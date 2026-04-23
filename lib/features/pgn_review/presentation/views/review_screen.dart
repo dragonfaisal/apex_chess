@@ -17,7 +17,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
+import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_chess_board.dart';
+import 'package:apex_chess/shared_ui/widgets/brilliant_glow.dart';
 import 'package:apex_chess/shared_ui/widgets/evaluation_chart.dart';
 import '../controllers/review_controller.dart';
 import '../controllers/review_audio_controller.dart';
@@ -45,11 +47,14 @@ class ReviewScreen extends ConsumerWidget {
     }
 
     final currentMove = state.currentMove;
+    final isBrilliant =
+        currentMove?.classification == MoveQuality.brilliant;
 
     return Scaffold(
-      backgroundColor: ApexColors.darkSurface,
       appBar: _buildAppBar(context, timeline.headers),
-      body: SafeArea(
+      body: Container(
+        decoration: const BoxDecoration(gradient: ApexGradients.spaceCanvas),
+        child: SafeArea(
         child: Column(
           children: [
             // ── Eval Bar ────────────────────────────────────────
@@ -59,10 +64,13 @@ class ReviewScreen extends ConsumerWidget {
             // ── Board ───────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: ApexChessBoard(
-                fen: state.currentFen,
-                lastMove: state.lastMove,
-                lastMoveQuality: currentMove?.classification,
+              child: BrilliantGlow(
+                visible: isBrilliant,
+                child: ApexChessBoard(
+                  fen: state.currentFen,
+                  lastMove: state.lastMove,
+                  lastMoveQuality: currentMove?.classification,
+                ),
               ),
             ),
             const SizedBox(height: 10),
@@ -97,6 +105,7 @@ class ReviewScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 16),
           ],
+        ),
         ),
       ),
     );

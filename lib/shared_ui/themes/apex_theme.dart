@@ -1,126 +1,223 @@
+/// Apex Chess — "Deep Space Cinematic" Design System
+///
+/// The visual language is built around three ideas:
+///
+///   * **Deep space canvas** — cool, almost-black blues for backgrounds so
+///     accent colours read as light sources rather than decoration.
+///   * **Sapphire → Ruby accent spectrum** — primary actions glow in sapphire;
+///     destructive / warning states shift warmer through ruby.
+///   * **Glass materials** — elevated surfaces use [BackdropFilter] blur with
+///     subtle gradient borders (see [GlassPanel]).
+///
+/// Legacy identifiers from the previous "Quiet Power" theme are kept as
+/// aliases so existing feature code keeps compiling; new work should prefer
+/// the [ApexColors.sapphire] / [ApexColors.ruby] palette.
+library;
+
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Apex Chess — "Quiet Power" Cyber Design System
+// Palette
 // ─────────────────────────────────────────────────────────────────────────────
-// Charcoal canvas, Electric Blue accents, clean mono typography.
-// Every surface is deliberately dark so the cyan glows.
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// ── Color Palette ───────────────────────────────────────────────────────────
 
 class ApexColors {
   ApexColors._();
 
-  // Backgrounds
-  static const Color trueBlack       = Color(0xFF111111);
-  static const Color darkSurface     = Color(0xFF1A1A1A);
-  static const Color elevatedSurface = Color(0xFF222222);
-  static const Color cardSurface     = Color(0xFF2A2A2A);
-  static const Color subtleBorder    = Color(0xFF3A3A3A);
+  // ── Deep-space background spectrum ─────────────────────────────────────
+  /// The void behind everything — used for scaffold background on hero screens.
+  static const Color spaceVoid       = Color(0xFF050814);
+  /// Standard surface — dashboards, list screens.
+  static const Color deepSpace       = Color(0xFF0A1024);
+  /// Slightly lifted — app-bar, persistent chrome.
+  static const Color nebula          = Color(0xFF121A38);
+  /// Dialog / modal background under the glass blur.
+  static const Color cosmicDust      = Color(0xFF1A2448);
+  /// Subtle separators inside glass panels.
+  static const Color stardustLine    = Color(0x33A0B6FF);
 
-  // Electric Blue / Cyan Spectrum
-  static const Color electricBlue    = Color(0xFF00BFFF);
-  static const Color brightCyan      = Color(0xFF33CFFF);
-  static const Color mutedCyan       = Color(0xFF0088B3);
-  static const Color deepCyan        = Color(0xFF006080);
-  static const Color cyanGlow        = Color(0xFFB3ECFF);
+  // ── Sapphire accent (primary) ──────────────────────────────────────────
+  static const Color sapphire        = Color(0xFF4DA6FF);
+  static const Color sapphireBright  = Color(0xFF7CC4FF);
+  static const Color sapphireDeep    = Color(0xFF1D5FD2);
+  static const Color sapphireGlow    = Color(0xFFB8DEFF);
 
-  // Legacy gold aliases (keeps old code compiling — maps to cyan)
-  static const Color royalGold       = electricBlue;
-  static const Color brightGold      = brightCyan;
-  static const Color mutedGold       = mutedCyan;
+  // ── Ruby accent (danger / highlight) ───────────────────────────────────
+  static const Color ruby            = Color(0xFFFF4D7A);
+  static const Color rubyBright      = Color(0xFFFF7FA2);
+  static const Color rubyDeep        = Color(0xFFC01F4E);
+
+  // ── Aurora accent (brilliant moments, victory) ─────────────────────────
+  static const Color aurora          = Color(0xFF00F0FF);
+  static const Color auroraSoft      = Color(0xFF7BFFFF);
+
+  // ── Text ───────────────────────────────────────────────────────────────
+  static const Color textPrimary     = Color(0xFFF4F7FF);
+  static const Color textSecondary   = Color(0xFFB4C0E0);
+  static const Color textTertiary    = Color(0xFF7A87B0);
+  static const Color textOnAccent    = Color(0xFF050814);
+
+  // ── Move-quality semantic colours ──────────────────────────────────────
+  static const Color brilliant       = aurora;                // !!
+  static const Color best            = sapphire;              // ★
+  static const Color great           = Color(0xFF4DE98B);     // !
+  static const Color inaccuracy      = Color(0xFFFFC857);     // ?!
+  static const Color mistake         = Color(0xFFFF8C3A);     // ?
+  static const Color blunder         = ruby;                  // ??
+  static const Color book            = Color(0xFFB98CFF);     // book
+
+  // ── Legacy aliases (old "Quiet Power" names) ───────────────────────────
+  // These map the previous charcoal + cyan identifiers onto the new palette
+  // so existing widgets keep rendering without a simultaneous rewrite.
+  static const Color trueBlack       = spaceVoid;
+  static const Color darkSurface     = deepSpace;
+  static const Color elevatedSurface = nebula;
+  static const Color cardSurface     = cosmicDust;
+  static const Color subtleBorder    = Color(0xFF243058);
+
+  static const Color electricBlue    = sapphire;
+  static const Color brightCyan      = sapphireBright;
+  static const Color mutedCyan       = sapphireDeep;
+  static const Color deepCyan        = Color(0xFF0C3A80);
+  static const Color cyanGlow        = sapphireGlow;
+
+  static const Color royalGold       = sapphire;
+  static const Color brightGold      = sapphireBright;
+  static const Color mutedGold       = sapphireDeep;
   static const Color deepGold        = deepCyan;
-  static const Color goldShimmer     = cyanGlow;
-
-  // Text
-  static const Color textPrimary     = Color(0xFFF0F0F0);
-  static const Color textSecondary   = Color(0xFFB0B0B0);
-  static const Color textTertiary    = Color(0xFF707070);
-  static const Color textOnAccent    = Color(0xFF0A0A0A);
-
-  // Semantic (Move Quality)
-  static const Color brilliant       = Color(0xFF00E5FF); // !! brilliant
-  static const Color great           = Color(0xFF22C55E); // !  great
-  static const Color inaccuracy      = Color(0xFFFBBF24); // ?! inaccuracy
-  static const Color mistake         = Color(0xFFF97316); // ?  mistake
-  static const Color blunder         = Color(0xFFEF4444); // ?? blunder
-  static const Color book            = Color(0xFFA78BFA); // book move
-  static const Color best            = Color(0xFF00BFFF); // ★  best/engine
+  static const Color goldShimmer     = sapphireGlow;
 }
 
-/// ── Typography ──────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Gradients
+// ─────────────────────────────────────────────────────────────────────────────
+
+class ApexGradients {
+  ApexGradients._();
+
+  /// Sapphire primary action gradient (buttons, CTAs).
+  static const LinearGradient sapphire = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [ApexColors.sapphireBright, ApexColors.sapphireDeep],
+  );
+
+  /// Sapphire → Ruby — hero moments, premium touches.
+  static const LinearGradient sapphireRuby = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [ApexColors.sapphire, ApexColors.ruby],
+  );
+
+  /// Brilliant move glow — aurora → sapphire.
+  static const LinearGradient brilliant = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [ApexColors.aurora, ApexColors.sapphireBright],
+  );
+
+  /// Ruby warning / blunder.
+  static const LinearGradient ruby = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [ApexColors.rubyBright, ApexColors.rubyDeep],
+  );
+
+  /// Ambient space canvas — subtle vertical falloff for Scaffolds.
+  static const LinearGradient spaceCanvas = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [ApexColors.deepSpace, ApexColors.spaceVoid],
+  );
+
+  /// Gradient border for glass panels (top-lit).
+  static const LinearGradient glassEdge = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0x55A0B6FF), Color(0x1522356A)],
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Typography — futuristic stack via google_fonts
+// ─────────────────────────────────────────────────────────────────────────────
 
 class ApexTypography {
   ApexTypography._();
 
-  static const String _fontFamily = 'Inter';
+  static TextStyle _sora(double size, FontWeight w,
+          {Color color = ApexColors.textPrimary,
+          double letterSpacing = 0,
+          double height = 1.2}) =>
+      GoogleFonts.sora(
+        fontSize: size,
+        fontWeight: w,
+        letterSpacing: letterSpacing,
+        color: color,
+        height: height,
+      );
 
-  static const TextStyle displayLarge = TextStyle(
-    fontFamily: _fontFamily,
-    fontSize: 40,
-    fontWeight: FontWeight.w700,
-    letterSpacing: -1.2,
-    color: ApexColors.textPrimary,
-    height: 1.15,
-  );
+  static TextStyle _spaceGrotesk(double size, FontWeight w,
+          {Color color = ApexColors.textSecondary,
+          double letterSpacing = 0,
+          double height = 1.45}) =>
+      GoogleFonts.spaceGrotesk(
+        fontSize: size,
+        fontWeight: w,
+        letterSpacing: letterSpacing,
+        color: color,
+        height: height,
+      );
 
-  static const TextStyle headlineMedium = TextStyle(
-    fontFamily: _fontFamily,
-    fontSize: 24,
-    fontWeight: FontWeight.w600,
-    letterSpacing: -0.5,
-    color: ApexColors.textPrimary,
-    height: 1.25,
-  );
+  static TextStyle _mono(double size, FontWeight w,
+          {Color color = ApexColors.sapphire,
+          double letterSpacing = 0.5,
+          double height = 1.0}) =>
+      GoogleFonts.jetBrainsMono(
+        fontSize: size,
+        fontWeight: w,
+        letterSpacing: letterSpacing,
+        color: color,
+        height: height,
+      );
 
-  static const TextStyle titleMedium = TextStyle(
-    fontFamily: _fontFamily,
-    fontSize: 16,
-    fontWeight: FontWeight.w600,
-    letterSpacing: 0.0,
-    color: ApexColors.textPrimary,
-    height: 1.35,
-  );
+  /// Hero display — app title, splash.
+  static TextStyle get displayLarge =>
+      _sora(40, FontWeight.w700, letterSpacing: -1.2, height: 1.15);
 
-  static const TextStyle bodyLarge = TextStyle(
-    fontFamily: _fontFamily,
-    fontSize: 16,
-    fontWeight: FontWeight.w400,
-    letterSpacing: 0.0,
-    color: ApexColors.textSecondary,
-    height: 1.5,
-  );
+  /// Screen-level heading.
+  static TextStyle get headlineMedium =>
+      _sora(24, FontWeight.w600, letterSpacing: -0.3, height: 1.25);
 
-  static const TextStyle bodyMedium = TextStyle(
-    fontFamily: _fontFamily,
-    fontSize: 14,
-    fontWeight: FontWeight.w400,
-    letterSpacing: 0.0,
-    color: ApexColors.textSecondary,
-    height: 1.45,
-  );
+  /// Card / dialog title.
+  static TextStyle get titleMedium =>
+      _sora(16, FontWeight.w600, letterSpacing: 0, height: 1.35);
 
-  static const TextStyle labelLarge = TextStyle(
-    fontFamily: _fontFamily,
-    fontSize: 14,
-    fontWeight: FontWeight.w600,
-    letterSpacing: 0.4,
-    color: ApexColors.electricBlue,
-    height: 1.2,
-  );
+  /// Body paragraph — `Space Grotesk`, optimal for UI copy.
+  static TextStyle get bodyLarge =>
+      _spaceGrotesk(16, FontWeight.w400, height: 1.5);
 
-  static const TextStyle monoEval = TextStyle(
-    fontFamily: 'JetBrains Mono',
-    fontSize: 18,
-    fontWeight: FontWeight.w700,
-    letterSpacing: 0.5,
-    color: ApexColors.electricBlue,
-    height: 1.0,
-  );
+  /// Body small — labels, secondary copy.
+  static TextStyle get bodyMedium =>
+      _spaceGrotesk(14, FontWeight.w400, height: 1.45);
+
+  /// Button labels — all-caps-friendly, sapphire by default.
+  static TextStyle get labelLarge => _sora(
+        14,
+        FontWeight.w600,
+        letterSpacing: 0.6,
+        color: ApexColors.sapphire,
+        height: 1.2,
+      );
+
+  /// Mono eval bar — "+1.4", "M5".
+  static TextStyle get monoEval =>
+      _mono(18, FontWeight.w700, letterSpacing: 0.5);
 }
 
-/// ── Theme Data ──────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Theme data
+// ─────────────────────────────────────────────────────────────────────────────
 
 class ApexTheme {
   ApexTheme._();
@@ -128,15 +225,15 @@ class ApexTheme {
   static ThemeData get dark {
     final ColorScheme colorScheme = ColorScheme.dark(
       brightness: Brightness.dark,
-      primary: ApexColors.electricBlue,
+      primary: ApexColors.sapphire,
       onPrimary: ApexColors.textOnAccent,
-      primaryContainer: ApexColors.deepCyan,
-      onPrimaryContainer: ApexColors.cyanGlow,
-      secondary: ApexColors.mutedCyan,
-      onSecondary: ApexColors.textOnAccent,
-      surface: ApexColors.darkSurface,
+      primaryContainer: ApexColors.sapphireDeep,
+      onPrimaryContainer: ApexColors.sapphireGlow,
+      secondary: ApexColors.ruby,
+      onSecondary: ApexColors.textPrimary,
+      surface: ApexColors.deepSpace,
       onSurface: ApexColors.textPrimary,
-      error: ApexColors.blunder,
+      error: ApexColors.ruby,
       onError: ApexColors.textPrimary,
       outline: ApexColors.subtleBorder,
     );
@@ -145,118 +242,122 @@ class ApexTheme {
       useMaterial3: true,
       brightness: Brightness.dark,
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: ApexColors.darkSurface,
-      fontFamily: 'Inter',
+      scaffoldBackgroundColor: ApexColors.deepSpace,
+      textTheme: TextTheme(
+        displayLarge: ApexTypography.displayLarge,
+        headlineMedium: ApexTypography.headlineMedium,
+        titleMedium: ApexTypography.titleMedium,
+        bodyLarge: ApexTypography.bodyLarge,
+        bodyMedium: ApexTypography.bodyMedium,
+        labelLarge: ApexTypography.labelLarge,
+      ),
 
-      // ── App Bar ──────────────────────────────────────────────────────
+      // ── App bar ──
       appBarTheme: AppBarTheme(
-        backgroundColor: ApexColors.darkSurface,
+        backgroundColor: ApexColors.deepSpace,
         foregroundColor: ApexColors.textPrimary,
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: true,
         titleTextStyle: ApexTypography.titleMedium.copyWith(
-          color: ApexColors.electricBlue,
+          color: ApexColors.sapphire,
           letterSpacing: 1.5,
         ),
       ),
 
-      // ── Cards ────────────────────────────────────────────────────────
+      // ── Cards ──
       cardTheme: CardThemeData(
-        color: ApexColors.cardSurface,
+        color: ApexColors.cosmicDust.withValues(alpha: 0.72),
         elevation: 0,
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(18),
           side: const BorderSide(color: ApexColors.subtleBorder, width: 0.5),
         ),
       ),
 
-      // ── Elevated Buttons ─────────────────────────────────────────────
+      // ── Elevated buttons ──
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: ApexColors.electricBlue,
-          foregroundColor: ApexColors.textOnAccent,
+          backgroundColor: ApexColors.sapphireDeep,
+          foregroundColor: ApexColors.textPrimary,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
           textStyle: ApexTypography.labelLarge.copyWith(
-            color: ApexColors.textOnAccent,
+            color: ApexColors.textPrimary,
           ),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
           ),
         ),
       ),
 
-      // ── Outlined Buttons ─────────────────────────────────────────────
+      // ── Outlined buttons ──
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: ApexColors.electricBlue,
-          side: const BorderSide(color: ApexColors.mutedCyan, width: 1),
+          foregroundColor: ApexColors.sapphire,
+          side: const BorderSide(color: ApexColors.sapphireDeep, width: 1),
           padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
           textStyle: ApexTypography.labelLarge,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
           ),
         ),
       ),
 
-      // ── Icon Buttons ─────────────────────────────────────────────────
+      // ── Icon buttons ──
       iconButtonTheme: IconButtonThemeData(
-        style: IconButton.styleFrom(
-          foregroundColor: ApexColors.textSecondary,
-        ),
+        style: IconButton.styleFrom(foregroundColor: ApexColors.textSecondary),
       ),
 
-      // ── Bottom Navigation ────────────────────────────────────────────
+      // ── Bottom nav ──
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: ApexColors.darkSurface,
-        selectedItemColor: ApexColors.electricBlue,
+        backgroundColor: ApexColors.deepSpace,
+        selectedItemColor: ApexColors.sapphire,
         unselectedItemColor: ApexColors.textTertiary,
         type: BottomNavigationBarType.fixed,
         elevation: 0,
       ),
 
-      // ── Dividers ─────────────────────────────────────────────────────
+      // ── Dividers ──
       dividerTheme: const DividerThemeData(
         color: ApexColors.subtleBorder,
         thickness: 0.5,
         space: 0,
       ),
 
-      // ── Dialogs ──────────────────────────────────────────────────────
+      // ── Dialogs — styled to be compatible with [GlassPanel] wrappers. ──
       dialogTheme: DialogThemeData(
-        backgroundColor: ApexColors.elevatedSurface,
-        elevation: 24,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
-          side: const BorderSide(color: ApexColors.subtleBorder, width: 0.5),
         ),
         titleTextStyle: ApexTypography.headlineMedium,
         contentTextStyle: ApexTypography.bodyLarge,
       ),
 
-      // ── Sliders ──────────────────────────────────────────────────────
+      // ── Sliders ──
       sliderTheme: SliderThemeData(
-        activeTrackColor: ApexColors.electricBlue,
+        activeTrackColor: ApexColors.sapphire,
         inactiveTrackColor: ApexColors.subtleBorder,
-        thumbColor: ApexColors.brightCyan,
-        overlayColor: ApexColors.electricBlue.withAlpha(30),
+        thumbColor: ApexColors.sapphireBright,
+        overlayColor: ApexColors.sapphire.withValues(alpha: 0.12),
         trackHeight: 3,
         thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
       ),
 
-      // ── Text Selection ───────────────────────────────────────────────
+      // ── Text selection ──
       textSelectionTheme: TextSelectionThemeData(
-        cursorColor: ApexColors.electricBlue,
-        selectionColor: ApexColors.electricBlue.withAlpha(60),
-        selectionHandleColor: ApexColors.brightCyan,
+        cursorColor: ApexColors.sapphire,
+        selectionColor: ApexColors.sapphire.withValues(alpha: 0.24),
+        selectionHandleColor: ApexColors.sapphireBright,
       ),
 
-      // ── Tooltips ─────────────────────────────────────────────────────
+      // ── Tooltips ──
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(
-          color: ApexColors.elevatedSurface,
+          color: ApexColors.nebula,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: ApexColors.subtleBorder, width: 0.5),
         ),
