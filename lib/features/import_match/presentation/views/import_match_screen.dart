@@ -1,0 +1,955 @@
+/// Premium "Import Match" screen — Apex Chess Deep Space Cinematic.
+///
+/// Inspired by chessplus.pages.dev, rebuilt on top of the Apex design
+/// language (`GlassPanel`, Sapphire/Ruby accents, Sora typography).
+///
+/// Flow:
+///   1. User picks a source (Chess.com or Lichess) and types a username.
+///   2. Taps "Fetch Games" — controller hits the public API, streams back
+///      an `ImportedGame` list.
+///   3. Taps any row → [DepthPickerDialog] offers Fast (depth 14) or
+///      Quantum Deep (depth 22), both backed by the **local** Stockfish.
+///   4. On selection, the PGN runs through `LocalGameAnalyzer` and we
+///      push the ReviewScreen on the navigator.
+library;
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'package:apex_chess/app/di/providers.dart';
+import 'package:apex_chess/features/import_match/domain/imported_game.dart';
+import 'package:apex_chess/features/import_match/presentation/controllers/import_controller.dart';
+import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
+import 'package:apex_chess/features/pgn_review/presentation/views/review_screen.dart';
+import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
+import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
+import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
+import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
+
+class ImportMatchScreen extends ConsumerStatefulWidget {
+  const ImportMatchScreen({super.key});
+
+  @override
+  ConsumerState<ImportMatchScreen> createState() =>
+      _ImportMatchScreenState();
+}
+
+class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(importControllerProvider);
+    final notifier = ref.read(importControllerProvider.notifier);
+
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(gradient: ApexGradients.spaceCanvas),
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildAppBar(context),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 6, 24, 8),
+                child: Text(
+                  ApexCopy.importSubtitle,
+                  textAlign: TextAlign.center,
+                  style: ApexTypography.bodyMedium.copyWith(
+                    color: ApexColors.textTertiary,
+                    fontSize: 12,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+              _SourceToggle(
+                source: state.source,
+                onChanged: notifier.setSource,
+              ),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: _UsernameField(
+                  controller: _controller,
+                  onChanged: notifier.setUsername,
+                  onSubmitted: (_) => notifier.fetch(),
+                  source: state.source,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: _FetchButton(
+                  isLoading: state.isLoading,
+                  onTap: notifier.fetch,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Expanded(child: _buildBody(state)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAppBar(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 8, 16, 0),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back_rounded,
+                color: ApexColors.textSecondary),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          Expanded(
+            child: Text(
+              ApexCopy.importTitle,
+              textAlign: TextAlign.center,
+              style: ApexTypography.titleMedium.copyWith(
+                color: ApexColors.textPrimary,
+                letterSpacing: 3,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(width: 40),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBody(ImportState state) {
+    if (state.isLoading) {
+      return const Center(
+        child: SizedBox(
+          width: 32,
+          height: 32,
+          child: CircularProgressIndicator(
+              strokeWidth: 2.4, color: ApexColors.sapphireBright),
+        ),
+      );
+    }
+    if (state.errorMessage != null) {
+      return _EmptyState(
+        icon: Icons.cloud_off_rounded,
+        label: state.errorMessage!,
+        accent: ApexColors.ruby,
+      );
+    }
+    if (!state.hasFetched) {
+      return const _EmptyState(
+        icon: Icons.search_rounded,
+        label: 'Pick a source, enter a username, tap Fetch.',
+      );
+    }
+    if (state.games.isEmpty) {
+      return const _EmptyState(
+        icon: Icons.inbox_rounded,
+        label: ApexCopy.importEmpty,
+      );
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(18, 4, 18, 28),
+      itemBuilder: (_, i) => _GameCard(game: state.games[i]),
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemCount: state.games.length,
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Source toggle (Chess.com / Lichess)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _SourceToggle extends StatelessWidget {
+  const _SourceToggle({required this.source, required this.onChanged});
+
+  final GameSource source;
+  final ValueChanged<GameSource> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: GlassPanel(
+        padding: const EdgeInsets.all(4),
+        margin: null,
+        borderRadius: 14,
+        accentAlpha: 0.18,
+        fillAlpha: 0.38,
+        child: Row(
+          children: [
+            Expanded(
+              child: _SourceChip(
+                label: ApexCopy.importSourceChessCom,
+                active: source == GameSource.chessCom,
+                onTap: () => onChanged(GameSource.chessCom),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: _SourceChip(
+                label: ApexCopy.importSourceLichess,
+                active: source == GameSource.lichess,
+                onTap: () => onChanged(GameSource.lichess),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SourceChip extends StatelessWidget {
+  const _SourceChip({
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+      decoration: BoxDecoration(
+        gradient: active ? ApexGradients.sapphire : null,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: onTap,
+          child: SizedBox(
+            height: 38,
+            child: Center(
+              child: Text(
+                label,
+                style: ApexTypography.labelLarge.copyWith(
+                  letterSpacing: 1.5,
+                  fontSize: 12,
+                  color: active
+                      ? Colors.white
+                      : ApexColors.textTertiary,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Username field + Fetch button
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _UsernameField extends StatelessWidget {
+  const _UsernameField({
+    required this.controller,
+    required this.onChanged,
+    required this.onSubmitted,
+    required this.source,
+  });
+
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+  final ValueChanged<String> onSubmitted;
+  final GameSource source;
+
+  @override
+  Widget build(BuildContext context) {
+    final placeholder = switch (source) {
+      GameSource.chessCom => 'e.g. hikaru',
+      GameSource.lichess => 'e.g. DrNykterstein',
+    };
+    return TextField(
+      controller: controller,
+      onChanged: onChanged,
+      onSubmitted: onSubmitted,
+      textInputAction: TextInputAction.search,
+      style: ApexTypography.bodyMedium.copyWith(
+        color: ApexColors.textPrimary,
+        fontSize: 14,
+        fontFamily: 'JetBrains Mono',
+      ),
+      decoration: InputDecoration(
+        prefixIcon: const Icon(Icons.person_outline_rounded,
+            color: ApexColors.sapphireBright, size: 20),
+        hintText: placeholder,
+        hintStyle: ApexTypography.bodyMedium.copyWith(
+          color: ApexColors.textTertiary,
+          fontFamily: 'JetBrains Mono',
+        ),
+        filled: true,
+        fillColor: ApexColors.deepSpace.withValues(alpha: 0.55),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: ApexColors.subtleBorder),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: ApexColors.subtleBorder),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide:
+              BorderSide(color: ApexColors.sapphire.withValues(alpha: 0.55)),
+        ),
+      ),
+    );
+  }
+}
+
+class _FetchButton extends StatelessWidget {
+  const _FetchButton({required this.isLoading, required this.onTap});
+
+  final bool isLoading;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: isLoading ? null : onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Ink(
+          height: 52,
+          decoration: BoxDecoration(
+            gradient: ApexGradients.sapphire,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: ApexColors.sapphire.withValues(alpha: 0.3),
+                blurRadius: 20,
+                spreadRadius: -6,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (isLoading) ...[
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  ),
+                  const SizedBox(width: 12),
+                ] else ...[
+                  const Icon(Icons.bolt_rounded,
+                      color: Colors.white, size: 20),
+                  const SizedBox(width: 10),
+                ],
+                Text(
+                  ApexCopy.importFetch,
+                  style: ApexTypography.labelLarge.copyWith(
+                    color: Colors.white,
+                    letterSpacing: 2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Game card
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _GameCard extends ConsumerWidget {
+  const _GameCard({required this.game});
+
+  final ImportedGame game;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final accentColor = switch (game.result) {
+      GameResult.whiteWon => ApexColors.brilliant,
+      GameResult.blackWon => ApexColors.ruby,
+      GameResult.draw => ApexColors.textTertiary,
+      GameResult.unknown => ApexColors.subtleBorder,
+    };
+    final outcome = game.userOutcomeLabel;
+    final outcomeColor = switch (outcome) {
+      'Won' => ApexColors.brilliant,
+      'Lost' => ApexColors.ruby,
+      'Drew' => ApexColors.textSecondary,
+      _ => ApexColors.textTertiary,
+    };
+
+    return GlassPanel(
+      padding: EdgeInsets.zero,
+      margin: null,
+      borderRadius: 16,
+      accentColor: accentColor,
+      accentAlpha: 0.28,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _openDepthPicker(context, ref),
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                _SourceBadge(source: game.source),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _PlayerRow(
+                        name: game.whiteName,
+                        rating: game.whiteRating,
+                        light: true,
+                        isUser: game.userColor == PlayerColor.white,
+                      ),
+                      const SizedBox(height: 4),
+                      _PlayerRow(
+                        name: game.blackName,
+                        rating: game.blackRating,
+                        light: false,
+                        isUser: game.userColor == PlayerColor.black,
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          _MetaPill(icon: Icons.timer_outlined,
+                              label: game.timeControl ?? '—'),
+                          const SizedBox(width: 6),
+                          _MetaPill(icon: Icons.history_rounded,
+                              label: '${game.moveCount} moves'),
+                          const SizedBox(width: 6),
+                          _MetaPill(icon: Icons.calendar_today_outlined,
+                              label: game.relativeTime),
+                        ],
+                      ),
+                      if (game.openingName != null) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          '${game.eco != null ? '${game.eco} • ' : ''}${game.openingName}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: ApexTypography.bodyMedium.copyWith(
+                            color: ApexColors.book,
+                            fontSize: 11,
+                            fontFamily: 'JetBrains Mono',
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      game.resultLabel,
+                      style: ApexTypography.monoEval.copyWith(
+                        color: accentColor,
+                        fontSize: 17,
+                      ),
+                    ),
+                    if (outcome != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        outcome,
+                        style: ApexTypography.bodyMedium.copyWith(
+                          color: outcomeColor,
+                          fontSize: 10,
+                          letterSpacing: 1.4,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openDepthPicker(BuildContext context, WidgetRef ref) async {
+    final depth = await showDialog<int>(
+      context: context,
+      barrierColor: ApexColors.spaceVoid.withValues(alpha: 0.72),
+      builder: (_) => const DepthPickerDialog(),
+    );
+    if (depth == null) return;
+    if (!context.mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: ApexColors.spaceVoid.withValues(alpha: 0.72),
+      builder: (_) => _ImportAnalysisDialog(pgn: game.pgn, depth: depth),
+    );
+  }
+}
+
+class _SourceBadge extends StatelessWidget {
+  const _SourceBadge({required this.source});
+  final GameSource source;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = switch (source) {
+      GameSource.chessCom => 'CC',
+      GameSource.lichess => 'LI',
+    };
+    final color = switch (source) {
+      GameSource.chessCom => const Color(0xFF81B64C),
+      GameSource.lichess => const Color(0xFFB8B5AF),
+    };
+    return Container(
+      width: 40,
+      height: 40,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.45), width: 0.6),
+      ),
+      child: Text(
+        label,
+        style: ApexTypography.monoEval.copyWith(
+          color: color, fontSize: 14, fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _PlayerRow extends StatelessWidget {
+  const _PlayerRow({
+    required this.name,
+    required this.rating,
+    required this.light,
+    required this.isUser,
+  });
+
+  final String name;
+  final int? rating;
+  final bool light;
+  final bool isUser;
+
+  @override
+  Widget build(BuildContext context) {
+    final dotColor = light ? Colors.white : ApexColors.trueBlack;
+    final dotBorder = light
+        ? ApexColors.subtleBorder
+        : Colors.white.withValues(alpha: 0.25);
+    return Row(
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            color: dotColor,
+            shape: BoxShape.circle,
+            border: Border.all(color: dotBorder, width: 0.6),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: ApexTypography.bodyMedium.copyWith(
+              color: isUser ? ApexColors.sapphireBright : ApexColors.textPrimary,
+              fontSize: 13,
+              fontWeight: isUser ? FontWeight.w700 : FontWeight.w500,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ),
+        if (rating != null) ...[
+          const SizedBox(width: 8),
+          Text(
+            rating.toString(),
+            style: ApexTypography.monoEval.copyWith(
+              color: ApexColors.textTertiary,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _MetaPill extends StatelessWidget {
+  const _MetaPill({required this.icon, required this.label});
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: ApexColors.elevatedSurface.withValues(alpha: 0.65),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: ApexColors.subtleBorder, width: 0.5),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: ApexColors.textTertiary, size: 11),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: ApexTypography.bodyMedium.copyWith(
+              color: ApexColors.textTertiary,
+              fontSize: 10,
+              fontFamily: 'JetBrains Mono',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({
+    required this.icon,
+    required this.label,
+    this.accent = ApexColors.sapphire,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 36),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: accent.withValues(alpha: 0.7), size: 40),
+          const SizedBox(height: 14),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: ApexTypography.bodyMedium.copyWith(
+              color: ApexColors.textTertiary,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Depth picker dialog — returns the selected depth (14 or 22) via pop.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class DepthPickerDialog extends StatelessWidget {
+  const DepthPickerDialog({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      child: GlassPanel.dialog(
+        accentColor: ApexColors.sapphire,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.tune_rounded,
+                    color: ApexColors.sapphireBright, size: 22),
+                const SizedBox(width: 10),
+                Text(
+                  ApexCopy.depthPickerTitle,
+                  style: ApexTypography.titleMedium.copyWith(letterSpacing: 3),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            _DepthOption(
+              label: ApexCopy.depthFastLabel,
+              tag: ApexCopy.depthFastTag,
+              blurb: ApexCopy.depthFastBlurb,
+              icon: Icons.flash_on_rounded,
+              accent: ApexColors.electricBlue,
+              onTap: () => Navigator.of(context).pop(14),
+            ),
+            const SizedBox(height: 12),
+            _DepthOption(
+              label: ApexCopy.depthDeepLabel,
+              tag: ApexCopy.depthDeepTag,
+              blurb: ApexCopy.depthDeepBlurb,
+              icon: Icons.auto_awesome_rounded,
+              accent: ApexColors.sapphire,
+              onTap: () => Navigator.of(context).pop(22),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DepthOption extends StatelessWidget {
+  const _DepthOption({
+    required this.label,
+    required this.tag,
+    required this.blurb,
+    required this.icon,
+    required this.accent,
+    required this.onTap,
+  });
+
+  final String label;
+  final String tag;
+  final String blurb;
+  final IconData icon;
+  final Color accent;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: ApexColors.elevatedSurface.withValues(alpha: 0.6),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: accent.withValues(alpha: 0.35), width: 0.6,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: accent, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          label,
+                          style: ApexTypography.labelLarge.copyWith(
+                            color: ApexColors.textPrimary,
+                            letterSpacing: 1.4,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: accent.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            tag,
+                            style: ApexTypography.monoEval.copyWith(
+                              color: accent, fontSize: 10,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      blurb,
+                      style: ApexTypography.bodyMedium.copyWith(
+                        color: ApexColors.textTertiary,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              Icon(Icons.chevron_right_rounded,
+                  color: accent.withValues(alpha: 0.8)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Analysis progress dialog (shared with Home's PGN flow).
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ImportAnalysisDialog extends ConsumerStatefulWidget {
+  const _ImportAnalysisDialog({required this.pgn, required this.depth});
+  final String pgn;
+  final int depth;
+
+  @override
+  ConsumerState<_ImportAnalysisDialog> createState() =>
+      _ImportAnalysisDialogState();
+}
+
+class _ImportAnalysisDialogState
+    extends ConsumerState<_ImportAnalysisDialog> {
+  int _completed = 0;
+  int _total = 1;
+  bool _done = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _run();
+  }
+
+  Future<void> _run() async {
+    try {
+      final analyzer = ref.read(gameAnalyzerProvider);
+      final timeline = await analyzer.analyzeFromPgn(
+        widget.pgn,
+        depth: widget.depth,
+        onProgress: (c, t) {
+          if (!mounted) return;
+          setState(() {
+            _completed = c;
+            _total = t;
+          });
+        },
+      );
+      if (!mounted) return;
+      ref.read(reviewControllerProvider.notifier).loadTimeline(timeline);
+      setState(() => _done = true);
+    } on LocalAnalysisException catch (e) {
+      if (mounted) setState(() => _error = e.userMessage);
+    } catch (_) {
+      if (mounted) setState(() => _error = ApexCopy.analysisFailed);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_done) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const ReviewScreen()),
+        );
+      });
+    }
+
+    final progress = _total > 0 ? _completed / _total : 0.0;
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      child: GlassPanel.dialog(
+        accentColor: _error == null ? ApexColors.sapphire : ApexColors.ruby,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  _error == null
+                      ? Icons.auto_awesome_rounded
+                      : Icons.error_outline_rounded,
+                  color: _error == null
+                      ? ApexColors.sapphireBright
+                      : ApexColors.ruby,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  _error == null
+                      ? '${ApexCopy.deepAnalysis} · D${widget.depth}'
+                      : 'Scan failed',
+                  style: ApexTypography.titleMedium,
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            if (_error != null)
+              Text(
+                _error!,
+                style: ApexTypography.bodyMedium.copyWith(
+                  color: ApexColors.ruby,
+                ),
+              )
+            else ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 8,
+                  backgroundColor:
+                      ApexColors.deepSpace.withValues(alpha: 0.65),
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                      ApexColors.sapphireBright),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                '$_completed / $_total plies',
+                style: ApexTypography.bodyMedium.copyWith(
+                  color: ApexColors.textTertiary,
+                  fontFamily: 'JetBrains Mono',
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
