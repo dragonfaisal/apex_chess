@@ -1,0 +1,362 @@
+/// Cloud-only full game analyzer.
+///
+/// Orchestrates Opening Explorer + Cloud Eval for complete game analysis:
+///   1. For each ply, query Opening Explorer first (plies 0–20).
+///   2. If move is in book (≥10 games) → classify as Book, assign name/ECO.
+///   3. If move is a DEVIATION → immediately query Cloud Eval for deltaW.
+///      NO IMMUNITY. A blunder on move 4 is flagged as Blunder (??).
+///   4. After book zone, every move is evaluated via Cloud Eval.
+///
+/// Returns [AnalysisTimeline] for the review pipeline (identical to mock flow).
+library;
+
+import 'package:dartchess/dartchess.dart';
+
+import 'package:apex_chess/core/domain/entities/move_analysis.dart';
+import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
+import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
+import 'package:apex_chess/infrastructure/api/cloud_eval_service.dart';
+import 'package:apex_chess/infrastructure/api/opening_service.dart';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Error
+// ─────────────────────────────────────────────────────────────────────────────
+
+class CloudAnalysisException implements Exception {
+  final String message;
+  final CloudEvalError? evalError;
+
+  const CloudAnalysisException(this.message, {this.evalError});
+
+  @override
+  String toString() => 'CloudAnalysisException: $message';
+
+  /// User-facing message.
+  String get userMessage {
+    if (evalError == CloudEvalError.offline) {
+      return 'Cloud analysis requires an internet connection.';
+    }
+    if (evalError == CloudEvalError.rateLimited) {
+      return 'Rate limited by Lichess. Please try again in a few minutes.';
+    }
+    return 'Analysis temporarily unavailable. Please try again later.';
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Analyzer
+// ─────────────────────────────────────────────────────────────────────────────
+
+class CloudGameAnalyzer {
+  final CloudEvalService _cloudEval;
+  final OpeningService _openings;
+  final EvaluationAnalyzer _analyzer;
+
+  CloudGameAnalyzer({
+    required CloudEvalService cloudEval,
+    required OpeningService openings,
+    EvaluationAnalyzer analyzer = const EvaluationAnalyzer(),
+  })  : _cloudEval = cloudEval,
+        _openings = openings,
+        _analyzer = analyzer;
+
+  /// Analyzes a full game from PGN notation.
+  ///
+  /// [onProgress] — called with (completed, total) for UI progress.
+  /// Throws [CloudAnalysisException] on persistent network/rate-limit failures.
+  Future<AnalysisTimeline> analyzeFromPgn(
+    String pgn, {
+    void Function(int completed, int total)? onProgress,
+  }) async {
+    // 1. Parse PGN → extract all positions + moves.
+    final game = PgnGame.parsePgn(pgn);
+    final headers = Map<String, String>.from(game.headers);
+    Position position = PgnGame.startingPosition(game.headers);
+    final startingFen = position.fen;
+
+    final moveList = <_ParsedMove>[];
+
+    for (final node in game.moves.mainline()) {
+      final move = position.parseSan(node.san);
+      if (move == null) break;
+
+      final fenBefore = position.fen;
+      final isWhite = position.turn == Side.white;
+      final newPos = position.play(move);
+
+      String uci;
+      if (move is NormalMove) {
+        uci = '${_sqAlg(move.from)}${_sqAlg(move.to)}'
+            '${move.promotion != null ? _roleChar(move.promotion!) : ""}';
+      } else {
+        uci = node.san;
+      }
+
+      moveList.add(_ParsedMove(
+        fenBefore: fenBefore,
+        fenAfter: newPos.fen,
+        san: node.san,
+        uci: uci,
+        isWhiteMove: isWhite,
+      ));
+
+      position = newPos;
+    }
+
+    final totalPlies = moveList.length;
+    onProgress?.call(0, totalPlies);
+
+    // 2. Get starting position eval.
+    final (startEval, startErr) = await _cloudEval.evaluate(startingFen);
+    if (startErr == CloudEvalError.offline ||
+        startErr == CloudEvalError.rateLimited) {
+      throw CloudAnalysisException(
+        'Cannot reach cloud evaluation service.',
+        evalError: startErr,
+      );
+    }
+
+    double prevWinPct = startEval != null
+        ? EvaluationAnalyzer.calculateWinPercentage(
+            cp: startEval.scoreCp, mate: startEval.mateIn)
+        : 50.0;
+
+    final moves = <MoveAnalysis>[];
+    int consecutiveNotFound = 0;
+    const int maxConsecutiveNotFound = 5;
+
+    // 3. Analyze each ply.
+    for (int ply = 0; ply < totalPlies; ply++) {
+      final entry = moveList[ply];
+
+      // ── Phase 5: Opening Explorer Check ──────────────────────────
+      final openingInfo = await _openings.checkMove(
+        fen: entry.fenBefore,
+        playedSan: entry.san,
+        ply: ply,
+      );
+
+      // ── BOOK MOVE → classify as Book, no engine eval needed ──────
+      if (openingInfo.isBookMove) {
+        consecutiveNotFound = 0;
+        final winPctAfter = prevWinPct; // Book moves: neutral Win% delta.
+        moves.add(MoveAnalysis(
+          ply: ply,
+          san: entry.san,
+          uci: entry.uci,
+          fenBefore: entry.fenBefore,
+          fenAfter: entry.fenAfter,
+          winPercentBefore: prevWinPct,
+          winPercentAfter: winPctAfter,
+          deltaW: 0.0,
+          classification: MoveQuality.book,
+          isWhiteMove: entry.isWhiteMove,
+          openingName: openingInfo.openingName,
+          ecoCode: openingInfo.ecoCode,
+          inBook: true,
+          message: openingInfo.openingName != null
+              ? '📖 ${openingInfo.openingName}'
+              : '📖 Book move (${openingInfo.gamesPlayed} games)',
+        ));
+        onProgress?.call(ply + 1, totalPlies);
+        continue;
+      }
+
+      // ── DEVIATION or OUT-OF-BOOK → must evaluate via Cloud Eval ──
+      final (afterEval, afterErr) = await _cloudEval.evaluate(entry.fenAfter);
+
+      if (afterErr == CloudEvalError.offline) {
+        throw CloudAnalysisException(
+          'Lost internet connection during analysis.',
+          evalError: afterErr,
+        );
+      }
+
+      if (afterErr == CloudEvalError.rateLimited) {
+        throw CloudAnalysisException(
+          'Rate limited during analysis.',
+          evalError: afterErr,
+        );
+      }
+
+      if (afterEval == null) {
+        // Position not in cloud database.
+        consecutiveNotFound++;
+
+        if (consecutiveNotFound >= maxConsecutiveNotFound) {
+          // Too many misses — likely past cloud database coverage.
+          // Use neutral classification for remaining moves.
+          moves.add(_neutralMove(ply, entry, prevWinPct, openingInfo));
+          onProgress?.call(ply + 1, totalPlies);
+          continue;
+        }
+
+        moves.add(_neutralMove(ply, entry, prevWinPct, openingInfo));
+        onProgress?.call(ply + 1, totalPlies);
+        continue;
+      }
+
+      consecutiveNotFound = 0;
+
+      // ── Calculate Win% and classify ──────────────────────────────
+      final currCpWhite = afterEval.scoreCp;
+      final currMateWhite = afterEval.mateIn;
+      final winPctAfter = EvaluationAnalyzer.calculateWinPercentage(
+          cp: currCpWhite, mate: currMateWhite);
+
+      // Get the before-position eval for bestMove comparison.
+      final (beforeEval, _) = await _cloudEval.evaluate(entry.fenBefore);
+
+      final result = _analyzer.analyze(
+        prevCp: beforeEval?.scoreCp,
+        prevMate: beforeEval?.mateIn,
+        currCp: currCpWhite,
+        currMate: currMateWhite,
+        isWhiteMove: entry.isWhiteMove,
+        engineBestMoveUci: beforeEval?.bestMoveUci,
+        playedMoveUci: entry.uci,
+      );
+
+      // Resolve engine best move to SAN if available.
+      String? engineBestSan;
+      if (beforeEval?.bestMoveUci != null) {
+        engineBestSan =
+            _tryUciToSan(entry.fenBefore, beforeEval!.bestMoveUci!);
+      }
+
+      // Coach message.
+      String msg = result.message;
+      if (openingInfo.isDeviation && openingInfo.openingName != null) {
+        msg =
+            '⚠️ Deviation from ${openingInfo.openingName} — $msg';
+      }
+
+      moves.add(MoveAnalysis(
+        ply: ply,
+        san: entry.san,
+        uci: entry.uci,
+        fenBefore: entry.fenBefore,
+        fenAfter: entry.fenAfter,
+        winPercentBefore: prevWinPct,
+        winPercentAfter: winPctAfter,
+        deltaW: result.deltaW,
+        classification: result.quality,
+        isWhiteMove: entry.isWhiteMove,
+        engineBestMoveSan: engineBestSan,
+        openingName: openingInfo.openingName,
+        ecoCode: openingInfo.ecoCode,
+        inBook: false,
+        message: msg,
+      ));
+
+      prevWinPct = winPctAfter;
+      onProgress?.call(ply + 1, totalPlies);
+    }
+
+    // Build winPercentages array from analyzed moves.
+    final winPercentages = moves.map((m) => m.winPercentAfter).toList();
+
+    return AnalysisTimeline(
+      moves: moves,
+      startingFen: startingFen,
+      headers: headers,
+      winPercentages: winPercentages,
+    );
+  }
+
+  /// Creates a neutral move when cloud eval is unavailable for a position.
+  MoveAnalysis _neutralMove(
+    int ply,
+    _ParsedMove entry,
+    double prevWinPct,
+    OpeningInfo openingInfo,
+  ) {
+    return MoveAnalysis(
+      ply: ply,
+      san: entry.san,
+      uci: entry.uci,
+      fenBefore: entry.fenBefore,
+      fenAfter: entry.fenAfter,
+      winPercentBefore: prevWinPct,
+      winPercentAfter: prevWinPct,
+      deltaW: 0.0,
+      classification: MoveQuality.good,
+      isWhiteMove: entry.isWhiteMove,
+      openingName: openingInfo.openingName,
+      ecoCode: openingInfo.ecoCode,
+      inBook: false,
+      message: '☁️ Position not in cloud database.',
+    );
+  }
+
+  /// Attempts to convert a UCI move to SAN using dartchess.
+  String? _tryUciToSan(String fen, String uci) {
+    try {
+      if (uci.length < 4) return null;
+      final pos = Chess.fromSetup(Setup.parseFen(fen));
+      final from = _parseSquare(uci.substring(0, 2));
+      final to = _parseSquare(uci.substring(2, 4));
+      if (from == null || to == null) return null;
+
+      Role? promotion;
+      if (uci.length == 5) {
+        promotion = switch (uci[4]) {
+          'q' => Role.queen,
+          'r' => Role.rook,
+          'b' => Role.bishop,
+          'n' => Role.knight,
+          _ => null,
+        };
+      }
+
+      final move = NormalMove(from: from, to: to, promotion: promotion);
+      if (!pos.isLegal(move)) return null;
+      return pos.makeSan(move).$2;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Square? _parseSquare(String alg) {
+    if (alg.length != 2) return null;
+    final file = alg.codeUnitAt(0) - 'a'.codeUnitAt(0);
+    final rank = int.tryParse(alg[1]);
+    if (file < 0 || file > 7 || rank == null || rank < 1 || rank > 8) {
+      return null;
+    }
+    return Square(file + (rank - 1) * 8);
+  }
+
+  static String _sqAlg(Square sq) {
+    final file = String.fromCharCode('a'.codeUnitAt(0) + sq.file);
+    return '$file${sq.rank + 1}';
+  }
+
+  static String _roleChar(Role role) => switch (role) {
+        Role.queen => 'q',
+        Role.rook => 'r',
+        Role.bishop => 'b',
+        Role.knight => 'n',
+        _ => '',
+      };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Internal
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ParsedMove {
+  final String fenBefore;
+  final String fenAfter;
+  final String san;
+  final String uci;
+  final bool isWhiteMove;
+
+  const _ParsedMove({
+    required this.fenBefore,
+    required this.fenAfter,
+    required this.san,
+    required this.uci,
+    required this.isWhiteMove,
+  });
+}
