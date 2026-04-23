@@ -17,7 +17,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
+import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_chess_board.dart';
+import 'package:apex_chess/shared_ui/widgets/brilliant_glow.dart';
 import 'package:apex_chess/shared_ui/widgets/evaluation_chart.dart';
 import '../controllers/review_controller.dart';
 import '../controllers/review_audio_controller.dart';
@@ -45,58 +47,84 @@ class ReviewScreen extends ConsumerWidget {
     }
 
     final currentMove = state.currentMove;
+    final isBrilliant =
+        currentMove?.classification == MoveQuality.brilliant;
 
     return Scaffold(
-      backgroundColor: ApexColors.darkSurface,
       appBar: _buildAppBar(context, timeline.headers),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // ── Eval Bar ────────────────────────────────────────
-            _EvalBar(move: currentMove),
-            const SizedBox(height: 8),
+      body: Container(
+        decoration: const BoxDecoration(gradient: ApexGradients.spaceCanvas),
+        child: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // Constrain the board so it never exceeds the viewport on
+              // landscape / desktop — previously it consumed full width and
+              // pushed the chart + nav controls off-screen (RenderFlex
+              // overflow by ~800px on wide windows).
+              final maxBoardWidth =
+                  (constraints.maxHeight * 0.55).clamp(240.0, 560.0);
+              final boardSize =
+                  (constraints.maxWidth - 24).clamp(240.0, maxBoardWidth);
 
-            // ── Board ───────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: ApexChessBoard(
-                fen: state.currentFen,
-                lastMove: state.lastMove,
-                lastMoveQuality: currentMove?.classification,
-              ),
-            ),
-            const SizedBox(height: 10),
-
-            // ── Advantage Chart ─────────────────────────────────
-            EvaluationChart(
-              winPercentages: timeline.winPercentages,
-              selectedPly: state.currentPly >= 0 ? state.currentPly : null,
-              onPlySelected: (ply) {
-                ref.read(reviewControllerProvider.notifier).jumpTo(ply);
-              },
-            ),
-            const SizedBox(height: 10),
-
-            // ── Coach Dashboard ─────────────────────────────────
-            _CoachCard(move: currentMove, ply: state.currentPly),
-
-            const Spacer(),
-
-            // ── Navigation Controls ─────────────────────────────
-            _NavControls(
-              currentPly: state.currentPly,
-              totalPlies: state.totalPlies,
-              onStart: () =>
-                  ref.read(reviewControllerProvider.notifier).goToStart(),
-              onBack: () =>
-                  ref.read(reviewControllerProvider.notifier).prev(),
-              onForward: () =>
-                  ref.read(reviewControllerProvider.notifier).next(),
-              onEnd: () =>
-                  ref.read(reviewControllerProvider.notifier).goToEnd(),
-            ),
-            const SizedBox(height: 16),
-          ],
+              return SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: ConstrainedBox(
+                  constraints:
+                      BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Column(
+                    children: [
+                      _EvalBar(move: currentMove),
+                      const SizedBox(height: 8),
+                      Center(
+                        child: SizedBox(
+                          width: boardSize,
+                          child: BrilliantGlow(
+                            visible: isBrilliant,
+                            child: ApexChessBoard(
+                              fen: state.currentFen,
+                              lastMove: state.lastMove,
+                              lastMoveQuality: currentMove?.classification,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      EvaluationChart(
+                        winPercentages: timeline.winPercentages,
+                        selectedPly:
+                            state.currentPly >= 0 ? state.currentPly : null,
+                        onPlySelected: (ply) {
+                          ref
+                              .read(reviewControllerProvider.notifier)
+                              .jumpTo(ply);
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      _CoachCard(move: currentMove, ply: state.currentPly),
+                      const SizedBox(height: 16),
+                      _NavControls(
+                        currentPly: state.currentPly,
+                        totalPlies: state.totalPlies,
+                        onStart: () => ref
+                            .read(reviewControllerProvider.notifier)
+                            .goToStart(),
+                        onBack: () => ref
+                            .read(reviewControllerProvider.notifier)
+                            .prev(),
+                        onForward: () => ref
+                            .read(reviewControllerProvider.notifier)
+                            .next(),
+                        onEnd: () => ref
+                            .read(reviewControllerProvider.notifier)
+                            .goToEnd(),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
         ),
       ),
     );

@@ -1,11 +1,11 @@
-/// State management for the Live Play screen — Cloud-Only edition.
+/// State management for the Live Play screen — Apex AI Analyst edition.
 ///
 /// Holds the immutable [Chess] position (via dartchess for RULES ONLY),
-/// queries [CloudEvalService] for evaluation after each move,
-/// and orchestrates move → audio → cloud eval in a reactive pipeline.
+/// queries the local [LocalEvalService] for evaluation after each move,
+/// and orchestrates move → audio → engine eval in a reactive pipeline.
 ///
-/// NO local engine. If offline or position not in cloud DB, shows
-/// a graceful error state instead of spinning up Stockfish.
+/// Zero network calls. If the engine fails to start (unsigned library,
+/// unsupported arch), the UI surfaces a graceful error state.
 library;
 
 import 'dart:async';
@@ -16,7 +16,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apex_chess/app/di/providers.dart';
 import 'package:apex_chess/core/platform/audio/chess_audio_service.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
-import 'package:apex_chess/infrastructure/api/cloud_eval_service.dart';
+import 'package:apex_chess/infrastructure/api/cloud_eval_service.dart'
+    show CloudEvalSnapshot, CloudEvalError;
+import 'package:apex_chess/infrastructure/engine/local_eval_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // State
@@ -119,13 +121,13 @@ class LivePlayState {
     if (evalError == null) return null;
     return switch (evalError!) {
       CloudEvalError.offline =>
-        'Cloud analysis requires an internet connection.',
+        'Apex AI Analyst could not be loaded on this device.',
       CloudEvalError.rateLimited =>
-        'Rate limited. Retrying in a few minutes…',
+        'Engine busy — retrying…',
       CloudEvalError.positionNotFound =>
-        'Position not in cloud database.',
+        'Engine returned no evaluation for this position.',
       CloudEvalError.serverError =>
-        'Cloud service temporarily unavailable.',
+        'Apex AI Analyst stopped responding.',
     };
   }
 }
@@ -135,7 +137,7 @@ class LivePlayState {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class LivePlayNotifier extends Notifier<LivePlayState> {
-  late final CloudEvalService _cloudEval;
+  late final LocalEvalService _eval;
   late final ChessAudioService _audio;
   final EvaluationAnalyzer _analyzer = const EvaluationAnalyzer();
 
@@ -143,7 +145,7 @@ class LivePlayNotifier extends Notifier<LivePlayState> {
 
   @override
   LivePlayState build() {
-    _cloudEval = ref.watch(cloudEvalServiceProvider);
+    _eval = ref.watch(liveEvalServiceProvider);
     _audio = ref.watch(audioServiceProvider);
     _position = Chess.initial;
     return LivePlayState.initial();
@@ -255,18 +257,18 @@ class LivePlayNotifier extends Notifier<LivePlayState> {
     );
 
     if (!_position.isGameOver) {
-      _requestCloudEval();
+      _requestEval();
     } else {
       _audio.playImmediate(ChessSoundType.gameEnd);
     }
   }
 
-  // ── Cloud Evaluation ───────────────────────────────────────────────────
+  // ── Engine Evaluation ──────────────────────────────────────────────────
 
-  Future<void> _requestCloudEval() async {
+  Future<void> _requestEval() async {
     state = state.copyWith(isEvaluating: true, clearError: true);
 
-    final (snapshot, error) = await _cloudEval.evaluate(state.currentFen);
+    final (snapshot, error) = await _eval.evaluate(state.currentFen);
 
     if (error != null) {
       state = state.copyWith(
@@ -310,7 +312,7 @@ class LivePlayNotifier extends Notifier<LivePlayState> {
   }
 
   /// Manually re-request evaluation for the current position.
-  Future<void> refreshEval() async => _requestCloudEval();
+  Future<void> refreshEval() async => _requestEval();
 
   void resetGame() {
     _position = Chess.initial;

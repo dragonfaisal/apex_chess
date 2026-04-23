@@ -1,17 +1,18 @@
-/// Live Play Screen — Cloud-Only edition.
+/// Live Play Screen — Apex AI Analyst edition.
 ///
-/// Interactive board with cloud-based evaluation.
-/// Shows graceful errors when offline or rate-limited.
+/// Interactive board backed by the on-device Stockfish engine via
+/// [LocalEvalService]. No network activity.
 library;
-
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
+import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_chess_board.dart';
-import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
+import 'package:apex_chess/shared_ui/widgets/brilliant_glow.dart';
+import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
 import '../controllers/live_play_controller.dart';
 
 class LivePlayScreen extends ConsumerWidget {
@@ -22,13 +23,17 @@ class LivePlayScreen extends ConsumerWidget {
     final s = ref.watch(livePlayProvider);
     final eval = s.evaluation;
 
+    final isBrilliant =
+        s.moveAnalysis?.quality == MoveQuality.brilliant;
+
     return Scaffold(
-      backgroundColor: ApexColors.darkSurface,
       appBar: _buildAppBar(context, ref, s),
-      body: SafeArea(
+      body: Container(
+        decoration: const BoxDecoration(gradient: ApexGradients.spaceCanvas),
+        child: SafeArea(
         child: Column(
           children: [
-            _CloudEvalBar(
+            _EngineEvalBar(
               scoreCp: eval?.scoreCp,
               mateIn: eval?.mateIn,
               depth: eval?.depth ?? 0,
@@ -51,33 +56,37 @@ class LivePlayScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 12),
-            _CoachDashboard(
-              moveAnalysis: s.moveAnalysis,
-              isCheckmate: s.isCheckmate,
-              isStalemate: s.isStalemate,
-              isDraw: s.isDraw,
+            BrilliantGlow(
+              visible: isBrilliant,
+              child: _CoachDashboard(
+                moveAnalysis: s.moveAnalysis,
+                isCheckmate: s.isCheckmate,
+                isStalemate: s.isStalemate,
+                isDraw: s.isDraw,
+              ),
             ),
             const Spacer(),
-            // Cloud-first badge.
             Padding(
               padding: const EdgeInsets.only(bottom: 16),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.cloud_rounded,
-                      color: ApexColors.electricBlue.withAlpha(120), size: 14),
+                  Icon(Icons.memory_rounded,
+                      color: ApexColors.sapphire.withValues(alpha: 0.55),
+                      size: 14),
                   const SizedBox(width: 6),
                   Text(
                     eval != null
-                        ? 'Cloud Depth ${eval.depth}'
-                        : 'Lichess Cloud Eval',
+                        ? '${ApexCopy.depthLabel} ${eval.depth}'
+                        : ApexCopy.liveEngineFooter,
                     style: ApexTypography.bodyMedium.copyWith(
-                      color: ApexColors.textTertiary, fontSize: 12),
+                        color: ApexColors.textTertiary, fontSize: 12),
                   ),
                 ],
               ),
             ),
           ],
+        ),
         ),
       ),
     );
@@ -96,9 +105,9 @@ class LivePlayScreen extends ConsumerWidget {
           : null,
       title: Row(mainAxisSize: MainAxisSize.min, children: [
         Icon(Icons.auto_awesome,
-            color: ApexColors.electricBlue.withAlpha(180), size: 20),
+            color: ApexColors.sapphireBright.withValues(alpha: 0.85), size: 20),
         const SizedBox(width: 8),
-        Text('APEX CHESS',
+        Text(ApexCopy.appTitle,
             style: ApexTypography.titleMedium.copyWith(
               color: ApexColors.textPrimary, letterSpacing: 3,
               fontWeight: FontWeight.w700)),
@@ -123,17 +132,17 @@ class LivePlayScreen extends ConsumerWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Cloud Eval Bar (replaces local engine eval bar)
+// Engine Eval Bar (Apex AI Analyst)
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _CloudEvalBar extends StatelessWidget {
+class _EngineEvalBar extends StatelessWidget {
   final int? scoreCp;
   final int? mateIn;
   final int depth;
   final bool isSearching;
   final String? errorMessage;
 
-  const _CloudEvalBar({
+  const _EngineEvalBar({
     this.scoreCp, this.mateIn,
     required this.depth, required this.isSearching,
     this.errorMessage});
@@ -160,8 +169,8 @@ class _CloudEvalBar extends StatelessWidget {
               topLeft: Radius.circular(11.5),
               bottomLeft: Radius.circular(11.5))),
           child: errorMessage != null
-              ? Icon(Icons.cloud_off_rounded,
-                  color: ApexColors.mistake.withAlpha(180), size: 20)
+              ? Icon(Icons.memory_outlined,
+                  color: ApexColors.ruby.withValues(alpha: 0.75), size: 20)
               : Text(_scoreText,
                   style: ApexTypography.monoEval.copyWith(
                       color: _scoreTextColor, fontSize: 16)),
@@ -171,9 +180,9 @@ class _CloudEvalBar extends StatelessWidget {
           child: errorMessage != null
               ? Text(errorMessage!,
                   style: ApexTypography.bodyMedium.copyWith(
-                    color: ApexColors.mistake.withAlpha(200), fontSize: 11),
+                    color: ApexColors.ruby.withValues(alpha: 0.8), fontSize: 11),
                   maxLines: 1, overflow: TextOverflow.ellipsis)
-              : Text(depth > 0 ? 'Cloud D$depth' : '—',
+              : Text(depth > 0 ? 'D$depth' : '—',
                   style: ApexTypography.bodyMedium.copyWith(
                     color: ApexColors.textTertiary,
                     fontFamily: 'JetBrains Mono', fontSize: 12)),
@@ -229,38 +238,20 @@ class _CoachDashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final accent = moveAnalysis?.quality.color ?? ApexColors.sapphire;
+    return GlassPanel(
       margin: const EdgeInsets.symmetric(horizontal: 14),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: ApexColors.cardSurface.withAlpha(200),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: _borderColor, width: 0.8),
-              boxShadow: [
-                BoxShadow(color: _glowColor, blurRadius: 20, spreadRadius: -4),
-              ]),
-            child: _buildContent(),
-          ),
-        ),
-      ),
+      borderRadius: 16,
+      accentColor: accent,
+      accentAlpha: moveAnalysis != null ? 0.45 : 0.28,
+      child: _buildContent(),
     );
   }
 
-  Color get _borderColor => moveAnalysis != null
-      ? moveAnalysis!.quality.color.withAlpha(60)
-      : ApexColors.electricBlue.withAlpha(30);
-
-  Color get _glowColor => moveAnalysis != null
-      ? moveAnalysis!.quality.color.withAlpha(15)
-      : ApexColors.electricBlue.withAlpha(8);
-
   Widget _buildContent() {
-    if (isCheckmate) return _statusRow('♚', 'CHECKMATE', ApexColors.electricBlue);
+    if (isCheckmate) {
+      return _statusRow('♚', 'CHECKMATE', ApexColors.sapphireBright);
+    }
     if (isStalemate) return _statusRow('½', 'STALEMATE', ApexColors.textTertiary);
     if (isDraw) return _statusRow('½', 'DRAW', ApexColors.textTertiary);
 
@@ -297,10 +288,10 @@ class _CoachDashboard extends StatelessWidget {
     }
 
     return Row(children: [
-      Icon(Icons.cloud_rounded,
-          color: ApexColors.electricBlue.withAlpha(120), size: 24),
+      Icon(Icons.auto_awesome,
+          color: ApexColors.sapphireBright.withValues(alpha: 0.55), size: 24),
       const SizedBox(width: 12),
-      Text('Cloud Coach — play a move to begin',
+      Text('${ApexCopy.engineBrand} — play a move to begin',
           style: ApexTypography.bodyMedium.copyWith(
               color: ApexColors.textTertiary)),
     ]);

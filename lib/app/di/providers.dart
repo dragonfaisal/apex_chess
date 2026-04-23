@@ -1,69 +1,18 @@
 /// Riverpod dependency injection — app-level providers.
 ///
-/// Cloud-first architecture with an optional local-engine escape hatch for
-/// offline analysis and power-user features. All providers that cross
-/// feature boundaries live here.
+/// Apex Chess runs an on-device engine exclusively from the UI layer:
+/// `liveEvalServiceProvider` and `gameAnalyzerProvider` both resolve to the
+/// local Stockfish-backed services. Legacy Lichess cloud clients remain
+/// compiled in `infrastructure/api/` but are no longer reachable from any
+/// view (see PR description for the rationale).
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:apex_chess/core/infrastructure/engine/engine.dart';
-import 'package:apex_chess/infrastructure/api/cloud_eval_service.dart';
-import 'package:apex_chess/infrastructure/api/cloud_game_analyzer.dart';
-import 'package:apex_chess/infrastructure/api/lichess_cloud_eval_client.dart';
-import 'package:apex_chess/infrastructure/api/lichess_opening_client.dart';
+import 'package:apex_chess/infrastructure/engine/local_eval_service.dart';
+import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
 import 'package:apex_chess/infrastructure/api/mock_analysis_api_client.dart';
-import 'package:apex_chess/infrastructure/api/opening_service.dart';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Cloud API Clients
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Singleton Lichess Cloud Eval HTTP client.
-final lichessCloudEvalProvider = Provider<LichessCloudEvalClient>((ref) {
-  final client = LichessCloudEvalClient();
-  ref.onDispose(() => client.dispose());
-  return client;
-});
-
-/// Singleton Lichess Opening Explorer HTTP client.
-final lichessOpeningProvider = Provider<LichessOpeningClient>((ref) {
-  final client = LichessOpeningClient();
-  ref.onDispose(() => client.dispose());
-  return client;
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Services
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Cloud evaluation service (wraps LichessCloudEvalClient).
-final cloudEvalServiceProvider = Provider<CloudEvalService>((ref) {
-  final client = ref.watch(lichessCloudEvalProvider);
-  return CloudEvalService(client: client);
-});
-
-/// Opening detection service (wraps LichessOpeningClient).
-final openingServiceProvider = Provider<OpeningService>((ref) {
-  final client = ref.watch(lichessOpeningProvider);
-  return OpeningService(client: client);
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Analyzers
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Cloud-only full game analyzer (Opening Explorer + Cloud Eval).
-final cloudGameAnalyzerProvider = Provider<CloudGameAnalyzer>((ref) {
-  final cloudEval = ref.watch(cloudEvalServiceProvider);
-  final openings = ref.watch(openingServiceProvider);
-  return CloudGameAnalyzer(cloudEval: cloudEval, openings: openings);
-});
-
-/// Mock analysis API client for development/demo.
-final mockAnalysisApiProvider = Provider<MockAnalysisApiClient>((ref) {
-  return const MockAnalysisApiClient();
-});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Local engine (Stockfish via FFI + Isolate)
@@ -72,24 +21,48 @@ final mockAnalysisApiProvider = Provider<MockAnalysisApiClient>((ref) {
 /// Singleton local [ChessEngine] backed by Stockfish.
 ///
 /// The engine is started lazily on first `ref.watch` / `ref.read` and
-/// disposed with the owning [ProviderContainer]. Feature modules that want
-/// local analysis should depend on this provider instead of instantiating
-/// [StockfishEngine] directly so tests can override it.
+/// disposed with the owning [ProviderContainer]. Tests can override this
+/// provider with a `FakeEngine`.
 final stockfishEngineProvider = Provider<ChessEngine>((ref) {
   final engine = StockfishEngine();
-  // Kick off startup without blocking provider construction. Callers that
-  // need to await readiness should use `engineReadyProvider` below.
   ref.onDispose(() async {
     await engine.dispose();
   });
   return engine;
 });
 
-/// Awaitable handle that resolves once the local engine's UCI handshake
-/// has completed. Widgets can `ref.watch` this to gate analysis UI behind
+/// Awaitable handle that resolves once the engine's UCI handshake has
+/// completed. Widgets can `ref.watch` this to gate analysis UI behind
 /// engine readiness.
 final engineReadyProvider = FutureProvider<ChessEngine>((ref) async {
   final engine = ref.watch(stockfishEngineProvider);
   if (!engine.isRunning) await engine.start();
   return engine;
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Evaluation service — local only
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Apex AI Analyst — local, non-blocking position evaluator. Replaces the
+/// previous `cloudEvalServiceProvider`.
+final liveEvalServiceProvider = Provider<LocalEvalService>((ref) {
+  final engine = ref.watch(stockfishEngineProvider);
+  return LocalEvalService(engine: engine);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Full-game analyzer — local only
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Quantum Depth Scan — analyzes a full PGN via the local engine. Replaces
+/// the previous `cloudGameAnalyzerProvider`.
+final gameAnalyzerProvider = Provider<LocalGameAnalyzer>((ref) {
+  final eval = ref.watch(liveEvalServiceProvider);
+  return LocalGameAnalyzer(eval: eval);
+});
+
+/// Mock analysis API client for the "Demo • Opera Game" hero.
+final mockAnalysisApiProvider = Provider<MockAnalysisApiClient>((ref) {
+  return const MockAnalysisApiClient();
 });

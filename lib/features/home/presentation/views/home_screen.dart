@@ -1,20 +1,26 @@
-/// Home Screen — Main Menu for Apex Chess (Cloud-Only).
+/// Home Screen — Apex Chess "Deep Space Cinematic" edition.
 ///
-/// Three entry points: "Play Live", "Cloud Analyze PGN", and "Demo: Opera Game".
-/// Charcoal + Electric Blue "Quiet Power" aesthetics.
+/// Three entry points driven by the on-device Apex AI Analyst:
+///   * ENTER LIVE MATCH     — opens the interactive board with live eval.
+///   * QUANTUM DEPTH SCAN   — imports a PGN, analyses every ply locally.
+///   * DEMO • OPERA GAME    — pre-computed showcase from `MockAnalysisApi`.
+///
+/// Layout is wrapped in a [SingleChildScrollView] so the content never
+/// overflows on compact screens (previously caused the
+/// "RenderFlex overflowed by 67 pixels" warning at this screen).
 library;
-
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/app/di/providers.dart';
-import 'package:apex_chess/infrastructure/api/cloud_game_analyzer.dart';
 import 'package:apex_chess/features/live_play/presentation/views/live_play_screen.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
 import 'package:apex_chess/features/pgn_review/presentation/views/review_screen.dart';
+import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
+import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
+import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
+import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -22,60 +28,86 @@ class HomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      backgroundColor: ApexColors.darkSurface,
-      body: SafeArea(
-        child: Column(
-          children: [
-            const SizedBox(height: 60),
-            Icon(Icons.cloud_rounded,
-                color: ApexColors.electricBlue, size: 48),
-            const SizedBox(height: 16),
-            Text('APEX CHESS',
-                style: ApexTypography.displayLarge.copyWith(
-                  color: ApexColors.textPrimary,
-                  letterSpacing: 6, fontSize: 32)),
-            const SizedBox(height: 6),
-            Text('Cloud-First AI Coach',
-                style: ApexTypography.bodyMedium.copyWith(
-                  color: ApexColors.electricBlue.withAlpha(160),
-                  letterSpacing: 2)),
-            const Spacer(),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32),
-              child: _CyberButton(
-                label: 'PLAY LIVE',
-                icon: Icons.play_arrow_rounded,
-                isPrimary: true,
-                onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const LivePlayScreen())),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32),
-              child: _CyberButton(
-                label: 'CLOUD ANALYZE PGN',
-                icon: Icons.cloud_sync_rounded,
-                isPrimary: false,
-                onTap: () => _showPgnDialog(context, ref),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32),
-              child: _CyberButton(
-                label: 'DEMO: OPERA GAME',
-                icon: Icons.auto_awesome_mosaic_rounded,
-                isPrimary: false,
-                onTap: () => _launchOperaGameDemo(context, ref),
-              ),
-            ),
-            const SizedBox(height: 48),
-            Text('Powered by Lichess Cloud • Zero APK Bloat',
-                style: ApexTypography.bodyMedium.copyWith(
-                  color: ApexColors.textTertiary, fontSize: 12)),
-            const SizedBox(height: 24),
-          ],
+      body: Container(
+        decoration: const BoxDecoration(gradient: ApexGradients.spaceCanvas),
+        child: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // Guarantee the column can scroll when it doesn't fit — this
+              // is the fix for the RenderFlex overflow on small devices.
+              return SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: ConstrainedBox(
+                  constraints:
+                      BoxConstraints(minHeight: constraints.maxHeight),
+                  child: IntrinsicHeight(
+                    child: Padding(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const SizedBox(height: 56),
+                          const _HeroBadge(),
+                          const SizedBox(height: 16),
+                          Text(
+                            ApexCopy.appTitle,
+                            textAlign: TextAlign.center,
+                            style: ApexTypography.displayLarge.copyWith(
+                              letterSpacing: 6,
+                              fontSize: 36,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            ApexCopy.tagline,
+                            textAlign: TextAlign.center,
+                            style: ApexTypography.bodyMedium.copyWith(
+                              color: ApexColors.sapphireBright
+                                  .withValues(alpha: 0.72),
+                              letterSpacing: 2,
+                            ),
+                          ),
+                          const Spacer(),
+                          _PrimaryAction(
+                            label: ApexCopy.playLive,
+                            icon: Icons.play_arrow_rounded,
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                  builder: (_) => const LivePlayScreen()),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          _SecondaryAction(
+                            label: ApexCopy.analyzeGame,
+                            icon: Icons.auto_graph_rounded,
+                            onTap: () => _showPgnDialog(context, ref),
+                          ),
+                          const SizedBox(height: 14),
+                          _SecondaryAction(
+                            label: ApexCopy.operaDemo,
+                            icon: Icons.auto_awesome_mosaic_rounded,
+                            onTap: () => _launchOperaGameDemo(context, ref),
+                          ),
+                          const SizedBox(height: 36),
+                          Text(
+                            ApexCopy.liveEngineFooter,
+                            textAlign: TextAlign.center,
+                            style: ApexTypography.bodyMedium.copyWith(
+                              color: ApexColors.textTertiary,
+                              fontSize: 11,
+                              letterSpacing: 1.4,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
         ),
       ),
     );
@@ -86,74 +118,78 @@ class HomeScreen extends ConsumerWidget {
     final timeline = mockApi.getOperaGameAnalysis();
     ref.read(reviewControllerProvider.notifier).loadTimeline(timeline);
     Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const ReviewScreen()));
+      MaterialPageRoute(builder: (_) => const ReviewScreen()),
+    );
   }
 
   void _showPgnDialog(BuildContext context, WidgetRef ref) {
     final controller = TextEditingController();
     showDialog(
       context: context,
+      barrierColor: ApexColors.spaceVoid.withValues(alpha: 0.72),
       builder: (ctx) => Dialog(
-        backgroundColor: ApexColors.elevatedSurface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(
-              color: ApexColors.electricBlue.withAlpha(40), width: 0.5)),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
+        insetPadding:
+            const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+        child: GlassPanel.dialog(
+          accentColor: ApexColors.sapphire,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(children: [
-                Icon(Icons.cloud_sync_rounded,
-                    color: ApexColors.electricBlue, size: 22),
-                const SizedBox(width: 10),
-                Text('Paste PGN',
-                    style: ApexTypography.titleMedium.copyWith(
-                        color: ApexColors.textPrimary)),
-              ]),
+              Row(
+                children: [
+                  Icon(Icons.auto_graph_rounded,
+                      color: ApexColors.sapphire, size: 22),
+                  const SizedBox(width: 10),
+                  Text(
+                    ApexCopy.pgnDialogTitle,
+                    style: ApexTypography.titleMedium,
+                  ),
+                ],
+              ),
               const SizedBox(height: 16),
               TextField(
                 controller: controller,
                 maxLines: 8,
                 style: ApexTypography.bodyMedium.copyWith(
-                    fontFamily: 'JetBrains Mono', fontSize: 12,
-                    color: ApexColors.textSecondary),
+                  fontFamily: 'JetBrainsMono',
+                  fontSize: 12,
+                  color: ApexColors.textPrimary,
+                ),
                 decoration: InputDecoration(
-                  hintText: '1. e4 e5 2. Nf3 Nc6 ...',
-                  hintStyle: ApexTypography.bodyMedium.copyWith(
-                      color: ApexColors.textTertiary),
-                  filled: true, fillColor: ApexColors.cardSurface,
+                  hintText: ApexCopy.pgnDialogHint,
+                  hintStyle: ApexTypography.bodyMedium
+                      .copyWith(color: ApexColors.textTertiary),
+                  filled: true,
+                  fillColor: ApexColors.deepSpace.withValues(alpha: 0.55),
                   border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: ApexColors.subtleBorder)),
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide:
+                        const BorderSide(color: ApexColors.subtleBorder),
+                  ),
                   enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: ApexColors.subtleBorder)),
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide:
+                        const BorderSide(color: ApexColors.subtleBorder),
+                  ),
                   focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(
-                          color: ApexColors.electricBlue.withAlpha(100))),
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                        color: ApexColors.sapphire
+                            .withValues(alpha: 0.55)),
+                  ),
                 ),
               ),
               const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () {
+              _PrimaryAction(
+                label: ApexCopy.pgnDialogCta,
+                icon: Icons.flash_on_rounded,
+                onTap: () {
                   final pgn = controller.text.trim();
                   if (pgn.isEmpty) return;
                   Navigator.of(ctx).pop();
-                  _startCloudAnalysis(context, ref, pgn);
+                  _startLocalAnalysis(context, ref, pgn);
                 },
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: ApexColors.electricBlue,
-                    foregroundColor: ApexColors.textOnAccent,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12))),
-                child: Text('CLOUD ANALYZE',
-                    style: ApexTypography.labelLarge.copyWith(
-                        color: ApexColors.textOnAccent, letterSpacing: 2)),
               ),
             ],
           ),
@@ -162,29 +198,171 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  void _startCloudAnalysis(BuildContext context, WidgetRef ref, String pgn) {
+  void _startLocalAnalysis(BuildContext context, WidgetRef ref, String pgn) {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => _CloudAnalysisProgressDialog(pgn: pgn),
+      barrierColor: ApexColors.spaceVoid.withValues(alpha: 0.72),
+      builder: (_) => _LocalAnalysisProgressDialog(pgn: pgn),
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Cloud Analysis Progress Dialog
+// Buttons
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _CloudAnalysisProgressDialog extends ConsumerStatefulWidget {
-  final String pgn;
-  const _CloudAnalysisProgressDialog({required this.pgn});
+class _PrimaryAction extends StatelessWidget {
+  const _PrimaryAction({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+
   @override
-  ConsumerState<_CloudAnalysisProgressDialog> createState() =>
-      _CloudAnalysisProgressDialogState();
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Ink(
+          height: 58,
+          decoration: BoxDecoration(
+            gradient: ApexGradients.sapphire,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: ApexColors.sapphire.withValues(alpha: 0.35),
+                blurRadius: 24,
+                spreadRadius: -6,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, color: ApexColors.textPrimary, size: 22),
+                const SizedBox(width: 12),
+                Text(
+                  label,
+                  style: ApexTypography.labelLarge.copyWith(
+                    color: ApexColors.textPrimary,
+                    letterSpacing: 2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
-class _CloudAnalysisProgressDialogState
-    extends ConsumerState<_CloudAnalysisProgressDialog> {
+class _SecondaryAction extends StatelessWidget {
+  const _SecondaryAction({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassPanel(
+      padding: EdgeInsets.zero,
+      margin: null,
+      borderRadius: 16,
+      accentAlpha: 0.25,
+      fillAlpha: 0.42,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: SizedBox(
+            height: 56,
+            child: Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon,
+                      color: ApexColors.sapphireBright, size: 20),
+                  const SizedBox(width: 12),
+                  Text(
+                    label,
+                    style: ApexTypography.labelLarge.copyWith(
+                      color: ApexColors.sapphireBright,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hero badge
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _HeroBadge extends StatelessWidget {
+  const _HeroBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.center,
+      child: Container(
+        width: 72,
+        height: 72,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: ApexGradients.sapphireRuby,
+          boxShadow: [
+            BoxShadow(
+              color: ApexColors.sapphire.withValues(alpha: 0.45),
+              blurRadius: 36,
+              spreadRadius: -6,
+            ),
+          ],
+        ),
+        child: const Icon(Icons.auto_awesome,
+            color: Colors.white, size: 32),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Quantum Depth Scan progress dialog — backed by LocalGameAnalyzer.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _LocalAnalysisProgressDialog extends ConsumerStatefulWidget {
+  const _LocalAnalysisProgressDialog({required this.pgn});
+  final String pgn;
+
+  @override
+  ConsumerState<_LocalAnalysisProgressDialog> createState() =>
+      _LocalAnalysisProgressDialogState();
+}
+
+class _LocalAnalysisProgressDialogState
+    extends ConsumerState<_LocalAnalysisProgressDialog> {
   int _completed = 0;
   int _total = 1;
   bool _done = false;
@@ -198,162 +376,109 @@ class _CloudAnalysisProgressDialogState
 
   Future<void> _runAnalysis() async {
     try {
-      final analyzer = ref.read(cloudGameAnalyzerProvider);
-      final timeline = await analyzer.analyzeFromPgn(widget.pgn,
-          onProgress: (completed, total) {
-        if (mounted) setState(() { _completed = completed; _total = total; });
-      });
+      final analyzer = ref.read(gameAnalyzerProvider);
+      final timeline = await analyzer.analyzeFromPgn(
+        widget.pgn,
+        onProgress: (c, t) {
+          if (mounted) setState(() { _completed = c; _total = t; });
+        },
+      );
       if (mounted) {
         ref.read(reviewControllerProvider.notifier).loadTimeline(timeline);
-        setState(() { _done = true; });
+        setState(() => _done = true);
       }
-    } on CloudAnalysisException catch (e) {
-      if (mounted) setState(() { _error = e.userMessage; });
+    } on LocalAnalysisException catch (e) {
+      if (mounted) setState(() => _error = e.userMessage);
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); });
+      if (mounted) setState(() => _error = ApexCopy.analysisFailed);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_error != null) {
-      return AlertDialog(
-        backgroundColor: ApexColors.elevatedSurface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: ApexColors.mistake.withAlpha(40))),
-        title: Row(children: [
-          Icon(Icons.cloud_off_rounded, color: ApexColors.mistake, size: 22),
-          const SizedBox(width: 10),
-          Text('Cloud Analysis Error',
-              style: TextStyle(color: ApexColors.mistake, fontSize: 16)),
-        ]),
-        content: Text(_error!,
-            style: TextStyle(color: ApexColors.textSecondary)),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text('OK',
-                  style: TextStyle(color: ApexColors.electricBlue))),
-        ],
-      );
-    }
     if (_done) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         Navigator.of(context).pop();
-        Navigator.of(context).push(MaterialPageRoute(
-            builder: (_) => const ReviewScreen()));
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const ReviewScreen()),
+        );
       });
     }
-    final progress = _total > 0 ? _completed / _total : 0.0;
+
     return Dialog(
-      backgroundColor: ApexColors.elevatedSurface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(
-            color: ApexColors.electricBlue.withAlpha(40), width: 0.5)),
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          SizedBox(width: 48, height: 48,
-            child: CircularProgressIndicator(
-              value: progress > 0 ? progress : null,
-              strokeWidth: 3, color: ApexColors.electricBlue,
-              backgroundColor: ApexColors.subtleBorder)),
-          const SizedBox(height: 20),
-          Text('Cloud analyzing…',
-              style: ApexTypography.titleMedium.copyWith(
-                  color: ApexColors.textPrimary)),
-          const SizedBox(height: 8),
-          Text('$_completed / $_total moves',
-              style: ApexTypography.bodyMedium.copyWith(
-                  color: ApexColors.electricBlue,
-                  fontFamily: 'JetBrains Mono')),
-          const SizedBox(height: 4),
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Icon(Icons.cloud_rounded,
-                color: ApexColors.electricBlue.withAlpha(100), size: 12),
-            const SizedBox(width: 4),
-            Text('Lichess Cloud Eval + Opening Explorer',
-                style: ApexTypography.bodyMedium.copyWith(
-                  color: ApexColors.textTertiary, fontSize: 10)),
-          ]),
-          const SizedBox(height: 16),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: progress, minHeight: 4,
-              color: ApexColors.electricBlue,
-              backgroundColor: ApexColors.subtleBorder)),
-        ]),
+      insetPadding:
+          const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      child: GlassPanel.dialog(
+        accentColor:
+            _error == null ? ApexColors.sapphire : ApexColors.ruby,
+        child: _error != null ? _errorContent() : _progressContent(),
       ),
     );
   }
-}
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Cyber Button
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _CyberButton extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool isPrimary;
-  final VoidCallback onTap;
-
-  const _CyberButton({
-    required this.label, required this.icon,
-    required this.isPrimary, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
-              decoration: BoxDecoration(
-                color: isPrimary
-                    ? ApexColors.electricBlue.withAlpha(20)
-                    : ApexColors.cardSurface.withAlpha(180),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: isPrimary
-                      ? ApexColors.electricBlue.withAlpha(80)
-                      : ApexColors.subtleBorder,
-                  width: 0.8),
-                boxShadow: isPrimary ? [
-                  BoxShadow(
-                    color: ApexColors.electricBlue.withAlpha(15),
-                    blurRadius: 20, spreadRadius: -4),
-                ] : null),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(icon,
-                      color: isPrimary
-                          ? ApexColors.electricBlue
-                          : ApexColors.textSecondary,
-                      size: 24),
-                  const SizedBox(width: 12),
-                  Text(label,
-                      style: ApexTypography.labelLarge.copyWith(
-                        color: isPrimary
-                            ? ApexColors.electricBlue
-                            : ApexColors.textSecondary,
-                        letterSpacing: 2, fontSize: 15)),
-                ],
-              ),
-            ),
+  Widget _progressContent() {
+    final progress = _total > 0 ? _completed / _total : 0.0;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.flash_on_rounded,
+                color: ApexColors.sapphireBright, size: 20),
+            const SizedBox(width: 10),
+            Text(ApexCopy.deepAnalysis,
+                style: ApexTypography.titleMedium),
+          ],
+        ),
+        const SizedBox(height: 16),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: LinearProgressIndicator(
+            value: progress,
+            minHeight: 6,
+            backgroundColor: ApexColors.subtleBorder,
+            valueColor:
+                const AlwaysStoppedAnimation(ApexColors.sapphireBright),
           ),
         ),
-      ),
+        const SizedBox(height: 12),
+        Text(
+          '$_completed / $_total plies analysed',
+          style: ApexTypography.bodyMedium
+              .copyWith(color: ApexColors.textTertiary, fontSize: 12),
+        ),
+      ],
+    );
+  }
+
+  Widget _errorContent() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.error_outline_rounded,
+                color: ApexColors.ruby, size: 22),
+            const SizedBox(width: 10),
+            Text('Quantum Scan Error',
+                style: ApexTypography.titleMedium
+                    .copyWith(color: ApexColors.ruby)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Text(_error!, style: ApexTypography.bodyLarge),
+        const SizedBox(height: 16),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('OK',
+                style: TextStyle(color: ApexColors.sapphire)),
+          ),
+        ),
+      ],
     );
   }
 }
