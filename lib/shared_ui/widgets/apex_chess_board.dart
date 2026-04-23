@@ -63,6 +63,11 @@ class ApexChessBoard extends StatelessWidget {
                       ApexColors.electricBlue.withAlpha(25)),
                   _buildHighlight(lastMove!.$2, squareSize,
                       ApexColors.electricBlue.withAlpha(40)),
+                  // Castling: detect from king's 2-square horizontal hop
+                  // on the back rank and highlight the rook's trail so the
+                  // eye reads the move as a single combined action
+                  // instead of a king move with a rook that "teleports".
+                  ..._buildCastlingRookHighlight(lastMove!, squareSize),
                 ],
                 if (selectedSquare != null)
                   _buildHighlight(selectedSquare!, squareSize,
@@ -111,6 +116,43 @@ class ApexChessBoard extends StatelessWidget {
       left: pos.dx, top: pos.dy, width: squareSize, height: squareSize,
       child: Container(color: color),
     );
+  }
+
+  /// If [lastMove] is a castling king-hop, return a pair of highlights for
+  /// the rook's corresponding move. Supports all four castling patterns:
+  ///
+  ///   e1g1 ⇢ h1f1 (White kingside)   e1c1 ⇢ a1d1 (White queenside)
+  ///   e8g8 ⇢ h8f8 (Black kingside)   e8c8 ⇢ a8d8 (Black queenside)
+  ///
+  /// Returns an empty list for any non-castling move — cheap guard, runs
+  /// once per rebuild, and callers can spread the result unconditionally.
+  List<Widget> _buildCastlingRookHighlight(
+      (String, String) move, double squareSize) {
+    final (from, to) = move;
+    if (from.length != 2 || to.length != 2) return const [];
+    // Must be a king starting on e-file and landing on g/c-file of the
+    // same rank 1 or 8.
+    if (from[0] != 'e' || from[1] != to[1]) return const [];
+    final rank = from[1];
+    if (rank != '1' && rank != '8') return const [];
+    String rookFrom;
+    String rookTo;
+    switch (to[0]) {
+      case 'g':
+        rookFrom = 'h$rank';
+        rookTo = 'f$rank';
+      case 'c':
+        rookFrom = 'a$rank';
+        rookTo = 'd$rank';
+      default:
+        return const [];
+    }
+    return [
+      _buildHighlight(rookFrom, squareSize,
+          ApexColors.electricBlue.withAlpha(25)),
+      _buildHighlight(rookTo, squareSize,
+          ApexColors.electricBlue.withAlpha(40)),
+    ];
   }
 
   Widget _buildCheckHighlight(
