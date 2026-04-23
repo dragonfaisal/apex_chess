@@ -95,32 +95,106 @@ struct sf_engine {
 // ─────────────────────────────────────────────────────────────────────────────
 
 #if defined(STOCKFISH_REAL)
-// Real Stockfish integration. The build system renames Stockfish's `main`
-// symbol to `stockfish_main` and provides `bridge_io` hooks that the engine
-// uses instead of std::cin / std::cout. See `CMakeLists.txt` for details.
-extern "C" int stockfish_main(int argc, char** argv);
-extern "C" void stockfish_bridge_set_io(
-    std::string (*read_line)(void*),
-    void (*write_line)(void*, const char*),
-    void* ctx);
+// Real Stockfish integration.
+//
+// The bridge keeps Stockfish's sources untouched except for renaming the
+// upstream `int main(int, char**)` to `extern "C" int stockfish_main(...)`
+// (done by `scripts/fetch_stockfish.sh`). All UCI I/O is shuttled through
+// two OS pipes that we attach to the process's fd 0 / fd 1 at worker-thread
+// startup — so `std::getline(std::cin, …)` and `std::cout << …` inside the
+// engine implicitly route through the bridge without any source patches.
+//
+// CAVEAT: dup2 on STDIN/STDOUT is process-wide. Flutter's own logging on
+// Android/iOS does not use raw stdout (it goes via platform loggers), so
+// this is safe in production. On desktop `flutter run`, Dart `print()` may
+// also land on stdout — which means while the engine is running, some
+// `print()` output may be captured by the bridge reader. Production builds
+// are unaffected; in debug builds, prefer the STUB engine for diagnostics.
 
-static std::string BridgeRead(void* ctx) {
-  auto* engine = static_cast<sf_engine*>(ctx);
-  std::string line;
-  if (!engine->to_engine.PopBlocking(&line)) return "quit";
-  return line;
+#include <fcntl.h>
+#include <unistd.h>
+#if defined(_WIN32)
+  #include <io.h>
+  #define pipe(fds) _pipe(fds, 65536, _O_BINARY)
+  #define read      _read
+  #define write     _write
+  #define close     _close
+  #define dup2      _dup2
+  #define STDIN_FILENO  0
+  #define STDOUT_FILENO 1
+#endif
+
+extern "C" int stockfish_main(int argc, char** argv);
+
+static void DrainReader(int fd, sf_engine* engine) {
+  std::string buf;
+  char chunk[4096];
+  while (true) {
+    const auto n = read(fd, chunk, sizeof(chunk));
+    if (n <= 0) break;
+    buf.append(chunk, static_cast<size_t>(n));
+    size_t pos;
+    while ((pos = buf.find('\n')) != std::string::npos) {
+      std::string line = buf.substr(0, pos);
+      // Trim trailing CR for Windows line endings.
+      if (!line.empty() && line.back() == '\r') line.pop_back();
+      engine->from_engine.Push(std::move(line));
+      buf.erase(0, pos + 1);
+    }
+  }
+  if (!buf.empty()) engine->from_engine.Push(std::move(buf));
+  close(fd);
 }
 
-static void BridgeWrite(void* ctx, const char* line) {
-  auto* engine = static_cast<sf_engine*>(ctx);
-  engine->from_engine.Push(line == nullptr ? std::string{} : std::string{line});
+static void DrainWriter(int fd, sf_engine* engine) {
+  std::string line;
+  while (engine->to_engine.PopBlocking(&line)) {
+    line += '\n';
+    ssize_t remaining = static_cast<ssize_t>(line.size());
+    const char* p = line.data();
+    while (remaining > 0) {
+      const auto n = write(fd, p, remaining);
+      if (n <= 0) break;
+      p += n;
+      remaining -= n;
+    }
+  }
+  close(fd);
 }
 
 static void RunEngine(sf_engine* engine) {
-  stockfish_bridge_set_io(&BridgeRead, &BridgeWrite, engine);
+  int in_pipe[2] = {-1, -1};
+  int out_pipe[2] = {-1, -1};
+  if (pipe(in_pipe) != 0 || pipe(out_pipe) != 0) {
+    engine->from_engine.Push("info string bridge_error pipe_create_failed");
+    engine->from_engine.Close();
+    return;
+  }
+
+  // Redirect process stdin/stdout to our pipes. See CAVEAT above.
+  dup2(in_pipe[0], STDIN_FILENO);
+  dup2(out_pipe[1], STDOUT_FILENO);
+  close(in_pipe[0]);
+  close(out_pipe[1]);
+
+  std::setvbuf(stdout, nullptr, _IOLBF, 0);
+
+  std::thread writer(DrainWriter, in_pipe[1], engine);
+  std::thread reader(DrainReader, out_pipe[0], engine);
+
   char arg0[] = "stockfish";
   char* argv[] = {arg0, nullptr};
   stockfish_main(1, argv);
+
+  // Engine returned — flush and close stdout so the reader terminates.
+  std::fflush(stdout);
+  close(STDOUT_FILENO);
+
+  // Push a sentinel to unblock the writer.
+  engine->to_engine.Close();
+
+  if (writer.joinable()) writer.join();
+  if (reader.joinable()) reader.join();
   engine->from_engine.Close();
 }
 
