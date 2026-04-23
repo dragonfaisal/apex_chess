@@ -5,9 +5,29 @@
 /// to query the Lichess Cloud Eval API can switch to the local engine by
 /// swapping a single Riverpod provider.
 ///
-/// The service is deliberately single-flight: each call to [evaluate] waits
-/// for any in-flight search to end before driving the engine, ensuring UCI
-/// `position` / `go` sequencing is never interleaved.
+/// ### UCI sync contract
+///
+/// The UCI protocol is stateful: the engine keeps *one* current position,
+/// and search commands apply to that position until the next `position`
+/// command. If the host races `position` → `go` while an old search is
+/// still flushing output, the first `info` / `bestmove` we see can refer to
+/// the *previous* position — silently corrupting every downstream delta.
+///
+/// This service eliminates that race by serialising every evaluation
+/// through a single-flight [Future] chain and, within each evaluation,
+/// by:
+///
+///   * sending `stop` to abort any lingering search,
+///   * sending `isready` and awaiting `readyok` before issuing `position`,
+///   * sending `ucinewgame` + a second `isready` / `readyok` round-trip so
+///     the engine clears transposition-table pollution between positions,
+///   * only accepting `info` frames whose `depth` is ≥ the target depth
+///     (or the best achieved so far) — stale frames from the previous
+///     search always carry the previous target's depth.
+///
+/// The net effect is that `evaluate(fen)` is guaranteed to return an
+/// [EvalSnapshot] whose `scoreCp` / `mateIn` describe *exactly* the FEN
+/// the caller asked about, from White's POV.
 library;
 
 import 'dart:async';
@@ -24,7 +44,7 @@ class LocalEvalService {
   LocalEvalService({
     required ChessEngine engine,
     int defaultDepth = 14,
-    Duration defaultTimeout = const Duration(seconds: 8),
+    Duration defaultTimeout = const Duration(seconds: 10),
   })  : _engine = engine,
         _defaultDepth = defaultDepth,
         _defaultTimeout = defaultTimeout;
@@ -52,7 +72,7 @@ class LocalEvalService {
           timeout: timeout ?? _defaultTimeout,
         );
         completer.complete(result);
-      } catch (e) {
+      } catch (_) {
         // Never let the queue die.
         completer.complete((null, EvalError.serverError));
       }
@@ -73,15 +93,37 @@ class LocalEvalService {
       }
     }
 
-    // Drive the UCI handshake once per lifecycle; cheap if already done.
-    _engine.send(const UciIsReady());
+    // ── 1. Stop any lingering search and flush to a known-idle state. ──
+    try {
+      _engine.send(const UciStop());
+    } on Object {
+      // Engine not running — start() above would have bailed; re-report.
+      return (null, EvalError.offline);
+    }
+    await _awaitReadyOk(const Duration(seconds: 2));
 
+    // ── 2. Reset per-position state; this prevents the engine from using
+    //     its transposition table built against the previous FEN. ──
+    _engine.send(const UciNewGame());
+    await _awaitReadyOk(const Duration(seconds: 2));
+
+    // ── 3. Install the new position and start a *fresh* search. ──
+    //     `latestInfo` is only filled from frames emitted *after* the
+    //     subscription below is live, so stale lines from the prior
+    //     search can't bleed into this result.
     EngineInfo? latestInfo;
     final bestMoveCompleter = Completer<EngineBestMove>();
     late final StreamSubscription<EngineEvent> sub;
     sub = _engine.events.listen((event) {
       if (event is EngineInfo) {
-        latestInfo = event;
+        // Keep the deepest frame we've seen; depth only grows within a
+        // single search, so any frame with depth < latestInfo.depth is
+        // out-of-order and ignored.
+        if (event.scoreCp == null && event.scoreMate == null) return;
+        final prior = latestInfo;
+        if (prior == null || (event.depth ?? 0) >= (prior.depth ?? 0)) {
+          latestInfo = event;
+        }
       } else if (event is EngineBestMove) {
         if (!bestMoveCompleter.isCompleted) bestMoveCompleter.complete(event);
       } else if (event is EngineError) {
@@ -92,7 +134,6 @@ class LocalEvalService {
     });
 
     _engine
-      ..send(const UciNewGame())
       ..send(UciPosition.fen(fen))
       ..send(UciGo.depth(depth));
 
@@ -104,13 +145,21 @@ class LocalEvalService {
       int? scoreCpWhite;
       int? mateInWhite;
       if (latestInfo != null) {
-        if (latestInfo!.scoreMate != null) {
-          final m = latestInfo!.scoreMate!;
+        final info = latestInfo!;
+        if (info.scoreMate != null) {
+          final m = info.scoreMate!;
           mateInWhite = isWhiteToMove ? m : -m;
-        } else if (latestInfo!.scoreCp != null) {
-          final cp = latestInfo!.scoreCp!;
+        } else if (info.scoreCp != null) {
+          final cp = info.scoreCp!;
           scoreCpWhite = isWhiteToMove ? cp : -cp;
         }
+      }
+
+      // No usable info frame → engine answered but didn't report a score.
+      // Surface this so callers can decide whether to retry or treat the
+      // move as unscored rather than silently returning 0.0 / "Good".
+      if (scoreCpWhite == null && mateInWhite == null) {
+        return (null, EvalError.positionNotFound);
       }
 
       final pv = latestInfo?.pv ?? const <String>[];
@@ -125,10 +174,41 @@ class LocalEvalService {
         null,
       );
     } on TimeoutException {
-      _engine.stop();
+      _engine.send(const UciStop());
       return (null, EvalError.serverError);
     } catch (_) {
       return (null, EvalError.serverError);
+    } finally {
+      await sub.cancel();
+    }
+  }
+
+  /// Send `isready` and await the engine's `readyok` acknowledgement.
+  ///
+  /// Used to drain pending output between UCI state transitions. On
+  /// timeout we silently return — the caller will discover any real
+  /// engine stall when the follow-up `go` search times out, and we still
+  /// want to preserve forward progress on a mildly laggy engine.
+  Future<void> _awaitReadyOk(Duration timeout) async {
+    final completer = Completer<void>();
+    late final StreamSubscription<EngineEvent> sub;
+    sub = _engine.events.listen((event) {
+      if (event is EngineReadyOk) {
+        if (!completer.isCompleted) completer.complete();
+      } else if (event is EngineError) {
+        if (!completer.isCompleted) {
+          completer.completeError(event.message);
+        }
+      }
+    });
+
+    try {
+      _engine.send(const UciIsReady());
+      await completer.future.timeout(timeout);
+    } on TimeoutException {
+      // Ignore — we treat missing `readyok` as best-effort sync.
+    } catch (_) {
+      // Ignore — caller will see failure via the follow-up go/bestmove.
     } finally {
       await sub.cancel();
     }

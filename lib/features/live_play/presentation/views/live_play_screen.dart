@@ -11,6 +11,7 @@ import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_chess_board.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_eval_bar.dart';
 import 'package:apex_chess/shared_ui/widgets/brilliant_glow.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
 import '../controllers/live_play_controller.dart';
@@ -33,7 +34,7 @@ class LivePlayScreen extends ConsumerWidget {
         child: SafeArea(
         child: Column(
           children: [
-            _EngineEvalBar(
+            ApexEvalBar(
               scoreCp: eval?.scoreCp,
               mateIn: eval?.mateIn,
               depth: eval?.depth ?? 0,
@@ -128,94 +129,6 @@ class LivePlayScreen extends ConsumerWidget {
         const SizedBox(width: 4),
       ],
     );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Engine Eval Bar (Apex AI Analyst)
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _EngineEvalBar extends StatelessWidget {
-  final int? scoreCp;
-  final int? mateIn;
-  final int depth;
-  final bool isSearching;
-  final String? errorMessage;
-
-  const _EngineEvalBar({
-    this.scoreCp, this.mateIn,
-    required this.depth, required this.isSearching,
-    this.errorMessage});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 48,
-      margin: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: ApexColors.elevatedSurface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: errorMessage != null
-              ? ApexColors.mistake.withAlpha(60)
-              : ApexColors.subtleBorder,
-          width: 0.5)),
-      child: Row(children: [
-        Container(
-          width: 72, alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: _scoreBadgeColor,
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(11.5),
-              bottomLeft: Radius.circular(11.5))),
-          child: errorMessage != null
-              ? Icon(Icons.memory_outlined,
-                  color: ApexColors.ruby.withValues(alpha: 0.75), size: 20)
-              : Text(_scoreText,
-                  style: ApexTypography.monoEval.copyWith(
-                      color: _scoreTextColor, fontSize: 16)),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: errorMessage != null
-              ? Text(errorMessage!,
-                  style: ApexTypography.bodyMedium.copyWith(
-                    color: ApexColors.ruby.withValues(alpha: 0.8), fontSize: 11),
-                  maxLines: 1, overflow: TextOverflow.ellipsis)
-              : Text(depth > 0 ? 'D$depth' : '—',
-                  style: ApexTypography.bodyMedium.copyWith(
-                    color: ApexColors.textTertiary,
-                    fontFamily: 'JetBrains Mono', fontSize: 12)),
-        ),
-        if (isSearching)
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: SizedBox(width: 14, height: 14,
-              child: CircularProgressIndicator(strokeWidth: 2,
-                  color: ApexColors.electricBlue.withAlpha(180)))),
-      ]),
-    );
-  }
-
-  String get _scoreText {
-    if (mateIn != null) return 'M${mateIn!.abs()}';
-    if (scoreCp == null) return '—';
-    final pawns = scoreCp! / 100;
-    final sign = pawns >= 0 ? '+' : '';
-    return '$sign${pawns.toStringAsFixed(1)}';
-  }
-
-  Color get _scoreBadgeColor {
-    if (errorMessage != null) return ApexColors.cardSurface;
-    if (mateIn != null) return mateIn! > 0 ? Colors.white : ApexColors.trueBlack;
-    if (scoreCp == null) return ApexColors.cardSurface;
-    return scoreCp! >= 0 ? Colors.white : ApexColors.trueBlack;
-  }
-
-  Color get _scoreTextColor {
-    if (mateIn != null) return mateIn! > 0 ? ApexColors.trueBlack : Colors.white;
-    if (scoreCp == null) return ApexColors.textTertiary;
-    return scoreCp! >= 0 ? ApexColors.trueBlack : Colors.white;
   }
 }
 

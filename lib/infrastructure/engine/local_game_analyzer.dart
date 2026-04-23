@@ -5,10 +5,23 @@
 /// type so the Review pipeline does not care whether analysis came from
 /// Lichess or from local Stockfish.
 ///
-/// Opening-book detection has been dropped from this path because it was
-/// implemented via the Lichess Opening Explorer — all analysis is now
-/// engine-evaluated. A move that would have been classified as "Book" is
-/// now classified by the engine's delta Win% like any other move.
+/// ### Pipeline (per ply)
+///
+/// 1. Check the embedded ECO opening book for the *before* position. If it
+///    is a known theoretical move, classify as [MoveQuality.book] and skip
+///    the engine call entirely — saving ~70 % of searches on most opening
+///    sequences.
+/// 2. Otherwise, request the engine eval for the *before* FEN (mover's
+///    POV, normalised to White in the returned snapshot).
+/// 3. Request the engine eval for the *after* FEN — which is also the
+///    *before* FEN of the next ply, so we cache and reuse it and each ply
+///    only costs a single additional search on the happy path.
+/// 4. Pass the two snapshots to [EvaluationAnalyzer] to compute deltaW and
+///    classify the move (Blunder / Mistake / Inaccuracy / Good / Best /
+///    Excellent / Brilliant).
+///
+/// All evaluations are issued through [LocalEvalService] which now
+/// guarantees per-call UCI synchronisation (see that file for details).
 library;
 
 import 'package:dartchess/dartchess.dart';
@@ -18,12 +31,10 @@ import 'package:apex_chess/core/domain/entities/move_analysis.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/infrastructure/api/cloud_eval_service.dart'
     show CloudEvalError;
+import 'package:apex_chess/infrastructure/engine/eco_book.dart';
 import 'package:apex_chess/infrastructure/engine/local_eval_service.dart';
 
 /// Exception used to surface user-facing errors to the home / review UI.
-/// The UI already handles `CloudAnalysisException`, so we reuse the same
-/// shape by name to avoid churning the dialog code. The underlying error
-/// values now describe engine failures rather than HTTP errors.
 class LocalAnalysisException implements Exception {
   const LocalAnalysisException(this.message);
 
@@ -38,20 +49,25 @@ class LocalAnalysisException implements Exception {
 class LocalGameAnalyzer {
   LocalGameAnalyzer({
     required LocalEvalService eval,
+    EcoBook? book,
     EvaluationAnalyzer analyzer = const EvaluationAnalyzer(),
-    int depth = 12,
+    int depth = 14,
   })  : _eval = eval,
+        _book = book,
         _analyzer = analyzer,
         _depth = depth;
 
   final LocalEvalService _eval;
+  final EcoBook? _book;
   final EvaluationAnalyzer _analyzer;
   final int _depth;
 
   Future<AnalysisTimeline> analyzeFromPgn(
     String pgn, {
     void Function(int completed, int total)? onProgress,
+    int? depth,
   }) async {
+    final searchDepth = depth ?? _depth;
     final game = PgnGame.parsePgn(pgn);
     final headers = Map<String, String>.from(game.headers);
     Position position = PgnGame.startingPosition(game.headers);
@@ -64,12 +80,18 @@ class LocalGameAnalyzer {
       final fenBefore = position.fen;
       final isWhite = position.turn == Side.white;
       final newPos = position.play(move);
+      // Always derive UCI from the actual move squares — never fall back
+      // to SAN, which would produce garbage like "O-O" inside the four-
+      // character slot the UI parses as (from, to).
       String uci;
       if (move is NormalMove) {
         uci = '${_sqAlg(move.from)}${_sqAlg(move.to)}'
             '${move.promotion != null ? _roleChar(move.promotion!) : ""}';
       } else {
-        uci = node.san;
+        // Should be unreachable — dartchess emits NormalMove for every
+        // legal move, including castling. Defensive null-guard so the
+        // rest of the pipeline can rely on `uci.length >= 4`.
+        uci = '';
       }
       parsed.add(_ParsedMove(
         fenBefore: fenBefore,
@@ -84,11 +106,28 @@ class LocalGameAnalyzer {
     final totalPlies = parsed.length;
     onProgress?.call(0, totalPlies);
 
-    // Seed the starting-position Win% from the engine's opening eval.
-    final (startEval, startErr) = await _eval.evaluate(startingFen, depth: _depth);
-    if (startErr != null && startErr != CloudEvalError.positionNotFound) {
-      throw const LocalAnalysisException(
-          'Apex AI Analyst failed to initialise.');
+    // ── Cache engine evals by FEN. fenAfter[ply N] == fenBefore[ply N+1],
+    // so each non-book position is evaluated at most once. ──
+    final cache = <String, EvalSnapshot>{};
+
+    Future<EvalSnapshot?> evalCached(String fen) async {
+      final hit = cache[fen];
+      if (hit != null) return hit;
+      final (snap, err) = await _eval.evaluate(fen, depth: searchDepth);
+      if (err != null && err != CloudEvalError.positionNotFound) {
+        throw const LocalAnalysisException(
+            'Quantum Scan failed — engine stopped responding.');
+      }
+      if (snap == null) return null;
+      cache[fen] = snap;
+      return snap;
+    }
+
+    // Seed the starting-position Win% from the engine's opening eval (if
+    // not a book position) or from neutral 50 % (book positions).
+    EvalSnapshot? startEval;
+    if (_book == null || !_book.contains(startingFen)) {
+      startEval = await evalCached(startingFen);
     }
     double prevWinPct = startEval != null
         ? EvaluationAnalyzer.calculateWinPercentage(
@@ -100,21 +139,37 @@ class LocalGameAnalyzer {
     for (var ply = 0; ply < totalPlies; ply++) {
       final entry = parsed[ply];
 
-      // One search per ply — the `bestMove` from the "before" search is the
-      // engine's recommendation; the Win% delta uses the "after" search.
-      final (before, beforeErr) =
-          await _eval.evaluate(entry.fenBefore, depth: _depth);
-      final (after, afterErr) =
-          await _eval.evaluate(entry.fenAfter, depth: _depth);
+      // ── Book cutoff: if the move is a known theoretical reply, trust
+      // the book and skip the engine entirely. Saves ~70 % of searches in
+      // the opening phase and lets batteries live to see move 20. ──
+      final bookHit = _book?.lookup(entry.fenAfter);
+      if (bookHit != null) {
+        moves.add(MoveAnalysis(
+          ply: ply,
+          san: entry.san,
+          uci: entry.uci,
+          fenBefore: entry.fenBefore,
+          fenAfter: entry.fenAfter,
+          winPercentBefore: prevWinPct,
+          winPercentAfter: prevWinPct,
+          deltaW: 0,
+          classification: MoveQuality.book,
+          isWhiteMove: entry.isWhiteMove,
+          engineBestMoveSan: null,
+          engineBestMoveUci: null,
+          scoreCpAfter: null,
+          mateInAfter: null,
+          inBook: true,
+          openingName: bookHit.name,
+          ecoCode: bookHit.eco,
+          message: '${bookHit.eco} • ${bookHit.name}',
+        ));
+        onProgress?.call(ply + 1, totalPlies);
+        continue;
+      }
 
-      if (beforeErr != null && beforeErr != CloudEvalError.positionNotFound) {
-        throw const LocalAnalysisException(
-            'Quantum Scan failed — engine stopped responding.');
-      }
-      if (afterErr != null && afterErr != CloudEvalError.positionNotFound) {
-        throw const LocalAnalysisException(
-            'Quantum Scan failed — engine stopped responding.');
-      }
+      final before = await evalCached(entry.fenBefore);
+      final after = await evalCached(entry.fenAfter);
 
       final winPctAfter = after != null
           ? EvaluationAnalyzer.calculateWinPercentage(

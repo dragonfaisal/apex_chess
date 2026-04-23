@@ -19,6 +19,7 @@ import '../../../../shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_chess_board.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_eval_bar.dart';
 import 'package:apex_chess/shared_ui/widgets/brilliant_glow.dart';
 import 'package:apex_chess/shared_ui/widgets/evaluation_chart.dart';
 import '../controllers/review_controller.dart';
@@ -73,7 +74,12 @@ class ReviewScreen extends ConsumerWidget {
                       BoxConstraints(minHeight: constraints.maxHeight),
                   child: Column(
                     children: [
-                      _EvalBar(move: currentMove),
+                      ApexEvalBar(
+                        scoreCp: currentMove?.scoreCpAfter,
+                        mateIn: currentMove?.mateInAfter,
+                        depth: 0,
+                        openingLabel: currentMove?.openingName,
+                      ),
                       const SizedBox(height: 8),
                       Center(
                         child: SizedBox(
@@ -166,113 +172,6 @@ class ReviewScreen extends ConsumerWidget {
       ),
       centerTitle: true,
     );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Eval Bar
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _EvalBar extends StatelessWidget {
-  final MoveAnalysis? move;
-  const _EvalBar({this.move});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 48,
-      margin: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: ApexColors.elevatedSurface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: ApexColors.subtleBorder, width: 0.5),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 72,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: _badgeColor,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(11.5),
-                bottomLeft: Radius.circular(11.5),
-              ),
-            ),
-            child: Text(
-              _scoreText,
-              style: ApexTypography.monoEval.copyWith(
-                  color: _textColor, fontSize: 16),
-            ),
-          ),
-          const SizedBox(width: 12),
-          if (move != null) ...[
-            Text(
-              'Win ${move!.winPercentAfter.toStringAsFixed(1)}%',
-              style: ApexTypography.bodyMedium.copyWith(
-                color: ApexColors.textTertiary,
-                fontFamily: 'JetBrains Mono',
-                fontSize: 12,
-              ),
-            ),
-            const Spacer(),
-            if (move!.openingName != null)
-              Padding(
-                padding: const EdgeInsets.only(right: 14),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: ApexColors.book.withAlpha(20),
-                    borderRadius: BorderRadius.circular(8),
-                    border:
-                        Border.all(color: ApexColors.book.withAlpha(40)),
-                  ),
-                  child: Text(
-                    move!.openingName!,
-                    style: TextStyle(
-                      color: ApexColors.book,
-                      fontSize: 11,
-                      fontFamily: 'JetBrains Mono',
-                    ),
-                  ),
-                ),
-              ),
-          ] else ...[
-            Text(
-              'Starting position',
-              style: ApexTypography.bodyMedium.copyWith(
-                color: ApexColors.textTertiary,
-                fontSize: 12,
-              ),
-            ),
-            const Spacer(),
-          ],
-        ],
-      ),
-    );
-  }
-
-  String get _scoreText {
-    if (move == null) return '0.0';
-    final cp = move!.scoreCpAfter;
-    if (move!.mateInAfter != null) return 'M${move!.mateInAfter!.abs()}';
-    if (cp == null) return '—';
-    final pawns = cp / 100;
-    final sign = pawns >= 0 ? '+' : '';
-    return '$sign${pawns.toStringAsFixed(1)}';
-  }
-
-  Color get _badgeColor {
-    if (move == null) return ApexColors.cardSurface;
-    final cp = move!.scoreCpAfter ?? 0;
-    return cp >= 0 ? Colors.white : ApexColors.trueBlack;
-  }
-
-  Color get _textColor {
-    if (move == null) return ApexColors.textTertiary;
-    final cp = move!.scoreCpAfter ?? 0;
-    return cp >= 0 ? ApexColors.trueBlack : Colors.white;
   }
 }
 

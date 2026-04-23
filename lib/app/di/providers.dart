@@ -10,6 +10,7 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:apex_chess/core/infrastructure/engine/engine.dart';
+import 'package:apex_chess/infrastructure/engine/eco_book.dart';
 import 'package:apex_chess/infrastructure/engine/local_eval_service.dart';
 import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
 import 'package:apex_chess/infrastructure/api/mock_analysis_api_client.dart';
@@ -55,11 +56,24 @@ final liveEvalServiceProvider = Provider<LocalEvalService>((ref) {
 // Full-game analyzer — local only
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Local ECO opening book — loaded once from the bundled TSV.
+///
+/// Evaluated lazily on first analyser invocation; failures degrade to an
+/// empty book (no book-based classification, but the engine pipeline is
+/// unaffected).
+final ecoBookProvider = FutureProvider<EcoBook>((ref) async {
+  return EcoBook.load();
+});
+
 /// Quantum Depth Scan — analyzes a full PGN via the local engine. Replaces
 /// the previous `cloudGameAnalyzerProvider`.
 final gameAnalyzerProvider = Provider<LocalGameAnalyzer>((ref) {
   final eval = ref.watch(liveEvalServiceProvider);
-  return LocalGameAnalyzer(eval: eval);
+  // Watch the book; while loading, gameAnalyzerProvider sees `null` and
+  // the analyser runs engine-only. Once loaded, Riverpod rebuilds this
+  // provider with the populated book for subsequent analyses.
+  final book = ref.watch(ecoBookProvider).asData?.value;
+  return LocalGameAnalyzer(eval: eval, book: book);
 });
 
 /// Mock analysis API client for the "Demo • Opera Game" hero.
