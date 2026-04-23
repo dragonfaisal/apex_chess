@@ -54,6 +54,13 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
 
+# Stockfish FFI bridge. Built as a shared library and bundled alongside the
+# Flutter library under lib/ in the install bundle.
+add_subdirectory(
+  "${CMAKE_CURRENT_SOURCE_DIR}/../src/native"
+  "${CMAKE_CURRENT_BINARY_DIR}/stockfish_bridge"
+)
+
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
 
@@ -105,6 +112,10 @@ foreach(bundled_library ${PLUGIN_BUNDLED_LIBRARIES})
     DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
     COMPONENT Runtime)
 endforeach(bundled_library)
+
+install(TARGETS stockfish_bridge
+  LIBRARY DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+  COMPONENT Runtime)
 
 # Copy the native assets provided by the build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/linux/")

@@ -1,0 +1,214 @@
+// Copyright (c) Apex Chess authors.
+//
+// Implementation of the Stockfish C bridge.
+//
+// The bridge spawns a worker thread that runs the UCI loop and communicates
+// with the caller via two line-oriented queues. Two build modes are supported:
+//
+//   * STOCKFISH_STUB (default when `STOCKFISH_SOURCES_DIR` is not provided at
+//     configure time): a minimal UCI-ish stub that responds to `uci`,
+//     `isready`, `ucinewgame`, `position`, `go`, and `quit`. This lets the
+//     Dart / Flutter layer be exercised end-to-end before the real engine is
+//     integrated.
+//
+//   * Real Stockfish: define `STOCKFISH_REAL` and link against the Stockfish
+//     translation units. The upstream `main` entrypoint is renamed to
+//     `stockfish_main` (see `CMakeLists.txt`) and invoked on the worker
+//     thread, with its std::cin / std::cout rebound to the bridge's queues.
+#include "stockfish_bridge.h"
+
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <deque>
+#include <mutex>
+#include <string>
+#include <thread>
+
+namespace {
+
+// A blocking line queue used by both directions of the bridge.
+class LineQueue {
+ public:
+  void Push(std::string line) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    queue_.emplace_back(std::move(line));
+    cv_.notify_one();
+  }
+
+  // Pop up to `timeout_ms` milliseconds. Returns false on timeout or shutdown.
+  bool Pop(std::string* out, int timeout_ms) {
+    std::unique_lock<std::mutex> lock(mutex_);
+    const auto deadline =
+        std::chrono::steady_clock::now() +
+        std::chrono::milliseconds(timeout_ms < 0 ? 0 : timeout_ms);
+    while (queue_.empty() && !closed_) {
+      if (timeout_ms < 0) {
+        cv_.wait(lock);
+      } else if (cv_.wait_until(lock, deadline) == std::cv_status::timeout) {
+        return false;
+      }
+    }
+    if (queue_.empty()) return false;
+    *out = std::move(queue_.front());
+    queue_.pop_front();
+    return true;
+  }
+
+  // Blocking pop with no timeout. Returns false only on shutdown.
+  bool PopBlocking(std::string* out) {
+    std::unique_lock<std::mutex> lock(mutex_);
+    cv_.wait(lock, [&] { return !queue_.empty() || closed_; });
+    if (queue_.empty()) return false;
+    *out = std::move(queue_.front());
+    queue_.pop_front();
+    return true;
+  }
+
+  void Close() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    closed_ = true;
+    cv_.notify_all();
+  }
+
+ private:
+  std::mutex mutex_;
+  std::condition_variable cv_;
+  std::deque<std::string> queue_;
+  bool closed_ = false;
+};
+
+}  // namespace
+
+struct sf_engine {
+  LineQueue to_engine;
+  LineQueue from_engine;
+  std::thread worker;
+  std::atomic<bool> shutting_down{false};
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Worker implementations
+// ─────────────────────────────────────────────────────────────────────────────
+
+#if defined(STOCKFISH_REAL)
+// Real Stockfish integration. The build system renames Stockfish's `main`
+// symbol to `stockfish_main` and provides `bridge_io` hooks that the engine
+// uses instead of std::cin / std::cout. See `CMakeLists.txt` for details.
+extern "C" int stockfish_main(int argc, char** argv);
+extern "C" void stockfish_bridge_set_io(
+    std::string (*read_line)(void*),
+    void (*write_line)(void*, const char*),
+    void* ctx);
+
+static std::string BridgeRead(void* ctx) {
+  auto* engine = static_cast<sf_engine*>(ctx);
+  std::string line;
+  if (!engine->to_engine.PopBlocking(&line)) return "quit";
+  return line;
+}
+
+static void BridgeWrite(void* ctx, const char* line) {
+  auto* engine = static_cast<sf_engine*>(ctx);
+  engine->from_engine.Push(line == nullptr ? std::string{} : std::string{line});
+}
+
+static void RunEngine(sf_engine* engine) {
+  stockfish_bridge_set_io(&BridgeRead, &BridgeWrite, engine);
+  char arg0[] = "stockfish";
+  char* argv[] = {arg0, nullptr};
+  stockfish_main(1, argv);
+  engine->from_engine.Close();
+}
+
+#else  // STOCKFISH_STUB
+
+// Minimal UCI stub so the full Dart pipeline can be tested without the real
+// engine. It replies to the handful of commands the app uses today.
+static void HandleStubCommand(sf_engine* engine, const std::string& cmd) {
+  if (cmd == "uci") {
+    engine->from_engine.Push("id name ApexChess-Stub");
+    engine->from_engine.Push("id author Apex Chess");
+    engine->from_engine.Push("uciok");
+  } else if (cmd == "isready") {
+    engine->from_engine.Push("readyok");
+  } else if (cmd.rfind("go", 0) == 0) {
+    engine->from_engine.Push(
+        "info depth 1 seldepth 1 multipv 1 score cp 0 nodes 1 nps 1 time 1 "
+        "pv e2e4");
+    engine->from_engine.Push("bestmove e2e4");
+  }
+  // Silently accept: ucinewgame, position, setoption, stop, debug, register
+}
+
+static void RunEngine(sf_engine* engine) {
+  std::string cmd;
+  while (!engine->shutting_down.load()) {
+    if (!engine->to_engine.PopBlocking(&cmd)) break;
+    if (cmd == "quit") break;
+    HandleStubCommand(engine, cmd);
+  }
+  engine->from_engine.Close();
+}
+
+#endif  // STOCKFISH_REAL / STOCKFISH_STUB
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Public C ABI
+// ─────────────────────────────────────────────────────────────────────────────
+
+extern "C" SF_API sf_engine* stockfish_create(void) {
+  auto* engine = new (std::nothrow) sf_engine();
+  if (engine == nullptr) return nullptr;
+  engine->worker = std::thread(RunEngine, engine);
+  return engine;
+}
+
+extern "C" SF_API void stockfish_destroy(sf_engine* engine) {
+  if (engine == nullptr) return;
+  engine->shutting_down.store(true);
+  engine->to_engine.Push("quit");
+  engine->to_engine.Close();
+  if (engine->worker.joinable()) engine->worker.join();
+  engine->from_engine.Close();
+  delete engine;
+}
+
+extern "C" SF_API int stockfish_write(sf_engine* engine,
+                                      const char* utf8_line) {
+  if (engine == nullptr || utf8_line == nullptr) return -1;
+  std::string line(utf8_line);
+  while (!line.empty() &&
+         (line.back() == '\n' || line.back() == '\r')) {
+    line.pop_back();
+  }
+  const int bytes = static_cast<int>(line.size());
+  engine->to_engine.Push(std::move(line));
+  return bytes;
+}
+
+extern "C" SF_API char* stockfish_read_line(sf_engine* engine,
+                                            int timeout_ms) {
+  if (engine == nullptr) return nullptr;
+  std::string line;
+  const bool ok = timeout_ms < 0
+                      ? engine->from_engine.PopBlocking(&line)
+                      : engine->from_engine.Pop(&line, timeout_ms);
+  if (!ok) return nullptr;
+  char* out = static_cast<char*>(std::malloc(line.size() + 1));
+  if (out == nullptr) return nullptr;
+  std::memcpy(out, line.data(), line.size());
+  out[line.size()] = '\0';
+  return out;
+}
+
+extern "C" SF_API void stockfish_free_string(char* s) {
+  std::free(s);
+}
+
+extern "C" SF_API const char* stockfish_bridge_version(void) {
+  return "apex-stockfish-bridge/0.1.0";
+}
