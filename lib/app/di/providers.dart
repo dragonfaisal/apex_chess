@@ -14,7 +14,6 @@ import 'package:apex_chess/features/user_validation/data/username_validator.dart
 import 'package:apex_chess/infrastructure/engine/eco_book.dart';
 import 'package:apex_chess/infrastructure/engine/local_eval_service.dart';
 import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
-import 'package:apex_chess/infrastructure/api/mock_analysis_api_client.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Local engine (Stockfish via FFI + Isolate)
@@ -76,11 +75,6 @@ final gameAnalyzerProvider = Provider<LocalGameAnalyzer>((ref) {
   // and silently disable book classification for the first game scanned.
   final bookFuture = ref.watch(ecoBookProvider.future);
   return LocalGameAnalyzer(eval: eval, bookFuture: bookFuture);
-});
-
-/// Mock analysis API client for the "Demo • Opera Game" hero.
-final mockAnalysisApiProvider = Provider<MockAnalysisApiClient>((ref) {
-  return const MockAnalysisApiClient();
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

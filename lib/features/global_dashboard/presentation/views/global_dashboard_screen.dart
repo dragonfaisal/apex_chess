@@ -11,6 +11,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
+import 'package:apex_chess/features/profile_stats/data/profile_stats_service.dart';
+import 'package:apex_chess/features/profile_stats/presentation/controllers/profile_stats_controller.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
@@ -124,6 +126,10 @@ class _DashboardBody extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 16),
+          const _ProfileStatsCard(),
+          const SizedBox(height: 14),
+          const _ColorFilterBar(),
+          const SizedBox(height: 12),
           _KpiRow(stats: stats),
           const SizedBox(height: 18),
           _AccuracyTrendCard(stats: stats),
@@ -131,9 +137,448 @@ class _DashboardBody extends ConsumerWidget {
           _QualityPieCard(stats: stats),
           const SizedBox(height: 14),
           _ResultSplitCard(stats: stats),
+          const SizedBox(height: 14),
+          const _OpeningStatsCard(),
           const SizedBox(height: 18),
           const _RecentGamesTable(),
         ],
+      ),
+    );
+  }
+}
+
+// ── Color filter ──────────────────────────────────────────────────────
+
+class _ColorFilterBar extends ConsumerWidget {
+  const _ColorFilterBar();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final active = ref.watch(dashboardColorFilterProvider);
+    return GlassPanel(
+      padding: const EdgeInsets.all(4),
+      accentColor: ApexColors.sapphire,
+      child: Row(
+        children: [
+          for (final p in ColorPerspective.values)
+            Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  ref.read(dashboardColorFilterProvider.notifier).state = p;
+                },
+                child: Container(
+                  margin: const EdgeInsets.all(2),
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    gradient: active == p
+                        ? ApexGradients.sapphire
+                        : null,
+                    color: active == p
+                        ? null
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    switch (p) {
+                      ColorPerspective.all => 'ALL',
+                      ColorPerspective.white => 'WHITE',
+                      ColorPerspective.black => 'BLACK',
+                    },
+                    style: ApexTypography.bodyMedium.copyWith(
+                      color: active == p
+                          ? ApexColors.textPrimary
+                          : ApexColors.textTertiary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Profile Stats card ────────────────────────────────────────────────
+
+class _ProfileStatsCard extends ConsumerWidget {
+  const _ProfileStatsCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(liveProfileStatsProvider);
+    return GlassPanel(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      accentColor: ApexColors.aurora,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _CardHeader(
+            title: 'LIVE PROFILE',
+            subtitle:
+                'Synced from Chess.com / Lichess — updates every refresh.',
+            accent: ApexColors.aurora,
+          ),
+          const SizedBox(height: 12),
+          async.when(
+            loading: () => _profileLoading(),
+            error: (_, __) => _profileFallback(
+                'Could not reach profile service. Retry in a moment.'),
+            data: (stats) {
+              if (stats == null || !stats.hasData) {
+                return _profileFallback(
+                    'Connect an account to stream live rating snapshots.');
+              }
+              return _profileBody(stats);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _profileLoading() => SizedBox(
+        height: 60,
+        child: Center(
+          child: SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: ApexColors.aurora.withValues(alpha: 0.7),
+            ),
+          ),
+        ),
+      );
+
+  Widget _profileFallback(String msg) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Text(
+          msg,
+          style: ApexTypography.bodyMedium.copyWith(
+            color: ApexColors.textTertiary,
+            fontSize: 12,
+          ),
+        ),
+      );
+
+  Widget _profileBody(ProfileStats stats) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          '@${stats.displayName}',
+          style: ApexTypography.titleMedium.copyWith(
+            color: ApexColors.textPrimary,
+            fontSize: 14,
+            letterSpacing: 0.6,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            for (final b in stats.buckets)
+              Expanded(
+                child: _RatingTile(
+                  label: b.label,
+                  rating: b.rating,
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: _SmallStat(
+                label: 'GAMES',
+                value: '${stats.totalGames}',
+                color: ApexColors.sapphireBright,
+              ),
+            ),
+            Expanded(
+              child: _SmallStat(
+                label: 'WIN',
+                value: '${stats.totalWins}',
+                color: ApexColors.emeraldBright,
+              ),
+            ),
+            Expanded(
+              child: _SmallStat(
+                label: 'LOSS',
+                value: '${stats.totalLosses}',
+                color: ApexColors.ruby,
+              ),
+            ),
+            Expanded(
+              child: _SmallStat(
+                label: 'WIN%',
+                value: '${stats.winRate.toStringAsFixed(1)}%',
+                color: ApexColors.aurora,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _RatingTile extends StatelessWidget {
+  const _RatingTile({required this.label, required this.rating});
+
+  final String label;
+  final int? rating;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 3),
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        color: ApexColors.cardSurface.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+            color: ApexColors.subtleBorder, width: 0.6),
+      ),
+      child: Column(
+        children: [
+          Text(
+            rating?.toString() ?? '—',
+            style: ApexTypography.headlineMedium.copyWith(
+              color: ApexColors.textPrimary,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label.toUpperCase(),
+            style: ApexTypography.bodyMedium.copyWith(
+              color: ApexColors.textTertiary,
+              fontSize: 9,
+              letterSpacing: 1.2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SmallStat extends StatelessWidget {
+  const _SmallStat({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: ApexTypography.bodyMedium.copyWith(
+            color: color,
+            fontWeight: FontWeight.w700,
+            fontSize: 13,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: ApexTypography.bodyMedium.copyWith(
+            color: ApexColors.textTertiary,
+            fontSize: 9,
+            letterSpacing: 1.2,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Opening stats ────────────────────────────────────────────────────
+
+class _OpeningStatsCard extends ConsumerWidget {
+  const _OpeningStatsCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final openings = ref.watch(openingStatsProvider);
+    final revisit = ref.watch(academyRevisitQueueProvider);
+    return GlassPanel(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      accentColor: ApexColors.sapphireBright,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _CardHeader(
+            title: 'OPENING PERFORMANCE',
+            subtitle:
+                'Top lines by frequency — Apex Academy prioritises your weakest.',
+            accent: ApexColors.sapphireBright,
+          ),
+          const SizedBox(height: 12),
+          if (openings.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'Scan a few games to unlock opening analytics.',
+                style: ApexTypography.bodyMedium.copyWith(
+                  color: ApexColors.textTertiary,
+                  fontSize: 12,
+                ),
+              ),
+            )
+          else ...[
+            for (final o in openings.take(6))
+              _OpeningRow(stats: o),
+            if (revisit.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: ApexColors.sapphireBright.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: ApexColors.sapphireBright.withValues(alpha: 0.35),
+                      width: 0.5),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'REVISIT QUEUE',
+                      style: ApexTypography.bodyMedium.copyWith(
+                        color: ApexColors.sapphireBright,
+                        fontSize: 10,
+                        letterSpacing: 1.4,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    for (final o in revisit)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          '• ${o.name} — ${o.lossRate.toStringAsFixed(0)}% loss · ${o.total} games',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: ApexTypography.bodyMedium.copyWith(
+                            color: ApexColors.textSecondary,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _OpeningRow extends StatelessWidget {
+  const _OpeningRow({required this.stats});
+  final OpeningStats stats;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  stats.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: ApexTypography.bodyMedium.copyWith(
+                    color: ApexColors.textPrimary,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${stats.eco ?? "—"} · ${stats.total} games',
+                  style: ApexTypography.bodyMedium.copyWith(
+                    color: ApexColors.textTertiary,
+                    fontSize: 10.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          _OpeningBar(stats: stats),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 46,
+            child: Text(
+              '${stats.winRate.toStringAsFixed(0)}%',
+              textAlign: TextAlign.right,
+              style: ApexTypography.bodyMedium.copyWith(
+                color: stats.winRate >= 50
+                    ? ApexColors.emeraldBright
+                    : ApexColors.ruby,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OpeningBar extends StatelessWidget {
+  const _OpeningBar({required this.stats});
+  final OpeningStats stats;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = stats.total == 0 ? 1 : stats.total;
+    final winFrac = stats.wins / total;
+    final drawFrac = stats.draws / total;
+    return SizedBox(
+      width: 80,
+      height: 8,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(4),
+        child: Row(
+          children: [
+            Expanded(
+              flex: (winFrac * 100).round().clamp(0, 100),
+              child: Container(color: ApexColors.emeraldBright),
+            ),
+            Expanded(
+              flex: (drawFrac * 100).round().clamp(0, 100),
+              child: Container(color: ApexColors.textTertiary),
+            ),
+            Expanded(
+              flex: ((1 - winFrac - drawFrac) * 100).round().clamp(0, 100),
+              child: Container(color: ApexColors.ruby),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -344,6 +789,15 @@ class _QualityPieCard extends StatelessWidget {
       ..sort((a, b) => b.value.compareTo(a.value));
     final total = entries.fold<int>(0, (s, e) => s + e.value);
 
+    final legendItems = entries
+        .map((e) => _LegendChip(
+              color: _qualityColor(e.key),
+              label: _qualityLabel(e.key),
+              count: e.value,
+              percent: total == 0 ? 0 : e.value / total,
+            ))
+        .toList();
+
     return GlassPanel(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
       accentColor: ApexColors.sapphire,
@@ -356,50 +810,80 @@ class _QualityPieCard extends StatelessWidget {
             accent: ApexColors.sapphire,
           ),
           const SizedBox(height: 12),
-          SizedBox(
-            height: 170,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                  flex: 5,
-                  child: PieChart(
-                    PieChartData(
-                      sectionsSpace: 2,
-                      centerSpaceRadius: 36,
-                      startDegreeOffset: -90,
-                      sections: entries.isEmpty
-                          ? []
-                          : entries
-                              .map((e) => PieChartSectionData(
-                                    value: e.value.toDouble(),
-                                    color: _qualityColor(e.key),
-                                    radius: 42,
-                                    title: '',
-                                  ))
-                              .toList(),
+          // ── Responsive: pie + legend-column side-by-side on ≥ 420 dp,
+          // stacked (pie above, wrapping legend grid below) on narrower
+          // phones. The old fixed-height Row with `flex: 6` on the
+          // legend overflowed both vertically (7 chips / 170 dp) and
+          // horizontally (label + count cramped into ~100 dp).
+          LayoutBuilder(builder: (context, box) {
+            final wide = box.maxWidth >= 420;
+            if (wide) {
+              return SizedBox(
+                height: 200,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      flex: 5,
+                      child: _buildPie(entries),
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 7,
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: legendItems,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                Expanded(
-                  flex: 6,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: entries
-                        .map((e) => _LegendChip(
-                              color: _qualityColor(e.key),
-                              label: _qualityLabel(e.key),
-                              count: e.value,
-                              percent: total == 0 ? 0 : e.value / total,
-                            ))
-                        .toList(),
-                  ),
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(height: 170, child: _buildPie(entries)),
+                const SizedBox(height: 10),
+                // Two-column wrap keeps every chip inside the card even
+                // on 320 dp widths, and each chip is its own Intrinsic
+                // so the "· %" trailing figure never collides with the
+                // label.
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 2,
+                  children: legendItems
+                      .map((chip) => SizedBox(
+                            width: (box.maxWidth - 8) / 2,
+                            child: chip,
+                          ))
+                      .toList(),
                 ),
               ],
-            ),
-          ),
+            );
+          }),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPie(List<MapEntry<MoveQuality, int>> entries) {
+    return PieChart(
+      PieChartData(
+        sectionsSpace: 2,
+        centerSpaceRadius: 36,
+        startDegreeOffset: -90,
+        sections: entries.isEmpty
+            ? []
+            : entries
+                .map((e) => PieChartSectionData(
+                      value: e.value.toDouble(),
+                      color: _qualityColor(e.key),
+                      radius: 42,
+                      title: '',
+                    ))
+                .toList(),
       ),
     );
   }

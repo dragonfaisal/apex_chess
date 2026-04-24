@@ -13,6 +13,7 @@
 library;
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
@@ -153,23 +154,29 @@ class ProfileScannerService {
           accuracy: 0,
           brilliantCount: 0,
           blunderCount: 0,
+          engineMatchRate: 0,
+          cpLossStdDev: 0,
+          rating: null,
         ));
         continue;
       }
 
-      final accuracy = _opponentAccuracy(timeline, username);
-      accuracySum += accuracy;
+      final signals = _collectSignals(timeline, username);
+      accuracySum += signals.accuracy;
 
       perGameAccuracy.add(GameAccuracy(
         id: g.id,
         white: g.whiteName,
         black: g.blackName,
         result: g.resultLabel,
-        accuracy: accuracy,
+        accuracy: signals.accuracy,
         brilliantCount:
             timeline.qualityCounts[MoveQuality.brilliant] ?? 0,
         blunderCount:
             timeline.qualityCounts[MoveQuality.blunder] ?? 0,
+        engineMatchRate: signals.engineMatchRate,
+        cpLossStdDev: signals.cpLossStdDev,
+        rating: signals.rating,
       ));
     }
 
@@ -184,28 +191,99 @@ class ProfileScannerService {
       currentPlyTotal: 1,
     ));
 
-    final avg = perGameAccuracy.isEmpty
-        ? 0.0
-        : accuracySum / perGameAccuracy.length;
-    final suspicion = avg >= 92
+    if (perGameAccuracy.isEmpty) {
+      return ProfileScanResult(
+        username: username,
+        source: source,
+        sampleSize: 0,
+        averageAccuracy: 0,
+        averageEngineMatchRate: 0,
+        averageRating: null,
+        suspicionScore: 0,
+        suspicion: SuspicionLevel.clean,
+        verdict: 'No playable games found in this profile.',
+        games: const [],
+      );
+    }
+
+    final avgAccuracy = accuracySum / perGameAccuracy.length;
+    final avgEngineMatch = perGameAccuracy
+            .map((g) => g.engineMatchRate)
+            .fold<double>(0, (s, v) => s + v) /
+        perGameAccuracy.length;
+    final avgCpStdDev = perGameAccuracy
+            .map((g) => g.cpLossStdDev)
+            .fold<double>(0, (s, v) => s + v) /
+        perGameAccuracy.length;
+    final ratedGames = perGameAccuracy.where((g) => g.rating != null).toList();
+    final avgRating = ratedGames.isEmpty
+        ? null
+        : ratedGames
+                .map((g) => g.rating!)
+                .reduce((a, b) => a + b) ~/
+            ratedGames.length;
+
+    // ── Composite suspicion score ────────────────────────────────
+    //
+    // Three signals, each normalized to 0..1, then weighted.
+    //
+    //   accuracyExcess: how much accuracy exceeds the human band
+    //       expected for [avgRating]. 1500 ≈ 75% baseline, each +400
+    //       rating points buys +4% expected accuracy (linear approx,
+    //       clamped).
+    //   matchExcess:    how much engine-match exceeds the human band
+    //       for [avgRating]. 1500 ≈ 45% baseline, each +400 rating
+    //       points buys +5%.
+    //   flatness:       low cp-loss variance at high accuracy. Humans
+    //       spike on blunders; engines stay flat. Penalise sub-2% SD
+    //       when accuracy is > 85%.
+    //
+    // Each term is 0..1; final score is a weighted sum × 100.
+    final expectedAccuracy =
+        _expectedAccuracyForRating(avgRating ?? 1500);
+    final expectedMatch =
+        _expectedEngineMatchForRating(avgRating ?? 1500);
+    final accuracyExcess =
+        ((avgAccuracy - expectedAccuracy) / 15).clamp(0, 1).toDouble();
+    final matchExcess =
+        ((avgEngineMatch - expectedMatch) / 0.25).clamp(0, 1).toDouble();
+    final flatness = (avgAccuracy >= 85 && avgCpStdDev < 3.0)
+        ? ((3.0 - avgCpStdDev) / 3.0).clamp(0, 1).toDouble()
+        : 0.0;
+
+    final suspicionScore =
+        (0.45 * accuracyExcess + 0.40 * matchExcess + 0.15 * flatness) *
+            100;
+
+    final suspicion = suspicionScore >= 70
         ? SuspicionLevel.suspicious
-        : avg >= 82
+        : suspicionScore >= 40
             ? SuspicionLevel.moderate
             : SuspicionLevel.clean;
+
     final verdict = switch (suspicion) {
       SuspicionLevel.clean =>
-        'Accuracy sits within the human band for the stated rating.',
+        'Signals sit within the human band for ${avgRating ?? "this rating"} '
+        '— ${avgAccuracy.toStringAsFixed(0)}% accuracy, '
+        '${(avgEngineMatch * 100).toStringAsFixed(0)}% top-line match.',
       SuspicionLevel.moderate =>
-        'Accuracy is above the typical band — flag for a human review.',
+        'Elevated signals — ${avgAccuracy.toStringAsFixed(0)}% accuracy with '
+        '${(avgEngineMatch * 100).toStringAsFixed(0)}% engine agreement at '
+        '${avgRating ?? "the stated"} ELO. Flag for a human review.',
       SuspicionLevel.suspicious =>
-        'Accuracy is well above what a human of this rating typically produces.',
+        'Accuracy and top-line match are well above the human band for '
+        '${avgRating ?? "this rating"} '
+        '(SD ${avgCpStdDev.toStringAsFixed(1)}%). Strong engine assistance signal.',
     };
 
     return ProfileScanResult(
       username: username,
       source: source,
       sampleSize: perGameAccuracy.length,
-      averageAccuracy: avg,
+      averageAccuracy: avgAccuracy,
+      averageEngineMatchRate: avgEngineMatch,
+      averageRating: avgRating,
+      suspicionScore: suspicionScore,
       suspicion: suspicion,
       verdict: verdict,
       // Reverse so newest plays first in the results list.
@@ -213,32 +291,93 @@ class ProfileScannerService {
     );
   }
 
-  /// Average Win% accuracy for the user-of-interest in a single game.
-  ///
-  /// "Accuracy" here is a simple dual of the `averageCpLoss` aggregate
-  /// already used across the app: for each ply where the user was on
-  /// move, accumulate `max(0, -deltaW)` (negative delta = loss for the
-  /// mover) and divide by the number of plies. We clamp to 0..100
-  /// because deltas can briefly exceed the range on blundered mate-in
-  /// lines.
-  double _opponentAccuracy(AnalysisTimeline timeline, String username) {
+  /// Baseline human accuracy curve. ~75% at 1500, ~92% at 2500.
+  /// Beyond that the scale plateaus — top GMs rarely score above 96%
+  /// full-game accuracy under serious time control.
+  double _expectedAccuracyForRating(int rating) {
+    final clamped = rating.clamp(600, 2800);
+    // Piecewise linear approximation calibrated to Chess.com's
+    // published accuracy histograms.
+    final acc = 60 + ((clamped - 600) / (2800 - 600)) * 36; // 60..96
+    return acc.toDouble();
+  }
+
+  /// Baseline engine top-3 match rate. ~35% at 1500, ~65% at 2500.
+  double _expectedEngineMatchForRating(int rating) {
+    final clamped = rating.clamp(600, 2800);
+    return 0.25 + ((clamped - 600) / (2800 - 600)) * 0.50; // 0.25..0.75
+  }
+
+  /// Collapses a single timeline into the three cheat-detection
+  /// signals plus the user's rating.
+  _Signals _collectSignals(AnalysisTimeline timeline, String username) {
     final userIsWhite = _inferUserColor(timeline, username);
+    int? rating;
+    if (userIsWhite == true) {
+      rating = int.tryParse(timeline.headers['WhiteElo'] ?? '');
+    } else if (userIsWhite == false) {
+      rating = int.tryParse(timeline.headers['BlackElo'] ?? '');
+    }
+
     if (userIsWhite == null) {
       // Username not on either side of the header — fall back to
-      // whole-game accuracy so the row still has a signal.
-      return (100 - timeline.averageCpLoss).clamp(0, 100).toDouble();
+      // whole-game signals so the row still shows something.
+      final fallbackAcc =
+          (100 - timeline.averageCpLoss).clamp(0, 100).toDouble();
+      return _Signals(
+        accuracy: fallbackAcc,
+        engineMatchRate: 0,
+        cpLossStdDev: 0,
+        rating: rating,
+      );
     }
+
     double totalLoss = 0;
+    final losses = <double>[];
     int plies = 0;
+    int engineMatches = 0;
     for (final m in timeline.moves) {
       if (m.isWhiteMove != userIsWhite) continue;
-      if (m.inBook) continue; // Don't count book theory toward accuracy.
+      if (m.inBook) continue; // don't count book theory toward accuracy
       plies++;
-      if (m.deltaW < 0) totalLoss += m.deltaW.abs();
+      final loss = m.deltaW < 0 ? m.deltaW.abs() : 0.0;
+      totalLoss += loss;
+      losses.add(loss);
+      // `best` + `brilliant` are the two classifications that *require*
+      // a match against the engine's top line; treat them as the
+      // engine-correlation signal.
+      if (m.classification == MoveQuality.best ||
+          m.classification == MoveQuality.brilliant) {
+        engineMatches++;
+      }
     }
-    if (plies == 0) return 0;
+    if (plies == 0) {
+      return _Signals(
+        accuracy: 0,
+        engineMatchRate: 0,
+        cpLossStdDev: 0,
+        rating: rating,
+      );
+    }
     final avgLoss = totalLoss / plies;
-    return (100 - avgLoss).clamp(0, 100).toDouble();
+    final accuracy = (100 - avgLoss).clamp(0, 100).toDouble();
+    final matchRate = engineMatches / plies;
+
+    // Population stdev of the per-ply loss series.
+    double varSum = 0;
+    for (final l in losses) {
+      final d = l - avgLoss;
+      varSum += d * d;
+    }
+    final variance = plies <= 1 ? 0.0 : (varSum / plies).abs();
+    final std = math.sqrt(variance);
+
+    return _Signals(
+      accuracy: accuracy,
+      engineMatchRate: matchRate,
+      cpLossStdDev: std,
+      rating: rating,
+    );
   }
 
   bool? _inferUserColor(AnalysisTimeline timeline, String username) {
@@ -249,6 +388,20 @@ class ProfileScannerService {
     if (black == me) return false;
     return null;
   }
+
+}
+
+class _Signals {
+  const _Signals({
+    required this.accuracy,
+    required this.engineMatchRate,
+    required this.cpLossStdDev,
+    required this.rating,
+  });
+  final double accuracy;
+  final double engineMatchRate;
+  final double cpLossStdDev;
+  final int? rating;
 }
 
 

@@ -2,11 +2,15 @@
 ///
 /// All user-facing terminology lives here so the voice of the product can be
 /// tuned in one place. Views MUST prefer these constants over raw strings so
-/// naming stays consistent across Home, Live Play, and PGN Review.
+/// naming stays consistent across Home, Live Play, PGN Review, Academy,
+/// Grandmaster Analytics, and Cheat Detection Radar.
 ///
-/// Where a boring term and a premium term coexist, the premium one is the
-/// public identifier; the boring one is documented in a comment so code
-/// reviewers can connect the dots back to engineering jargon.
+/// Phase 5 voice — "multi-million dollar e-sports platform":
+///   * "Grandmaster Analytics" (never "Global Dashboard").
+///   * "Cheat Detection Radar" (never "Opponent Forensics").
+///   * "War Room" / "Live Arena" (never "Live Play").
+///   * "Apex Academy — Daily Drills" (never "Spaced Repetition").
+///   * "Archived Intel" is kept — it already has the right voice.
 library;
 
 class ApexCopy {
@@ -14,7 +18,9 @@ class ApexCopy {
 
   // ── Brand ──────────────────────────────────────────────────────────────
   static const String appTitle           = 'APEX CHESS';
-  static const String tagline            = 'On-Device Neural Grandmaster';
+  static const String tagline            = 'The Grandmaster In Your Pocket';
+  static const String homeHeroSub        =
+      'On-device neural analysis. Real engine depth. Zero telemetry.';
 
   // ── Engine / analysis (replaces "Engine Eval", "Deep Analysis", etc.) ──
   /// Premium alias for "Engine Eval" / "Stockfish".
@@ -33,7 +39,7 @@ class ApexCopy {
   static const String reanalysisPending  = 'Replaying Neural Analysis…';
 
   // ── Action copy (home screen buttons) ──────────────────────────────────
-  static const String playLive           = 'ENTER LIVE MATCH';
+  static const String playLive           = 'ENTER WAR ROOM';
   static const String analyzeGame        = 'QUANTUM DEPTH SCAN';
   static const String importMatch        = 'IMPORT LIVE MATCH';
 
@@ -43,16 +49,16 @@ class ApexCopy {
   static const String pgnDialogHint      = '1. e4 e5 2. Nf3 Nc6 …';
 
   // ── Import feature (Chess.com / Lichess) ───────────────────────────────
-  static const String importTitle         = 'IMPORT MATCH';
+  static const String importTitle         = 'LIVE MATCH INTEL';
   static const String importSubtitle      =
-      'Pull any Chess.com or Lichess profile and scan any recent game.';
+      'Link any Chess.com or Lichess handle — matches stream in automatically.';
   static const String importHint          = 'username';
-  static const String importFetch         = 'FETCH GAMES';
+  static const String importAutoFetch     = 'Auto-stream engaged — verify handle to ingest matches.';
   static const String importSourceChessCom = 'Chess.com';
   static const String importSourceLichess = 'Lichess';
-  static const String importEmpty         = 'No recent matches found.';
+  static const String importEmpty         = 'No recent matches found for this handle.';
   static const String importFailed        =
-      'Could not fetch games — check username or connection.';
+      'Could not fetch games — check the handle or your connection.';
 
   // ── Depth picker ───────────────────────────────────────────────────────
   static const String depthPickerTitle    = 'SCAN MODE';
@@ -74,7 +80,7 @@ class ApexCopy {
 
   // ── Error messages ─────────────────────────────────────────────────────
   static const String engineUnavailable  =
-      'Apex AI Analyst could not be reached.';
+      'Apex AI Grandmaster could not be reached.';
   static const String analysisFailed     =
       'Quantum Scan could not complete — try again.';
 
@@ -107,42 +113,73 @@ class ApexCopy {
       'Replay any previously-scanned match at full Quantum depth.';
 
   // ── Connect Account (onboarding) ───────────────────────────────────────
-  static const String onboardingTitle    = 'CONNECT ACCOUNT';
+  static const String onboardingTitle    = 'CONNECT HANDLE';
   static const String onboardingHeadline =
       'Link your Chess.com or Lichess handle.';
   static const String onboardingSub      =
-      'Games you import are persisted locally so the Global Dashboard and Apex Academy can personalise training around your actual play.';
+      'Matches stream into your Grandmaster Analytics the instant they sync. Read-only. Public endpoints.';
   static const String onboardingConnect  = 'CONNECT';
   static const String onboardingSkip     = 'Skip for now';
-  static const String onboardingSwitch   = 'Switch account';
+  static const String onboardingSwitch   = 'Switch handle';
   static const String onboardingPrivacy  =
       'Read-only. Public profile endpoints. No password, no OAuth.';
 
-  // ── Global Dashboard ───────────────────────────────────────────────────
-  static const String dashboardTitle     = 'GLOBAL DASHBOARD';
+  // ── Grandmaster Analytics (the Global Dashboard) ───────────────────────
+  static const String dashboardTitle     = 'GRANDMASTER ANALYTICS';
   static const String dashboardSubtitle  =
-      'Aggregated intel across every game scanned into your archive.';
+      'Ratings, openings, and accuracy trends from every match scanned.';
   static const String dashboardEmpty     =
-      'Run a Quantum Scan on any imported game — the dashboard populates itself.';
+      'Scan any imported match — your Grandmaster Analytics populate themselves.';
+  static const String dashboardColorAll   = 'ALL';
+  static const String dashboardColorWhite = 'WHITE';
+  static const String dashboardColorBlack = 'BLACK';
+  static const String dashboardRatingCard   = 'LIVE RATINGS';
+  static const String dashboardRatingEmpty  =
+      'Connect a handle on Home to stream your live Chess.com / Lichess ratings.';
+  static const String dashboardOpeningCard  = 'OPENING ARSENAL';
+  static const String dashboardOpeningEmpty =
+      'Scan a handful of matches to surface your strongest and weakest lines.';
 
   // ── Apex Academy ───────────────────────────────────────────────────────
   static const String academyTitle       = 'APEX ACADEMY';
   static const String academySubtitle    =
-      'Daily spaced-repetition drills built from your own mistakes.';
+      'Daily drills engineered from your own mistakes — Lotus-grade spaced repetition.';
   static const String academyEmpty       =
-      'Scan at least one game — every Blunder and Mistake enters the Vault and returns here as a drill.';
+      'Scan at least one match — every Blunder and Mistake enters the Vault and returns here as a drill.';
   static const String academyDone        =
       'All drills cleared for today. Streak preserved — see you tomorrow.';
   static const String academyCorrect     = 'Correct — Apex agrees.';
   static const String academyWrongHeader = 'Not quite.';
 
-  // ── Opponent Forensics (profile scanner) ───────────────────────────────
+  // ── Cheat Detection Radar (profile scanner) ────────────────────────────
   /// Premium alias for "Cheat detector" / "Profile analyser".
-  static const String scannerTitle        = 'OPPONENT FORENSICS';
+  static const String scannerTitle        = 'CHEAT DETECTION RADAR';
   static const String scannerSubtitle     =
-      'Calibrate an opponent\'s move quality against the Apex AI baseline.';
-  static const String scannerCta          = 'INITIATE SCAN';
+      'Correlate an opponent\'s move choices against the Apex AI baseline.';
+  static const String scannerCta          = 'LOCK IN TARGET';
   static const String scannerRunning      = 'SCANNING…';
   static const String scannerLoading      =
       'Initiating Neural Analysis…';
+  static const String scannerVerdictClean =
+      'Within the human band for the stated rating — no red flags.';
+  static const String scannerVerdictModerate =
+      'Above the expected band — flag for human review.';
+  static const String scannerVerdictSuspicious =
+      'Well above what a human of this rating produces. Likely engine-assisted.';
+
+  // ── Home tile subtitles ────────────────────────────────────────────────
+  static const String tilePlayLiveSub =
+      'Face the Apex AI Grandmaster at live depth.';
+  static const String tileImportSub =
+      'Stream your last 50 matches and deep-scan on demand.';
+  static const String tilePgnSub =
+      'Paste any PGN — Quantum Scan in seconds.';
+  static const String tileArchivesSub =
+      'Every match you\'ve ever scanned, one tap away.';
+  static const String tileScannerSub =
+      'Benchmark any opponent vs the engine baseline.';
+  static const String tileDashboardSub =
+      'Rating trends, opening arsenal, win rates per colour.';
+  static const String tileAcademySub =
+      'Today\'s drills, crafted from your weakest positions.';
 }

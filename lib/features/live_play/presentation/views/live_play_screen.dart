@@ -6,6 +6,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
@@ -173,14 +174,22 @@ class _CoachDashboard extends StatelessWidget {
       return Row(children: [
         Container(
           width: 44, height: 44, alignment: Alignment.center,
+          padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
             color: ma.quality.color.withAlpha(25),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: ma.quality.color.withAlpha(60), width: 0.5)),
-          child: Text(
-            ma.quality.symbol.isEmpty ? '✓' : ma.quality.symbol,
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700,
-                color: ma.quality.color)),
+            border: Border.all(color: ma.quality.color.withAlpha(60), width: 0.5),
+            boxShadow: [
+              BoxShadow(
+                color: ma.quality.color.withAlpha(60),
+                blurRadius: 10,
+                spreadRadius: -2,
+              ),
+            ],
+          ),
+          // Premium SVG badge (assets/svg/<quality>.svg) — replaces the
+          // old text symbol so Live Play matches the Review board.
+          child: SvgPicture.asset(ma.quality.svgAssetPath, fit: BoxFit.contain),
         ),
         const SizedBox(width: 14),
         Expanded(child: Column(
