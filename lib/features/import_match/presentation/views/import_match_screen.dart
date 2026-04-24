@@ -13,10 +13,14 @@
 ///      push the ReviewScreen on the navigator.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:apex_chess/app/di/providers.dart';
+import 'package:apex_chess/features/archives/data/archive_save_hook.dart';
+import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/import_match/domain/imported_game.dart';
 import 'package:apex_chess/features/import_match/presentation/controllers/import_controller.dart';
 import 'package:apex_chess/features/import_match/presentation/controllers/recent_searches_controller.dart';
@@ -850,7 +854,14 @@ class _GameCard extends ConsumerWidget {
       context: context,
       barrierDismissible: false,
       barrierColor: ApexColors.spaceVoid.withValues(alpha: 0.72),
-      builder: (_) => _ImportAnalysisDialog(pgn: game.pgn, depth: depth),
+      builder: (_) => _ImportAnalysisDialog(
+        pgn: game.pgn,
+        depth: depth,
+        source: game.source == GameSource.chessCom
+            ? ArchiveSource.chessCom
+            : ArchiveSource.lichess,
+        playedAt: game.playedAt,
+      ),
     );
   }
 }
@@ -1182,9 +1193,16 @@ class _DepthOption extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _ImportAnalysisDialog extends ConsumerStatefulWidget {
-  const _ImportAnalysisDialog({required this.pgn, required this.depth});
+  const _ImportAnalysisDialog({
+    required this.pgn,
+    required this.depth,
+    required this.source,
+    this.playedAt,
+  });
   final String pgn;
   final int depth;
+  final ArchiveSource source;
+  final DateTime? playedAt;
 
   @override
   ConsumerState<_ImportAnalysisDialog> createState() =>
@@ -1225,6 +1243,15 @@ class _ImportAnalysisDialogState
       );
       if (!mounted) return;
       ref.read(reviewControllerProvider.notifier).loadTimeline(timeline);
+      // Fire-and-forget save — failures never block the review flow.
+      unawaited(saveAnalysisToArchive(
+        ref: ref,
+        timeline: timeline,
+        pgn: widget.pgn,
+        depth: widget.depth,
+        source: widget.source,
+        playedAt: widget.playedAt,
+      ));
       setState(() => _done = true);
     } on LocalAnalysisException catch (e) {
       if (mounted) setState(() => _error = e.userMessage);

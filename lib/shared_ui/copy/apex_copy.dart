@@ -18,17 +18,19 @@ class ApexCopy {
 
   // ── Engine / analysis (replaces "Engine Eval", "Deep Analysis", etc.) ──
   /// Premium alias for "Engine Eval" / "Stockfish".
-  static const String engineBrand        = 'Apex AI Analyst';
+  static const String engineBrand        = 'Apex AI Grandmaster';
   /// Premium alias for "Deep Analysis" / "engine at high depth".
-  static const String deepAnalysis       = 'Quantum Depth Scan';
+  static const String deepAnalysis       = 'Quantum Deep Scan';
   /// Premium alias for "Depth" header on the eval bar.
   static const String depthLabel         = 'Quantum Depth';
   /// Live-play footer — shown under the eval bar while the engine thinks.
-  static const String liveEngineFooter   = 'Apex AI Analyst • On-Device';
+  static const String liveEngineFooter   = 'Apex AI Grandmaster • On-Device';
   /// Shown while the engine hands back its first thought.
   static const String engineWarming      = 'Calibrating Apex AI…';
   /// Shown before any engine output arrives for the current position.
-  static const String awaitingAnalysis   = 'Awaiting Quantum Scan…';
+  static const String awaitingAnalysis   = 'Initiating Neural Analysis…';
+  /// Shown on the radar loader while a saved game is being re-scanned.
+  static const String reanalysisPending  = 'Replaying Neural Analysis…';
 
   // ── Action copy (home screen buttons) ──────────────────────────────────
   static const String playLive           = 'ENTER LIVE MATCH';
@@ -90,4 +92,20 @@ class ApexCopy {
 
   /// Glow celebration copy (shown above the board when a brilliant fires).
   static const String brilliantCelebration = 'Brilliant!! Apex confirms.';
+
+  // ── Archived Intel (saved game library) ────────────────────────────────
+  /// Premium alias for "Saved games" / "Analysis history".
+  static const String archivesTitle       = 'ARCHIVED INTEL';
+  static const String archivesSubtitle    =
+      'Replay any previously-scanned match at full Quantum depth.';
+
+  // ── Opponent Forensics (profile scanner) ───────────────────────────────
+  /// Premium alias for "Cheat detector" / "Profile analyser".
+  static const String scannerTitle        = 'OPPONENT FORENSICS';
+  static const String scannerSubtitle     =
+      'Calibrate an opponent\'s move quality against the Apex AI baseline.';
+  static const String scannerCta          = 'INITIATE SCAN';
+  static const String scannerRunning      = 'SCANNING…';
+  static const String scannerLoading      =
+      'Initiating Neural Analysis…';
 }
