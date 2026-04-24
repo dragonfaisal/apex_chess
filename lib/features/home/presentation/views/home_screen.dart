@@ -463,7 +463,7 @@ class _LocalAnalysisProgressDialogState
             Icon(Icons.flash_on_rounded,
                 color: ApexColors.sapphireBright, size: 20),
             const SizedBox(width: 10),
-            Text(ApexCopy.deepAnalysis,
+            Text(ApexCopy.scanHeader(14),
                 style: ApexTypography.titleMedium),
           ],
         ),

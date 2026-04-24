@@ -1296,7 +1296,7 @@ class _ImportAnalysisDialogState
                 const SizedBox(width: 10),
                 Text(
                   _error == null
-                      ? '${ApexCopy.deepAnalysis} · D${widget.depth}'
+                      ? '${ApexCopy.scanHeader(widget.depth)} · D${widget.depth}'
                       : 'Scan failed',
                   style: ApexTypography.titleMedium,
                 ),
