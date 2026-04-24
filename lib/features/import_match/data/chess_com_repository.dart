@@ -160,7 +160,9 @@ class ChessComRepository {
     var plies = 0;
     for (final t in tokens) {
       if (t.isEmpty) continue;
-      if (RegExp(r'^\d+\.').hasMatch(t)) continue;
+      // Anchored on both ends so glued tokens like `1.e4` are NOT skipped;
+      // only pure move-number tokens (`1.`, `1...`) are filtered out.
+      if (RegExp(r'^\d+\.+$').hasMatch(t)) continue;
       if (const ['1-0', '0-1', '1/2-1/2', '*'].contains(t)) continue;
       plies++;
     }

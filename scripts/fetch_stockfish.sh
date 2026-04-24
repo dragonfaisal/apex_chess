@@ -15,18 +15,18 @@
 #      the UCI loop in-process. This is the ONLY change we make to upstream
 #      source — stdin/stdout redirection happens in the bridge via pipes.
 #
-#   3. Optionally fetches the NNUE weight file. NNUE is DISABLED by default
-#      (pass `--with-nnue` or set `APEX_STOCKFISH_WITH_NNUE=1` to download).
-#      Without NNUE, Stockfish compiles but can only be used for testing
-#      the UCI wiring — eval quality will be very low until the weights are
-#      loaded via `setoption name EvalFile value <path>` at runtime.
+#   3. Fetches the NNUE weight files. NNUE is ENABLED by default — Stockfish
+#      17 is NNUE-only and will crash on `go depth` without real weights.
+#      Pass `--no-nnue` (or set `APEX_STOCKFISH_WITH_NNUE=0`) if you only
+#      need to exercise the UCI wiring and will point `EvalFile` at a real
+#      file at runtime.
 #
 # Idempotent — re-running over an existing vendor/ directory is a no-op
 # unless `--force` is passed.
 #
 # Usage:
-#   scripts/fetch_stockfish.sh                       # vendor, no NNUE
-#   scripts/fetch_stockfish.sh --with-nnue           # vendor + download NNUE
+#   scripts/fetch_stockfish.sh                       # vendor + download NNUE
+#   scripts/fetch_stockfish.sh --no-nnue             # skip NNUE download (stubs)
 #   scripts/fetch_stockfish.sh --force               # re-vendor from scratch
 #   APEX_STOCKFISH_TAG=sf_18 scripts/fetch_stockfish.sh
 # ─────────────────────────────────────────────────────────────────────────────
@@ -37,12 +37,13 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 VENDOR_DIR="$REPO_ROOT/src/native/vendor/Stockfish"
 
 TAG="${APEX_STOCKFISH_TAG:-sf_17}"
-WITH_NNUE="${APEX_STOCKFISH_WITH_NNUE:-0}"
+WITH_NNUE="${APEX_STOCKFISH_WITH_NNUE:-1}"
 FORCE=0
 
 for arg in "$@"; do
   case "$arg" in
     --with-nnue) WITH_NNUE=1 ;;
+    --no-nnue)   WITH_NNUE=0 ;;
     --force)     FORCE=1 ;;
     -h|--help)
       sed -n '2,33p' "$0"

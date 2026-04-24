@@ -105,8 +105,8 @@ class LichessRepository {
         raw['status'] == 'insufficient') {
       result = GameResult.draw;
     } else {
-      // No winner field → typically a draw on Lichess too.
-      result = GameResult.draw;
+      // No winner + unrecognised status (aborted, noStart, variantEnd, etc.).
+      result = GameResult.unknown;
     }
 
     final createdAt = (raw['createdAt'] as num?)?.toInt();
