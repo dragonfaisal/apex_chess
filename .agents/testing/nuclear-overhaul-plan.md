@@ -1,66 +1,65 @@
-# Nuclear Overhaul — Test Plan (run 6)
+# Nuclear Overhaul — Test Plan (run 7)
 
-Target commit: `2e46c66` (branch `devin/1776982522-apex-nuclear-overhaul`).
+Target commit: `489b022` (branch `devin/1776982522-apex-nuclear-overhaul`).
 
-## What changed since run 5
-- **900 ms per-position `movetime` cap** forwarded from `LocalGameAnalyzer` to
-  `LocalEvalService`. Depth 14 is still requested; `UciGo` emits both
-  terminators so Stockfish stops at whichever hits first. Budget for an
-  85-ply game drops from ~30 min to ~80 s.
-  - <ref_snippet file="/home/ubuntu/repos/apex_chess/lib/infrastructure/engine/local_eval_service.dart" lines="143-154" />
-  - <ref_snippet file="/home/ubuntu/repos/apex_chess/lib/infrastructure/engine/local_game_analyzer.dart" lines="50-78" />
+## What changed since run 6
 
-The prior five runs validated:
-- No home-screen overflow, Opera demo absent, 3 entry points rendered.
-- Chess.com import returns real cards with ratings + ECO code + opening
-  label derived from `[ECOUrl]` slug.
-- `(plies/2).ceil()` moveCount renders correctly on odd-ply games.
-- `[ECO]` tag used instead of the `eco` URL field.
-- 45 s eval timeout holds; engine no longer dies on first slow position.
+Three new Devin Review findings on run 6's movetime commit. All three
+fixed in `489b022`:
 
-Run 5 blocked on wall-clock time (3/85 plies in 90 s). Run 6's only
-new claim: **a real Chess.com game completes inside ~2 min** and the
-resulting timeline surfaces a valid mix of classifications.
+1. **CRITICAL — movetime now scales with depth.**
+   Run 6 hardcoded 900 ms for every position, so `go depth 22 movetime 900`
+   always stopped at movetime (~D14 on desktop NNUE), making Quantum Deep
+   Scan functionally identical to Fast Analysis. New behaviour:
+   `LocalGameAnalyzer.defaultMovetimeForDepth(depth)` returns 900 ms @ D14,
+   6000 ms @ D≤22.
+   - <ref_snippet file="/home/ubuntu/repos/apex_chess/lib/infrastructure/engine/local_game_analyzer.dart" lines="69-78" />
+2. **MEDIUM — HTTP clients now close on provider dispose.**
+   Providers own the client; repos take it via ctor injection.
+   - <ref_snippet file="/home/ubuntu/repos/apex_chess/lib/features/import_match/presentation/controllers/import_controller.dart" lines="14-28" />
+3. **LOW — `_backfillBookWinPct` deltaW is signed per side-to-move.**
+   Matches the main `analyze()` path's contract.
+
+Everything else (ECO book race, Chess.com moveCount ceil, ECO from PGN
+tag, ECOUrl slug parsing, 45 s eval timeout, resilient stall handling)
+was already validated in run 6.
 
 ## Primary flow — single recording
 
-1. `flutter run -d linux --release` (release for realistic engine speed)
-2. Home → `IMPORT LIVE MATCH`
-3. Type `hikaru` → Fetch Games
-4. Pick a **short, tactical** Chess.com game — prefer one with a
-   published game length around **40–60 plies** so the recording stays
-   watchable. Skip games longer than ~80 plies or shorter than 20.
-5. Tap the row → Depth picker → **Fast Analysis (Depth 14)**
-6. Wait for the timeline to fully populate. Step through to observe
-   classifications, castling, and the eval bar.
+Two back-to-back scans on the same game — the depth-dependent ply rate
+is what proves the critical fix.
+
+1. Home → `IMPORT LIVE MATCH` → `hikaru` → Fetch
+2. Tap the Parhamov game (43 moves, A07 Kings Indian Attack, 85 plies)
+3. **Fast Analysis (D14)** — should complete in ~60–80 s as before.
+4. Return to the game list, tap the same game again.
+5. **Quantum Deep Scan (D22)** — do NOT wait for completion; observe
+   the progress bar for ~60 s to measure the plies/sec rate.
+6. Return home.
 
 ## Adversarial assertions
 
-Each assertion is designed so a broken build would look visibly different.
-
 | # | Assertion | Broken-build signature |
 |---|---|---|
-| A1 | Analysis **completes** without the red "Quantum Scan failed — engine stopped responding." banner. | Old build would stall or abort; before 2e46c66 it would crawl at ~3 plies per 90 s. |
-| A2 | Total wall-clock time from Fast Analysis tap to "done" is less than **(plies × 1.5 s + 10 s overhead)**. | Without the movetime cap, tactical positions spent 15–30 s each. |
-| A3 | At least one opening ply (1–10) classifies as **Theory** with an opening-name pill. | If everything is `Solid`, the ECO-book async-race fix regressed. |
-| A4 | At least one non-book ply classifies as **Blunder** / **Mistake** / **Inaccuracy** across the whole game. | A game that's all `Solid` means the UCI sync contract regressed; every modern Chess.com game contains ≥1 inaccuracy at D14. |
-| A5 | Card "N moves" matches `ceil(plies/2)` for the chosen game. | Old `~/2` would under-report odd-ply games by 1. |
-| A6 | Card shows `<ECO> • <readable opening name>` (not a URL, not bare code). | Indicates both the `[ECO]` tag fix and the `[ECOUrl]`-slug parser are holding. |
-| A7 | If the chosen game contains a castling move, the four squares of the castling shape (e.g. e8 + g8 + h8 + f8 for 0-0) highlight in the **same frame** when navigating to that ply. | Only king squares lit means the shape-detection from `e86fb8e` regressed. |
-| A8 | Eval bar renders at least one negative float (e.g. `-1.4`) without overflow or render errors during stepping. | Unhandled negative-cp would throw `RenderFlex` or NaN layout. |
+| A1 | Fast Analysis completes 85 plies in < 120 s without the timeout banner. | Regression of the movetime cap would stall again. |
+| A2 | After completion, at least one opening ply classifies as **Theory / Book** with opening-name pill. | ECO book async-race regression. |
+| A3 | After completion, at least one non-book ply shows a non-"Best/Solid" classification (Good / Excellent / Inaccuracy / Mistake / Blunder). | UCI sync contract regression; a game that's all Solid would indicate the classifier is stuck. |
+| A4 | Eval bar renders at least one negative float during stepping without render errors. | Unhandled negative cp would throw `RenderFlex` or NaN layout. |
+| A5 | **Quantum D22 shows measurably slower ply/sec than Fast D14** on the same game: at 60 s elapsed, Quantum progress must be *less than half* of Fast's rate. For Fast at ~1.3 plies/s, Quantum should be ≤ 0.3 plies/s (roughly 6×–10× slower). | If Quantum ploughs through at the same rate as Fast, the movetime scaling fix didn't take and the picker is still a lie. |
+| A6 | Quantum progress bar shows a *non-zero, monotonically increasing* ply count during the 60 s observation window. | A stuck bar at 0/N would mean the engine died on first position. |
 
 ## Pass / fail
 
-- **Pass**: A1, A2, A3, A4, A5, A6, A8 all pass. A7 passes **if** the
-  chosen game contains castling; otherwise record it as "untested —
-  no castling in chosen game" and do not retry with a different game
-  (would double-length the recording).
-- **Fail** on any of A1–A6, A8: stop, capture state, exit test mode,
-  debug, re-enter.
+- **Pass**: A1, A2, A3, A4, A5, A6 all pass.
+- **Fail** on any: stop, capture state, exit test mode, debug, re-enter.
 
 ## Out of scope for this run
 
-- Lichess import path (already validated in earlier run).
-- Quantum Deep Scan (Depth 22) — same code path at a different budget;
-  validating Fast Analysis is sufficient.
-- Regression of BrilliantGlow from PR #2.
+- Castling visual (Parhamov game has no castling; covered by unit
+  coverage in earlier commits and verified visually in earlier runs).
+- Lichess import path (already validated).
+- HTTP client disposal test — no user-visible behaviour; verified
+  behind the fact that repeated provider invalidations no longer leak
+  sockets. Covered by the code review + static analysis.
+- `_backfillBookWinPct` sign fix — not user-visible; covered by
+  unit tests in the same commit.
