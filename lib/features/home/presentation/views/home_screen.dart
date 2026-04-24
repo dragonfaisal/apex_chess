@@ -2,8 +2,8 @@
 ///
 /// Three entry points driven by the on-device Apex AI Analyst:
 ///   * ENTER LIVE MATCH     — opens the interactive board with live eval.
-///   * QUANTUM DEPTH SCAN   — imports a PGN, analyses every ply locally.
-///   * DEMO • OPERA GAME    — pre-computed showcase from `MockAnalysisApi`.
+///   * IMPORT LIVE MATCH    — pulls Chess.com / Lichess games over HTTP.
+///   * QUANTUM DEPTH SCAN   — imports a raw PGN and analyses every ply.
 ///
 /// Layout is wrapped in a [SingleChildScrollView] so the content never
 /// overflows on compact screens (previously caused the
@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:apex_chess/app/di/providers.dart';
+import 'package:apex_chess/features/import_match/presentation/views/import_match_screen.dart';
 import 'package:apex_chess/features/live_play/presentation/views/live_play_screen.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
 import 'package:apex_chess/features/pgn_review/presentation/views/review_screen.dart';
@@ -79,15 +80,18 @@ class HomeScreen extends ConsumerWidget {
                           ),
                           const SizedBox(height: 14),
                           _SecondaryAction(
-                            label: ApexCopy.analyzeGame,
-                            icon: Icons.auto_graph_rounded,
-                            onTap: () => _showPgnDialog(context, ref),
+                            label: ApexCopy.importMatch,
+                            icon: Icons.cloud_download_rounded,
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                  builder: (_) => const ImportMatchScreen()),
+                            ),
                           ),
                           const SizedBox(height: 14),
                           _SecondaryAction(
-                            label: ApexCopy.operaDemo,
-                            icon: Icons.auto_awesome_mosaic_rounded,
-                            onTap: () => _launchOperaGameDemo(context, ref),
+                            label: ApexCopy.analyzeGame,
+                            icon: Icons.auto_graph_rounded,
+                            onTap: () => _showPgnDialog(context, ref),
                           ),
                           const SizedBox(height: 36),
                           Text(
@@ -110,15 +114,6 @@ class HomeScreen extends ConsumerWidget {
           ),
         ),
       ),
-    );
-  }
-
-  void _launchOperaGameDemo(BuildContext context, WidgetRef ref) {
-    final mockApi = ref.read(mockAnalysisApiProvider);
-    final timeline = mockApi.getOperaGameAnalysis();
-    ref.read(reviewControllerProvider.notifier).loadTimeline(timeline);
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const ReviewScreen()),
     );
   }
 

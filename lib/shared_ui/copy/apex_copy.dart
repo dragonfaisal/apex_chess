@@ -33,12 +33,35 @@ class ApexCopy {
   // ── Action copy (home screen buttons) ──────────────────────────────────
   static const String playLive           = 'ENTER LIVE MATCH';
   static const String analyzeGame        = 'QUANTUM DEPTH SCAN';
-  static const String operaDemo          = 'DEMO • OPERA GAME 1858';
+  static const String importMatch        = 'IMPORT LIVE MATCH';
 
   // ── Dialog copy ────────────────────────────────────────────────────────
   static const String pgnDialogTitle     = 'Import PGN';
   static const String pgnDialogCta       = 'RUN QUANTUM SCAN';
   static const String pgnDialogHint      = '1. e4 e5 2. Nf3 Nc6 …';
+
+  // ── Import feature (Chess.com / Lichess) ───────────────────────────────
+  static const String importTitle         = 'IMPORT MATCH';
+  static const String importSubtitle      =
+      'Pull any Chess.com or Lichess profile and scan any recent game.';
+  static const String importHint          = 'username';
+  static const String importFetch         = 'FETCH GAMES';
+  static const String importSourceChessCom = 'Chess.com';
+  static const String importSourceLichess = 'Lichess';
+  static const String importEmpty         = 'No recent matches found.';
+  static const String importFailed        =
+      'Could not fetch games — check username or connection.';
+
+  // ── Depth picker ───────────────────────────────────────────────────────
+  static const String depthPickerTitle    = 'SCAN MODE';
+  static const String depthFastLabel      = 'Fast Analysis';
+  static const String depthFastTag        = 'Depth 14';
+  static const String depthFastBlurb      =
+      'Quick ply-by-ply read-out. Ideal for casual review.';
+  static const String depthDeepLabel      = 'Quantum Deep Scan';
+  static const String depthDeepTag        = 'Depth 22';
+  static const String depthDeepBlurb      =
+      'Full-resolution Apex AI sweep. Surfaces brilliant moves and missed tactics.';
 
   // ── Error messages ─────────────────────────────────────────────────────
   static const String engineUnavailable  =

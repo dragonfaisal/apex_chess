@@ -48,7 +48,7 @@ endif()
 
 option(APEX_STOCKFISH_USE_NNUE
        "Embed NNUE weights via incbin (requires real .nnue files in src/)"
-       OFF)
+       ON)
 
 if(DEFINED STOCKFISH_SOURCES_DIR AND EXISTS "${STOCKFISH_SOURCES_DIR}")
   message(STATUS "stockfish_bridge: building with real engine from ${STOCKFISH_SOURCES_DIR}")
