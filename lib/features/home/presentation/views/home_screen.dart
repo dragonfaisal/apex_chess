@@ -16,9 +16,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:apex_chess/app/di/providers.dart';
+import 'package:apex_chess/features/account/domain/apex_account.dart';
+import 'package:apex_chess/features/account/presentation/controllers/account_controller.dart';
+import 'package:apex_chess/features/account/presentation/views/connect_account_screen.dart';
+import 'package:apex_chess/features/apex_academy/presentation/views/apex_academy_screen.dart';
 import 'package:apex_chess/features/archives/data/archive_save_hook.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/archives/presentation/views/archive_screen.dart';
+import 'package:apex_chess/features/global_dashboard/presentation/views/global_dashboard_screen.dart';
 import 'package:apex_chess/features/import_match/presentation/views/import_match_screen.dart';
 import 'package:apex_chess/features/live_play/presentation/views/live_play_screen.dart';
 import 'package:apex_chess/features/mistake_vault/data/mistake_vault_save_hook.dart';
@@ -36,6 +41,7 @@ class HomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final account = ref.watch(accountControllerProvider).valueOrNull;
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(gradient: ApexGradients.spaceCanvas),
@@ -56,7 +62,9 @@ class HomeScreen extends ConsumerWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const SizedBox(height: 56),
+                          const SizedBox(height: 24),
+                          _AccountStrip(account: account),
+                          const SizedBox(height: 18),
                           const _HeroBadge(),
                           const SizedBox(height: 16),
                           Text(
@@ -118,6 +126,26 @@ class HomeScreen extends ConsumerWidget {
                               MaterialPageRoute(
                                   builder: (_) =>
                                       const ProfileScannerScreen()),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          _SecondaryAction(
+                            label: ApexCopy.dashboardTitle,
+                            icon: Icons.insights_rounded,
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                  builder: (_) =>
+                                      const GlobalDashboardScreen()),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          _SecondaryAction(
+                            label: ApexCopy.academyTitle,
+                            icon: Icons.school_rounded,
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                  builder: (_) =>
+                                      const ApexAcademyScreen()),
                             ),
                           ),
                           const SizedBox(height: 36),
@@ -558,6 +586,88 @@ class _LocalAnalysisProgressDialogState
             onPressed: () => Navigator.of(context).pop(),
             child: Text('OK',
                 style: TextStyle(color: ApexColors.sapphire)),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Account strip (top of home) ─────────────────────────────────────────
+//
+// Connected state: shows the source label + handle next to a "Switch
+// account" text button that re-opens onboarding.
+// Disconnected state: compact "Connect account" CTA that opens the
+// same onboarding screen.
+
+class _AccountStrip extends ConsumerWidget {
+  const _AccountStrip({required this.account});
+  final ApexAccount? account;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (account == null) {
+      return Align(
+        alignment: Alignment.centerRight,
+        child: OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: ApexColors.emerald,
+            side: BorderSide(
+                color: ApexColors.emerald.withValues(alpha: 0.55), width: 1),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          ),
+          onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => const ConnectAccountScreen())),
+          icon: const Icon(Icons.link_rounded, size: 16),
+          label: const Text('CONNECT ACCOUNT'),
+        ),
+      );
+    }
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            color: ApexColors.emerald.withValues(alpha: 0.12),
+            border: Border.all(
+                color: ApexColors.emerald.withValues(alpha: 0.4), width: 0.8),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.verified_rounded,
+                  size: 14, color: ApexColors.emeraldBright),
+              const SizedBox(width: 6),
+              Text(
+                '${account!.source.wire.toUpperCase()} · ${account!.username}',
+                style: ApexTypography.bodyMedium.copyWith(
+                  color: ApexColors.textPrimary,
+                  fontSize: 11,
+                  letterSpacing: 0.8,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Spacer(),
+        TextButton(
+          onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => const ConnectAccountScreen())),
+          style: TextButton.styleFrom(
+            foregroundColor: ApexColors.textSecondary,
+            padding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          ),
+          child: Text(
+            'Switch',
+            style: ApexTypography.bodyMedium.copyWith(
+              color: ApexColors.textTertiary,
+              fontSize: 11,
+              letterSpacing: 1,
+            ),
           ),
         ),
       ],
