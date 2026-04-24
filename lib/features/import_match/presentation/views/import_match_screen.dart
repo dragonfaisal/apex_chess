@@ -1196,6 +1196,11 @@ class _ImportAnalysisDialogState
   int _completed = 0;
   int _total = 1;
   bool _done = false;
+  // Guards the post-frame navigation callback so it is enqueued at most once,
+  // even if build() runs multiple times before the callback fires. Without
+  // this, an ancestor rebuild between `_done = true` and the next frame would
+  // queue a second pop→push pair and tear down the freshly-pushed review.
+  bool _navigated = false;
   String? _error;
 
   @override
@@ -1230,7 +1235,8 @@ class _ImportAnalysisDialogState
 
   @override
   Widget build(BuildContext context) {
-    if (_done) {
+    if (_done && !_navigated) {
+      _navigated = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         Navigator.of(context).pop();
@@ -1270,14 +1276,31 @@ class _ImportAnalysisDialogState
               ],
             ),
             const SizedBox(height: 18),
-            if (_error != null)
+            if (_error != null) ...[
               Text(
                 _error!,
                 style: ApexTypography.bodyMedium.copyWith(
                   color: ApexColors.ruby,
                 ),
-              )
-            else ...[
+              ),
+              const SizedBox(height: 16),
+              // CLOSE escape hatch — without this the dialog is
+              // undismissable when an analysis failure puts us in the
+              // error branch (barrierDismissible: false).
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text(
+                    'CLOSE',
+                    style: ApexTypography.labelLarge.copyWith(
+                      color: ApexColors.sapphire,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ),
+              ),
+            ] else ...[
               // Radar sweep behind the progress readout gives the user an
               // immediate visual signal that the engine is *actually
               // working* — the sweep rotates independently of the

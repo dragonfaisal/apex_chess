@@ -362,6 +362,11 @@ class _LocalAnalysisProgressDialogState
   int _completed = 0;
   int _total = 1;
   bool _done = false;
+  // Guards the post-frame navigation callback so it is enqueued at most once,
+  // even if build() runs multiple times before the callback fires. Without
+  // this, an ancestor rebuild between `_done = true` and the next frame would
+  // queue a second pop→push pair and tear down the freshly-pushed review.
+  bool _navigated = false;
   String? _error;
 
   @override
@@ -392,8 +397,10 @@ class _LocalAnalysisProgressDialogState
 
   @override
   Widget build(BuildContext context) {
-    if (_done) {
+    if (_done && !_navigated) {
+      _navigated = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
         Navigator.of(context).pop();
         Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => const ReviewScreen()),
