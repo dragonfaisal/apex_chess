@@ -44,7 +44,11 @@ class LocalEvalService {
   LocalEvalService({
     required ChessEngine engine,
     int defaultDepth = 14,
-    Duration defaultTimeout = const Duration(seconds: 10),
+    // Real Stockfish + NNUE on a single desktop thread can take 15-25 s
+    // on tactically loaded middlegame positions at depth 14. The previous
+    // 10 s cap aborted those searches mid-flight and surfaced as
+    // "engine stopped responding" during full-game batch scans.
+    Duration defaultTimeout = const Duration(seconds: 45),
   })  : _engine = engine,
         _defaultDepth = defaultDepth,
         _defaultTimeout = defaultTimeout;

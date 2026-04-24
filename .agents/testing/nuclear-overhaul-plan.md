@@ -63,9 +63,11 @@ Expected:
 - Top card or a near-top card matches the anchor game: players
   `morphy1984` / `hikaru`, ratings visible (`2923` / `3418`), one side
   shows a result badge.
-- Opening label under a card reads `B41 • Sicilian Defense: Kan…` (the
-  ECO tag comes from Chess.com's PGN, not from our book — Task 3 asserts
-  the card renderer surfaces it).
+- Opening label under at least one card reads `<ECO> • <Opening name>`
+  (e.g. `D35 • Queens Gambit Declined …`). Chess.com PGNs don't ship an
+  `[Opening]` tag, so the card derives the name from the `[ECOUrl]` slug
+  (commit 1d41242). If the card shows only the ECO code with no name, or
+  a raw `https://www.chess.com/openings/...` URL, that fix regressed.
 
 Pass iff the anchor game is visible in the list with correct player
 names + ratings.

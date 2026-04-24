@@ -130,15 +130,36 @@ class LocalGameAnalyzer {
     // so each non-book position is evaluated at most once. ──
     final cache = <String, EvalSnapshot>{};
 
+    // Track consecutive engine failures. One slow position shouldn't
+    // nuke an entire game scan — skip it, mark the ply as unknown, and
+    // keep going. Only abort when the engine is *sustainedly* broken.
+    var consecutiveFailures = 0;
+
     Future<EvalSnapshot?> evalCached(String fen) async {
       final hit = cache[fen];
-      if (hit != null) return hit;
+      if (hit != null) {
+        consecutiveFailures = 0;
+        return hit;
+      }
       final (snap, err) = await _eval.evaluate(fen, depth: searchDepth);
       if (err != null && err != CloudEvalError.positionNotFound) {
-        throw const LocalAnalysisException(
-            'Quantum Scan failed — engine stopped responding.');
+        consecutiveFailures++;
+        // A sustained run of failures means the engine itself is
+        // unresponsive (NNUE weights missing, native crash, hostile
+        // position, etc.) — abort so the user sees a clear error instead
+        // of a half-blank timeline.
+        if (consecutiveFailures >= 5) {
+          throw const LocalAnalysisException(
+              'Quantum Scan failed — engine stopped responding.');
+        }
+        return null;
       }
-      if (snap == null) return null;
+      if (snap == null) {
+        // positionNotFound — engine answered but had no usable score.
+        // Skip this ply (it'll classify as Unknown) but don't abort.
+        return null;
+      }
+      consecutiveFailures = 0;
       cache[fen] = snap;
       return snap;
     }
