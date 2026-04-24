@@ -5,19 +5,26 @@
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 
 import 'package:apex_chess/features/import_match/data/chess_com_repository.dart';
 import 'package:apex_chess/features/import_match/data/lichess_repository.dart';
 import 'package:apex_chess/features/import_match/domain/imported_game.dart';
 
+// Own the HTTP client at the provider layer so its connection pool is
+// closed when the provider is invalidated. Repos take the client via
+// constructor injection — they never create their own when run from the
+// app (tests can still new one up inline).
 final chessComRepositoryProvider = Provider<ChessComRepository>((ref) {
-  final repo = ChessComRepository();
-  ref.onDispose(() {});
-  return repo;
+  final client = http.Client();
+  ref.onDispose(client.close);
+  return ChessComRepository(client: client);
 });
 
 final lichessRepositoryProvider = Provider<LichessRepository>((ref) {
-  return LichessRepository();
+  final client = http.Client();
+  ref.onDispose(client.close);
+  return LichessRepository(client: client);
 });
 
 class ImportState {

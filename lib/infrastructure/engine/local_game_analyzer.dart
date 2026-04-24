@@ -53,18 +53,29 @@ class LocalGameAnalyzer {
     Future<EcoBook>? bookFuture,
     EvaluationAnalyzer analyzer = const EvaluationAnalyzer(),
     int depth = 14,
-    // Per-position wall-clock cap. The analyzer combines this with
-    // `depth` so Stockfish stops at whichever terminator hits first —
-    // this prevents one tactical middlegame from stalling an entire
-    // game scan at high depth. ~900 ms reaches D13-15 on desktop NNUE
-    // without bloating wall-clock time on long games.
-    Duration movetime = const Duration(milliseconds: 900),
+    // Optional wall-clock cap per position. When null, the analyzer
+    // picks a sensible budget for the effective search depth via
+    // [defaultMovetimeForDepth] — this keeps "Fast" scans snappy while
+    // giving "Quantum Deep Scan" enough time to actually reach its
+    // target depth.
+    Duration? movetime,
   })  : _eval = eval,
         _book = book,
         _bookFuture = bookFuture,
         _analyzer = analyzer,
         _depth = depth,
-        _movetime = movetime;
+        _movetimeOverride = movetime;
+
+  /// Sensible per-position wall-clock budget for a given target depth on
+  /// real Stockfish + NNUE. Scales monotonically so deeper scans actually
+  /// get to run longer; a fixed cap would mean every depth collapses to
+  /// whatever the cap reaches first.
+  static Duration defaultMovetimeForDepth(int depth) {
+    if (depth <= 14) return const Duration(milliseconds: 900);
+    if (depth <= 18) return const Duration(milliseconds: 2500);
+    if (depth <= 22) return const Duration(milliseconds: 6000);
+    return const Duration(milliseconds: 10000);
+  }
 
   final LocalEvalService _eval;
   // Book state is materialised on first `analyzeFromPgn` call. A caller
@@ -75,14 +86,22 @@ class LocalGameAnalyzer {
   final Future<EcoBook>? _bookFuture;
   final EvaluationAnalyzer _analyzer;
   final int _depth;
-  final Duration _movetime;
+  final Duration? _movetimeOverride;
 
   Future<AnalysisTimeline> analyzeFromPgn(
     String pgn, {
     void Function(int completed, int total)? onProgress,
     int? depth,
+    Duration? movetime,
   }) async {
     final searchDepth = depth ?? _depth;
+    // Resolve the movetime budget *after* the caller's depth override is
+    // applied — otherwise a depth-22 scan would silently inherit the
+    // constructor's depth-14 budget and finish at depth ~14, defeating
+    // the premium scan mode entirely.
+    final searchMovetime = movetime ??
+        _movetimeOverride ??
+        defaultMovetimeForDepth(searchDepth);
     // Resolve the book eagerly so book classifications aren't silently
     // skipped when the first analysis runs faster than the asset load.
     if (_book == null && _bookFuture != null) {
@@ -152,7 +171,7 @@ class LocalGameAnalyzer {
       final (snap, err) = await _eval.evaluate(
         fen,
         depth: searchDepth,
-        movetime: _movetime,
+        movetime: searchMovetime,
       );
       if (err != null && err != CloudEvalError.positionNotFound) {
         consecutiveFailures++;
@@ -320,7 +339,11 @@ class LocalGameAnalyzer {
         targetSquare: src.targetSquare,
         winPercentBefore: wBefore,
         winPercentAfter: wAfter,
-        deltaW: wAfter - wBefore,
+        // deltaW semantics (see MoveAnalysis): negative = bad for the
+        // mover, so the raw White-perspective difference must be
+        // negated for Black's moves to stay consistent with the main
+        // analyze() path.
+        deltaW: (wAfter - wBefore) * (src.isWhiteMove ? 1.0 : -1.0),
         isWhiteMove: src.isWhiteMove,
         classification: src.classification,
         engineBestMoveUci: src.engineBestMoveUci,
