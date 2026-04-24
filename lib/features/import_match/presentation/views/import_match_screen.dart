@@ -25,6 +25,8 @@ import 'package:apex_chess/features/import_match/domain/imported_game.dart';
 import 'package:apex_chess/features/import_match/presentation/controllers/import_controller.dart';
 import 'package:apex_chess/features/import_match/presentation/controllers/recent_searches_controller.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
+import 'package:apex_chess/features/user_validation/presentation/username_validation_controller.dart';
+import 'package:apex_chess/features/user_validation/presentation/widgets/username_validation_pill.dart';
 import 'package:apex_chess/features/pgn_review/presentation/views/review_screen.dart';
 import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
@@ -444,6 +446,7 @@ class _UsernameField extends ConsumerStatefulWidget {
 
 class _UsernameFieldState extends ConsumerState<_UsernameField> {
   bool _showDropdown = false;
+  UsernameValidationController? _validation;
 
   @override
   void initState() {
@@ -453,10 +456,36 @@ class _UsernameFieldState extends ConsumerState<_UsernameField> {
   }
 
   @override
+  void didUpdateWidget(covariant _UsernameField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.source != widget.source) {
+      _pushValidationInput();
+    }
+  }
+
+  @override
   void dispose() {
     widget.focusNode.removeListener(_onFocusChange);
     widget.controller.removeListener(_onTextChange);
+    _validation?.dispose();
     super.dispose();
+  }
+
+  UsernameValidationController _ensureValidation() {
+    return _validation ??=
+        UsernameValidationController(ref.read(usernameValidatorProvider));
+  }
+
+  String get _sourceKey => switch (widget.source) {
+        GameSource.chessCom => 'chess.com',
+        GameSource.lichess => 'lichess',
+      };
+
+  void _pushValidationInput() {
+    _ensureValidation().updateInput(
+      source: _sourceKey,
+      username: widget.controller.text,
+    );
   }
 
   void _onFocusChange() {
@@ -478,6 +507,7 @@ class _UsernameFieldState extends ConsumerState<_UsernameField> {
         _showDropdown = widget.focusNode.hasFocus && empty;
       });
     }
+    _pushValidationInput();
   }
 
   @override
@@ -511,6 +541,10 @@ class _UsernameFieldState extends ConsumerState<_UsernameField> {
           decoration: InputDecoration(
             prefixIcon: const Icon(Icons.person_outline_rounded,
                 color: ApexColors.sapphireBright, size: 20),
+            suffixIcon:
+                UsernameValidationPill(controller: _ensureValidation()),
+            suffixIconConstraints:
+                const BoxConstraints(minHeight: 32, minWidth: 0),
             hintText: placeholder,
             hintStyle: ApexTypography.bodyMedium.copyWith(
               color: ApexColors.textTertiary,
