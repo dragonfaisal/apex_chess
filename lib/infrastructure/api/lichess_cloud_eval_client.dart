@@ -15,21 +15,31 @@ import 'dart:math' as math;
 
 import 'package:http/http.dart' as http;
 
+import 'package:apex_chess/core/network/api_headers.dart';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Response Models
 // ─────────────────────────────────────────────────────────────────────────────
 
 class CloudEvalResult {
-  /// Evaluation in centipawns from White's perspective.
+  /// Evaluation of the best line (PV[0]) in centipawns, White's POV.
   final int? scoreCp;
 
-  /// Mate-in from White's perspective.
+  /// Mate-in for the best line, White's POV.
   final int? mateIn;
+
+  /// Evaluation of the second-best line (PV[1]) in centipawns, White's
+  /// POV. `null` when Lichess only returned a single PV — the cloud
+  /// database often has multiPv=1 for less-popular positions.
+  final int? secondBestCp;
+
+  /// Mate-in for the second-best line, White's POV.
+  final int? secondBestMate;
 
   /// Search depth achieved.
   final int depth;
 
-  /// Principal variation (list of UCI moves).
+  /// Principal variation of the best line (list of UCI moves).
   final List<String> pvMoves;
 
   /// Number of nodes searched (knodes).
@@ -38,6 +48,8 @@ class CloudEvalResult {
   const CloudEvalResult({
     this.scoreCp,
     this.mateIn,
+    this.secondBestCp,
+    this.secondBestMate,
     required this.depth,
     required this.pvMoves,
     required this.knodes,
@@ -46,9 +58,12 @@ class CloudEvalResult {
   factory CloudEvalResult.fromJson(Map<String, dynamic> json) {
     final pvs = json['pvs'] as List<dynamic>? ?? [];
     final firstPv = pvs.isNotEmpty ? pvs[0] as Map<String, dynamic> : null;
+    final secondPv = pvs.length > 1 ? pvs[1] as Map<String, dynamic> : null;
 
     int? cp;
     int? mate;
+    int? cp2;
+    int? mate2;
     List<String> moves = [];
 
     if (firstPv != null) {
@@ -57,10 +72,16 @@ class CloudEvalResult {
       final movesStr = firstPv['moves'] as String? ?? '';
       moves = movesStr.split(' ').where((s) => s.isNotEmpty).toList();
     }
+    if (secondPv != null) {
+      cp2 = secondPv['cp'] as int?;
+      mate2 = secondPv['mate'] as int?;
+    }
 
     return CloudEvalResult(
       scoreCp: cp,
       mateIn: mate,
+      secondBestCp: cp2,
+      secondBestMate: mate2,
       depth: json['depth'] as int? ?? 0,
       pvMoves: moves,
       knodes: json['knodes'] as int? ?? 0,
@@ -130,7 +151,7 @@ class LichessCloudEvalClient {
         });
 
         final response = await _httpClient
-            .get(uri, headers: {'Accept': 'application/json'})
+            .get(uri, headers: apexJsonHeaders)
             .timeout(const Duration(seconds: 10));
 
         switch (response.statusCode) {

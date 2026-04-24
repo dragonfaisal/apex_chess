@@ -29,6 +29,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
+import 'package:apex_chess/core/domain/services/position_heuristics.dart';
 import 'package:apex_chess/infrastructure/api/cloud_eval_service.dart'
     show CloudEvalError;
 import 'package:apex_chess/infrastructure/engine/eco_book.dart';
@@ -279,7 +280,7 @@ class LocalGameAnalyzer {
       // can award Brilliant when the engine says the position still
       // holds. Without this signal, Brilliant can never fire.
       final nextReply = ply + 1 < totalPlies ? parsed[ply + 1] : null;
-      final isSacrifice = _isSacrificeMove(
+      final isSacrifice = PositionHeuristics.isSacrificeMove(
         before: entry.fenBefore,
         afterReplyFen: nextReply?.fenAfter ?? entry.fenAfter,
         isWhiteMove: entry.isWhiteMove,
@@ -428,61 +429,9 @@ class LocalGameAnalyzer {
         _ => '',
       };
 
-  // ── Sacrifice detection ────────────────────────────────────────────────
-
-  /// Returns true when the mover has surrendered ≥3 points of material
-  /// (one minor piece) and the opponent's immediate reply has *not*
-  /// reclaimed it. Together with [EvaluationAnalyzer]'s non-regressing
-  /// Win% check, this is the only path to a Brilliant classification —
-  /// the analyser never invents brilliants from position alone.
-  ///
-  /// [afterReplyFen] is the FEN after the *opponent's* reply (or after
-  /// the played move if this was the last ply in the game). The balance
-  /// is computed White − Black in raw piece points (P=1, N=3, B=3, R=5,
-  /// Q=9) and normalised to the mover's perspective before thresholding.
-  static bool _isSacrificeMove({
-    required String before,
-    required String afterReplyFen,
-    required bool isWhiteMove,
-  }) {
-    final balanceBefore = _materialBalanceFromFen(before);
-    final balanceAfter = _materialBalanceFromFen(afterReplyFen);
-    if (balanceBefore == null || balanceAfter == null) return false;
-    final moverSign = isWhiteMove ? 1 : -1;
-    final delta = (balanceAfter - balanceBefore) * moverSign;
-    return delta <= -3;
-  }
-
-  /// Raw material balance (White − Black) in piece points. Returns
-  /// `null` if the FEN is unparseable so the caller can degrade
-  /// gracefully (no sacrifice = no brilliant, never a false positive).
-  static int? _materialBalanceFromFen(String fen) {
-    try {
-      final pos = Chess.fromSetup(Setup.parseFen(fen));
-      int total = 0;
-      for (final side in [Side.white, Side.black]) {
-        final sign = side == Side.white ? 1 : -1;
-        final pieces = pos.board.bySide(side);
-        for (final sq in pieces.squares) {
-          final p = pos.board.pieceAt(sq);
-          if (p == null) continue;
-          total += sign * _pieceValue(p.role);
-        }
-      }
-      return total;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  static int _pieceValue(Role role) => switch (role) {
-        Role.pawn => 1,
-        Role.knight => 3,
-        Role.bishop => 3,
-        Role.rook => 5,
-        Role.queen => 9,
-        Role.king => 0,
-      };
+  // Sacrifice detection lives in [PositionHeuristics] so the cloud
+  // analyser can share the same logic without copying the FEN
+  // material-balance code.
 }
 
 class _ParsedMove {

@@ -47,7 +47,10 @@ final profileScannerServiceProvider =
     Provider<ProfileScannerService>((ref) => ProfileScannerService(
           chessCom: ref.read(chessComRepositoryProvider),
           lichess: ref.read(lichessRepositoryProvider),
-          analyzer: ref.read(gameAnalyzerProvider),
+          // Forensics fans out to dozens of opponent games at once, so
+          // we burn local Stockfish CPU instead of hammering Lichess
+          // Cloud Eval (which would rate-limit the user-facing review).
+          analyzer: ref.read(localGameAnalyzerProvider),
         ));
 
 class ProfileScannerController extends Notifier<ProfileScannerState> {

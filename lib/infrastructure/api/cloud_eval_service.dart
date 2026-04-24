@@ -15,11 +15,18 @@ import 'package:apex_chess/infrastructure/api/lichess_cloud_eval_client.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 
 class CloudEvalSnapshot {
-  /// Centipawns from White's perspective.
+  /// Centipawns of the best line, White's POV.
   final int? scoreCp;
 
-  /// Mate-in from White's perspective.
+  /// Mate-in for the best line, White's POV.
   final int? mateIn;
+
+  /// Centipawns of the second-best line, White's POV. `null` when
+  /// Lichess only returned a single PV.
+  final int? secondBestCp;
+
+  /// Mate-in for the second-best line, White's POV.
+  final int? secondBestMate;
 
   /// Search depth achieved in the cloud.
   final int depth;
@@ -33,6 +40,8 @@ class CloudEvalSnapshot {
   const CloudEvalSnapshot({
     this.scoreCp,
     this.mateIn,
+    this.secondBestCp,
+    this.secondBestMate,
     required this.depth,
     this.bestMoveUci,
     this.pvMoves = const [],
@@ -69,16 +78,23 @@ class CloudEvalService {
 
   /// Evaluates a FEN position via the Lichess Cloud Eval API.
   ///
-  /// The FEN's side-to-move is used to normalize the score to White's POV.
+  /// [multiPv] controls how many alternate lines to request — pass 2
+  /// when the caller needs to detect "only winning move" (Great) by
+  /// comparing PV[0] vs PV[1]. The default of 1 keeps live-eval calls
+  /// cheap.
+  ///
   /// Returns a tuple of (result, error). Exactly one will be non-null.
-  Future<(CloudEvalSnapshot?, CloudEvalError?)> evaluate(String fen) async {
+  Future<(CloudEvalSnapshot?, CloudEvalError?)> evaluate(
+    String fen, {
+    int multiPv = 1,
+  }) async {
     // Check if circuit breaker is tripped before calling.
     if (_client.isRateLimited) {
       return (null, CloudEvalError.rateLimited);
     }
 
     try {
-      final result = await _client.getEvaluation(fen);
+      final result = await _client.getEvaluation(fen, multiPv: multiPv);
 
       if (result == null) {
         // Could be 404 (not found) or rate-limited.
@@ -97,6 +113,8 @@ class CloudEvalService {
         CloudEvalSnapshot(
           scoreCp: result.scoreCp,
           mateIn: result.mateIn,
+          secondBestCp: result.secondBestCp,
+          secondBestMate: result.secondBestMate,
           depth: result.depth,
           bestMoveUci: bestMove,
           pvMoves: result.pvMoves,

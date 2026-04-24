@@ -37,6 +37,7 @@ import 'package:flutter/material.dart';
 
 enum MoveQuality {
   brilliant('!!', 'Brilliant', ApexColors.brilliant, 'brilliant.svg'),
+  great('!', 'Great Find', ApexColors.brilliant, 'great_find.svg'),
   best('★', 'Best Move', ApexColors.best, 'best.svg'),
   excellent('!', 'Excellent', ApexColors.great, 'excellent.svg'),
   good('', 'Solid', ApexColors.textSecondary, 'good.svg'),
@@ -154,6 +155,7 @@ class EvaluationAnalyzer {
     String? engineBestMoveUci,
     String? playedMoveUci,
     bool isSacrifice = false,
+    bool isOnlyWinningMove = false,
   }) {
     final wPrev = calculateWinPercentage(cp: prevCp, mate: prevMate);
     final wCurr = calculateWinPercentage(cp: currCp, mate: currMate);
@@ -174,8 +176,8 @@ class EvaluationAnalyzer {
         normEngine == normPlayed;
 
     // Sacrifice-approved brilliancy. The sacrifice flag must be asserted
-    // upstream (local_game_analyzer compares piece balance before/after);
-    // we refuse to invent brilliants from deltaW alone.
+    // upstream (analyzer compares piece balance before/after); we refuse
+    // to invent brilliants from deltaW alone.
     if (isSacrifice && deltaW >= -2.0) {
       return MoveAnalysisResult(
         quality: MoveQuality.brilliant,
@@ -183,6 +185,23 @@ class EvaluationAnalyzer {
         winPercentBefore: wPrev,
         winPercentAfter: wCurr,
         message: 'Brilliant sacrifice — Apex AI confirms the attack.',
+        engineBestMove: engineBestMoveUci,
+      );
+    }
+
+    // Only-winning-move (Great Find !). The caller asserts that the
+    // engine's #2 line drops the position by ≥12 Win% relative to the
+    // played #1 — so the move is *forced* to keep an advantage. We only
+    // honour it when the player actually picked the engine's #1 and the
+    // resulting deltaW didn't regress meaningfully (same noise band as
+    // Best). This keeps Great strictly above Best in quality terms.
+    if (isOnlyWinningMove && wasEngineBestMove && deltaW >= -2.0) {
+      return MoveAnalysisResult(
+        quality: MoveQuality.great,
+        deltaW: deltaW,
+        winPercentBefore: wPrev,
+        winPercentAfter: wCurr,
+        message: 'Great find — the only move that holds the win.',
         engineBestMove: engineBestMoveUci,
       );
     }

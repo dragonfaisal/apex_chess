@@ -16,6 +16,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'package:apex_chess/core/network/api_headers.dart';
 import 'package:apex_chess/features/import_match/data/chess_com_repository.dart'
     show ImportPage;
 import 'package:apex_chess/features/import_match/domain/imported_game.dart';
@@ -66,7 +67,7 @@ class LichessRepository {
       final uri = Uri.https(
           'lichess.org', '/api/games/user/$user', params);
       final request = http.Request('GET', uri)
-        ..headers['Accept'] = 'application/x-ndjson';
+        ..headers.addAll(apexNdjsonHeaders);
       final streamed =
           await _client.send(request).timeout(const Duration(seconds: 20));
       if (streamed.statusCode == 404) {

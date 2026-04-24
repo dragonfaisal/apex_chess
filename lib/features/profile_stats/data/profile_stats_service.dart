@@ -19,6 +19,8 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
+import 'package:apex_chess/core/network/api_headers.dart';
+
 /// Which platform the handle belongs to.
 enum ProfileStatsSource { chessCom, lichess }
 
@@ -87,7 +89,6 @@ class ProfileStatsService {
       : _client = client ?? http.Client();
 
   final http.Client _client;
-  static const _ua = 'ApexChess/1.0 (+https://apex.chess)';
   static const _timeout = Duration(seconds: 8);
 
   /// Fetches the live rating buckets for [username] on [source]. Never
@@ -122,7 +123,7 @@ class ProfileStatsService {
     final statsUri =
         Uri.parse('https://api.chess.com/pub/player/$u/stats');
     final res = await _client
-        .get(statsUri, headers: const {'User-Agent': _ua})
+        .get(statsUri, headers: apexJsonHeaders)
         .timeout(_timeout);
     if (res.statusCode != 200) {
       return ProfileStats.unknown(
@@ -170,7 +171,7 @@ class ProfileStatsService {
     // for the majority of users) and leave the others rating-only.
     final uri = Uri.parse('https://lichess.org/api/user/$u');
     final res = await _client
-        .get(uri, headers: const {'User-Agent': _ua})
+        .get(uri, headers: apexJsonHeaders)
         .timeout(_timeout);
     if (res.statusCode != 200) {
       return ProfileStats.unknown(
