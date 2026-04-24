@@ -10,6 +10,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:apex_chess/app/di/providers.dart';
+import 'package:apex_chess/features/user_validation/presentation/username_validation_controller.dart';
+import 'package:apex_chess/features/user_validation/presentation/widgets/username_validation_pill.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
@@ -30,11 +33,40 @@ class _ProfileScannerScreenState
     extends ConsumerState<ProfileScannerScreen> {
   final _controller = TextEditingController();
   String _source = 'chess.com';
+  UsernameValidationController? _validation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_onTextChanged);
+  }
 
   @override
   void dispose() {
+    _controller.removeListener(_onTextChanged);
     _controller.dispose();
+    _validation?.dispose();
     super.dispose();
+  }
+
+  UsernameValidationController _ensureValidation() {
+    return _validation ??=
+        UsernameValidationController(ref.read(usernameValidatorProvider));
+  }
+
+  void _onTextChanged() {
+    _ensureValidation().updateInput(
+      source: _source,
+      username: _controller.text,
+    );
+  }
+
+  void _onSourceChanged(String source) {
+    setState(() => _source = source);
+    _ensureValidation().updateInput(
+      source: source,
+      username: _controller.text,
+    );
   }
 
   Future<void> _scan() async {
@@ -65,9 +97,10 @@ class _ProfileScannerScreenState
                 _InputCard(
                   controller: _controller,
                   source: _source,
-                  onSourceChanged: (s) => setState(() => _source = s),
+                  onSourceChanged: _onSourceChanged,
                   onSubmit: _scan,
                   isLoading: state.isLoading,
+                  validation: _ensureValidation(),
                 ),
                 const SizedBox(height: 20),
                 if (state.isLoading)
@@ -133,6 +166,7 @@ class _InputCard extends StatelessWidget {
     required this.onSourceChanged,
     required this.onSubmit,
     required this.isLoading,
+    required this.validation,
   });
 
   final TextEditingController controller;
@@ -140,6 +174,7 @@ class _InputCard extends StatelessWidget {
   final ValueChanged<String> onSourceChanged;
   final VoidCallback onSubmit;
   final bool isLoading;
+  final UsernameValidationController validation;
 
   @override
   Widget build(BuildContext context) {
@@ -182,6 +217,9 @@ class _InputCard extends StatelessWidget {
               ),
               prefixIcon: const Icon(Icons.person_search_rounded,
                   color: ApexColors.sapphireBright, size: 18),
+              suffixIcon: UsernameValidationPill(controller: validation),
+              suffixIconConstraints:
+                  const BoxConstraints(minHeight: 30, minWidth: 0),
               filled: true,
               fillColor: ApexColors.nebula.withValues(alpha: 0.5),
               border: OutlineInputBorder(

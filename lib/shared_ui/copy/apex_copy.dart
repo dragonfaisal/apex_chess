@@ -65,6 +65,13 @@ class ApexCopy {
   static const String depthDeepBlurb      =
       'Full-resolution Apex AI sweep. Surfaces brilliant moves and missed tactics.';
 
+  /// Returns the correct scan-mode label for a given engine depth so the
+  /// progress dialog header reads "Fast Analysis" for ≤ D16 and
+  /// "Quantum Deep Scan" above. Without this, both modes shared the
+  /// `deepAnalysis` constant and the Fast scan mis-advertised itself.
+  static String scanHeader(int depth) =>
+      depth <= 16 ? depthFastLabel : depthDeepLabel;
+
   // ── Error messages ─────────────────────────────────────────────────────
   static const String engineUnavailable  =
       'Apex AI Analyst could not be reached.';

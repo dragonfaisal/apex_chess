@@ -10,6 +10,7 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:apex_chess/core/infrastructure/engine/engine.dart';
+import 'package:apex_chess/features/user_validation/data/username_validator.dart';
 import 'package:apex_chess/infrastructure/engine/eco_book.dart';
 import 'package:apex_chess/infrastructure/engine/local_eval_service.dart';
 import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
@@ -80,4 +81,18 @@ final gameAnalyzerProvider = Provider<LocalGameAnalyzer>((ref) {
 /// Mock analysis API client for the "Demo • Opera Game" hero.
 final mockAnalysisApiProvider = Provider<MockAnalysisApiClient>((ref) {
   return const MockAnalysisApiClient();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Username existence validator (Chess.com + Lichess)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Shared [UsernameValidator] — a thin HTTP client wrapping the two
+/// providers' public profile endpoints. The debounce + stale-guard
+/// logic lives in the per-screen [UsernameValidationController] that
+/// consumes this provider.
+final usernameValidatorProvider = Provider<UsernameValidator>((ref) {
+  final validator = UsernameValidator();
+  ref.onDispose(validator.dispose);
+  return validator;
 });
