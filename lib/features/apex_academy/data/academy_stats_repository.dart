@@ -102,19 +102,14 @@ class AcademyStatsRepository {
     drillsToday += 1;
     if (correct) correctToday += 1;
 
-    int streak = p.getInt(_streakKey) ?? 0;
-    if (correct) {
-      // Streak advances only on the *first* correct drill of each
-      // new day — otherwise a single session could rack up fake
-      // streak days.
-      if (lastKey != todayKey) {
-        final yesterday = DateTime.now().subtract(const Duration(days: 1));
-        final yesterdayKey =
-            '${yesterday.year}-${yesterday.month.toString().padLeft(2, '0')}'
-            '-${yesterday.day.toString().padLeft(2, '0')}';
-        streak = (lastKey == yesterdayKey) ? streak + 1 : 1;
-      }
-    }
+    final priorStreak = p.getInt(_streakKey) ?? 0;
+    final streak = nextStreak(
+      previous: priorStreak,
+      lastDrillKey: lastKey,
+      todayKey: todayKey,
+      correct: correct,
+      now: DateTime.now(),
+    );
 
     final xpGain = correct ? xpPerCorrect : xpPerAttempt;
     final totalXp = (p.getInt(_xpKey) ?? 0) + xpGain;
@@ -132,6 +127,53 @@ class AcademyStatsRepository {
       correctToday: correctToday,
       lastDrillDate: DateTime.now(),
     );
+  }
+
+  /// Pure streak-math helper extracted for unit testing.
+  ///
+  /// Applies the documented streak rule — *consecutive calendar days
+  /// with at least one correct drill; a gap of more than 1 day resets
+  /// to zero* — irrespective of whether this drill happens to be
+  /// correct. The previous implementation only evaluated the gap when
+  /// `correct == true`, which meant an incorrect drill on the return
+  /// day could overwrite `_lastDateKey` and hide the gap from later
+  /// correct drills, preserving a stale streak across an
+  /// effectively-broken run.
+  ///
+  /// Parameters:
+  ///   * [previous]: current stored streak.
+  ///   * [lastDrillKey]: yyyy-mm-dd of the most recent drill, or null
+  ///     if the user has never drilled.
+  ///   * [todayKey]: yyyy-mm-dd of the drill being recorded (derived
+  ///     from [now]).
+  ///   * [correct]: whether this drill was answered correctly.
+  ///   * [now]: the "wall-clock" moment used to derive "yesterday";
+  ///     injected so tests can fast-forward the calendar.
+  static int nextStreak({
+    required int previous,
+    required String? lastDrillKey,
+    required String todayKey,
+    required bool correct,
+    required DateTime now,
+  }) {
+    var streak = previous;
+    // Detect calendar gap regardless of correctness.
+    if (lastDrillKey != null && lastDrillKey != todayKey) {
+      final yesterday = now.subtract(const Duration(days: 1));
+      final yesterdayKey =
+          '${yesterday.year}-${yesterday.month.toString().padLeft(2, '0')}'
+          '-${yesterday.day.toString().padLeft(2, '0')}';
+      if (lastDrillKey != yesterdayKey) {
+        streak = 0;
+      }
+    }
+    if (correct && lastDrillKey != todayKey) {
+      // First correct drill of a new day — advance. Covers both
+      // "continued from yesterday" (streak+1) and "returning after a
+      // gap" (streak was reset to 0 → 1).
+      streak = streak + 1;
+    }
+    return streak;
   }
 
   Future<void> clear() async {
