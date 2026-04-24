@@ -171,10 +171,27 @@ class LocalGameAnalyzer {
       final before = await evalCached(entry.fenBefore);
       final after = await evalCached(entry.fenAfter);
 
+      // Derive the *real* pre-move Win% from the engine — `prevWinPct`
+      // may be stale if the previous plies came from the book (book moves
+      // preserve the prior Win% unchanged, so the book→engine transition
+      // would otherwise show an artificial jump on the first real eval).
+      final winPctBefore = before != null
+          ? EvaluationAnalyzer.calculateWinPercentage(
+              cp: before.scoreCp, mate: before.mateIn)
+          : prevWinPct;
       final winPctAfter = after != null
           ? EvaluationAnalyzer.calculateWinPercentage(
               cp: after.scoreCp, mate: after.mateIn)
-          : prevWinPct;
+          : winPctBefore;
+
+      // Backfill any preceding book moves so the chart ramps smoothly
+      // from the opening eval (50 % if we started in book) to where the
+      // engine actually thinks the position stands when theory ends.
+      if (before != null &&
+          moves.isNotEmpty &&
+          moves.last.classification == MoveQuality.book) {
+        _backfillBookWinPct(moves, winPctBefore);
+      }
 
       final result = _analyzer.analyze(
         prevCp: before?.scoreCp,
@@ -197,7 +214,7 @@ class LocalGameAnalyzer {
         uci: entry.uci,
         fenBefore: entry.fenBefore,
         fenAfter: entry.fenAfter,
-        winPercentBefore: prevWinPct,
+        winPercentBefore: winPctBefore,
         winPercentAfter: winPctAfter,
         deltaW: result.deltaW,
         classification: result.quality,
@@ -221,6 +238,48 @@ class LocalGameAnalyzer {
       headers: headers,
       winPercentages: winPercentages,
     );
+  }
+
+  /// Rewrite contiguous book moves at the tail of [moves] so their
+  /// `winPercentBefore` / `winPercentAfter` interpolate linearly from the
+  /// first book move's starting Win% up to [endWinPct]. This makes the
+  /// advantage chart read as a smooth ramp through theory instead of a
+  /// flat 50 % line followed by an abrupt step on the first engine eval.
+  static void _backfillBookWinPct(List<MoveAnalysis> moves, double endWinPct) {
+    var start = moves.length - 1;
+    while (start > 0 && moves[start - 1].classification == MoveQuality.book) {
+      start--;
+    }
+    final startWinPct = moves[start].winPercentBefore;
+    final span = moves.length - start;
+    for (var i = start; i < moves.length; i++) {
+      final src = moves[i];
+      final tBefore = span == 0 ? 1.0 : (i - start) / span;
+      final tAfter = span == 0 ? 1.0 : (i - start + 1) / span;
+      final wBefore = startWinPct + (endWinPct - startWinPct) * tBefore;
+      final wAfter = startWinPct + (endWinPct - startWinPct) * tAfter;
+      moves[i] = MoveAnalysis(
+        ply: src.ply,
+        san: src.san,
+        uci: src.uci,
+        fenBefore: src.fenBefore,
+        fenAfter: src.fenAfter,
+        targetSquare: src.targetSquare,
+        winPercentBefore: wBefore,
+        winPercentAfter: wAfter,
+        deltaW: wAfter - wBefore,
+        isWhiteMove: src.isWhiteMove,
+        classification: src.classification,
+        engineBestMoveUci: src.engineBestMoveUci,
+        engineBestMoveSan: src.engineBestMoveSan,
+        scoreCpAfter: src.scoreCpAfter,
+        mateInAfter: src.mateInAfter,
+        inBook: src.inBook,
+        openingName: src.openingName,
+        ecoCode: src.ecoCode,
+        message: src.message,
+      );
+    }
   }
 
   String? _tryUciToSan(String fen, String uci) {

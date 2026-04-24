@@ -212,10 +212,9 @@ class _FillStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fraction = (winPercent / 100).clamp(0.0, 1.0);
-    final whiteSide = flipped ? 1.0 - fraction : fraction;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final whiteWidth = constraints.maxWidth * whiteSide;
+        final whiteWidth = constraints.maxWidth * fraction;
         return Stack(
           children: [
             Container(
