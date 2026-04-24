@@ -53,11 +53,18 @@ class LocalGameAnalyzer {
     Future<EcoBook>? bookFuture,
     EvaluationAnalyzer analyzer = const EvaluationAnalyzer(),
     int depth = 14,
+    // Per-position wall-clock cap. The analyzer combines this with
+    // `depth` so Stockfish stops at whichever terminator hits first —
+    // this prevents one tactical middlegame from stalling an entire
+    // game scan at high depth. ~900 ms reaches D13-15 on desktop NNUE
+    // without bloating wall-clock time on long games.
+    Duration movetime = const Duration(milliseconds: 900),
   })  : _eval = eval,
         _book = book,
         _bookFuture = bookFuture,
         _analyzer = analyzer,
-        _depth = depth;
+        _depth = depth,
+        _movetime = movetime;
 
   final LocalEvalService _eval;
   // Book state is materialised on first `analyzeFromPgn` call. A caller
@@ -68,6 +75,7 @@ class LocalGameAnalyzer {
   final Future<EcoBook>? _bookFuture;
   final EvaluationAnalyzer _analyzer;
   final int _depth;
+  final Duration _movetime;
 
   Future<AnalysisTimeline> analyzeFromPgn(
     String pgn, {
@@ -141,7 +149,11 @@ class LocalGameAnalyzer {
         consecutiveFailures = 0;
         return hit;
       }
-      final (snap, err) = await _eval.evaluate(fen, depth: searchDepth);
+      final (snap, err) = await _eval.evaluate(
+        fen,
+        depth: searchDepth,
+        movetime: _movetime,
+      );
       if (err != null && err != CloudEvalError.positionNotFound) {
         consecutiveFailures++;
         // A sustained run of failures means the engine itself is

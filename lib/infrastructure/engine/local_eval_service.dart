@@ -64,6 +64,7 @@ class LocalEvalService {
   Future<(EvalSnapshot?, EvalError?)> evaluate(
     String fen, {
     int? depth,
+    Duration? movetime,
     Duration? timeout,
   }) {
     final completer = Completer<(EvalSnapshot?, EvalError?)>();
@@ -73,6 +74,7 @@ class LocalEvalService {
         final result = await _runOne(
           fen,
           depth: depth ?? _defaultDepth,
+          movetime: movetime,
           timeout: timeout ?? _defaultTimeout,
         );
         completer.complete(result);
@@ -87,6 +89,7 @@ class LocalEvalService {
   Future<(EvalSnapshot?, EvalError?)> _runOne(
     String fen, {
     required int depth,
+    Duration? movetime,
     required Duration timeout,
   }) async {
     if (!_engine.isRunning) {
@@ -137,9 +140,18 @@ class LocalEvalService {
       }
     });
 
+    // UCI `go` lets the caller combine terminators — whichever fires
+    // first stops the search. For batch analysis we want "reach this
+    // depth OR at most this wall-clock time, then stop"; depth-only on
+    // desktop Stockfish can spend >30s on tactical middlegames which
+    // stalls the whole game scan.
     _engine
       ..send(UciPosition.fen(fen))
-      ..send(UciGo.depth(depth));
+      ..send(
+        movetime != null
+            ? UciGo(depth: depth, movetime: movetime)
+            : UciGo.depth(depth),
+      );
 
     try {
       final best = await bestMoveCompleter.future.timeout(timeout);
