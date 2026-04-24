@@ -47,6 +47,18 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
   final _usernameFocus = FocusNode();
   final _scrollController = ScrollController();
 
+  // Live-Fetch debounce — 600ms after the user stops typing (or toggles
+  // source) we auto-invoke Fetch. Guards:
+  //   * Minimum username length so a single keystroke doesn't spam HTTP.
+  //   * [_lastAutoKey] dedupes identical (source, username) combos so
+  //     a rebuild / source ping-pong can't re-fire the same query.
+  //   * Cancelled on submit (Enter), on tapping a recent, on source
+  //     toggle (re-scheduled), and on dispose.
+  Timer? _autoFetchDebounce;
+  String? _lastAutoKey;
+  static const Duration _autoFetchWindow = Duration(milliseconds: 600);
+  static const int _autoFetchMinLength = 3;
+
   @override
   void initState() {
     super.initState();
@@ -58,11 +70,41 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
 
   @override
   void dispose() {
+    _autoFetchDebounce?.cancel();
     _scrollController.removeListener(_maybeFetchMore);
     _scrollController.dispose();
     _usernameFocus.dispose();
     _controller.dispose();
     super.dispose();
+  }
+
+  /// Schedules an auto-fetch 600ms after the latest typing / source
+  /// change. Callers pass the *intended* next username so this works
+  /// from both [TextField.onChanged] (before the notifier has been
+  /// updated) and source-toggle callbacks.
+  void _scheduleAutoFetch({required GameSource source, required String username}) {
+    _autoFetchDebounce?.cancel();
+    final trimmed = username.trim();
+    if (trimmed.length < _autoFetchMinLength) return;
+    final key = '${source.name}:$trimmed';
+    if (key == _lastAutoKey) return;
+    _autoFetchDebounce = Timer(_autoFetchWindow, () {
+      // Re-check at fire-time: the user may have cleared or edited the
+      // field after the timer was scheduled, or tapped a recent (which
+      // drives its own immediate fetch). Bail if state has drifted.
+      if (!mounted) return;
+      if (_controller.text.trim() != trimmed) return;
+      final state = ref.read(importControllerProvider);
+      if (state.source != source) return;
+      if (state.isLoading) return;
+      _lastAutoKey = key;
+      ref.read(importControllerProvider.notifier).fetch();
+    });
+  }
+
+  void _cancelAutoFetch() {
+    _autoFetchDebounce?.cancel();
+    _autoFetchDebounce = null;
   }
 
   void _maybeFetchMore() {
@@ -103,7 +145,15 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
               ),
               _SourceToggle(
                 source: state.source,
-                onChanged: notifier.setSource,
+                onChanged: (src) {
+                  notifier.setSource(src);
+                  // Source change with an existing username is the only
+                  // case where the *same* text should trigger a new fetch
+                  // — clear the dedupe key so the debounce fires.
+                  _lastAutoKey = null;
+                  _scheduleAutoFetch(
+                      source: src, username: _controller.text);
+                },
               ),
               const SizedBox(height: 16),
               Padding(
@@ -111,8 +161,18 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
                 child: _UsernameField(
                   controller: _controller,
                   focusNode: _usernameFocus,
-                  onChanged: notifier.setUsername,
-                  onSubmitted: (_) => notifier.fetch(),
+                  onChanged: (v) {
+                    notifier.setUsername(v);
+                    _scheduleAutoFetch(
+                        source: state.source, username: v);
+                  },
+                  onSubmitted: (v) {
+                    // Explicit Enter: fire immediately and cancel the
+                    // pending auto-fetch so we don't double-hit the API.
+                    _cancelAutoFetch();
+                    _lastAutoKey = '${state.source.name}:${v.trim()}';
+                    notifier.fetch();
+                  },
                   source: state.source,
                   onRecentTapped: (username) {
                     _controller.text = username;
@@ -120,6 +180,8 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
                         offset: username.length);
                     notifier.setUsername(username);
                     _usernameFocus.unfocus();
+                    _cancelAutoFetch();
+                    _lastAutoKey = '${state.source.name}:$username';
                     notifier.fetch();
                   },
                 ),
@@ -129,7 +191,12 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: _FetchButton(
                   isLoading: state.isLoading,
-                  onTap: notifier.fetch,
+                  onTap: () {
+                    _cancelAutoFetch();
+                    _lastAutoKey =
+                        '${state.source.name}:${_controller.text.trim()}';
+                    notifier.fetch();
+                  },
                 ),
               ),
               const SizedBox(height: 18),
