@@ -93,11 +93,27 @@ class ImportController extends Notifier<ImportState> {
   ImportState build() => const ImportState();
 
   void setSource(GameSource source) {
-    // Switching source also invalidates any in-flight pagination —
-    // the old cursor belongs to the old repository and would be
-    // nonsensical to the new one.
+    if (source == state.source) return;
+    // Switching source invalidates every piece of pagination state:
+    //   * the old cursor belongs to the old repository's pagination
+    //     scheme ("0:25" on Chess.com is not a Lichess `until=` ms),
+    //   * the loaded games belong to a different profile's archive,
+    //   * `hasMore` / `hasFetched` describe the old query,
+    //   * `isLoadingMore` belongs to an in-flight `fetchMore()` we
+    //     are about to invalidate via the generation bump — without
+    //     clearing it here the footer spinner stays stuck forever
+    //     because the stale future's early-return doesn't touch it.
     _generation++;
-    state = state.copyWith(source: source);
+    state = state.copyWith(
+      source: source,
+      games: const [],
+      isLoading: false,
+      isLoadingMore: false,
+      clearError: true,
+      hasFetched: false,
+      clearCursor: true,
+      hasMore: false,
+    );
   }
 
   void setUsername(String value) {
@@ -128,6 +144,15 @@ class ImportController extends Notifier<ImportState> {
     }
 
     _generation++;
+    // Snapshot post-bump — if a later setSource() or fetch() runs
+    // while we're awaiting HTTP, the generation will advance and
+    // our stale response must be discarded. Without this guard the
+    // `isLoading` gate alone is not enough: setSource() clears
+    // isLoading to keep the UI responsive, so a second fetch() can
+    // start while this one is still in flight and the first
+    // completion would overwrite the second's results with games
+    // from a different source/user.
+    final gen = _generation;
     state = state.copyWith(
       isLoading: true,
       // Any in-flight fetchMore() is now stale; clear the footer
@@ -143,6 +168,7 @@ class ImportController extends Notifier<ImportState> {
 
     try {
       final page = await _fetchPage();
+      if (gen != _generation) return; // stale — superseded
       state = state.copyWith(
         games: page.games,
         isLoading: false,
@@ -160,12 +186,14 @@ class ImportController extends Notifier<ImportState> {
             .record(state.source, user);
       }
     } on ImportException catch (e) {
+      if (gen != _generation) return;
       state = state.copyWith(
         isLoading: false,
         errorMessage: e.userMessage,
         hasFetched: true,
       );
     } catch (_) {
+      if (gen != _generation) return;
       state = state.copyWith(
         isLoading: false,
         errorMessage: 'Something went wrong. Try again.',
