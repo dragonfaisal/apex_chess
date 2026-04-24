@@ -16,7 +16,7 @@ import 'package:apex_chess/features/user_validation/presentation/widgets/usernam
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
-import 'package:apex_chess/shared_ui/widgets/radar_scan.dart';
+import 'package:apex_chess/shared_ui/widgets/quantum_shatter_loader.dart';
 
 import '../../domain/profile_scan_result.dart';
 import '../controllers/profile_scanner_controller.dart';
@@ -337,7 +337,7 @@ class _LoadingCard extends StatelessWidget {
         children: [
           const SizedBox(
             height: 160,
-            child: Center(child: RadarScan(size: 160)),
+            child: Center(child: QuantumShatterLoader(size: 160)),
           ),
           const SizedBox(height: 12),
           Text(

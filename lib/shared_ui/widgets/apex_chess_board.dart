@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
+import 'package:apex_chess/shared_ui/widgets/move_quality_aura.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -78,6 +79,12 @@ class ApexChessBoard extends StatelessWidget {
                       isOccupied: pieces.values.any((e) =>
                           e.$1 == _fileFromAlgebraic(sq) &&
                           e.$2 == _rankFromAlgebraic(sq))),
+                // Per-quality breathing neon aura on the move's target
+                // square. Rendered under the piece so the piece reads
+                // against a glowing halo instead of being washed out.
+                if (lastMove != null && lastMoveQuality != null)
+                  _buildQualityAura(
+                      lastMove!.$2, squareSize, lastMoveQuality!),
                 for (final entry in pieces.entries)
                   _buildPiece(entry.key, entry.value, squareSize),
                 if (lastMove != null && lastMoveQuality != null)
@@ -199,6 +206,24 @@ class ApexChessBoard extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: ApexColors.electricBlue.withAlpha(90),
                   shape: BoxShape.circle)),
+      ),
+    );
+  }
+
+  Widget _buildQualityAura(
+      String square, double squareSize, MoveQuality quality) {
+    final pos = _squareToPosition(square, squareSize);
+    return Positioned(
+      left: pos.dx,
+      top: pos.dy,
+      width: squareSize,
+      height: squareSize,
+      child: MoveQualityAura(
+        // `ValueKey` forces a fresh controller when the quality flips
+        // on the same square — otherwise the breath would continue
+        // from a stale phase when stepping through the review timeline.
+        key: ValueKey('aura-$square-${quality.name}'),
+        quality: quality,
       ),
     );
   }

@@ -32,7 +32,7 @@ import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
-import 'package:apex_chess/shared_ui/widgets/radar_scan.dart';
+import 'package:apex_chess/shared_ui/widgets/quantum_shatter_loader.dart';
 
 class ImportMatchScreen extends ConsumerStatefulWidget {
   const ImportMatchScreen({super.key});
@@ -1371,7 +1371,7 @@ class _ImportAnalysisDialogState
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    const RadarScan(size: 220),
+                    const QuantumShatterLoader(size: 220),
                     Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
