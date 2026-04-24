@@ -85,9 +85,15 @@ class CloudGameAnalyzer {
       final newPos = position.play(move);
 
       String uci;
+      String targetSquare = '';
       if (move is NormalMove) {
-        uci = '${_sqAlg(move.from)}${_sqAlg(move.to)}'
+        final rawUci = '${_sqAlg(move.from)}${_sqAlg(move.to)}'
             '${move.promotion != null ? _roleChar(move.promotion!) : ""}';
+        // Normalise castling UCIs (e1h1 → e1g1) so the downstream
+        // engine-match test and the board aura both land on the king's
+        // destination square rather than the rook's.
+        uci = normalizeCastlingUci(rawUci);
+        targetSquare = uci.substring(2, 4);
       } else {
         uci = node.san;
       }
@@ -97,6 +103,7 @@ class CloudGameAnalyzer {
         fenAfter: newPos.fen,
         san: node.san,
         uci: uci,
+        targetSquare: targetSquare,
         isWhiteMove: isWhite,
       ));
 
@@ -146,6 +153,7 @@ class CloudGameAnalyzer {
           uci: entry.uci,
           fenBefore: entry.fenBefore,
           fenAfter: entry.fenAfter,
+          targetSquare: entry.targetSquare,
           winPercentBefore: prevWinPct,
           winPercentAfter: winPctAfter,
           deltaW: 0.0,
@@ -237,6 +245,7 @@ class CloudGameAnalyzer {
         uci: entry.uci,
         fenBefore: entry.fenBefore,
         fenAfter: entry.fenAfter,
+        targetSquare: entry.targetSquare,
         winPercentBefore: prevWinPct,
         winPercentAfter: winPctAfter,
         deltaW: result.deltaW,
@@ -277,6 +286,7 @@ class CloudGameAnalyzer {
       uci: entry.uci,
       fenBefore: entry.fenBefore,
       fenAfter: entry.fenAfter,
+      targetSquare: entry.targetSquare,
       winPercentBefore: prevWinPct,
       winPercentAfter: prevWinPct,
       deltaW: 0.0,
@@ -350,6 +360,7 @@ class _ParsedMove {
   final String fenAfter;
   final String san;
   final String uci;
+  final String targetSquare;
   final bool isWhiteMove;
 
   const _ParsedMove({
@@ -357,6 +368,7 @@ class _ParsedMove {
     required this.fenAfter,
     required this.san,
     required this.uci,
+    required this.targetSquare,
     required this.isWhiteMove,
   });
 }

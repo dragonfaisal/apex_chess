@@ -13,6 +13,40 @@ import 'package:apex_chess/features/account/presentation/controllers/account_con
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/archives/presentation/controllers/archive_controller.dart';
 
+/// Which side the user wants to inspect. Drives every derived stat on
+/// the Grandmaster Analytics dashboard so the pie, trend, and opening
+/// table all respect the same filter toggle.
+enum ColorPerspective { all, white, black }
+
+/// Single row in the opening-performance table. Sorted desc by
+/// [total] games played, tie-broken by win rate. Feeds the Apex
+/// Academy's spaced-repetition weighting — lines where the user
+/// performs worst bubble up in the "revisit" queue.
+class OpeningStats {
+  const OpeningStats({
+    required this.name,
+    required this.eco,
+    required this.wins,
+    required this.losses,
+    required this.draws,
+  });
+
+  final String name;
+  final String? eco;
+  final int wins;
+  final int losses;
+  final int draws;
+
+  int get total => wins + losses + draws;
+  double get winRate => total == 0 ? 0 : (wins / total) * 100;
+  double get lossRate => total == 0 ? 0 : (losses / total) * 100;
+}
+
+/// Active color filter for the dashboard. Persisted across the session
+/// only — a fresh app launch starts on [ColorPerspective.all].
+final dashboardColorFilterProvider =
+    StateProvider<ColorPerspective>((_) => ColorPerspective.all);
+
 class DashboardStats {
   const DashboardStats({
     required this.gamesAnalyzed,
@@ -79,10 +113,61 @@ const int dashboardPageSize = 10;
 final dashboardStatsProvider = Provider<DashboardStats>((ref) {
   final archive = ref.watch(archiveControllerProvider);
   final account = ref.watch(accountControllerProvider).valueOrNull;
-  return _buildStats(archive.games, account?.username);
+  final filter = ref.watch(dashboardColorFilterProvider);
+  return _buildStats(archive.games, account?.username, filter);
 });
 
-DashboardStats _buildStats(List<ArchivedGame> games, String? perspective) {
+/// Top openings for the active perspective. Sorted desc by total
+/// games played so the most-seen lines live at the top — the Apex
+/// Academy's review queue pulls from here, prioritising entries
+/// with high [OpeningStats.lossRate] and a sample size ≥ 3.
+final openingStatsProvider = Provider<List<OpeningStats>>((ref) {
+  final games = ref.watch(archiveControllerProvider).games;
+  final me = ref.watch(accountControllerProvider).valueOrNull?.username;
+  final filter = ref.watch(dashboardColorFilterProvider);
+  return _buildOpeningStats(games, me, filter);
+});
+
+/// Revisit queue — the openings the Academy spaced-repetition loop
+/// nudges first. Worst win rate + reasonable sample, capped at 5.
+final academyRevisitQueueProvider =
+    Provider<List<OpeningStats>>((ref) {
+  final list = ref.watch(openingStatsProvider);
+  final filtered = list.where((o) => o.total >= 3).toList()
+    ..sort((a, b) {
+      final lossCmp = b.lossRate.compareTo(a.lossRate);
+      if (lossCmp != 0) return lossCmp;
+      return b.total.compareTo(a.total);
+    });
+  return filtered.take(5).toList();
+});
+
+/// Whether [g] is from the user's perspective according to [filter].
+/// Returns null when the game has no identifiable user side so the
+/// caller can drop it from filtered views without double-counting.
+bool? _gameMatchesColor({
+  required ArchivedGame g,
+  required String? me,
+  required ColorPerspective filter,
+}) {
+  if (filter == ColorPerspective.all) return true;
+  if (me == null || me.isEmpty) return null;
+  final meL = me.toLowerCase();
+  final whiteIsMe = g.white.toLowerCase() == meL;
+  final blackIsMe = g.black.toLowerCase() == meL;
+  if (!whiteIsMe && !blackIsMe) return null;
+  return switch (filter) {
+    ColorPerspective.white => whiteIsMe,
+    ColorPerspective.black => blackIsMe,
+    ColorPerspective.all => true,
+  };
+}
+
+DashboardStats _buildStats(
+  List<ArchivedGame> games,
+  String? perspective,
+  ColorPerspective filter,
+) {
   if (games.isEmpty) return DashboardStats.empty();
   // Oldest-first so the trend series reads left-to-right in time.
   final ordered = [...games]
@@ -90,12 +175,18 @@ DashboardStats _buildStats(List<ArchivedGame> games, String? perspective) {
 
   int wins = 0, losses = 0, draws = 0, unknown = 0;
   int brilliants = 0, blunders = 0, mistakes = 0, inaccuracies = 0;
+  int countedGames = 0;
   final qualityTotals = <MoveQuality, int>{};
   final trend = <double>[];
   double accuracySum = 0;
 
   final me = perspective?.toLowerCase();
   for (final g in ordered) {
+    final match = _gameMatchesColor(g: g, me: me, filter: filter);
+    if (match == null) continue; // handle-less game dropped under filter
+    if (match == false) continue; // wrong color for the active filter
+
+    countedGames++;
     brilliants += g.brilliantCount;
     blunders += g.blunderCount;
     mistakes += g.mistakeCount;
@@ -143,9 +234,11 @@ DashboardStats _buildStats(List<ArchivedGame> games, String? perspective) {
     }
   }
 
+  if (countedGames == 0) return DashboardStats.empty();
+
   final decided = wins + losses + draws;
   return DashboardStats(
-    gamesAnalyzed: games.length,
+    gamesAnalyzed: countedGames,
     wins: wins,
     losses: losses,
     draws: draws,
@@ -157,9 +250,68 @@ DashboardStats _buildStats(List<ArchivedGame> games, String? perspective) {
     qualityDistribution: qualityTotals,
     accuracyTrend: trend,
     winRate: decided == 0 ? 0 : (wins / decided) * 100,
-    averageAccuracy: accuracySum / games.length,
+    averageAccuracy: accuracySum / countedGames,
     perspective: perspective,
   );
+}
+
+List<OpeningStats> _buildOpeningStats(
+  List<ArchivedGame> games,
+  String? me,
+  ColorPerspective filter,
+) {
+  if (games.isEmpty) return const [];
+  // Bucket by opening name (fall back to ECO when name is blank so we
+  // don't lump every un-named line into one row).
+  final buckets = <String, _OpeningAccum>{};
+  final meL = me?.toLowerCase();
+  for (final g in games) {
+    final name = g.openingName?.trim().isNotEmpty == true
+        ? g.openingName!.trim()
+        : (g.ecoCode ?? 'Unknown line');
+    final match = _gameMatchesColor(g: g, me: meL, filter: filter);
+    if (match == null || match == false) continue;
+
+    final bucket = buckets.putIfAbsent(
+      name,
+      () => _OpeningAccum(name: name, eco: g.ecoCode),
+    );
+    if (meL == null || meL.isEmpty) {
+      bucket.draws++; // no perspective, treat each game neutrally
+      continue;
+    }
+    final whiteIsMe = g.white.toLowerCase() == meL;
+    final blackIsMe = g.black.toLowerCase() == meL;
+    if (!whiteIsMe && !blackIsMe) continue;
+    switch (g.result) {
+      case '1-0':
+        whiteIsMe ? bucket.wins++ : bucket.losses++;
+      case '0-1':
+        blackIsMe ? bucket.wins++ : bucket.losses++;
+      case '1/2-1/2':
+        bucket.draws++;
+    }
+  }
+  final out = buckets.values
+      .map((b) => OpeningStats(
+            name: b.name,
+            eco: b.eco,
+            wins: b.wins,
+            losses: b.losses,
+            draws: b.draws,
+          ))
+      .toList()
+    ..sort((a, b) => b.total.compareTo(a.total));
+  return out;
+}
+
+class _OpeningAccum {
+  _OpeningAccum({required this.name, required this.eco});
+  final String name;
+  final String? eco;
+  int wins = 0;
+  int losses = 0;
+  int draws = 0;
 }
 
 /// Paginated recent-games table state. Bumping the page is a pure

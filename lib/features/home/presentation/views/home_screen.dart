@@ -64,18 +64,16 @@ class HomeScreen extends ConsumerWidget {
                         children: [
                           const SizedBox(height: 24),
                           _AccountStrip(account: account),
-                          const SizedBox(height: 18),
-                          const _HeroBadge(),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 22),
                           Text(
                             ApexCopy.appTitle,
                             textAlign: TextAlign.center,
                             style: ApexTypography.displayLarge.copyWith(
                               letterSpacing: 6,
-                              fontSize: 36,
+                              fontSize: 32,
                             ),
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 6),
                           Text(
                             ApexCopy.tagline,
                             textAlign: TextAlign.center,
@@ -83,72 +81,108 @@ class HomeScreen extends ConsumerWidget {
                               color: ApexColors.sapphireBright
                                   .withValues(alpha: 0.72),
                               letterSpacing: 2,
+                              fontSize: 11,
                             ),
                           ),
-                          const Spacer(),
-                          _PrimaryAction(
-                            label: ApexCopy.playLive,
-                            icon: Icons.play_arrow_rounded,
+                          const SizedBox(height: 20),
+                          _HeroPlayCard(
                             onTap: () => Navigator.of(context).push(
                               MaterialPageRoute(
                                   builder: (_) => const LivePlayScreen()),
                             ),
                           ),
-                          const SizedBox(height: 14),
-                          _SecondaryAction(
-                            label: ApexCopy.importMatch,
-                            icon: Icons.cloud_download_rounded,
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                  builder: (_) => const ImportMatchScreen()),
-                            ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _TileCard(
+                                  title: ApexCopy.importMatch,
+                                  subtitle: 'Chess.com · Lichess',
+                                  icon: Icons.cloud_download_rounded,
+                                  accent: ApexColors.sapphire,
+                                  onTap: () => Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const ImportMatchScreen(),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _TileCard(
+                                  title: ApexCopy.analyzeGame,
+                                  subtitle: 'Paste PGN · instant scan',
+                                  icon: Icons.auto_graph_rounded,
+                                  accent: ApexColors.aurora,
+                                  onTap: () =>
+                                      _showPgnDialog(context, ref),
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 14),
-                          _SecondaryAction(
-                            label: ApexCopy.analyzeGame,
-                            icon: Icons.auto_graph_rounded,
-                            onTap: () => _showPgnDialog(context, ref),
-                          ),
-                          const SizedBox(height: 14),
-                          _SecondaryAction(
-                            label: ApexCopy.archivesTitle,
-                            icon: Icons.inventory_2_outlined,
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                  builder: (_) => const ArchiveScreen()),
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          _SecondaryAction(
-                            label: ApexCopy.scannerTitle,
-                            icon: Icons.radar_rounded,
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                  builder: (_) =>
-                                      const ProfileScannerScreen()),
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          _SecondaryAction(
-                            label: ApexCopy.dashboardTitle,
+                          const SizedBox(height: 12),
+                          _WideTileCard(
+                            title: ApexCopy.dashboardTitle,
+                            subtitle:
+                                'Ratings · trend · opening performance',
                             icon: Icons.insights_rounded,
+                            accent: ApexColors.aurora,
                             onTap: () => Navigator.of(context).push(
                               MaterialPageRoute(
-                                  builder: (_) =>
-                                      const GlobalDashboardScreen()),
+                                builder: (_) =>
+                                    const GlobalDashboardScreen(),
+                              ),
                             ),
                           ),
-                          const SizedBox(height: 14),
-                          _SecondaryAction(
-                            label: ApexCopy.academyTitle,
-                            icon: Icons.school_rounded,
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _TileCard(
+                                  title: ApexCopy.scannerTitle,
+                                  subtitle: 'Fair-play radar',
+                                  icon: Icons.radar_rounded,
+                                  accent: ApexColors.ruby,
+                                  onTap: () => Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const ProfileScannerScreen(),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _TileCard(
+                                  title: ApexCopy.academyTitle,
+                                  subtitle: 'Weakness drills',
+                                  icon: Icons.school_rounded,
+                                  accent: ApexColors.emerald,
+                                  onTap: () => Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const ApexAcademyScreen(),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          _WideTileCard(
+                            title: ApexCopy.archivesTitle,
+                            subtitle:
+                                'Every Quantum Scan · searchable intel',
+                            icon: Icons.inventory_2_outlined,
+                            accent: ApexColors.sapphireBright,
                             onTap: () => Navigator.of(context).push(
                               MaterialPageRoute(
-                                  builder: (_) =>
-                                      const ApexAcademyScreen()),
+                                builder: (_) => const ArchiveScreen(),
+                              ),
                             ),
                           ),
-                          const SizedBox(height: 36),
+                          const SizedBox(height: 28),
                           Text(
                             ApexCopy.liveEngineFooter,
                             textAlign: TextAlign.center,
@@ -231,7 +265,7 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 20),
-              _PrimaryAction(
+              _DialogPrimaryAction(
                 label: ApexCopy.pgnDialogCta,
                 icon: Icons.flash_on_rounded,
                 onTap: () {
@@ -258,12 +292,8 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Buttons
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _PrimaryAction extends StatelessWidget {
-  const _PrimaryAction({
+class _DialogPrimaryAction extends StatelessWidget {
+  const _DialogPrimaryAction({
     required this.label,
     required this.icon,
     required this.onTap,
@@ -279,27 +309,19 @@ class _PrimaryAction extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         child: Ink(
-          height: 58,
+          height: 52,
           decoration: BoxDecoration(
             gradient: ApexGradients.sapphire,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: ApexColors.sapphire.withValues(alpha: 0.35),
-                blurRadius: 24,
-                spreadRadius: -6,
-                offset: const Offset(0, 8),
-              ),
-            ],
+            borderRadius: BorderRadius.circular(14),
           ),
           child: Center(
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(icon, color: ApexColors.textPrimary, size: 22),
-                const SizedBox(width: 12),
+                Icon(icon, color: ApexColors.textPrimary, size: 20),
+                const SizedBox(width: 10),
                 Text(
                   label,
                   style: ApexTypography.labelLarge.copyWith(
@@ -316,15 +338,107 @@ class _PrimaryAction extends StatelessWidget {
   }
 }
 
-class _SecondaryAction extends StatelessWidget {
-  const _SecondaryAction({
-    required this.label,
+// ─────────────────────────────────────────────────────────────────────────────
+// Dashboard tiles — staggered grid entries, each with its own accent theme.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _HeroPlayCard extends StatelessWidget {
+  const _HeroPlayCard({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(22),
+        child: Ink(
+          height: 128,
+          decoration: BoxDecoration(
+            gradient: ApexGradients.sapphireRuby,
+            borderRadius: BorderRadius.circular(22),
+            boxShadow: [
+              BoxShadow(
+                color: ApexColors.sapphire.withValues(alpha: 0.35),
+                blurRadius: 32,
+                spreadRadius: -8,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.fromLTRB(22, 16, 16, 16),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'LIVE ENGINE ROOM',
+                      style: ApexTypography.bodyMedium.copyWith(
+                        color: Colors.white.withValues(alpha: 0.8),
+                        fontSize: 10,
+                        letterSpacing: 2.2,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      ApexCopy.playLive,
+                      style: ApexTypography.displayLarge.copyWith(
+                        fontSize: 22,
+                        letterSpacing: 1.6,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Duel the engine · live eval · instant verdict',
+                      style: ApexTypography.bodyMedium.copyWith(
+                        color: Colors.white.withValues(alpha: 0.78),
+                        fontSize: 11,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  Icons.play_arrow_rounded,
+                  color: Colors.white,
+                  size: 32,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TileCard extends StatelessWidget {
+  const _TileCard({
+    required this.title,
+    required this.subtitle,
     required this.icon,
+    required this.accent,
     required this.onTap,
   });
 
-  final String label;
+  final String title;
+  final String subtitle;
   final IconData icon;
+  final Color accent;
   final VoidCallback onTap;
 
   @override
@@ -333,28 +447,55 @@ class _SecondaryAction extends StatelessWidget {
       padding: EdgeInsets.zero,
       margin: null,
       borderRadius: 16,
-      accentAlpha: 0.25,
-      fillAlpha: 0.42,
+      accentColor: accent,
+      accentAlpha: 0.32,
+      fillAlpha: 0.45,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(16),
-          child: SizedBox(
-            height: 56,
-            child: Center(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+            child: SizedBox(
+              height: 104,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Icon(icon,
-                      color: ApexColors.sapphireBright, size: 20),
-                  const SizedBox(width: 12),
-                  Text(
-                    label,
-                    style: ApexTypography.labelLarge.copyWith(
-                      color: ApexColors.sapphireBright,
-                      letterSpacing: 2,
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(10),
                     ),
+                    child: Icon(icon, color: accent, size: 18),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: ApexTypography.labelLarge.copyWith(
+                          color: ApexColors.textPrimary,
+                          letterSpacing: 1.1,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: ApexTypography.bodyMedium.copyWith(
+                          color: ApexColors.textTertiary,
+                          fontSize: 10.5,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -366,33 +507,82 @@ class _SecondaryAction extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Hero badge
-// ─────────────────────────────────────────────────────────────────────────────
+class _WideTileCard extends StatelessWidget {
+  const _WideTileCard({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.accent,
+    required this.onTap,
+  });
 
-class _HeroBadge extends StatelessWidget {
-  const _HeroBadge();
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color accent;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.center,
-      child: Container(
-        width: 72,
-        height: 72,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: ApexGradients.sapphireRuby,
-          boxShadow: [
-            BoxShadow(
-              color: ApexColors.sapphire.withValues(alpha: 0.45),
-              blurRadius: 36,
-              spreadRadius: -6,
+    return GlassPanel(
+      padding: EdgeInsets.zero,
+      margin: null,
+      borderRadius: 16,
+      accentColor: accent,
+      accentAlpha: 0.3,
+      fillAlpha: 0.42,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: accent, size: 20),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: ApexTypography.labelLarge.copyWith(
+                          color: ApexColors.textPrimary,
+                          letterSpacing: 1.3,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: ApexTypography.bodyMedium.copyWith(
+                          color: ApexColors.textTertiary,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded,
+                    color: accent.withValues(alpha: 0.7), size: 22),
+              ],
             ),
-          ],
+          ),
         ),
-        child: const Icon(Icons.auto_awesome,
-            color: Colors.white, size: 32),
       ),
     );
   }

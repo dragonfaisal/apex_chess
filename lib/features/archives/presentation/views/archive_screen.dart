@@ -9,8 +9,10 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import 'package:apex_chess/app/di/providers.dart';
+import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/archives/presentation/controllers/archive_controller.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
@@ -420,29 +422,29 @@ class _ArchiveCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 8),
-                  Row(
+                  // Premium SVG badges — one glyph per quality tier, count
+                  // rendered to the right of the icon. The Wrap guards
+                  // against squeeze on narrow rows where three pills
+                  // would otherwise overflow.
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
                     children: [
                       if (game.brilliantCount > 0)
-                        _CountPill(
-                          label: '${game.brilliantCount}${ApexCopy.brilliantSymbol}',
-                          color: ApexColors.aurora,
+                        _SvgCountPill(
+                          quality: MoveQuality.brilliant,
+                          count: game.brilliantCount,
                         ),
-                      if (game.blunderCount > 0) ...[
-                        if (game.brilliantCount > 0) const SizedBox(width: 6),
-                        _CountPill(
-                          label: '${game.blunderCount}${ApexCopy.blunderSymbol}',
-                          color: ApexColors.blunder,
+                      if (game.blunderCount > 0)
+                        _SvgCountPill(
+                          quality: MoveQuality.blunder,
+                          count: game.blunderCount,
                         ),
-                      ],
-                      if (game.mistakeCount > 0) ...[
-                        if (game.brilliantCount > 0 ||
-                            game.blunderCount > 0)
-                          const SizedBox(width: 6),
-                        _CountPill(
-                          label: '${game.mistakeCount}${ApexCopy.mistakeSymbol}',
-                          color: ApexColors.mistake,
+                      if (game.mistakeCount > 0)
+                        _SvgCountPill(
+                          quality: MoveQuality.mistake,
+                          count: game.mistakeCount,
                         ),
-                      ],
                     ],
                   ),
                 ],
@@ -505,13 +507,51 @@ class _DepthPill extends StatelessWidget {
   }
 }
 
-class _CountPill extends StatelessWidget {
-  const _CountPill({required this.label, required this.color});
-  final String label;
-  final Color color;
+/// SVG-backed count badge — used in the archive row to show how many
+/// brilliants/blunders/mistakes a scanned game contains. Replaces the
+/// old text-symbol pill so the archive list matches the Review board's
+/// premium asset language.
+class _SvgCountPill extends StatelessWidget {
+  const _SvgCountPill({required this.quality, required this.count});
+
+  final MoveQuality quality;
+  final int count;
 
   @override
-  Widget build(BuildContext context) => _Pill(label: label, color: color);
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: quality.color.withValues(alpha: 0.12),
+        border: Border.all(
+            color: quality.color.withValues(alpha: 0.4), width: 0.6),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 12,
+            height: 12,
+            child: SvgPicture.asset(
+              quality.svgAssetPath,
+              fit: BoxFit.contain,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '$count',
+            style: ApexTypography.bodyMedium.copyWith(
+              color: quality.color,
+              fontSize: 10,
+              letterSpacing: 0.8,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _Pill extends StatelessWidget {

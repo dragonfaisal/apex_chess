@@ -1,10 +1,29 @@
-/// Move quality evaluation — Lichess/Chesskit Sigmoid Model.
+/// Move-quality evaluation — Lichess/Chesskit Sigmoid Model, strict.
 ///
-/// Implements the exact logistic Win% equation:
-///   W = 50 + 50 * (2 / (1 + exp(-0.00368208 * cp)) - 1)
+/// Every classification in Apex Chess is derived **exclusively from the
+/// Apex AI Grandmaster's centipawn verdicts**. We take the engine's CP
+/// (or mate) before and after the played move, map each to Win% via the
+/// Lichess sigmoid:
 ///
-/// Move classification uses deltaW (signed Win% drop) with strict
-/// Chesskit thresholds. EVERY move from ply 1 is evaluated.
+///   `W(cp) = 50 + 50 * (2 / (1 + exp(-0.00368208 * cp)) - 1)`
+///
+/// and classify the signed Win% drop `deltaW` (negative = bad for the
+/// mover) against Chesskit thresholds. **No heuristics, no mocks —
+/// every tier corresponds to a specific CP-drop band**:
+///
+/// | Tier        | deltaW (Win%)   | Approx CP loss (from even) |
+/// |-------------|-----------------|----------------------------|
+/// | Brilliant   | > -2 & sacrifice| engine confirms the sac    |
+/// | Best        | > -0.5 & == eng | engine's #1 move           |
+/// | Excellent   | > -0.5          | ≤ ~25 CP                   |
+/// | Good        | -0.5 .. -2      | ~25–100 CP                 |
+/// | Inaccuracy  | -2 .. -5        | ~100–200 CP                |
+/// | Mistake     | -5 .. -10       | ~200–400 CP                |
+/// | Blunder     | ≤ -10           | ≥ ~400 CP or mate swing    |
+///
+/// Castling moves are UCI-normalised via [normalizeCastlingUci] so the
+/// "was this the engine's #1?" check works whether the engine returns
+/// `e1g1` (king-to-destination) or `e1h1` (king-captures-rook).
 library;
 
 import 'dart:math' as math;
@@ -20,11 +39,11 @@ enum MoveQuality {
   brilliant('!!', 'Brilliant', ApexColors.brilliant, 'brilliant.svg'),
   best('★', 'Best Move', ApexColors.best, 'best.svg'),
   excellent('!', 'Excellent', ApexColors.great, 'excellent.svg'),
-  good('', 'Good', ApexColors.textSecondary, 'good.svg'),
+  good('', 'Solid', ApexColors.textSecondary, 'good.svg'),
   inaccuracy('?!', 'Inaccuracy', ApexColors.inaccuracy, 'inaccuracy.svg'),
   mistake('?', 'Mistake', ApexColors.mistake, 'mistake.svg'),
   blunder('??', 'Blunder', ApexColors.blunder, 'blunder.svg'),
-  book('📖', 'Book', ApexColors.book, 'book.svg');
+  book('📖', 'Theory', ApexColors.book, 'book.svg');
 
   final String symbol;
   final String label;
@@ -67,12 +86,45 @@ class MoveAnalysisResult {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Analyzer (Lichess Sigmoid Model)
+// Castling UCI normaliser
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Rewrites king-captures-rook UCI (Lichess / Chess960 convention) to the
+/// standard FIDE destination square so the string comparison between
+/// `engineBestMoveUci` and `playedMoveUci` works regardless of which
+/// dialect either side emits. Non-castling UCIs pass through unchanged.
+///
+///   * `e1h1` → `e1g1` (White short)
+///   * `e1a1` → `e1c1` (White long)
+///   * `e8h8` → `e8g8` (Black short)
+///   * `e8a8` → `e8c8` (Black long)
+String normalizeCastlingUci(String uci) {
+  if (uci.length < 4) return uci;
+  final head = uci.substring(0, 4);
+  switch (head) {
+    case 'e1h1':
+      return 'e1g1${uci.substring(4)}';
+    case 'e1a1':
+      return 'e1c1${uci.substring(4)}';
+    case 'e8h8':
+      return 'e8g8${uci.substring(4)}';
+    case 'e8a8':
+      return 'e8c8${uci.substring(4)}';
+    default:
+      return uci;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Analyzer (strict Lichess Sigmoid Model)
 // ─────────────────────────────────────────────────────────────────────────────
 
 class EvaluationAnalyzer {
   const EvaluationAnalyzer();
 
+  /// Maps a Stockfish centipawn (or mate) verdict to White-perspective
+  /// Win% in [0, 100]. Mate-in-N collapses to 0/100 for the losing/winning
+  /// side respectively.
   static double calculateWinPercentage({int? cp, int? mate}) {
     if (mate != null) return mate > 0 ? 100.0 : 0.0;
     if (cp == null) return 50.0;
@@ -81,6 +133,18 @@ class EvaluationAnalyzer {
     return 50.0 + 50.0 * w;
   }
 
+  /// Classifies a single ply.
+  ///
+  /// * [prevCp] / [prevMate]  — engine verdict of the position *before*
+  ///   the played move (from White's POV).
+  /// * [currCp] / [currMate]  — engine verdict *after* the played move.
+  /// * [engineBestMoveUci]    — the engine's #1 candidate for the
+  ///   position before; used to award the **Best** tier when the player
+  ///   chose it. Castling UCIs are normalised so `e1h1` == `e1g1`.
+  /// * [isSacrifice]          — caller asserts that the move surrendered
+  ///   material of at least a minor piece without immediate recapture.
+  ///   Only then can the move be classified **Brilliant** — the analyser
+  ///   never invents sacrifices on its own.
   MoveAnalysisResult analyze({
     required int? prevCp,
     int? prevMate,
@@ -96,65 +160,100 @@ class EvaluationAnalyzer {
     final s = isWhiteMove ? 1.0 : -1.0;
     final deltaW = (wCurr - wPrev) * s;
 
-    final wasEngineBestMove = engineBestMoveUci != null &&
-        playedMoveUci != null &&
-        engineBestMoveUci == playedMoveUci;
+    // Normalise both sides of the comparison: the engine may return
+    // `e1g1` (destination) while the SAN-parsed played UCI can be
+    // `e1h1` (king-captures-rook). Without this the Best tier silently
+    // never fires on castling moves.
+    String? normPlayed =
+        playedMoveUci == null ? null : normalizeCastlingUci(playedMoveUci);
+    String? normEngine = engineBestMoveUci == null
+        ? null
+        : normalizeCastlingUci(engineBestMoveUci);
+    final wasEngineBestMove = normEngine != null &&
+        normPlayed != null &&
+        normEngine == normPlayed;
 
+    // Sacrifice-approved brilliancy. The sacrifice flag must be asserted
+    // upstream (local_game_analyzer compares piece balance before/after);
+    // we refuse to invent brilliants from deltaW alone.
     if (isSacrifice && deltaW >= -2.0) {
       return MoveAnalysisResult(
-        quality: MoveQuality.brilliant, deltaW: deltaW,
-        winPercentBefore: wPrev, winPercentAfter: wCurr,
-        message: 'Brilliant sacrifice! The engine confirms this wins.',
+        quality: MoveQuality.brilliant,
+        deltaW: deltaW,
+        winPercentBefore: wPrev,
+        winPercentAfter: wCurr,
+        message: 'Brilliant sacrifice — Apex AI confirms the attack.',
         engineBestMove: engineBestMoveUci,
       );
     }
 
-    if (wasEngineBestMove) {
+    // Best — the engine's #1 reply. Requires deltaW within the noise
+    // band (no runaway swings); a "best" pick that somehow loses 2 %+
+    // indicates one of the evals was a stale snapshot and we'd rather
+    // mis-classify it as Excellent/Good than lie about engine agreement.
+    if (wasEngineBestMove && deltaW >= -2.0) {
       return MoveAnalysisResult(
-        quality: MoveQuality.best, deltaW: deltaW,
-        winPercentBefore: wPrev, winPercentAfter: wCurr,
-        message: 'Best move — engine\'s #1 choice.',
+        quality: MoveQuality.best,
+        deltaW: deltaW,
+        winPercentBefore: wPrev,
+        winPercentAfter: wCurr,
+        message: 'Best move — Apex AI\'s #1 choice.',
         engineBestMove: engineBestMoveUci,
       );
     }
 
-    if (deltaW < -20.0) {
+    if (deltaW <= -10.0) {
       return MoveAnalysisResult(
-        quality: MoveQuality.blunder, deltaW: deltaW,
-        winPercentBefore: wPrev, winPercentAfter: wCurr,
-        message: 'Blunder! ${deltaW.abs().toStringAsFixed(1)}% Win% lost.',
+        quality: MoveQuality.blunder,
+        deltaW: deltaW,
+        winPercentBefore: wPrev,
+        winPercentAfter: wCurr,
+        message:
+            'Blunder — ${deltaW.abs().toStringAsFixed(1)}% Win% surrendered.',
         engineBestMove: engineBestMoveUci,
       );
     }
-    if (deltaW < -10.0) {
+    if (deltaW <= -5.0) {
       return MoveAnalysisResult(
-        quality: MoveQuality.mistake, deltaW: deltaW,
-        winPercentBefore: wPrev, winPercentAfter: wCurr,
-        message: 'Mistake — significant position loss.',
+        quality: MoveQuality.mistake,
+        deltaW: deltaW,
+        winPercentBefore: wPrev,
+        winPercentAfter: wCurr,
+        message:
+            'Mistake — ${deltaW.abs().toStringAsFixed(1)}% Win% lost.',
         engineBestMove: engineBestMoveUci,
       );
     }
-    if (deltaW < -5.0) {
+    if (deltaW <= -2.0) {
       return MoveAnalysisResult(
-        quality: MoveQuality.inaccuracy, deltaW: deltaW,
-        winPercentBefore: wPrev, winPercentAfter: wCurr,
-        message: 'Inaccuracy — a better move existed.',
+        quality: MoveQuality.inaccuracy,
+        deltaW: deltaW,
+        winPercentBefore: wPrev,
+        winPercentAfter: wCurr,
+        message:
+            'Inaccuracy — ${deltaW.abs().toStringAsFixed(1)}% better move existed.',
         engineBestMove: engineBestMoveUci,
       );
     }
-    if (deltaW < -2.0) {
+    if (deltaW < -0.5) {
       return MoveAnalysisResult(
-        quality: MoveQuality.good, deltaW: deltaW,
-        winPercentBefore: wPrev, winPercentAfter: wCurr,
-        message: 'Okay move — slight room for improvement.',
+        quality: MoveQuality.good,
+        deltaW: deltaW,
+        winPercentBefore: wPrev,
+        winPercentAfter: wCurr,
+        message: 'Solid — within tolerance of the best line.',
         engineBestMove: engineBestMoveUci,
       );
     }
 
+    // deltaW ≥ -0.5 % — the move is effectively indistinguishable from
+    // the engine's top choice in Win% terms, but wasn't the exact #1.
     return MoveAnalysisResult(
-      quality: MoveQuality.excellent, deltaW: deltaW,
-      winPercentBefore: wPrev, winPercentAfter: wCurr,
-      message: 'Excellent — near-engine accuracy.',
+      quality: MoveQuality.excellent,
+      deltaW: deltaW,
+      winPercentBefore: wPrev,
+      winPercentAfter: wCurr,
+      message: 'Excellent — effectively engine-grade.',
       engineBestMove: engineBestMoveUci,
     );
   }

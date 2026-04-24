@@ -14,6 +14,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../../shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
@@ -225,25 +226,32 @@ class _CoachCard extends StatelessWidget {
     final moveNum = '${(ply ~/ 2) + 1}${ply % 2 == 0 ? "." : "..."}';
 
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // Quality badge
+        // Premium SVG quality badge — the asset encodes the color + icon;
+        // we drop a soft glow behind it and the ring becomes a thin ring
+        // in the tier's color so the card still reads at a glance.
         Container(
           width: 44,
           height: 44,
           alignment: Alignment.center,
+          padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
             color: m.classification.color.withAlpha(25),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
                 color: m.classification.color.withAlpha(60), width: 0.5),
+            boxShadow: [
+              BoxShadow(
+                color: m.classification.color.withAlpha(60),
+                blurRadius: 10,
+                spreadRadius: -2,
+              ),
+            ],
           ),
-          child: Text(
-            m.classification.symbol.isEmpty ? '✓' : m.classification.symbol,
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: m.classification.color,
-            ),
+          child: SvgPicture.asset(
+            m.classification.svgAssetPath,
+            fit: BoxFit.contain,
           ),
         ),
         const SizedBox(width: 14),
@@ -254,6 +262,8 @@ class _CoachCard extends StatelessWidget {
             children: [
               Text(
                 '$moveNum ${m.san} — ${m.classification.label}',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: ApexTypography.titleMedium.copyWith(
                   color: m.classification.color,
                   fontSize: 15,
@@ -264,13 +274,15 @@ class _CoachCard extends StatelessWidget {
                 m.message,
                 style: ApexTypography.bodyMedium.copyWith(
                     color: ApexColors.textTertiary, fontSize: 12),
-                maxLines: 1,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
               if (m.engineBestMoveSan != null) ...[
                 const SizedBox(height: 4),
                 Text(
                   'Better: ${m.engineBestMoveSan}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: ApexTypography.bodyMedium.copyWith(
                     color: ApexColors.electricBlue.withAlpha(160),
                     fontSize: 11,
@@ -324,55 +336,87 @@ class _NavControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Each IconButton's default hitbox is 48×48; paired with the
+    // padded ply-counter chip, five children used to exceed ~280 dp
+    // before hitting the spaceEvenly distribution, yielding the
+    // infamous yellow/black tape on ≤ 360 dp phones. We now clamp
+    // each icon button with tight visual density + a Flexible-wrapped
+    // counter so the whole bar scales down to the narrowest layout.
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 14),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
       decoration: BoxDecoration(
         color: ApexColors.elevatedSurface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: ApexColors.subtleBorder, width: 0.5),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          IconButton(
-            icon: const Icon(Icons.skip_previous_rounded),
+          _navIcon(
+            icon: Icons.skip_previous_rounded,
             color: ApexColors.textSecondary,
             onPressed: currentPly > -1 ? onStart : null,
           ),
-          IconButton(
-            icon: const Icon(Icons.chevron_left_rounded, size: 32),
+          _navIcon(
+            icon: Icons.chevron_left_rounded,
             color: ApexColors.electricBlue,
+            iconSize: 28,
             onPressed: currentPly > -1 ? onBack : null,
           ),
-          Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            decoration: BoxDecoration(
-              color: ApexColors.cardSurface,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              '${currentPly + 1} / $totalPlies',
-              style: ApexTypography.bodyMedium.copyWith(
-                fontFamily: 'JetBrains Mono',
-                color: ApexColors.textPrimary,
-                fontSize: 13,
+          Expanded(
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: ApexColors.cardSurface,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    '${currentPly + 1} / $totalPlies',
+                    maxLines: 1,
+                    style: ApexTypography.bodyMedium.copyWith(
+                      fontFamily: 'JetBrains Mono',
+                      color: ApexColors.textPrimary,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.chevron_right_rounded, size: 32),
+          _navIcon(
+            icon: Icons.chevron_right_rounded,
             color: ApexColors.electricBlue,
+            iconSize: 28,
             onPressed: currentPly < totalPlies - 1 ? onForward : null,
           ),
-          IconButton(
-            icon: const Icon(Icons.skip_next_rounded),
+          _navIcon(
+            icon: Icons.skip_next_rounded,
             color: ApexColors.textSecondary,
             onPressed: currentPly < totalPlies - 1 ? onEnd : null,
           ),
         ],
       ),
+    );
+  }
+
+  Widget _navIcon({
+    required IconData icon,
+    required Color color,
+    required VoidCallback? onPressed,
+    double iconSize = 22,
+  }) {
+    return IconButton(
+      icon: Icon(icon),
+      iconSize: iconSize,
+      color: color,
+      padding: const EdgeInsets.all(6),
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+      onPressed: onPressed,
     );
   }
 }

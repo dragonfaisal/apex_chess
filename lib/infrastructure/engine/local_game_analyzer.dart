@@ -129,11 +129,17 @@ class LocalGameAnalyzer {
       final newPos = position.play(move);
       // Always derive UCI from the actual move squares — never fall back
       // to SAN, which would produce garbage like "O-O" inside the four-
-      // character slot the UI parses as (from, to).
+      // character slot the UI parses as (from, to). Castling is then
+      // normalised to the king's destination square so the downstream
+      // comparison with the engine's best move works regardless of
+      // whether the engine emits `e1g1` or `e1h1`.
       String uci;
+      String targetSquare = '';
       if (move is NormalMove) {
-        uci = '${_sqAlg(move.from)}${_sqAlg(move.to)}'
+        final rawUci = '${_sqAlg(move.from)}${_sqAlg(move.to)}'
             '${move.promotion != null ? _roleChar(move.promotion!) : ""}';
+        uci = normalizeCastlingUci(rawUci);
+        targetSquare = uci.substring(2, 4);
       } else {
         // Should be unreachable — dartchess emits NormalMove for every
         // legal move, including castling. Defensive null-guard so the
@@ -145,6 +151,7 @@ class LocalGameAnalyzer {
         fenAfter: newPos.fen,
         san: node.san,
         uci: uci,
+        targetSquare: targetSquare,
         isWhiteMove: isWhite,
       ));
       position = newPos;
@@ -222,6 +229,7 @@ class LocalGameAnalyzer {
           uci: entry.uci,
           fenBefore: entry.fenBefore,
           fenAfter: entry.fenAfter,
+          targetSquare: entry.targetSquare,
           winPercentBefore: prevWinPct,
           winPercentAfter: prevWinPct,
           deltaW: 0,
@@ -265,6 +273,18 @@ class LocalGameAnalyzer {
         _backfillBookWinPct(moves, winPctBefore);
       }
 
+      // Real sacrifice detection: if the mover's material drops by at
+      // least a minor piece (3) and the opponent's reply does *not*
+      // win it back, flag the ply as a sacrifice so EvaluationAnalyzer
+      // can award Brilliant when the engine says the position still
+      // holds. Without this signal, Brilliant can never fire.
+      final nextReply = ply + 1 < totalPlies ? parsed[ply + 1] : null;
+      final isSacrifice = _isSacrificeMove(
+        before: entry.fenBefore,
+        afterReplyFen: nextReply?.fenAfter ?? entry.fenAfter,
+        isWhiteMove: entry.isWhiteMove,
+      );
+
       final result = _analyzer.analyze(
         prevCp: before?.scoreCp,
         prevMate: before?.mateIn,
@@ -273,6 +293,7 @@ class LocalGameAnalyzer {
         isWhiteMove: entry.isWhiteMove,
         engineBestMoveUci: before?.bestMoveUci,
         playedMoveUci: entry.uci,
+        isSacrifice: isSacrifice,
       );
 
       String? engineBestSan;
@@ -286,6 +307,7 @@ class LocalGameAnalyzer {
         uci: entry.uci,
         fenBefore: entry.fenBefore,
         fenAfter: entry.fenAfter,
+        targetSquare: entry.targetSquare,
         winPercentBefore: winPctBefore,
         winPercentAfter: winPctAfter,
         deltaW: result.deltaW,
@@ -405,6 +427,62 @@ class LocalGameAnalyzer {
         Role.knight => 'n',
         _ => '',
       };
+
+  // ── Sacrifice detection ────────────────────────────────────────────────
+
+  /// Returns true when the mover has surrendered ≥3 points of material
+  /// (one minor piece) and the opponent's immediate reply has *not*
+  /// reclaimed it. Together with [EvaluationAnalyzer]'s non-regressing
+  /// Win% check, this is the only path to a Brilliant classification —
+  /// the analyser never invents brilliants from position alone.
+  ///
+  /// [afterReplyFen] is the FEN after the *opponent's* reply (or after
+  /// the played move if this was the last ply in the game). The balance
+  /// is computed White − Black in raw piece points (P=1, N=3, B=3, R=5,
+  /// Q=9) and normalised to the mover's perspective before thresholding.
+  static bool _isSacrificeMove({
+    required String before,
+    required String afterReplyFen,
+    required bool isWhiteMove,
+  }) {
+    final balanceBefore = _materialBalanceFromFen(before);
+    final balanceAfter = _materialBalanceFromFen(afterReplyFen);
+    if (balanceBefore == null || balanceAfter == null) return false;
+    final moverSign = isWhiteMove ? 1 : -1;
+    final delta = (balanceAfter - balanceBefore) * moverSign;
+    return delta <= -3;
+  }
+
+  /// Raw material balance (White − Black) in piece points. Returns
+  /// `null` if the FEN is unparseable so the caller can degrade
+  /// gracefully (no sacrifice = no brilliant, never a false positive).
+  static int? _materialBalanceFromFen(String fen) {
+    try {
+      final pos = Chess.fromSetup(Setup.parseFen(fen));
+      int total = 0;
+      for (final side in [Side.white, Side.black]) {
+        final sign = side == Side.white ? 1 : -1;
+        final pieces = pos.board.bySide(side);
+        for (final sq in pieces.squares) {
+          final p = pos.board.pieceAt(sq);
+          if (p == null) continue;
+          total += sign * _pieceValue(p.role);
+        }
+      }
+      return total;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static int _pieceValue(Role role) => switch (role) {
+        Role.pawn => 1,
+        Role.knight => 3,
+        Role.bishop => 3,
+        Role.rook => 5,
+        Role.queen => 9,
+        Role.king => 0,
+      };
 }
 
 class _ParsedMove {
@@ -413,6 +491,7 @@ class _ParsedMove {
     required this.fenAfter,
     required this.san,
     required this.uci,
+    required this.targetSquare,
     required this.isWhiteMove,
   });
 
@@ -420,5 +499,6 @@ class _ParsedMove {
   final String fenAfter;
   final String san;
   final String uci;
+  final String targetSquare;
   final bool isWhiteMove;
 }

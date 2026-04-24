@@ -1,15 +1,16 @@
-/// Premium "Import Match" screen — Apex Chess Deep Space Cinematic.
+/// Premium "Live Match Intel" screen — Apex Chess Deep Space Cinematic.
 ///
 /// Inspired by chessplus.pages.dev, rebuilt on top of the Apex design
 /// language (`GlassPanel`, Sapphire/Ruby accents, Sora typography).
 ///
-/// Flow:
-///   1. User picks a source (Chess.com or Lichess) and types a username.
-///   2. Taps "Fetch Games" — controller hits the public API, streams back
-///      an `ImportedGame` list.
-///   3. Taps any row → [DepthPickerDialog] offers Fast (depth 14) or
-///      Quantum Deep (depth 22), both backed by the **local** Stockfish.
-///   4. On selection, the PGN runs through `LocalGameAnalyzer` and we
+/// Flow (Phase 5):
+///   1. User picks a source (Chess.com or Lichess) and types a handle.
+///   2. The username-validation controller pings the public profile
+///      endpoint; the pill turns green the instant the handle resolves.
+///   3. **Auto-fetch** then fires 600 ms after verification — no button.
+///   4. Tapping any row opens [DepthPickerDialog] (Fast D14 or Quantum
+///      Deep D22, both backed by the local Apex AI Grandmaster).
+///   5. On selection, the PGN runs through `LocalGameAnalyzer` and we
 ///      push the ReviewScreen on the navigator.
 library;
 
@@ -50,17 +51,17 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
   final _usernameFocus = FocusNode();
   final _scrollController = ScrollController();
 
-  // Live-Fetch debounce — 600ms after the user stops typing (or toggles
-  // source) we auto-invoke Fetch. Guards:
-  //   * Minimum username length so a single keystroke doesn't spam HTTP.
+  // Live-Fetch debounce — 600 ms after the username-validation pill
+  // confirms the handle exists we auto-invoke Fetch. Guards:
+  //   * Only fires on verification success (green pill), not on raw
+  //     keystrokes, so we never hit the games API for typos.
   //   * [_lastAutoKey] dedupes identical (source, username) combos so
   //     a rebuild / source ping-pong can't re-fire the same query.
   //   * Cancelled on submit (Enter), on tapping a recent, on source
-  //     toggle (re-scheduled), and on dispose.
+  //     toggle, and on dispose.
   Timer? _autoFetchDebounce;
   String? _lastAutoKey;
   static const Duration _autoFetchWindow = Duration(milliseconds: 600);
-  static const int _autoFetchMinLength = 3;
 
   @override
   void initState() {
@@ -107,20 +108,24 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
     super.dispose();
   }
 
-  /// Schedules an auto-fetch 600ms after the latest typing / source
-  /// change. Callers pass the *intended* next username so this works
-  /// from both [TextField.onChanged] (before the notifier has been
-  /// updated) and source-toggle callbacks.
-  void _scheduleAutoFetch({required GameSource source, required String username}) {
+  /// Schedules an auto-fetch 600 ms *after the username-validation
+  /// controller has confirmed the handle exists*. We never fire on raw
+  /// keystrokes anymore — verifying first means zero wasted requests
+  /// on typos. Callers pass the verified handle so the dedupe key
+  /// reflects the exact string that resolved.
+  void _scheduleAutoFetchAfterVerification({
+    required GameSource source,
+    required String username,
+  }) {
     _autoFetchDebounce?.cancel();
     final trimmed = username.trim();
-    if (trimmed.length < _autoFetchMinLength) return;
+    if (trimmed.isEmpty) return;
     final key = '${source.name}:$trimmed';
     if (key == _lastAutoKey) return;
     _autoFetchDebounce = Timer(_autoFetchWindow, () {
       // Re-check at fire-time: the user may have cleared or edited the
-      // field after the timer was scheduled, or tapped a recent (which
-      // drives its own immediate fetch). Bail if state has drifted.
+      // field after verification, or tapped a recent (which drives its
+      // own immediate fetch). Bail if state has drifted.
       if (!mounted) return;
       if (_controller.text.trim() != trimmed) return;
       final state = ref.read(importControllerProvider);
@@ -176,12 +181,11 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
                 source: state.source,
                 onChanged: (src) {
                   notifier.setSource(src);
-                  // Source change with an existing username is the only
-                  // case where the *same* text should trigger a new fetch
-                  // — clear the dedupe key so the debounce fires.
+                  // Source change forgets the last-verified tuple so a
+                  // successful re-validation on the other provider will
+                  // re-fire the auto-fetch for the same handle.
+                  _cancelAutoFetch();
                   _lastAutoKey = null;
-                  _scheduleAutoFetch(
-                      source: src, username: _controller.text);
                 },
               ),
               const SizedBox(height: 16),
@@ -192,8 +196,7 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
                   focusNode: _usernameFocus,
                   onChanged: (v) {
                     notifier.setUsername(v);
-                    _scheduleAutoFetch(
-                        source: state.source, username: v);
+                    _cancelAutoFetch();
                   },
                   onSubmitted: (v) {
                     // Explicit Enter: fire immediately and cancel the
@@ -201,6 +204,14 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
                     _cancelAutoFetch();
                     _lastAutoKey = '${state.source.name}:${v.trim()}';
                     notifier.fetch();
+                  },
+                  onVerified: (v) {
+                    // Validation pill just flipped green — the handle
+                    // exists. Queue the auto-fetch 600 ms out.
+                    _scheduleAutoFetchAfterVerification(
+                      source: state.source,
+                      username: v,
+                    );
                   },
                   source: state.source,
                   onRecentTapped: (username) {
@@ -215,20 +226,9 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
                   },
                 ),
               ),
-              const SizedBox(height: 12),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: _FetchButton(
-                  isLoading: state.isLoading,
-                  onTap: () {
-                    _cancelAutoFetch();
-                    _lastAutoKey =
-                        '${state.source.name}:${_controller.text.trim()}';
-                    notifier.fetch();
-                  },
-                ),
-              ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 10),
+              _AutoFetchStatus(state: state),
+              const SizedBox(height: 14),
               Expanded(child: _buildBody(state)),
             ],
           ),
@@ -525,6 +525,7 @@ class _UsernameField extends ConsumerStatefulWidget {
     required this.focusNode,
     required this.onChanged,
     required this.onSubmitted,
+    required this.onVerified,
     required this.source,
     required this.onRecentTapped,
   });
@@ -533,6 +534,9 @@ class _UsernameField extends ConsumerStatefulWidget {
   final FocusNode focusNode;
   final ValueChanged<String> onChanged;
   final ValueChanged<String> onSubmitted;
+  /// Fires when the validation pill confirms the handle exists on the
+  /// current provider. Parent uses this to schedule the auto-fetch.
+  final ValueChanged<String> onVerified;
   final GameSource source;
   final ValueChanged<String> onRecentTapped;
 
@@ -543,6 +547,7 @@ class _UsernameField extends ConsumerStatefulWidget {
 class _UsernameFieldState extends ConsumerState<_UsernameField> {
   bool _showDropdown = false;
   UsernameValidationController? _validation;
+  String? _lastVerifiedQuery;
 
   @override
   void initState() {
@@ -555,6 +560,9 @@ class _UsernameFieldState extends ConsumerState<_UsernameField> {
   void didUpdateWidget(covariant _UsernameField oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.source != widget.source) {
+      // Source toggle → re-validate against the new provider; forget the
+      // previous verification so auto-fetch will re-arm on success.
+      _lastVerifiedQuery = null;
       _pushValidationInput();
     }
   }
@@ -563,13 +571,31 @@ class _UsernameFieldState extends ConsumerState<_UsernameField> {
   void dispose() {
     widget.focusNode.removeListener(_onFocusChange);
     widget.controller.removeListener(_onTextChange);
+    _validation?.removeListener(_onValidationChange);
     _validation?.dispose();
     super.dispose();
   }
 
   UsernameValidationController _ensureValidation() {
-    return _validation ??=
+    final existing = _validation;
+    if (existing != null) return existing;
+    final created =
         UsernameValidationController(ref.read(usernameValidatorProvider));
+    created.addListener(_onValidationChange);
+    _validation = created;
+    return created;
+  }
+
+  void _onValidationChange() {
+    final v = _validation;
+    if (v == null) return;
+    // Fire exactly once per (source, username) verification success.
+    if (!v.value.isGreen) return;
+    final verified = v.value.query;
+    if (verified.isEmpty) return;
+    if (verified == _lastVerifiedQuery) return;
+    _lastVerifiedQuery = verified;
+    widget.onVerified(verified);
   }
 
   String get _sourceKey => switch (widget.source) {
@@ -791,61 +817,46 @@ class _RecentSearchesDropdown extends StatelessWidget {
   }
 }
 
-class _FetchButton extends StatelessWidget {
-  const _FetchButton({required this.isLoading, required this.onTap});
+/// Status strip that replaced the old "Fetch Games" button. Shows a
+/// subtle sapphire progress line while a fetch is in flight and a
+/// muted hint otherwise so the user understands ingestion is automatic.
+class _AutoFetchStatus extends StatelessWidget {
+  const _AutoFetchStatus({required this.state});
 
-  final bool isLoading;
-  final VoidCallback onTap;
+  final ImportState state;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: isLoading ? null : onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Ink(
-          height: 52,
-          decoration: BoxDecoration(
-            gradient: ApexGradients.sapphire,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: ApexColors.sapphire.withValues(alpha: 0.3),
-                blurRadius: 20,
-                spreadRadius: -6,
-                offset: const Offset(0, 6),
-              ),
-            ],
+    final isLoading = state.isLoading;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 14,
+            height: 14,
+            child: isLoading
+                ? const CircularProgressIndicator(
+                    strokeWidth: 2, color: ApexColors.sapphireBright)
+                : const Icon(Icons.bolt_rounded,
+                    size: 14, color: ApexColors.sapphireBright),
           ),
-          child: Center(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (isLoading) ...[
-                  const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white),
-                  ),
-                  const SizedBox(width: 12),
-                ] else ...[
-                  const Icon(Icons.bolt_rounded,
-                      color: Colors.white, size: 20),
-                  const SizedBox(width: 10),
-                ],
-                Text(
-                  ApexCopy.importFetch,
-                  style: ApexTypography.labelLarge.copyWith(
-                    color: Colors.white,
-                    letterSpacing: 2,
-                  ),
-                ),
-              ],
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              isLoading
+                  ? 'Streaming live matches…'
+                  : ApexCopy.importAutoFetch,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: ApexTypography.bodyMedium.copyWith(
+                color: ApexColors.textTertiary,
+                fontSize: 12,
+                letterSpacing: 0.3,
+              ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
