@@ -19,10 +19,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:apex_chess/app/di/providers.dart';
+import 'package:apex_chess/features/account/domain/apex_account.dart';
+import 'package:apex_chess/features/account/presentation/controllers/account_controller.dart';
 import 'package:apex_chess/features/archives/data/archive_save_hook.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/import_match/domain/imported_game.dart';
 import 'package:apex_chess/features/import_match/presentation/controllers/import_controller.dart';
+import 'package:apex_chess/features/mistake_vault/data/mistake_vault_save_hook.dart';
 import 'package:apex_chess/features/import_match/presentation/controllers/recent_searches_controller.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
 import 'package:apex_chess/features/user_validation/presentation/username_validation_controller.dart';
@@ -32,7 +35,7 @@ import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
-import 'package:apex_chess/shared_ui/widgets/radar_scan.dart';
+import 'package:apex_chess/shared_ui/widgets/quantum_shatter_loader.dart';
 
 class ImportMatchScreen extends ConsumerStatefulWidget {
   const ImportMatchScreen({super.key});
@@ -47,6 +50,18 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
   final _usernameFocus = FocusNode();
   final _scrollController = ScrollController();
 
+  // Live-Fetch debounce — 600ms after the user stops typing (or toggles
+  // source) we auto-invoke Fetch. Guards:
+  //   * Minimum username length so a single keystroke doesn't spam HTTP.
+  //   * [_lastAutoKey] dedupes identical (source, username) combos so
+  //     a rebuild / source ping-pong can't re-fire the same query.
+  //   * Cancelled on submit (Enter), on tapping a recent, on source
+  //     toggle (re-scheduled), and on dispose.
+  Timer? _autoFetchDebounce;
+  String? _lastAutoKey;
+  static const Duration _autoFetchWindow = Duration(milliseconds: 600);
+  static const int _autoFetchMinLength = 3;
+
   @override
   void initState() {
     super.initState();
@@ -54,15 +69,71 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
     // listener — Flutter de-duplicates notifications to each scroll
     // position update, and `fetchMore` itself guards on already-loading.
     _scrollController.addListener(_maybeFetchMore);
+    // Prefill from the connected Apex account so returning users don't
+    // retype their handle every session. We do this in a post-frame
+    // callback so the ref.read happens after widget mount and we can
+    // touch the (now-running) controller providers safely.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _prefillFromAccount());
+  }
+
+  void _prefillFromAccount() {
+    if (!mounted) return;
+    final account = ref.read(accountControllerProvider).valueOrNull;
+    if (account == null) return;
+    if (_controller.text.isNotEmpty) return;
+    final notifier = ref.read(importControllerProvider.notifier);
+    final desiredSource = account.source == AccountSource.chessCom
+        ? GameSource.chessCom
+        : GameSource.lichess;
+    if (ref.read(importControllerProvider).source != desiredSource) {
+      notifier.setSource(desiredSource);
+    }
+    _controller.text = account.username;
+    _controller.selection = TextSelection.collapsed(
+        offset: account.username.length);
+    notifier.setUsername(account.username);
+    // Seed the dedupe key so the debounce timer doesn't instantly
+    // fire on the prefill — user hasn't asked for a fetch yet.
+    _lastAutoKey = '${desiredSource.name}:${account.username}';
   }
 
   @override
   void dispose() {
+    _autoFetchDebounce?.cancel();
     _scrollController.removeListener(_maybeFetchMore);
     _scrollController.dispose();
     _usernameFocus.dispose();
     _controller.dispose();
     super.dispose();
+  }
+
+  /// Schedules an auto-fetch 600ms after the latest typing / source
+  /// change. Callers pass the *intended* next username so this works
+  /// from both [TextField.onChanged] (before the notifier has been
+  /// updated) and source-toggle callbacks.
+  void _scheduleAutoFetch({required GameSource source, required String username}) {
+    _autoFetchDebounce?.cancel();
+    final trimmed = username.trim();
+    if (trimmed.length < _autoFetchMinLength) return;
+    final key = '${source.name}:$trimmed';
+    if (key == _lastAutoKey) return;
+    _autoFetchDebounce = Timer(_autoFetchWindow, () {
+      // Re-check at fire-time: the user may have cleared or edited the
+      // field after the timer was scheduled, or tapped a recent (which
+      // drives its own immediate fetch). Bail if state has drifted.
+      if (!mounted) return;
+      if (_controller.text.trim() != trimmed) return;
+      final state = ref.read(importControllerProvider);
+      if (state.source != source) return;
+      if (state.isLoading) return;
+      _lastAutoKey = key;
+      ref.read(importControllerProvider.notifier).fetch();
+    });
+  }
+
+  void _cancelAutoFetch() {
+    _autoFetchDebounce?.cancel();
+    _autoFetchDebounce = null;
   }
 
   void _maybeFetchMore() {
@@ -103,7 +174,15 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
               ),
               _SourceToggle(
                 source: state.source,
-                onChanged: notifier.setSource,
+                onChanged: (src) {
+                  notifier.setSource(src);
+                  // Source change with an existing username is the only
+                  // case where the *same* text should trigger a new fetch
+                  // — clear the dedupe key so the debounce fires.
+                  _lastAutoKey = null;
+                  _scheduleAutoFetch(
+                      source: src, username: _controller.text);
+                },
               ),
               const SizedBox(height: 16),
               Padding(
@@ -111,8 +190,18 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
                 child: _UsernameField(
                   controller: _controller,
                   focusNode: _usernameFocus,
-                  onChanged: notifier.setUsername,
-                  onSubmitted: (_) => notifier.fetch(),
+                  onChanged: (v) {
+                    notifier.setUsername(v);
+                    _scheduleAutoFetch(
+                        source: state.source, username: v);
+                  },
+                  onSubmitted: (v) {
+                    // Explicit Enter: fire immediately and cancel the
+                    // pending auto-fetch so we don't double-hit the API.
+                    _cancelAutoFetch();
+                    _lastAutoKey = '${state.source.name}:${v.trim()}';
+                    notifier.fetch();
+                  },
                   source: state.source,
                   onRecentTapped: (username) {
                     _controller.text = username;
@@ -120,6 +209,8 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
                         offset: username.length);
                     notifier.setUsername(username);
                     _usernameFocus.unfocus();
+                    _cancelAutoFetch();
+                    _lastAutoKey = '${state.source.name}:$username';
                     notifier.fetch();
                   },
                 ),
@@ -129,7 +220,12 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: _FetchButton(
                   isLoading: state.isLoading,
-                  onTap: notifier.fetch,
+                  onTap: () {
+                    _cancelAutoFetch();
+                    _lastAutoKey =
+                        '${state.source.name}:${_controller.text.trim()}';
+                    notifier.fetch();
+                  },
                 ),
               ),
               const SizedBox(height: 18),
@@ -895,6 +991,9 @@ class _GameCard extends ConsumerWidget {
             ? ArchiveSource.chessCom
             : ArchiveSource.lichess,
         playedAt: game.playedAt,
+        userIsWhite: game.userColor == null
+            ? null
+            : game.userColor == PlayerColor.white,
       ),
     );
   }
@@ -1232,11 +1331,15 @@ class _ImportAnalysisDialog extends ConsumerStatefulWidget {
     required this.depth,
     required this.source,
     this.playedAt,
+    this.userIsWhite,
   });
   final String pgn;
   final int depth;
   final ArchiveSource source;
   final DateTime? playedAt;
+  /// Null when we don't know which colour the user played (PGN
+  /// uploads). The Mistake Vault hook uses this to skip opponent plies.
+  final bool? userIsWhite;
 
   @override
   ConsumerState<_ImportAnalysisDialog> createState() =>
@@ -1278,14 +1381,23 @@ class _ImportAnalysisDialogState
       if (!mounted) return;
       ref.read(reviewControllerProvider.notifier).loadTimeline(timeline);
       // Fire-and-forget save — failures never block the review flow.
-      unawaited(saveAnalysisToArchive(
+      final archiveId = await saveAnalysisToArchive(
         ref: ref,
         timeline: timeline,
         pgn: widget.pgn,
         depth: widget.depth,
         source: widget.source,
         playedAt: widget.playedAt,
-      ));
+      );
+      if (archiveId != null) {
+        unawaited(saveMistakeDrillsFromTimeline(
+          ref: ref,
+          timeline: timeline,
+          archiveId: archiveId,
+          userIsWhite: widget.userIsWhite,
+        ));
+      }
+      if (!mounted) return;
       setState(() => _done = true);
     } on LocalAnalysisException catch (e) {
       if (mounted) setState(() => _error = e.userMessage);
@@ -1371,7 +1483,7 @@ class _ImportAnalysisDialogState
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    const RadarScan(size: 220),
+                    const QuantumShatterLoader(size: 220),
                     Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [

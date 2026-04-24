@@ -51,6 +51,16 @@ class ApexColors {
   static const Color aurora          = Color(0xFF00F0FF);
   static const Color auroraSoft      = Color(0xFF7BFFFF);
 
+  // ── Emerald / Neon accent (Phase 4 VFX — Quantum Shatter, Great-Move aura) ─
+  /// Vibrant emerald used for the shatter-loader core and "Best Move" aura.
+  static const Color emerald         = Color(0xFF10F0A5);
+  /// Lighter rim used for shard highlights and XP ring fills.
+  static const Color emeraldBright   = Color(0xFF7BFFD0);
+  /// Deep emerald for gradient bases.
+  static const Color emeraldDeep     = Color(0xFF0A8A5F);
+  /// Electric neon used for crackling arcs + Great-Move aura.
+  static const Color electricNeon    = Color(0xFF3FA0FF);
+
   // ── Text ───────────────────────────────────────────────────────────────
   static const Color textPrimary     = Color(0xFFF4F7FF);
   static const Color textSecondary   = Color(0xFFB4C0E0);

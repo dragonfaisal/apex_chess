@@ -18,7 +18,7 @@ import 'package:apex_chess/features/pgn_review/presentation/views/review_screen.
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
-import 'package:apex_chess/shared_ui/widgets/radar_scan.dart';
+import 'package:apex_chess/shared_ui/widgets/quantum_shatter_loader.dart';
 
 class ArchiveScreen extends ConsumerWidget {
   const ArchiveScreen({super.key});
@@ -597,7 +597,7 @@ class _ReanalysisDialog extends StatelessWidget {
           children: [
             const SizedBox(
               height: 120,
-              child: Center(child: RadarScan(size: 120)),
+              child: Center(child: QuantumShatterLoader(size: 120)),
             ),
             const SizedBox(height: 12),
             Text(

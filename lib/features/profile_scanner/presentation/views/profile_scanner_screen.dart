@@ -16,8 +16,9 @@ import 'package:apex_chess/features/user_validation/presentation/widgets/usernam
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
-import 'package:apex_chess/shared_ui/widgets/radar_scan.dart';
+import 'package:apex_chess/shared_ui/widgets/quantum_shatter_loader.dart';
 
+import '../../data/profile_scanner_service.dart';
 import '../../domain/profile_scan_result.dart';
 import '../controllers/profile_scanner_controller.dart';
 
@@ -104,7 +105,14 @@ class _ProfileScannerScreenState
                 ),
                 const SizedBox(height: 20),
                 if (state.isLoading)
-                  const _LoadingCard()
+                  _LoadingCard(
+                    progress: state.progress,
+                    onCancel: () => ref
+                        .read(profileScannerControllerProvider.notifier)
+                        .cancel(),
+                  )
+                else if (state.wasCancelled)
+                  const _CancelledCard()
                 else if (state.error != null)
                   _ErrorCard(message: state.error!)
                 else if (state.result != null)
@@ -326,24 +334,94 @@ class _SourceToggle extends StatelessWidget {
 // ── Loading ──────────────────────────────────────────────────────────
 
 class _LoadingCard extends StatelessWidget {
-  const _LoadingCard();
+  const _LoadingCard({required this.progress, required this.onCancel});
+  final ScanProgress? progress;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = progress;
+    final overall = p?.overall ?? 0.0;
+    return GlassPanel(
+      accentColor: ApexColors.aurora,
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        children: [
+          const SizedBox(
+            height: 140,
+            child: Center(child: QuantumShatterLoader(size: 140)),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            ApexCopy.scannerLoading,
+            textAlign: TextAlign.center,
+            style: ApexTypography.titleMedium
+                .copyWith(letterSpacing: 2, fontSize: 13),
+          ),
+          const SizedBox(height: 14),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: overall == 0 ? null : overall,
+              minHeight: 8,
+              backgroundColor: ApexColors.cosmicDust,
+              valueColor:
+                  const AlwaysStoppedAnimation(ApexColors.emeraldBright),
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (p != null)
+            Text(
+              p.currentGame == null
+                  ? 'Preparing engine…'
+                  : 'Game ${p.completed + 1}/${p.total}  ·  '
+                      'ply ${p.currentPly}/${p.currentPlyTotal}\n'
+                      '${p.currentGame}',
+              textAlign: TextAlign.center,
+              style: ApexTypography.bodyMedium.copyWith(
+                color: ApexColors.textTertiary,
+                fontSize: 11,
+                height: 1.4,
+              ),
+            ),
+          const SizedBox(height: 14),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: ApexColors.ruby,
+              side: BorderSide(
+                  color: ApexColors.ruby.withValues(alpha: 0.55), width: 1),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 10),
+            ),
+            onPressed: onCancel,
+            icon: const Icon(Icons.close_rounded, size: 16),
+            label: const Text('CANCEL SCAN'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CancelledCard extends StatelessWidget {
+  const _CancelledCard();
 
   @override
   Widget build(BuildContext context) {
     return GlassPanel(
-      accentColor: ApexColors.aurora,
-      padding: const EdgeInsets.all(28),
-      child: Column(
+      accentColor: ApexColors.textTertiary,
+      padding: const EdgeInsets.all(18),
+      child: Row(
         children: [
-          const SizedBox(
-            height: 160,
-            child: Center(child: RadarScan(size: 160)),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            ApexCopy.scannerLoading,
-            style: ApexTypography.titleMedium
-                .copyWith(letterSpacing: 2, fontSize: 13),
+          const Icon(Icons.cancel_outlined,
+              color: ApexColors.textTertiary, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Scan cancelled.',
+              style: ApexTypography.bodyMedium
+                  .copyWith(color: ApexColors.textSecondary),
+            ),
           ),
         ],
       ),
