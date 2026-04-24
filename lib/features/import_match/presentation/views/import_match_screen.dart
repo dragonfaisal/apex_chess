@@ -173,7 +173,11 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
         ),
       );
     }
-    if (state.errorMessage != null) {
+    // Full-screen error is only appropriate when we have nothing to show
+    // yet — if a pagination fetch fails *after* a successful first page,
+    // we keep the already-loaded games visible and let the footer surface
+    // the error inline.
+    if (state.errorMessage != null && state.games.isEmpty) {
       return _EmptyState(
         icon: Icons.cloud_off_rounded,
         label: state.errorMessage!,
@@ -192,7 +196,8 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
         label: ApexCopy.importEmpty,
       );
     }
-    // +1 row reserved for the footer (loader or "end of feed" marker).
+    // +1 row reserved for the footer (loader, inline error, or
+    // "end of feed" marker).
     final itemCount = state.games.length + 1;
     return ListView.separated(
       controller: _scrollController,
@@ -202,6 +207,10 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
           return _PaginationFooter(
             isLoading: state.isLoadingMore,
             hasMore: state.hasMore,
+            errorMessage: state.errorMessage,
+            onRetry: () => ref
+                .read(importControllerProvider.notifier)
+                .fetchMore(),
           );
         }
         return _GameCard(game: state.games[i]);
@@ -217,13 +226,53 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _PaginationFooter extends StatelessWidget {
-  const _PaginationFooter({required this.isLoading, required this.hasMore});
+  const _PaginationFooter({
+    required this.isLoading,
+    required this.hasMore,
+    this.errorMessage,
+    this.onRetry,
+  });
 
   final bool isLoading;
   final bool hasMore;
+  final String? errorMessage;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
+    // Inline pagination error — keeps the already-loaded list visible
+    // and offers a Retry so a single blip doesn't force a full reset.
+    if (errorMessage != null && !isLoading) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Column(
+          children: [
+            Text(
+              errorMessage!,
+              textAlign: TextAlign.center,
+              style: ApexTypography.bodyMedium.copyWith(
+                color: ApexColors.ruby,
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (onRetry != null)
+              TextButton(
+                onPressed: onRetry,
+                child: Text(
+                  'RETRY',
+                  style: ApexTypography.bodyMedium.copyWith(
+                    color: ApexColors.sapphireBright,
+                    fontSize: 12,
+                    letterSpacing: 2,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
+    }
     if (isLoading) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 20),
@@ -407,8 +456,12 @@ class _UsernameFieldState extends ConsumerState<_UsernameField> {
   }
 
   void _onFocusChange() {
+    // Only show the dropdown on focus when the field is empty —
+    // `_onTextChange` won't fire if the user re-focuses a field that
+    // already contained a username, so we have to re-check here too.
+    final empty = widget.controller.text.trim().isEmpty;
     setState(() {
-      _showDropdown = widget.focusNode.hasFocus;
+      _showDropdown = widget.focusNode.hasFocus && empty;
     });
   }
 
