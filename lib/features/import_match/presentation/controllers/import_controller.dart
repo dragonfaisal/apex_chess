@@ -80,10 +80,23 @@ class ImportState {
 }
 
 class ImportController extends Notifier<ImportState> {
+  // Monotonic counter bumped on every `fetch()` and `setSource()` so a
+  // long-running `fetchMore()` can detect that its response is stale
+  // (the user started a new search, or switched source, mid-flight)
+  // and discard the results rather than splicing them into the
+  // unrelated new list. Without this guard two distinct profiles'
+  // pages would be interleaved and the cursor would be cross-wired
+  // between repositories.
+  int _generation = 0;
+
   @override
   ImportState build() => const ImportState();
 
   void setSource(GameSource source) {
+    // Switching source also invalidates any in-flight pagination —
+    // the old cursor belongs to the old repository and would be
+    // nonsensical to the new one.
+    _generation++;
     state = state.copyWith(source: source);
   }
 
@@ -114,8 +127,13 @@ class ImportController extends Notifier<ImportState> {
       return;
     }
 
+    _generation++;
     state = state.copyWith(
       isLoading: true,
+      // Any in-flight fetchMore() is now stale; clear the footer
+      // spinner so the UI reflects reality even before that future
+      // resolves.
+      isLoadingMore: false,
       clearError: true,
       games: const [],
       hasFetched: false,
@@ -162,10 +180,17 @@ class ImportController extends Notifier<ImportState> {
     if (state.isLoading || state.isLoadingMore) return;
     if (!state.hasMore || state.cursor == null) return;
 
+    // Snapshot the generation at call time. If `fetch()` (new search)
+    // or `setSource()` (provider switch) runs before our `await`
+    // returns, the generation will have advanced and we MUST discard
+    // the result — otherwise we'd cross-wire the previous profile's
+    // pages and cursor into the new profile's state.
+    final gen = _generation;
     state = state.copyWith(isLoadingMore: true, clearError: true);
 
     try {
       final page = await _fetchPage(cursor: state.cursor);
+      if (gen != _generation) return; // stale — a new search superseded us
       // De-dup by id in case an archive boundary repeated a game.
       final existingIds = state.games.map((g) => g.id).toSet();
       final appended = [
@@ -180,11 +205,13 @@ class ImportController extends Notifier<ImportState> {
         hasMore: page.cursor != null && page.games.isNotEmpty,
       );
     } on ImportException catch (e) {
+      if (gen != _generation) return;
       state = state.copyWith(
         isLoadingMore: false,
         errorMessage: e.userMessage,
       );
     } catch (_) {
+      if (gen != _generation) return;
       state = state.copyWith(
         isLoadingMore: false,
         errorMessage: 'Could not load more games.',
