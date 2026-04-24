@@ -14,6 +14,8 @@ import 'dart:math' as math;
 
 import 'package:http/http.dart' as http;
 
+import 'package:apex_chess/core/network/api_headers.dart';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Response Models
 // ─────────────────────────────────────────────────────────────────────────────
@@ -164,7 +166,7 @@ class LichessOpeningClient {
         });
 
         final response = await _httpClient
-            .get(uri, headers: {'Accept': 'application/json'})
+            .get(uri, headers: apexJsonHeaders)
             .timeout(const Duration(seconds: 8));
 
         switch (response.statusCode) {

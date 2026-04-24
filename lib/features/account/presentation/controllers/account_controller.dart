@@ -5,10 +5,15 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/account_repository.dart';
+import '../../data/logout_service.dart';
 import '../../domain/apex_account.dart';
 
 final accountRepositoryProvider = Provider<AccountRepository>((ref) {
   return AccountRepository();
+});
+
+final logoutServiceProvider = Provider<LogoutService>((ref) {
+  return const LogoutService();
 });
 
 /// Null when no account is connected yet — the UI uses that to decide
@@ -43,6 +48,14 @@ class AccountController extends AsyncNotifier<ApexAccount?> {
   Future<void> disconnect() async {
     state = const AsyncData(null);
     await ref.read(accountRepositoryProvider).clear();
+  }
+
+  /// Full logout: nukes Hive boxes + SharedPreferences and reinvalidates
+  /// downstream providers so the UI rebuilds against an empty cache.
+  Future<void> logout() async {
+    state = const AsyncData(null);
+    await ref.read(logoutServiceProvider).wipeAll();
+    ref.invalidate(onboardingSeenProvider);
   }
 
   Future<void> markOnboardingSeen() async {

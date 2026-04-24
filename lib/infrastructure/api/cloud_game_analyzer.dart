@@ -15,6 +15,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
+import 'package:apex_chess/core/domain/services/position_heuristics.dart';
 import 'package:apex_chess/infrastructure/api/cloud_eval_service.dart';
 import 'package:apex_chess/infrastructure/api/opening_service.dart';
 
@@ -212,8 +213,36 @@ class CloudGameAnalyzer {
       final winPctAfter = EvaluationAnalyzer.calculateWinPercentage(
           cp: currCpWhite, mate: currMateWhite);
 
-      // Get the before-position eval for bestMove comparison.
-      final (beforeEval, _) = await _cloudEval.evaluate(entry.fenBefore);
+      // Pull the before-position eval with multiPv=2 so we can detect
+      // "only winning move" (Great) by comparing PV[0] vs PV[1] —
+      // exactly how Lichess's own analysis annotator does it.
+      final (beforeEval, _) =
+          await _cloudEval.evaluate(entry.fenBefore, multiPv: 2);
+
+      // Sacrifice flag — material balance after the *opponent's* reply
+      // (or after this ply if it's the last move). Same heuristic the
+      // local analyser uses; see [PositionHeuristics.isSacrificeMove].
+      final replyFen =
+          ply + 1 < totalPlies ? moveList[ply + 1].fenAfter : entry.fenAfter;
+      final isSacrifice = PositionHeuristics.isSacrificeMove(
+        before: entry.fenBefore,
+        afterReplyFen: replyFen,
+        isWhiteMove: entry.isWhiteMove,
+      );
+
+      // Only-winning-move flag — fires when PV[1]'s evaluation drops the
+      // mover's Win% by ≥12 percentage points relative to PV[0]. The
+      // 12pp threshold matches Lichess's "Only Move" annotation rule
+      // (`Only Move` ≈ best move is forced; the alternative is at least
+      // an Inaccuracy band). We only set the flag when both PVs are
+      // available — multiPv=1 cloud entries never trigger Great.
+      final isOnlyWinningMove = _isOnlyWinningMove(
+        bestCp: beforeEval?.scoreCp,
+        bestMate: beforeEval?.mateIn,
+        secondCp: beforeEval?.secondBestCp,
+        secondMate: beforeEval?.secondBestMate,
+        isWhiteMove: entry.isWhiteMove,
+      );
 
       final result = _analyzer.analyze(
         prevCp: beforeEval?.scoreCp,
@@ -223,6 +252,8 @@ class CloudGameAnalyzer {
         isWhiteMove: entry.isWhiteMove,
         engineBestMoveUci: beforeEval?.bestMoveUci,
         playedMoveUci: entry.uci,
+        isSacrifice: isSacrifice,
+        isOnlyWinningMove: isOnlyWinningMove,
       );
 
       // Resolve engine best move to SAN if available.
@@ -349,6 +380,27 @@ class CloudGameAnalyzer {
         Role.knight => 'n',
         _ => '',
       };
+
+  /// Lichess "Only Move" / Apex *Great* heuristic: the gap between PV[0]
+  /// and PV[1] is large enough that picking anything other than the
+  /// engine's #1 drops the mover by ≥12 Win%. Returns false when either
+  /// score is missing or when the position only carries a single PV.
+  static bool _isOnlyWinningMove({
+    int? bestCp,
+    int? bestMate,
+    int? secondCp,
+    int? secondMate,
+    required bool isWhiteMove,
+  }) {
+    if (secondCp == null && secondMate == null) return false;
+    final wBest =
+        EvaluationAnalyzer.calculateWinPercentage(cp: bestCp, mate: bestMate);
+    final wSecond = EvaluationAnalyzer.calculateWinPercentage(
+        cp: secondCp, mate: secondMate);
+    final s = isWhiteMove ? 1.0 : -1.0;
+    final gap = (wBest - wSecond) * s;
+    return gap >= 12.0;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

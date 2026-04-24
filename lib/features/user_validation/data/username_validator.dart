@@ -19,6 +19,8 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
+import 'package:apex_chess/core/network/api_headers.dart';
+
 enum UsernameExistence { exists, missing, unknown }
 
 class UsernameValidator {
@@ -26,7 +28,6 @@ class UsernameValidator {
       : _client = client ?? http.Client();
 
   final http.Client _client;
-  static const _ua = 'ApexChess/1.0 (+https://apex.chess)';
   static const _timeout = Duration(seconds: 6);
 
   /// Resolves [username] on [source] (`'chess.com'` or `'lichess'`).
@@ -46,7 +47,7 @@ class UsernameValidator {
 
     try {
       final res = await _client
-          .get(uri, headers: const {'User-Agent': _ua})
+          .get(uri, headers: apexJsonHeaders)
           .timeout(_timeout);
       if (res.statusCode == 200) {
         // Lichess returns 200 with `{"closed": true, ...}` for closed

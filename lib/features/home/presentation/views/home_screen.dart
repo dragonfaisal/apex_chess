@@ -29,6 +29,7 @@ import 'package:apex_chess/features/live_play/presentation/views/live_play_scree
 import 'package:apex_chess/features/mistake_vault/data/mistake_vault_save_hook.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
 import 'package:apex_chess/features/pgn_review/presentation/views/review_screen.dart';
+import 'package:apex_chess/features/profile/presentation/views/profile_screen.dart';
 import 'package:apex_chess/features/profile_scanner/presentation/views/profile_scanner_screen.dart';
 import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
@@ -91,96 +92,88 @@ class HomeScreen extends ConsumerWidget {
                                   builder: (_) => const LivePlayScreen()),
                             ),
                           ),
-                          const SizedBox(height: 12),
-                          Row(
+                          const SizedBox(height: 14),
+                          // Symmetric 2-column grid — every tile is the
+                          // same size, same shape, same elevation. No
+                          // half-width / full-width mix, no staggered
+                          // heights. Visually soothing, reads as one
+                          // unified module rather than a disparate list
+                          // of buttons.
+                          GridView.count(
+                            crossAxisCount: 2,
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            mainAxisSpacing: 12,
+                            crossAxisSpacing: 12,
+                            childAspectRatio: 1.05,
                             children: [
-                              Expanded(
-                                child: _TileCard(
-                                  title: ApexCopy.importMatch,
-                                  subtitle: 'Chess.com · Lichess',
-                                  icon: Icons.cloud_download_rounded,
-                                  accent: ApexColors.sapphire,
-                                  onTap: () => Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          const ImportMatchScreen(),
-                                    ),
+                              _TileCard(
+                                title: ApexCopy.importMatch,
+                                subtitle: 'Chess.com · Lichess',
+                                icon: Icons.cloud_download_rounded,
+                                accent: ApexColors.sapphire,
+                                onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const ImportMatchScreen(),
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: _TileCard(
-                                  title: ApexCopy.analyzeGame,
-                                  subtitle: 'Paste PGN · instant scan',
-                                  icon: Icons.auto_graph_rounded,
-                                  accent: ApexColors.aurora,
-                                  onTap: () =>
-                                      _showPgnDialog(context, ref),
+                              _TileCard(
+                                title: ApexCopy.analyzeGame,
+                                subtitle: 'Paste PGN · instant scan',
+                                icon: Icons.auto_graph_rounded,
+                                accent: ApexColors.aurora,
+                                onTap: () => _showPgnDialog(context, ref),
+                              ),
+                              _TileCard(
+                                title: ApexCopy.dashboardTitle,
+                                subtitle: 'Ratings · trend · openings',
+                                icon: Icons.insights_rounded,
+                                accent: ApexColors.emerald,
+                                onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const GlobalDashboardScreen(),
+                                  ),
+                                ),
+                              ),
+                              _TileCard(
+                                title: ApexCopy.scannerTitle,
+                                subtitle: 'Fair-play radar',
+                                icon: Icons.radar_rounded,
+                                accent: ApexColors.ruby,
+                                onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const ProfileScannerScreen(),
+                                  ),
+                                ),
+                              ),
+                              _TileCard(
+                                title: ApexCopy.academyTitle,
+                                subtitle: 'Weakness drills',
+                                icon: Icons.school_rounded,
+                                accent: ApexColors.emeraldBright,
+                                onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const ApexAcademyScreen(),
+                                  ),
+                                ),
+                              ),
+                              _TileCard(
+                                title: ApexCopy.archivesTitle,
+                                subtitle: 'Quantum scan vault',
+                                icon: Icons.inventory_2_outlined,
+                                accent: ApexColors.sapphireBright,
+                                onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => const ArchiveScreen(),
+                                  ),
                                 ),
                               ),
                             ],
-                          ),
-                          const SizedBox(height: 12),
-                          _WideTileCard(
-                            title: ApexCopy.dashboardTitle,
-                            subtitle:
-                                'Ratings · trend · opening performance',
-                            icon: Icons.insights_rounded,
-                            accent: ApexColors.aurora,
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    const GlobalDashboardScreen(),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _TileCard(
-                                  title: ApexCopy.scannerTitle,
-                                  subtitle: 'Fair-play radar',
-                                  icon: Icons.radar_rounded,
-                                  accent: ApexColors.ruby,
-                                  onTap: () => Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          const ProfileScannerScreen(),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: _TileCard(
-                                  title: ApexCopy.academyTitle,
-                                  subtitle: 'Weakness drills',
-                                  icon: Icons.school_rounded,
-                                  accent: ApexColors.emerald,
-                                  onTap: () => Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          const ApexAcademyScreen(),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          _WideTileCard(
-                            title: ApexCopy.archivesTitle,
-                            subtitle:
-                                'Every Quantum Scan · searchable intel',
-                            icon: Icons.inventory_2_outlined,
-                            accent: ApexColors.sapphireBright,
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const ArchiveScreen(),
-                              ),
-                            ),
                           ),
                           const SizedBox(height: 28),
                           Text(
@@ -507,87 +500,6 @@ class _TileCard extends StatelessWidget {
   }
 }
 
-class _WideTileCard extends StatelessWidget {
-  const _WideTileCard({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.accent,
-    required this.onTap,
-  });
-
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final Color accent;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GlassPanel(
-      padding: EdgeInsets.zero,
-      margin: null,
-      borderRadius: 16,
-      accentColor: accent,
-      accentAlpha: 0.3,
-      fillAlpha: 0.42,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: accent.withValues(alpha: 0.18),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(icon, color: accent, size: 20),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: ApexTypography.labelLarge.copyWith(
-                          color: ApexColors.textPrimary,
-                          letterSpacing: 1.3,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        subtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: ApexTypography.bodyMedium.copyWith(
-                          color: ApexColors.textTertiary,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(Icons.chevron_right_rounded,
-                    color: accent.withValues(alpha: 0.7), size: 22),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Quantum Depth Scan progress dialog — backed by LocalGameAnalyzer.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -816,49 +728,51 @@ class _AccountStrip extends ConsumerWidget {
     }
     return Row(
       children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
+        // Verified-handle chip — also tappable as a quick portal to the
+        // dedicated Profile screen (live ratings + logout cascade).
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
             borderRadius: BorderRadius.circular(10),
-            color: ApexColors.emerald.withValues(alpha: 0.12),
-            border: Border.all(
-                color: ApexColors.emerald.withValues(alpha: 0.4), width: 0.8),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.verified_rounded,
-                  size: 14, color: ApexColors.emeraldBright),
-              const SizedBox(width: 6),
-              Text(
-                '${account!.source.wire.toUpperCase()} · ${account!.username}',
-                style: ApexTypography.bodyMedium.copyWith(
-                  color: ApexColors.textPrimary,
-                  fontSize: 11,
-                  letterSpacing: 0.8,
-                  fontWeight: FontWeight.w600,
-                ),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                builder: (_) => const ProfileScreen())),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                color: ApexColors.emerald.withValues(alpha: 0.12),
+                border: Border.all(
+                    color: ApexColors.emerald.withValues(alpha: 0.4),
+                    width: 0.8),
               ),
-            ],
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.verified_rounded,
+                      size: 14, color: ApexColors.emeraldBright),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${account!.source.wire.toUpperCase()} · ${account!.username}',
+                    style: ApexTypography.bodyMedium.copyWith(
+                      color: ApexColors.textPrimary,
+                      fontSize: 11,
+                      letterSpacing: 0.8,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
         const Spacer(),
-        TextButton(
-          onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => const ConnectAccountScreen())),
-          style: TextButton.styleFrom(
-            foregroundColor: ApexColors.textSecondary,
-            padding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          ),
-          child: Text(
-            'Switch',
-            style: ApexTypography.bodyMedium.copyWith(
-              color: ApexColors.textTertiary,
-              fontSize: 11,
-              letterSpacing: 1,
-            ),
-          ),
+        IconButton(
+          tooltip: 'Profile',
+          onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => const ProfileScreen())),
+          icon: const Icon(Icons.account_circle_outlined,
+              size: 22, color: ApexColors.sapphireBright),
         ),
       ],
     );

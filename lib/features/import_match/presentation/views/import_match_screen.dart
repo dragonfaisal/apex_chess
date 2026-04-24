@@ -266,12 +266,34 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
 
   Widget _buildBody(ImportState state) {
     if (state.isLoading) {
-      return const Center(
-        child: SizedBox(
-          width: 32,
-          height: 32,
-          child: CircularProgressIndicator(
-              strokeWidth: 2.4, color: ApexColors.sapphireBright),
+      // Shatter loader + caption — gives the user a deliberate signal
+      // that we're streaming archives over HTTP, not just a generic
+      // spinner. Matches the analyser's full-screen busy state.
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const QuantumShatterLoader(size: 160),
+            const SizedBox(height: 18),
+            const Text(
+              'Downloading recent matches…',
+              style: TextStyle(
+                color: ApexColors.textPrimary,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.4,
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Streaming directly from your provider — no cached data.',
+              style: TextStyle(
+                color: ApexColors.textSecondary,
+                fontSize: 12.5,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
       );
     }

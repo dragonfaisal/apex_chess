@@ -31,6 +31,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'package:apex_chess/core/network/api_headers.dart';
 import 'package:apex_chess/features/import_match/domain/imported_game.dart';
 
 /// A single page of imported games plus a cursor for the next page.
@@ -47,7 +48,6 @@ class ChessComRepository {
       : _client = client ?? http.Client();
 
   final http.Client _client;
-  static const _ua = 'ApexChess/1.0 (+https://apex.chess)';
 
   /// Convenience wrapper for callers that only need the first page.
   /// Historical API — preserved so existing tests keep passing.
@@ -74,7 +74,7 @@ class ChessComRepository {
       final archivesUri = Uri.parse(
           'https://api.chess.com/pub/player/$user/games/archives');
       final archivesResp = await _client
-          .get(archivesUri, headers: {'User-Agent': _ua})
+          .get(archivesUri, headers: apexChessComHeaders)
           .timeout(const Duration(seconds: 15));
       if (archivesResp.statusCode == 404) {
         throw const ImportException('Chess.com user not found.');
@@ -116,7 +116,7 @@ class ChessComRepository {
       while (ix < archives.length && games.length < pageSize) {
         final archive = archives[ix];
         final resp = await _client
-            .get(Uri.parse(archive), headers: {'User-Agent': _ua})
+            .get(Uri.parse(archive), headers: apexChessComHeaders)
             .timeout(const Duration(seconds: 20));
         if (resp.statusCode != 200) {
           ix++;

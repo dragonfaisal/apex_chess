@@ -27,6 +27,11 @@ import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
     case MoveQuality.brilliant:
       // Ruby + cyan — the "wow" combo specified for brilliant moves.
       return (inner: ApexColors.aurora, outer: ApexColors.ruby);
+    case MoveQuality.great:
+      // Same wow palette as Brilliant — Great is "the *only* winning
+      // move" rather than a sacrifice, but visually it deserves the
+      // same celebratory aura.
+      return (inner: ApexColors.aurora, outer: ApexColors.ruby);
     case MoveQuality.best:
       return (inner: ApexColors.emeraldBright, outer: ApexColors.emerald);
     case MoveQuality.excellent:

@@ -890,6 +890,7 @@ class _QualityPieCard extends StatelessWidget {
 
   Color _qualityColor(MoveQuality q) => switch (q) {
         MoveQuality.brilliant => ApexColors.brilliant,
+        MoveQuality.great => ApexColors.brilliant,
         MoveQuality.best => ApexColors.best,
         MoveQuality.excellent => ApexColors.great,
         MoveQuality.good => ApexColors.sapphireDeep,
@@ -901,6 +902,7 @@ class _QualityPieCard extends StatelessWidget {
 
   String _qualityLabel(MoveQuality q) => switch (q) {
         MoveQuality.brilliant => 'Brilliant',
+        MoveQuality.great => 'Great',
         MoveQuality.best => 'Best',
         MoveQuality.excellent => 'Excellent',
         MoveQuality.good => 'Solid',
