@@ -22,6 +22,7 @@ import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
+import 'package:apex_chess/shared_ui/widgets/radar_scan.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -426,7 +427,39 @@ class _LocalAnalysisProgressDialogState
                 style: ApexTypography.titleMedium),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 18),
+        SizedBox(
+          height: 220,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              const RadarScan(size: 220),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${(progress * 100).toStringAsFixed(0)}%',
+                    style: ApexTypography.displayLarge.copyWith(
+                      fontSize: 38,
+                      color: ApexColors.sapphireBright,
+                      letterSpacing: 3,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'QUANTUM SCAN',
+                    style: ApexTypography.bodyMedium.copyWith(
+                      color: ApexColors.textTertiary,
+                      fontSize: 10,
+                      letterSpacing: 3.5,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
         ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: LinearProgressIndicator(

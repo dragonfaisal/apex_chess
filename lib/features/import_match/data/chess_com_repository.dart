@@ -6,10 +6,15 @@
 ///   2. `GET {archive}` returns all games played that month, each with its
 ///      own PGN string and structured metadata.
 ///
-/// To keep the UI snappy we fetch the **most recent archive only** and
-/// return up to [limit] games sorted newest → oldest. The API responses
-/// are small (~50-100 KB) so this is a single HTTP round-trip on the
-/// happy path.
+/// ### Pagination
+///
+/// The public screen consumes results page-by-page to support infinite
+/// scroll. Each call to [fetchRecentGames] returns at most [pageSize]
+/// games plus a [ImportPage.cursor] describing where to resume. For
+/// Chess.com we encode the cursor as the *index of the next archive to
+/// consume* (0 = most recent archive), which is simple and stable across
+/// polling cycles. `cursor == null` means there are no more archives to
+/// paginate into.
 library;
 
 import 'dart:async';
@@ -19,6 +24,15 @@ import 'package:http/http.dart' as http;
 
 import 'package:apex_chess/features/import_match/domain/imported_game.dart';
 
+/// A single page of imported games plus a cursor for the next page.
+///
+/// `cursor == null` indicates the stream is exhausted.
+class ImportPage {
+  const ImportPage({required this.games, this.cursor});
+  final List<ImportedGame> games;
+  final String? cursor;
+}
+
 class ChessComRepository {
   ChessComRepository({http.Client? client})
       : _client = client ?? http.Client();
@@ -26,9 +40,22 @@ class ChessComRepository {
   final http.Client _client;
   static const _ua = 'ApexChess/1.0 (+https://apex.chess)';
 
+  /// Convenience wrapper for callers that only need the first page.
+  /// Historical API — preserved so existing tests keep passing.
   Future<List<ImportedGame>> fetchRecentGames(
     String username, {
     int limit = 25,
+  }) async {
+    final page = await fetchPage(username, pageSize: limit);
+    return page.games;
+  }
+
+  /// Fetch one page of games. Pass `cursor` from the previous page to
+  /// paginate; pass `null` (the default) to start from the newest archive.
+  Future<ImportPage> fetchPage(
+    String username, {
+    int pageSize = 25,
+    String? cursor,
   }) async {
     final user = username.trim();
     if (user.isEmpty) {
@@ -46,30 +73,44 @@ class ChessComRepository {
       if (archivesResp.statusCode != 200) {
         throw const ImportException('Chess.com responded unexpectedly.');
       }
-      final archivesJson = jsonDecode(archivesResp.body) as Map<String, dynamic>;
+      final archivesJson =
+          jsonDecode(archivesResp.body) as Map<String, dynamic>;
       final archives = (archivesJson['archives'] as List? ?? const [])
-          .cast<String>();
-      if (archives.isEmpty) return const [];
+          .cast<String>()
+          // Reverse so index 0 = newest archive; stable pagination order.
+          .reversed
+          .toList();
+      if (archives.isEmpty) return const ImportPage(games: []);
 
-      // Fetch the latest archive first; if it's empty (e.g. user only
-      // played a single partial month), fall back to the previous one.
+      final startIx = int.tryParse(cursor ?? '0') ?? 0;
+      if (startIx >= archives.length) {
+        return const ImportPage(games: []);
+      }
+
       final games = <ImportedGame>[];
-      for (final archive in archives.reversed.take(2)) {
+      var ix = startIx;
+      // Walk archives from newest until we've filled the page — an archive
+      // with zero qualifying games shouldn't stall the iteration.
+      while (ix < archives.length && games.length < pageSize) {
+        final archive = archives[ix];
+        ix++;
         final resp = await _client
             .get(Uri.parse(archive), headers: {'User-Agent': _ua})
             .timeout(const Duration(seconds: 20));
         if (resp.statusCode != 200) continue;
         final body = jsonDecode(resp.body) as Map<String, dynamic>;
-        final rawGames =
-            (body['games'] as List? ?? const []).cast<Map<String, dynamic>>();
+        final rawGames = (body['games'] as List? ?? const [])
+            .cast<Map<String, dynamic>>();
         for (final raw in rawGames.reversed) {
           final parsed = _parseGame(raw, user);
           if (parsed != null) games.add(parsed);
-          if (games.length >= limit) break;
+          if (games.length >= pageSize) break;
         }
-        if (games.length >= limit) break;
       }
-      return games;
+
+      // Cursor points at the next unconsumed archive. null = exhausted.
+      final nextCursor = ix >= archives.length ? null : ix.toString();
+      return ImportPage(games: games, cursor: nextCursor);
     } on ImportException {
       rethrow;
     } on TimeoutException {
