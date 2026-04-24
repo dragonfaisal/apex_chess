@@ -143,8 +143,10 @@ class _RadarPainter extends CustomPainter {
       ).createShader(beamRect);
     canvas.drawCircle(center, radius, beamPaint);
 
-    // Bright leading edge — a thin filled triangle giving the beam its
-    // recognisable "blip" silhouette.
+    // Bright leading edge — a thin stroked line giving the beam its
+    // recognisable "blip" silhouette. `Paint` defaults to fill, which
+    // would render nothing for a zero-area single-segment path, so
+    // the stroke style is required.
     final leadingAngle = -math.pi / 2 + sweep;
     final leadPath = Path()
       ..moveTo(center.dx, center.dy)
@@ -153,6 +155,7 @@ class _RadarPainter extends CustomPainter {
         center.dy + radius * math.sin(leadingAngle),
       );
     final leadPaint = Paint()
+      ..style = PaintingStyle.stroke
       ..strokeWidth = 1.4
       ..color = color.withValues(alpha: 0.85);
     canvas.drawPath(leadPath, leadPaint);

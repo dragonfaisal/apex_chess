@@ -11,10 +11,19 @@
 /// The public screen consumes results page-by-page to support infinite
 /// scroll. Each call to [fetchRecentGames] returns at most [pageSize]
 /// games plus a [ImportPage.cursor] describing where to resume. For
-/// Chess.com we encode the cursor as the *index of the next archive to
-/// consume* (0 = most recent archive), which is simple and stable across
-/// polling cycles. `cursor == null` means there are no more archives to
-/// paginate into.
+/// Chess.com the cursor encodes both the archive index *and* the
+/// within-archive offset, formatted as `"archiveIx:rawOffset"`:
+///
+///   * `archiveIx` — 0 = most recent archive; increases into history.
+///   * `rawOffset` — how many entries of `rawGames.reversed` we've
+///     already consumed from that archive. Offsets count raw entries
+///     (including ones [_parseGame] rejected) so the resume point is
+///     stable across retries.
+///
+/// Without the offset, a page that fills partway through an archive
+/// would permanently lose the remaining games in that archive — the
+/// next call would skip forward to the next archive.
+/// `cursor == null` means there are no more archives to paginate into.
 library;
 
 import 'dart:async';
@@ -82,34 +91,73 @@ class ChessComRepository {
           .toList();
       if (archives.isEmpty) return const ImportPage(games: []);
 
-      final startIx = int.tryParse(cursor ?? '0') ?? 0;
+      // Decode `"archiveIx[:rawOffset]"`. Legacy cursors from older
+      // clients that only encoded `archiveIx` still parse correctly
+      // (offset defaults to 0).
+      final parts = (cursor ?? '0').split(':');
+      final startIx = int.tryParse(parts[0]) ?? 0;
+      final startOffset =
+          parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
       if (startIx >= archives.length) {
         return const ImportPage(games: []);
       }
 
       final games = <ImportedGame>[];
       var ix = startIx;
+      var skip = startOffset;
+      // `consumedInArchive` tracks how many raw entries we've walked
+      // through in the *current* archive (including the initial skip
+      // and any [_parseGame] rejections) — it becomes the rawOffset
+      // of the next cursor if we fill mid-archive.
+      var consumedInArchive = startOffset;
+
       // Walk archives from newest until we've filled the page — an archive
       // with zero qualifying games shouldn't stall the iteration.
       while (ix < archives.length && games.length < pageSize) {
         final archive = archives[ix];
-        ix++;
         final resp = await _client
             .get(Uri.parse(archive), headers: {'User-Agent': _ua})
             .timeout(const Duration(seconds: 20));
-        if (resp.statusCode != 200) continue;
+        if (resp.statusCode != 200) {
+          ix++;
+          skip = 0;
+          consumedInArchive = 0;
+          continue;
+        }
         final body = jsonDecode(resp.body) as Map<String, dynamic>;
-        final rawGames = (body['games'] as List? ?? const [])
-            .cast<Map<String, dynamic>>();
-        for (final raw in rawGames.reversed) {
-          final parsed = _parseGame(raw, user);
+        final reversed = (body['games'] as List? ?? const [])
+            .cast<Map<String, dynamic>>()
+            .reversed
+            .toList();
+
+        var archiveExhausted = true;
+        for (var i = skip; i < reversed.length; i++) {
+          consumedInArchive = i + 1;
+          final parsed = _parseGame(reversed[i], user);
           if (parsed != null) games.add(parsed);
-          if (games.length >= pageSize) break;
+          if (games.length >= pageSize) {
+            archiveExhausted = consumedInArchive >= reversed.length;
+            break;
+          }
+        }
+        if (archiveExhausted) {
+          ix++;
+          skip = 0;
+          consumedInArchive = 0;
         }
       }
 
-      // Cursor points at the next unconsumed archive. null = exhausted.
-      final nextCursor = ix >= archives.length ? null : ix.toString();
+      // If we stopped mid-archive, resume from the next unread entry
+      // in the same archive; otherwise advance to the next archive.
+      // null = no more archives to paginate into.
+      final String? nextCursor;
+      if (ix >= archives.length) {
+        nextCursor = null;
+      } else if (consumedInArchive > 0) {
+        nextCursor = '$ix:$consumedInArchive';
+      } else {
+        nextCursor = '$ix:0';
+      }
       return ImportPage(games: games, cursor: nextCursor);
     } on ImportException {
       rethrow;

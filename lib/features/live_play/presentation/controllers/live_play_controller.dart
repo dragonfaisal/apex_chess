@@ -236,16 +236,19 @@ class LivePlayNotifier extends Notifier<LivePlayState> {
 
     _position = _position.play(move) as Chess;
 
-    // Sound. Castling gets its own SFX — checked before capture so a
-    // king→rook-square castling path (unused today but defensive) doesn't
-    // fall into the capture bucket just because the destination square
-    // holds the friendly rook.
+    // Sound. Priority mirrors review_audio_controller so the same move
+    // classifies to the same SFX whether the user plays it live or
+    // reviews it afterwards:
+    //   checkmate → castle → check → capture → move
+    // `O-O+` (castle with check) plays the castle tink rather than the
+    // generic check gong — the castling motion is the more specific
+    // signal a viewer wants to hear.
     if (_position.isCheckmate) {
       _audio.playImmediate(ChessSoundType.checkmate);
-    } else if (_position.isCheck) {
-      _audio.play(ChessSoundType.check);
     } else if (isCastling) {
       _audio.play(ChessSoundType.castle);
+    } else if (_position.isCheck) {
+      _audio.play(ChessSoundType.check);
     } else if (isCapture) {
       _audio.play(ChessSoundType.capture);
     } else {
