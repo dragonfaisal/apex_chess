@@ -3,13 +3,19 @@
 /// install.
 ///
 /// Order matters:
-///   1. **Hive boxes first** — close any open boxes and `deleteFromDisk`
-///      so subsequent reads don't see stale archive / mistake-vault
-///      entries from the previous account.
+///   1. **Hive boxes first** — clear each open box in-place. We
+///      deliberately do NOT close or `deleteFromDisk` the archive /
+///      mistake-vault boxes: those were opened at boot in `main()`
+///      and other providers hold live references. Closing them would
+///      throw `HiveError: Box has already been closed` on the next
+///      read, which is exactly what produced the blank-screen crash
+///      in Phase 5.1. `clear()` drops every entry but keeps the
+///      handle alive.
 ///   2. **SharedPreferences** — `clear()` removes every key in one
-///      atomic call (account, onboarding flag, recent searches, academy
-///      streak, …). This avoids the per-key dance and keeps the keys
-///      list owned by each feature module rather than mirrored here.
+///      atomic call (account, onboarding flag, recent searches,
+///      academy streak, …). This avoids the per-key dance and keeps
+///      the keys list owned by each feature module rather than
+///      mirrored here.
 ///   3. **Provider invalidation** — handled by the caller so the UI
 ///      tree rebuilds against an empty state.
 library;
@@ -33,19 +39,21 @@ class LogoutService {
   }
 
   Future<void> _wipeHive() async {
-    for (final box in const [
+    for (final name in const [
       ArchiveRepository.boxName,
       MistakeVaultRepository.boxName,
     ]) {
       try {
-        if (Hive.isBoxOpen(box)) {
-          await Hive.box<String>(box).clear();
-          await Hive.box<String>(box).close();
-        }
-        await Hive.deleteBoxFromDisk(box);
+        // Open-if-needed, then clear in place. We cannot close or
+        // delete-from-disk here — live repositories hold references
+        // and the app would crash with "Box has already been closed".
+        final box = Hive.isBoxOpen(name)
+            ? Hive.box<String>(name)
+            : await Hive.openBox<String>(name);
+        await box.clear();
       } catch (_) {
-        // Box never existed, or platform locked it — keep going so
-        // the rest of the cascade still runs.
+        // Box lookup / open failed — the cascade is advisory, keep
+        // going so prefs still get wiped.
       }
     }
   }
