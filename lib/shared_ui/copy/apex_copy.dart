@@ -106,6 +106,36 @@ class ApexCopy {
   static const String archivesSubtitle    =
       'Replay any previously-scanned match at full Quantum depth.';
 
+  // ── Connect Account (onboarding) ───────────────────────────────────────
+  static const String onboardingTitle    = 'CONNECT ACCOUNT';
+  static const String onboardingHeadline =
+      'Link your Chess.com or Lichess handle.';
+  static const String onboardingSub      =
+      'Games you import are persisted locally so the Global Dashboard and Apex Academy can personalise training around your actual play.';
+  static const String onboardingConnect  = 'CONNECT';
+  static const String onboardingSkip     = 'Skip for now';
+  static const String onboardingSwitch   = 'Switch account';
+  static const String onboardingPrivacy  =
+      'Read-only. Public profile endpoints. No password, no OAuth.';
+
+  // ── Global Dashboard ───────────────────────────────────────────────────
+  static const String dashboardTitle     = 'GLOBAL DASHBOARD';
+  static const String dashboardSubtitle  =
+      'Aggregated intel across every game scanned into your archive.';
+  static const String dashboardEmpty     =
+      'Run a Quantum Scan on any imported game — the dashboard populates itself.';
+
+  // ── Apex Academy ───────────────────────────────────────────────────────
+  static const String academyTitle       = 'APEX ACADEMY';
+  static const String academySubtitle    =
+      'Daily spaced-repetition drills built from your own mistakes.';
+  static const String academyEmpty       =
+      'Scan at least one game — every Blunder and Mistake enters the Vault and returns here as a drill.';
+  static const String academyDone        =
+      'All drills cleared for today. Streak preserved — see you tomorrow.';
+  static const String academyCorrect     = 'Correct — Apex agrees.';
+  static const String academyWrongHeader = 'Not quite.';
+
   // ── Opponent Forensics (profile scanner) ───────────────────────────────
   /// Premium alias for "Cheat detector" / "Profile analyser".
   static const String scannerTitle        = 'OPPONENT FORENSICS';

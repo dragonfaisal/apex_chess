@@ -19,6 +19,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:apex_chess/app/di/providers.dart';
+import 'package:apex_chess/features/account/domain/apex_account.dart';
+import 'package:apex_chess/features/account/presentation/controllers/account_controller.dart';
 import 'package:apex_chess/features/archives/data/archive_save_hook.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/import_match/domain/imported_game.dart';
@@ -66,6 +68,32 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
     // listener — Flutter de-duplicates notifications to each scroll
     // position update, and `fetchMore` itself guards on already-loading.
     _scrollController.addListener(_maybeFetchMore);
+    // Prefill from the connected Apex account so returning users don't
+    // retype their handle every session. We do this in a post-frame
+    // callback so the ref.read happens after widget mount and we can
+    // touch the (now-running) controller providers safely.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _prefillFromAccount());
+  }
+
+  void _prefillFromAccount() {
+    if (!mounted) return;
+    final account = ref.read(accountControllerProvider).valueOrNull;
+    if (account == null) return;
+    if (_controller.text.isNotEmpty) return;
+    final notifier = ref.read(importControllerProvider.notifier);
+    final desiredSource = account.source == AccountSource.chessCom
+        ? GameSource.chessCom
+        : GameSource.lichess;
+    if (ref.read(importControllerProvider).source != desiredSource) {
+      notifier.setSource(desiredSource);
+    }
+    _controller.text = account.username;
+    _controller.selection = TextSelection.collapsed(
+        offset: account.username.length);
+    notifier.setUsername(account.username);
+    // Seed the dedupe key so the debounce timer doesn't instantly
+    // fire on the prefill — user hasn't asked for a fetch yet.
+    _lastAutoKey = '${desiredSource.name}:${account.username}';
   }
 
   @override
