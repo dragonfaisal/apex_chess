@@ -43,6 +43,13 @@ dependencies:
   http: ^1.2.0
   ffi: ^2.1.0
   shared_preferences: ^2.3.2
+  # Local document DB for the Archived Intel feature (offline-first
+  # list of analyzed games). Chosen over Isar because Hive is a
+  # pure-Dart store with no native binary per platform (keeps the
+  # desktop/mobile/web matrix tractable) and because the footprint
+  # per record is small (<5 KB).
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
 
 dev_dependencies:
   flutter_test:

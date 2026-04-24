@@ -10,14 +10,20 @@
 /// "RenderFlex overflowed by 67 pixels" warning at this screen).
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:apex_chess/app/di/providers.dart';
+import 'package:apex_chess/features/archives/data/archive_save_hook.dart';
+import 'package:apex_chess/features/archives/domain/archived_game.dart';
+import 'package:apex_chess/features/archives/presentation/views/archive_screen.dart';
 import 'package:apex_chess/features/import_match/presentation/views/import_match_screen.dart';
 import 'package:apex_chess/features/live_play/presentation/views/live_play_screen.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
 import 'package:apex_chess/features/pgn_review/presentation/views/review_screen.dart';
+import 'package:apex_chess/features/profile_scanner/presentation/views/profile_scanner_screen.dart';
 import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
@@ -93,6 +99,25 @@ class HomeScreen extends ConsumerWidget {
                             label: ApexCopy.analyzeGame,
                             icon: Icons.auto_graph_rounded,
                             onTap: () => _showPgnDialog(context, ref),
+                          ),
+                          const SizedBox(height: 14),
+                          _SecondaryAction(
+                            label: ApexCopy.archivesTitle,
+                            icon: Icons.inventory_2_outlined,
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                  builder: (_) => const ArchiveScreen()),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          _SecondaryAction(
+                            label: ApexCopy.scannerTitle,
+                            icon: Icons.radar_rounded,
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                  builder: (_) =>
+                                      const ProfileScannerScreen()),
+                            ),
                           ),
                           const SizedBox(height: 36),
                           Text(
@@ -386,6 +411,14 @@ class _LocalAnalysisProgressDialogState
       );
       if (mounted) {
         ref.read(reviewControllerProvider.notifier).loadTimeline(timeline);
+        // Fire-and-forget archive save — never blocks the review flow.
+        unawaited(saveAnalysisToArchive(
+          ref: ref,
+          timeline: timeline,
+          pgn: widget.pgn,
+          depth: 14,
+          source: ArchiveSource.pgn,
+        ));
         setState(() => _done = true);
       }
     } on LocalAnalysisException catch (e) {
