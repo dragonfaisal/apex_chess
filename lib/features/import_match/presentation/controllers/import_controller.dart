@@ -93,11 +93,27 @@ class ImportController extends Notifier<ImportState> {
   ImportState build() => const ImportState();
 
   void setSource(GameSource source) {
-    // Switching source also invalidates any in-flight pagination —
-    // the old cursor belongs to the old repository and would be
-    // nonsensical to the new one.
+    if (source == state.source) return;
+    // Switching source invalidates every piece of pagination state:
+    //   * the old cursor belongs to the old repository's pagination
+    //     scheme ("0:25" on Chess.com is not a Lichess `until=` ms),
+    //   * the loaded games belong to a different profile's archive,
+    //   * `hasMore` / `hasFetched` describe the old query,
+    //   * `isLoadingMore` belongs to an in-flight `fetchMore()` we
+    //     are about to invalidate via the generation bump — without
+    //     clearing it here the footer spinner stays stuck forever
+    //     because the stale future's early-return doesn't touch it.
     _generation++;
-    state = state.copyWith(source: source);
+    state = state.copyWith(
+      source: source,
+      games: const [],
+      isLoading: false,
+      isLoadingMore: false,
+      clearError: true,
+      hasFetched: false,
+      clearCursor: true,
+      hasMore: false,
+    );
   }
 
   void setUsername(String value) {
