@@ -140,7 +140,14 @@ class ChessComRepository {
       // https://www.chess.com/openings/Italian-Game), not the ECO code the
       // card wants to render. Extract the actual ECO tag from the PGN.
       eco: _extractTagValue(pgn, 'ECO'),
-      openingName: _extractTagValue(pgn, 'Opening'),
+      // Chess.com PGNs don't ship an [Opening] tag — they encode the
+      // opening name in the [ECOUrl] slug (e.g. `.../openings/
+      // Queens-Gambit-Declined-Queens-Knight-Variation-3...Nf6-4.e3`).
+      // Fall back to that slug when [Opening] is absent so the card shows
+      // something human-readable next to the ECO code.
+      openingName: _extractTagValue(pgn, 'Opening') ??
+          _openingFromEcoUrl(_extractTagValue(pgn, 'ECOUrl')) ??
+          _openingFromEcoUrl(raw['eco'] as String?),
       userColor: userColor,
     );
   }
@@ -191,5 +198,29 @@ class ChessComRepository {
     final re = RegExp('\\[${RegExp.escape(tag)} "([^"]*)"\\]');
     final match = re.firstMatch(pgn);
     return match?.group(1);
+  }
+
+  /// Parses the opening slug from a Chess.com ECOUrl like
+  /// `https://www.chess.com/openings/Queens-Gambit-Declined-Queens-Knight-Variation-3...Nf6-4.e3`.
+  /// Returns a cleaned human name like `Queens Gambit Declined, Queens Knight`
+  /// or `null` when the slug can't be parsed. Notation moves (tokens with
+  /// a digit + dot, e.g. `3...Nf6`, `4.e3`) are stripped; only the named
+  /// variation remains.
+  static String? _openingFromEcoUrl(String? url) {
+    if (url == null || url.isEmpty) return null;
+    final ix = url.indexOf('/openings/');
+    if (ix < 0) return null;
+    final slug = url.substring(ix + '/openings/'.length);
+    if (slug.isEmpty) return null;
+    final parts = slug.split('-').where((p) => p.isNotEmpty).toList();
+    // Drop move-notation segments (`3...Nf6`, `4.e3`, etc.) so the label
+    // stays short and reads like an opening name.
+    final named = parts
+        .where((p) => !RegExp(r'^\d').hasMatch(p))
+        .toList();
+    if (named.isEmpty) return null;
+    // Trim to first 5 tokens to avoid long compound variation names.
+    final trimmed = named.take(5).join(' ');
+    return trimmed.isEmpty ? null : trimmed;
   }
 }
