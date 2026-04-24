@@ -25,6 +25,7 @@ import 'package:apex_chess/features/archives/data/archive_save_hook.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/import_match/domain/imported_game.dart';
 import 'package:apex_chess/features/import_match/presentation/controllers/import_controller.dart';
+import 'package:apex_chess/features/mistake_vault/data/mistake_vault_save_hook.dart';
 import 'package:apex_chess/features/import_match/presentation/controllers/recent_searches_controller.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
 import 'package:apex_chess/features/user_validation/presentation/username_validation_controller.dart';
@@ -990,6 +991,9 @@ class _GameCard extends ConsumerWidget {
             ? ArchiveSource.chessCom
             : ArchiveSource.lichess,
         playedAt: game.playedAt,
+        userIsWhite: game.userColor == null
+            ? null
+            : game.userColor == PlayerColor.white,
       ),
     );
   }
@@ -1327,11 +1331,15 @@ class _ImportAnalysisDialog extends ConsumerStatefulWidget {
     required this.depth,
     required this.source,
     this.playedAt,
+    this.userIsWhite,
   });
   final String pgn;
   final int depth;
   final ArchiveSource source;
   final DateTime? playedAt;
+  /// Null when we don't know which colour the user played (PGN
+  /// uploads). The Mistake Vault hook uses this to skip opponent plies.
+  final bool? userIsWhite;
 
   @override
   ConsumerState<_ImportAnalysisDialog> createState() =>
@@ -1373,14 +1381,23 @@ class _ImportAnalysisDialogState
       if (!mounted) return;
       ref.read(reviewControllerProvider.notifier).loadTimeline(timeline);
       // Fire-and-forget save — failures never block the review flow.
-      unawaited(saveAnalysisToArchive(
+      final archiveId = await saveAnalysisToArchive(
         ref: ref,
         timeline: timeline,
         pgn: widget.pgn,
         depth: widget.depth,
         source: widget.source,
         playedAt: widget.playedAt,
-      ));
+      );
+      if (archiveId != null) {
+        unawaited(saveMistakeDrillsFromTimeline(
+          ref: ref,
+          timeline: timeline,
+          archiveId: archiveId,
+          userIsWhite: widget.userIsWhite,
+        ));
+      }
+      if (!mounted) return;
       setState(() => _done = true);
     } on LocalAnalysisException catch (e) {
       if (mounted) setState(() => _error = e.userMessage);

@@ -21,6 +21,7 @@ import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/archives/presentation/views/archive_screen.dart';
 import 'package:apex_chess/features/import_match/presentation/views/import_match_screen.dart';
 import 'package:apex_chess/features/live_play/presentation/views/live_play_screen.dart';
+import 'package:apex_chess/features/mistake_vault/data/mistake_vault_save_hook.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
 import 'package:apex_chess/features/pgn_review/presentation/views/review_screen.dart';
 import 'package:apex_chess/features/profile_scanner/presentation/views/profile_scanner_screen.dart';
@@ -411,14 +412,27 @@ class _LocalAnalysisProgressDialogState
       );
       if (mounted) {
         ref.read(reviewControllerProvider.notifier).loadTimeline(timeline);
-        // Fire-and-forget archive save — never blocks the review flow.
-        unawaited(saveAnalysisToArchive(
+        // Archive save is awaited so we have the id to hand the
+        // Mistake Vault hook; both are still best-effort and never
+        // block the review flow on failure.
+        final archiveId = await saveAnalysisToArchive(
           ref: ref,
           timeline: timeline,
           pgn: widget.pgn,
           depth: 14,
           source: ArchiveSource.pgn,
-        ));
+        );
+        if (archiveId != null) {
+          unawaited(saveMistakeDrillsFromTimeline(
+            ref: ref,
+            timeline: timeline,
+            archiveId: archiveId,
+            // PGN upload path — unknown which colour the user
+            // played, so ingest both sides’ mistakes.
+            userIsWhite: null,
+          ));
+        }
+        if (!mounted) return;
         setState(() => _done = true);
       }
     } on LocalAnalysisException catch (e) {
