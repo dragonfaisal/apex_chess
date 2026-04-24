@@ -137,15 +137,41 @@ class AcademyController extends Notifier<AcademyState> {
       final pos = Chess.fromSetup(Setup.parseFen(drill.fenBefore));
       final legals = <Move>[];
       pos.legalMoves.forEach((from, dests) {
+        final fromPiece = pos.board.pieceAt(from);
         for (final sq in dests.squares) {
-          legals.add(NormalMove(from: from, to: sq));
+          // Pawn reaching the back rank = promotion: enumerate the four
+          // promotion variants so UCI comparison (`e7e8q` vs `e7e8n`)
+          // can resolve to the right entry instead of silently skipping
+          // the drill when the best move is a promotion.
+          final isPromotion = fromPiece != null &&
+              fromPiece.role == Role.pawn &&
+              (sq.rank == 0 || sq.rank == 7);
+          if (isPromotion) {
+            for (final role in const [
+              Role.queen,
+              Role.rook,
+              Role.bishop,
+              Role.knight,
+            ]) {
+              legals.add(NormalMove(from: from, to: sq, promotion: role));
+            }
+          } else {
+            legals.add(NormalMove(from: from, to: sq));
+          }
         }
       });
       if (legals.isEmpty) return null;
 
       String uciOf(Move m) {
         final n = m as NormalMove;
-        return '${_squareToAlg(n.from)}${_squareToAlg(n.to)}';
+        final promoSuffix = switch (n.promotion) {
+          Role.queen => 'q',
+          Role.rook => 'r',
+          Role.bishop => 'b',
+          Role.knight => 'n',
+          _ => '',
+        };
+        return '${_squareToAlg(n.from)}${_squareToAlg(n.to)}$promoSuffix';
       }
 
       final best = legals.firstWhere(

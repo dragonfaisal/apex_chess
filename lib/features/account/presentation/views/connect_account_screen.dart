@@ -64,6 +64,15 @@ class _ConnectAccountScreenState
       _textController.text = existing.username;
     }
     _textController.addListener(_onTextChange);
+    // Validation controller is created here so we can listen to it for
+    // the whole widget lifetime — the build() method reads
+    // `.value` to decide whether CONNECT is enabled, but since it's a
+    // ValueNotifier the parent won't rebuild on its own when the pill
+    // flips from `checking` → `exists`. Forwarding the notification to
+    // setState() keeps the CTA in sync with the pill.
+    _validation =
+        UsernameValidationController(ref.read(usernameValidatorProvider))
+          ..addListener(_onValidationChange);
     // Seed the pill with whatever the user pre-filled from an earlier
     // account; otherwise the first keystroke has to rediscover existence.
     WidgetsBinding.instance
@@ -74,13 +83,16 @@ class _ConnectAccountScreenState
   void dispose() {
     _textController.removeListener(_onTextChange);
     _textController.dispose();
+    _validation?.removeListener(_onValidationChange);
     _validation?.dispose();
     super.dispose();
   }
 
-  UsernameValidationController _ensureValidation() {
-    return _validation ??=
-        UsernameValidationController(ref.read(usernameValidatorProvider));
+  UsernameValidationController _ensureValidation() => _validation!;
+
+  void _onValidationChange() {
+    if (!mounted) return;
+    setState(() {});
   }
 
   void _onTextChange() => _pushValidation();
