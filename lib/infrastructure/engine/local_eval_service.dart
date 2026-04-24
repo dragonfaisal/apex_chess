@@ -31,6 +31,9 @@
 library;
 
 import 'dart:async';
+import 'dart:developer' as developer;
+
+import 'package:flutter/foundation.dart' show kDebugMode;
 
 import 'package:apex_chess/core/infrastructure/engine/engine.dart';
 import 'package:apex_chess/infrastructure/api/cloud_eval_service.dart'
@@ -145,6 +148,7 @@ class LocalEvalService {
     // depth OR at most this wall-clock time, then stop"; depth-only on
     // desktop Stockfish can spend >30s on tactical middlegames which
     // stalls the whole game scan.
+    final searchStartedAt = DateTime.now();
     _engine
       ..send(UciPosition.fen(fen))
       ..send(
@@ -155,6 +159,8 @@ class LocalEvalService {
 
     try {
       final best = await bestMoveCompleter.future.timeout(timeout);
+      final elapsedMs =
+          DateTime.now().difference(searchStartedAt).inMilliseconds;
       final isWhiteToMove = _sideToMoveIsWhite(fen);
 
       // Stockfish emits scores from side-to-move's POV; normalize to White.
@@ -179,6 +185,25 @@ class LocalEvalService {
       }
 
       final pv = latestInfo?.pv ?? const <String>[];
+
+      // Diagnostic telemetry — off in release builds. Cheap to keep on in
+      // debug because each eval already involves ~thousands of UCI lines;
+      // a single structured log per search is noise-free and lets us
+      // prove the engine is actually *searching* (elapsed_ms should
+      // scale with movetime/depth, not collapse to ~0).
+      if (kDebugMode) {
+        developer.log(
+          'uci_eval fen="$fen" depth_target=$depth '
+          'depth_reached=${latestInfo?.depth ?? '?'} '
+          'movetime_cap_ms=${movetime?.inMilliseconds ?? '-'} '
+          'elapsed_ms=$elapsedMs '
+          'score_cp_white=${scoreCpWhite ?? '-'} '
+          'mate_in_white=${mateInWhite ?? '-'} '
+          'bestmove=${best.move}',
+          name: 'apex.engine',
+        );
+      }
+
       return (
         EvalSnapshot(
           scoreCp: scoreCpWhite,

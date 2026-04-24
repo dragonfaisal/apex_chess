@@ -55,8 +55,13 @@ class ReviewAudioController {
     final san = move.san;
     String soundFile;
 
+    // Precedence matters: a castle with check (`O-O+`) should still play
+    // the castle SFX, not the generic check gong. Checkmate stays first
+    // because terminal sound always wins.
     if (san.endsWith('#')) {
       soundFile = 'explosion.mp3';
+    } else if (san.startsWith('O-O') || san.startsWith('0-0')) {
+      soundFile = 'castle.mp3';
     } else if (san.endsWith('+')) {
       soundFile = 'dong.mp3';
     } else if (san.contains('x')) {

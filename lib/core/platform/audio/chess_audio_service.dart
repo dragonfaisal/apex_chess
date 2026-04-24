@@ -9,6 +9,7 @@ import 'package:audioplayers/audioplayers.dart';
 enum ChessSoundType {
   move('move.mp3'),
   capture('capture.mp3'),
+  castle('castle.mp3'),
   check('dong.mp3'),
   checkmate('explosion.mp3'),
   select('confirmation.mp3'),

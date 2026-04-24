@@ -19,12 +19,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apex_chess/app/di/providers.dart';
 import 'package:apex_chess/features/import_match/domain/imported_game.dart';
 import 'package:apex_chess/features/import_match/presentation/controllers/import_controller.dart';
+import 'package:apex_chess/features/import_match/presentation/controllers/recent_searches_controller.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
 import 'package:apex_chess/features/pgn_review/presentation/views/review_screen.dart';
 import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
+import 'package:apex_chess/shared_ui/widgets/radar_scan.dart';
 
 class ImportMatchScreen extends ConsumerStatefulWidget {
   const ImportMatchScreen({super.key});
@@ -36,11 +38,36 @@ class ImportMatchScreen extends ConsumerStatefulWidget {
 
 class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
   final _controller = TextEditingController();
+  final _usernameFocus = FocusNode();
+  final _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    // Trigger `fetchMore` when the list is near the bottom. Cheap
+    // listener — Flutter de-duplicates notifications to each scroll
+    // position update, and `fetchMore` itself guards on already-loading.
+    _scrollController.addListener(_maybeFetchMore);
+  }
 
   @override
   void dispose() {
+    _scrollController.removeListener(_maybeFetchMore);
+    _scrollController.dispose();
+    _usernameFocus.dispose();
     _controller.dispose();
     super.dispose();
+  }
+
+  void _maybeFetchMore() {
+    if (!_scrollController.hasClients) return;
+    final pos = _scrollController.position;
+    // 220px pre-fetch threshold so new cards start loading *before* the
+    // user hits the spinner — keeps the feed feeling continuous rather
+    // than paged.
+    if (pos.pixels >= pos.maxScrollExtent - 220) {
+      ref.read(importControllerProvider.notifier).fetchMore();
+    }
   }
 
   @override
@@ -77,9 +104,18 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: _UsernameField(
                   controller: _controller,
+                  focusNode: _usernameFocus,
                   onChanged: notifier.setUsername,
                   onSubmitted: (_) => notifier.fetch(),
                   source: state.source,
+                  onRecentTapped: (username) {
+                    _controller.text = username;
+                    _controller.selection = TextSelection.collapsed(
+                        offset: username.length);
+                    notifier.setUsername(username);
+                    _usernameFocus.unfocus();
+                    notifier.fetch();
+                  },
                 ),
               ),
               const SizedBox(height: 12),
@@ -137,7 +173,11 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
         ),
       );
     }
-    if (state.errorMessage != null) {
+    // Full-screen error is only appropriate when we have nothing to show
+    // yet — if a pagination fetch fails *after* a successful first page,
+    // we keep the already-loaded games visible and let the footer surface
+    // the error inline.
+    if (state.errorMessage != null && state.games.isEmpty) {
       return _EmptyState(
         icon: Icons.cloud_off_rounded,
         label: state.errorMessage!,
@@ -156,12 +196,130 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
         label: ApexCopy.importEmpty,
       );
     }
+    // +1 row reserved for the footer (loader, inline error, or
+    // "end of feed" marker).
+    final itemCount = state.games.length + 1;
     return ListView.separated(
+      controller: _scrollController,
       padding: const EdgeInsets.fromLTRB(18, 4, 18, 28),
-      itemBuilder: (_, i) => _GameCard(game: state.games[i]),
+      itemBuilder: (_, i) {
+        if (i == state.games.length) {
+          return _PaginationFooter(
+            isLoading: state.isLoadingMore,
+            hasMore: state.hasMore,
+            errorMessage: state.errorMessage,
+            onRetry: () => ref
+                .read(importControllerProvider.notifier)
+                .fetchMore(),
+          );
+        }
+        return _GameCard(game: state.games[i]);
+      },
       separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemCount: state.games.length,
+      itemCount: itemCount,
     );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pagination footer — shown below the last card.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _PaginationFooter extends StatelessWidget {
+  const _PaginationFooter({
+    required this.isLoading,
+    required this.hasMore,
+    this.errorMessage,
+    this.onRetry,
+  });
+
+  final bool isLoading;
+  final bool hasMore;
+  final String? errorMessage;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    // Inline pagination error — keeps the already-loaded list visible
+    // and offers a Retry so a single blip doesn't force a full reset.
+    if (errorMessage != null && !isLoading) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Column(
+          children: [
+            Text(
+              errorMessage!,
+              textAlign: TextAlign.center,
+              style: ApexTypography.bodyMedium.copyWith(
+                color: ApexColors.ruby,
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (onRetry != null)
+              TextButton(
+                onPressed: onRetry,
+                child: Text(
+                  'RETRY',
+                  style: ApexTypography.bodyMedium.copyWith(
+                    color: ApexColors.sapphireBright,
+                    fontSize: 12,
+                    letterSpacing: 2,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+    if (isLoading) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Center(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: ApexColors.sapphireBright,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'Loading more games…',
+                style: ApexTypography.bodyMedium.copyWith(
+                  color: ApexColors.textTertiary,
+                  fontSize: 12,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (!hasMore) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Center(
+          child: Text(
+            '— end of feed —',
+            style: ApexTypography.bodyMedium.copyWith(
+              color: ApexColors.textTertiary,
+              fontSize: 11,
+              letterSpacing: 2,
+            ),
+          ),
+        ),
+      );
+    }
+    // hasMore but not yet loading — reserve a little space so the
+    // scroll-trigger threshold has something to reach.
+    return const SizedBox(height: 40);
   }
 }
 
@@ -259,57 +417,240 @@ class _SourceChip extends StatelessWidget {
 // Username field + Fetch button
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _UsernameField extends StatelessWidget {
+class _UsernameField extends ConsumerStatefulWidget {
   const _UsernameField({
     required this.controller,
+    required this.focusNode,
     required this.onChanged,
     required this.onSubmitted,
     required this.source,
+    required this.onRecentTapped,
   });
 
   final TextEditingController controller;
+  final FocusNode focusNode;
   final ValueChanged<String> onChanged;
   final ValueChanged<String> onSubmitted;
   final GameSource source;
+  final ValueChanged<String> onRecentTapped;
+
+  @override
+  ConsumerState<_UsernameField> createState() => _UsernameFieldState();
+}
+
+class _UsernameFieldState extends ConsumerState<_UsernameField> {
+  bool _showDropdown = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.focusNode.addListener(_onFocusChange);
+    widget.controller.addListener(_onTextChange);
+  }
+
+  @override
+  void dispose() {
+    widget.focusNode.removeListener(_onFocusChange);
+    widget.controller.removeListener(_onTextChange);
+    super.dispose();
+  }
+
+  void _onFocusChange() {
+    // Only show the dropdown on focus when the field is empty —
+    // `_onTextChange` won't fire if the user re-focuses a field that
+    // already contained a username, so we have to re-check here too.
+    final empty = widget.controller.text.trim().isEmpty;
+    setState(() {
+      _showDropdown = widget.focusNode.hasFocus && empty;
+    });
+  }
+
+  void _onTextChange() {
+    // Hide the dropdown once the user starts typing a fresh username —
+    // the suggestions become noisy mid-typing.
+    final empty = widget.controller.text.trim().isEmpty;
+    if (_showDropdown != (widget.focusNode.hasFocus && empty)) {
+      setState(() {
+        _showDropdown = widget.focusNode.hasFocus && empty;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final placeholder = switch (source) {
+    final placeholder = switch (widget.source) {
       GameSource.chessCom => 'e.g. hikaru',
       GameSource.lichess => 'e.g. DrNykterstein',
     };
-    return TextField(
-      controller: controller,
-      onChanged: onChanged,
-      onSubmitted: onSubmitted,
-      textInputAction: TextInputAction.search,
-      style: ApexTypography.bodyMedium.copyWith(
-        color: ApexColors.textPrimary,
-        fontSize: 14,
-        fontFamily: 'JetBrains Mono',
-      ),
-      decoration: InputDecoration(
-        prefixIcon: const Icon(Icons.person_outline_rounded,
-            color: ApexColors.sapphireBright, size: 20),
-        hintText: placeholder,
-        hintStyle: ApexTypography.bodyMedium.copyWith(
-          color: ApexColors.textTertiary,
-          fontFamily: 'JetBrains Mono',
+
+    final recents = ref
+        .watch(recentSearchesProvider)
+        .maybeWhen(
+          data: (s) => s.forSource(widget.source),
+          orElse: () => const <String>[],
+        );
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TextField(
+          controller: widget.controller,
+          focusNode: widget.focusNode,
+          onChanged: widget.onChanged,
+          onSubmitted: widget.onSubmitted,
+          textInputAction: TextInputAction.search,
+          style: ApexTypography.bodyMedium.copyWith(
+            color: ApexColors.textPrimary,
+            fontSize: 14,
+            fontFamily: 'JetBrains Mono',
+          ),
+          decoration: InputDecoration(
+            prefixIcon: const Icon(Icons.person_outline_rounded,
+                color: ApexColors.sapphireBright, size: 20),
+            hintText: placeholder,
+            hintStyle: ApexTypography.bodyMedium.copyWith(
+              color: ApexColors.textTertiary,
+              fontFamily: 'JetBrains Mono',
+            ),
+            filled: true,
+            fillColor: ApexColors.deepSpace.withValues(alpha: 0.55),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: ApexColors.subtleBorder),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: ApexColors.subtleBorder),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide(
+                  color: ApexColors.sapphire.withValues(alpha: 0.55)),
+            ),
+          ),
         ),
-        filled: true,
-        fillColor: ApexColors.deepSpace.withValues(alpha: 0.55),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: ApexColors.subtleBorder),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: ApexColors.subtleBorder),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide:
-              BorderSide(color: ApexColors.sapphire.withValues(alpha: 0.55)),
+        if (_showDropdown && recents.isNotEmpty)
+          _RecentSearchesDropdown(
+            entries: recents,
+            onTap: widget.onRecentTapped,
+            onClear: () => ref
+                .read(recentSearchesProvider.notifier)
+                .clear(widget.source),
+            onRemove: (u) => ref
+                .read(recentSearchesProvider.notifier)
+                .remove(widget.source, u),
+          ),
+      ],
+    );
+  }
+}
+
+/// Sapphire-tinted dropdown listing the user's recent successful searches
+/// for the active source. Shown below the field while it has focus and is
+/// empty. Entries have a swipe-free remove button so the user can prune
+/// the list without leaving the screen.
+class _RecentSearchesDropdown extends StatelessWidget {
+  const _RecentSearchesDropdown({
+    required this.entries,
+    required this.onTap,
+    required this.onClear,
+    required this.onRemove,
+  });
+
+  final List<String> entries;
+  final ValueChanged<String> onTap;
+  final VoidCallback onClear;
+  final ValueChanged<String> onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: GlassPanel(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        margin: null,
+        borderRadius: 12,
+        accentAlpha: 0.18,
+        fillAlpha: 0.55,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 6, 8, 4),
+              child: Row(
+                children: [
+                  Icon(Icons.history_rounded,
+                      size: 14,
+                      color: ApexColors.sapphireBright
+                          .withValues(alpha: 0.75)),
+                  const SizedBox(width: 6),
+                  Text(
+                    'RECENT SEARCHES',
+                    style: ApexTypography.bodyMedium.copyWith(
+                      color: ApexColors.textTertiary,
+                      fontSize: 10,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: onClear,
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(0, 28),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    child: Text(
+                      'CLEAR',
+                      style: ApexTypography.bodyMedium.copyWith(
+                        color: ApexColors.ruby.withValues(alpha: 0.85),
+                        fontSize: 10,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            for (final entry in entries)
+              InkWell(
+                onTap: () => onTap(entry),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 8),
+                  child: Row(
+                    children: [
+                      Icon(Icons.person_search_rounded,
+                          size: 16,
+                          color: ApexColors.textTertiary),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          entry,
+                          overflow: TextOverflow.ellipsis,
+                          style: ApexTypography.bodyMedium.copyWith(
+                            color: ApexColors.textPrimary,
+                            fontSize: 13,
+                            fontFamily: 'JetBrains Mono',
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => onRemove(entry),
+                        iconSize: 14,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                            minWidth: 28, minHeight: 28),
+                        icon: Icon(Icons.close_rounded,
+                            color: ApexColors.textTertiary
+                                .withValues(alpha: 0.7)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -776,14 +1117,23 @@ class _DepthOption extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Flex row: label shrinks with ellipsis before the pill
+                    // gets clipped. Previously the bare Text(label) forced
+                    // its intrinsic width onto the parent Expanded, which
+                    // is what was producing the "RIGHT OVERFLOWED BY 61
+                    // PIXELS" warning on narrow phones.
                     Row(
                       children: [
-                        Text(
-                          label,
-                          style: ApexTypography.labelLarge.copyWith(
-                            color: ApexColors.textPrimary,
-                            letterSpacing: 1.4,
-                            fontSize: 14,
+                        Flexible(
+                          child: Text(
+                            label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: ApexTypography.labelLarge.copyWith(
+                              color: ApexColors.textPrimary,
+                              letterSpacing: 1.4,
+                              fontSize: 14,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 6),
@@ -806,6 +1156,8 @@ class _DepthOption extends StatelessWidget {
                     const SizedBox(height: 3),
                     Text(
                       blurb,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: ApexTypography.bodyMedium.copyWith(
                         color: ApexColors.textTertiary,
                         fontSize: 11,
@@ -932,6 +1284,9 @@ class _ImportAnalysisDialogState
                 ),
               ),
               const SizedBox(height: 16),
+              // CLOSE escape hatch — without this the dialog is
+              // undismissable when an analysis failure puts us in the
+              // error branch (barrierDismissible: false).
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
@@ -946,11 +1301,47 @@ class _ImportAnalysisDialogState
                 ),
               ),
             ] else ...[
+              // Radar sweep behind the progress readout gives the user an
+              // immediate visual signal that the engine is *actually
+              // working* — the sweep rotates independently of the
+              // progress ticks, so a frozen engine is obvious.
+              SizedBox(
+                height: 220,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    const RadarScan(size: 220),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '${(progress * 100).toStringAsFixed(0)}%',
+                          style: ApexTypography.displayLarge.copyWith(
+                            fontSize: 38,
+                            color: ApexColors.sapphireBright,
+                            letterSpacing: 3,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'QUANTUM SCAN',
+                          style: ApexTypography.bodyMedium.copyWith(
+                            color: ApexColors.textTertiary,
+                            fontSize: 10,
+                            letterSpacing: 3.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
               ClipRRect(
                 borderRadius: BorderRadius.circular(6),
                 child: LinearProgressIndicator(
                   value: progress,
-                  minHeight: 8,
+                  minHeight: 6,
                   backgroundColor:
                       ApexColors.deepSpace.withValues(alpha: 0.65),
                   valueColor: const AlwaysStoppedAnimation<Color>(

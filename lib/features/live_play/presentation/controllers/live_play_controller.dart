@@ -212,6 +212,14 @@ class LivePlayNotifier extends Notifier<LivePlayState> {
         movingPiece.role == Role.pawn &&
         (toSq.rank == 0 || toSq.rank == 7);
 
+    // Castling = king moving two files horizontally on the back rank.
+    // Detected here so the audio layer can play a dedicated `castle.mp3`
+    // instead of falling into the generic `move` bucket (or — if dart-
+    // chess ever emits king→rook-square castling — the `capture` bucket).
+    final isCastling = movingPiece != null &&
+        movingPiece.role == Role.king &&
+        (toSq.file - fromSq.file).abs() == 2;
+
     final move = NormalMove(
         from: fromSq, to: toSq,
         promotion: isPromotion ? Role.queen : null);
@@ -228,9 +236,17 @@ class LivePlayNotifier extends Notifier<LivePlayState> {
 
     _position = _position.play(move) as Chess;
 
-    // Sound.
+    // Sound. Priority mirrors review_audio_controller so the same move
+    // classifies to the same SFX whether the user plays it live or
+    // reviews it afterwards:
+    //   checkmate → castle → check → capture → move
+    // `O-O+` (castle with check) plays the castle tink rather than the
+    // generic check gong — the castling motion is the more specific
+    // signal a viewer wants to hear.
     if (_position.isCheckmate) {
       _audio.playImmediate(ChessSoundType.checkmate);
+    } else if (isCastling) {
+      _audio.play(ChessSoundType.castle);
     } else if (_position.isCheck) {
       _audio.play(ChessSoundType.check);
     } else if (isCapture) {
