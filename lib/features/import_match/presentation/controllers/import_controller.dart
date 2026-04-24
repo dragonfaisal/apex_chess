@@ -144,6 +144,15 @@ class ImportController extends Notifier<ImportState> {
     }
 
     _generation++;
+    // Snapshot post-bump — if a later setSource() or fetch() runs
+    // while we're awaiting HTTP, the generation will advance and
+    // our stale response must be discarded. Without this guard the
+    // `isLoading` gate alone is not enough: setSource() clears
+    // isLoading to keep the UI responsive, so a second fetch() can
+    // start while this one is still in flight and the first
+    // completion would overwrite the second's results with games
+    // from a different source/user.
+    final gen = _generation;
     state = state.copyWith(
       isLoading: true,
       // Any in-flight fetchMore() is now stale; clear the footer
@@ -159,6 +168,7 @@ class ImportController extends Notifier<ImportState> {
 
     try {
       final page = await _fetchPage();
+      if (gen != _generation) return; // stale — superseded
       state = state.copyWith(
         games: page.games,
         isLoading: false,
@@ -176,12 +186,14 @@ class ImportController extends Notifier<ImportState> {
             .record(state.source, user);
       }
     } on ImportException catch (e) {
+      if (gen != _generation) return;
       state = state.copyWith(
         isLoading: false,
         errorMessage: e.userMessage,
         hasFetched: true,
       );
     } catch (_) {
+      if (gen != _generation) return;
       state = state.copyWith(
         isLoading: false,
         errorMessage: 'Something went wrong. Try again.',
