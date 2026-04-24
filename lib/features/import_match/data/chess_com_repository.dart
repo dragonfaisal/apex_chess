@@ -113,7 +113,9 @@ class ChessComRepository {
         : DateTime.now();
 
     final timeControl = raw['time_control'] as String?;
-    final moveCount = _countPlies(pgn) ~/ 2;
+    // Use ceil — a game ending on White's move has an odd ply count, and
+    // truncating would under-report by one full move half the time.
+    final moveCount = (_countPlies(pgn) / 2).ceil();
 
     PlayerColor? userColor;
     if (whiteName.toLowerCase() == lookupUser.toLowerCase()) {
@@ -134,7 +136,10 @@ class ChessComRepository {
       timeControl: _humanTimeControl(timeControl),
       moveCount: moveCount,
       pgn: pgn,
-      eco: raw['eco'] as String?,
+      // Chess.com's JSON `eco` field is a URL (e.g.
+      // https://www.chess.com/openings/Italian-Game), not the ECO code the
+      // card wants to render. Extract the actual ECO tag from the PGN.
+      eco: _extractTagValue(pgn, 'ECO'),
       openingName: _extractTagValue(pgn, 'Opening'),
       userColor: userColor,
     );

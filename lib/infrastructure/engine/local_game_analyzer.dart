@@ -50,15 +50,22 @@ class LocalGameAnalyzer {
   LocalGameAnalyzer({
     required LocalEvalService eval,
     EcoBook? book,
+    Future<EcoBook>? bookFuture,
     EvaluationAnalyzer analyzer = const EvaluationAnalyzer(),
     int depth = 14,
   })  : _eval = eval,
         _book = book,
+        _bookFuture = bookFuture,
         _analyzer = analyzer,
         _depth = depth;
 
   final LocalEvalService _eval;
-  final EcoBook? _book;
+  // Book state is materialised on first `analyzeFromPgn` call. A caller
+  // that already has the book ready passes it via `book:`; callers that
+  // are racing an async load should pass `bookFuture:` so we await the
+  // asset once instead of falling back to engine-only classification.
+  EcoBook? _book;
+  final Future<EcoBook>? _bookFuture;
   final EvaluationAnalyzer _analyzer;
   final int _depth;
 
@@ -68,6 +75,19 @@ class LocalGameAnalyzer {
     int? depth,
   }) async {
     final searchDepth = depth ?? _depth;
+    // Resolve the book eagerly so book classifications aren't silently
+    // skipped when the first analysis runs faster than the asset load.
+    if (_book == null && _bookFuture != null) {
+      try {
+        _book = await _bookFuture;
+      } catch (_) {
+        // Asset missing / corrupt — fall back to engine-only classification.
+        _book = null;
+      }
+    }
+    // Capture into a local so Dart's flow analysis can promote it past
+    // the subsequent `await` boundaries inside this method.
+    final book = _book;
     final game = PgnGame.parsePgn(pgn);
     final headers = Map<String, String>.from(game.headers);
     Position position = PgnGame.startingPosition(game.headers);
@@ -126,7 +146,7 @@ class LocalGameAnalyzer {
     // Seed the starting-position Win% from the engine's opening eval (if
     // not a book position) or from neutral 50 % (book positions).
     EvalSnapshot? startEval;
-    if (_book == null || !_book.contains(startingFen)) {
+    if (book == null || !book.contains(startingFen)) {
       startEval = await evalCached(startingFen);
     }
     double prevWinPct = startEval != null
@@ -142,7 +162,7 @@ class LocalGameAnalyzer {
       // ── Book cutoff: if the move is a known theoretical reply, trust
       // the book and skip the engine entirely. Saves ~70 % of searches in
       // the opening phase and lets batteries live to see move 20. ──
-      final bookHit = _book?.lookup(entry.fenAfter);
+      final bookHit = book?.lookup(entry.fenAfter);
       if (bookHit != null) {
         moves.add(MoveAnalysis(
           ply: ply,

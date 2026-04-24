@@ -69,11 +69,12 @@ final ecoBookProvider = FutureProvider<EcoBook>((ref) async {
 /// the previous `cloudGameAnalyzerProvider`.
 final gameAnalyzerProvider = Provider<LocalGameAnalyzer>((ref) {
   final eval = ref.watch(liveEvalServiceProvider);
-  // Watch the book; while loading, gameAnalyzerProvider sees `null` and
-  // the analyser runs engine-only. Once loaded, Riverpod rebuilds this
-  // provider with the populated book for subsequent analyses.
-  final book = ref.watch(ecoBookProvider).asData?.value;
-  return LocalGameAnalyzer(eval: eval, book: book);
+  // Hand the analyzer the book *future* directly: on the first
+  // `analyzeFromPgn` call it awaits the asset load before classifying the
+  // opening plies. A synchronous `.asData?.value` read would race the load
+  // and silently disable book classification for the first game scanned.
+  final bookFuture = ref.watch(ecoBookProvider.future);
+  return LocalGameAnalyzer(eval: eval, bookFuture: bookFuture);
 });
 
 /// Mock analysis API client for the "Demo • Opera Game" hero.
