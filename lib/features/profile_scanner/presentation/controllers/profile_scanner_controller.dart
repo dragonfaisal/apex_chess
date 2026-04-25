@@ -4,6 +4,8 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:apex_chess/app/di/providers.dart';
+import 'package:apex_chess/features/import_match/domain/imported_game.dart'
+    show ImportException;
 import 'package:apex_chess/features/import_match/presentation/controllers/import_controller.dart';
 
 import '../../data/profile_scanner_service.dart';
@@ -94,6 +96,14 @@ class ProfileScannerController extends Notifier<ProfileScannerState> {
       state = state.copyWith(
         isLoading: false,
         wasCancelled: true,
+        clearProgress: true,
+      );
+    } on ImportException catch (e) {
+      // Show the human-friendly message the repository already
+      // tailored, not Dart's `Exception: ...` toString().
+      state = state.copyWith(
+        isLoading: false,
+        error: e.userMessage,
         clearProgress: true,
       );
     } catch (e) {

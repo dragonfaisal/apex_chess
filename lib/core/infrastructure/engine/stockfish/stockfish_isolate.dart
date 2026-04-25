@@ -148,6 +148,18 @@ Future<void> stockfishIsolateEntry(StockfishIsolateInit init) async {
   readTimer.cancel();
   commandPort.close();
 
+  // Send `stop` before destroy so any in-flight `go` search returns to
+  // the UCI prompt before Stockfish's ThreadPool teardown runs. Without
+  // this, the native bridge's `quit` lands while search workers are
+  // still spinning, and the workers race with their own pool's mutex
+  // destruction (the destroyed-mutex SIGABRT).
+  final stopUtf = 'stop'.toNativeUtf8();
+  try {
+    bindings.write(handle, stopUtf);
+  } finally {
+    malloc.free(stopUtf);
+  }
+
   // `destroy` sends `quit`, joins the native worker thread, and frees the
   // handle. Safe to run on this isolate because we've already stopped both
   // loops above.

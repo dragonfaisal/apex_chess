@@ -85,25 +85,28 @@ class ProfileScannerService {
     void Function(ScanProgress)? onProgress,
   }) async {
     // 1. Fetch the opponent's recent games from the correct provider.
+    //    Re-throw [ImportException] verbatim so the controller can show
+    //    the underlying message (e.g. "Chess.com is rate-limiting requests"
+    //    or "Chess.com has no public games for X") instead of the
+    //    historical "Bad state: No games found" wrapper that hid both the
+    //    network and the empty-account cases behind the same string.
     final List<ImportedGame> games;
-    try {
-      if (source == 'chess.com') {
-        games = await chessCom.fetchRecentGames(
-          username,
-          limit: sampleSize,
-        );
-      } else {
-        games = await lichess.fetchRecentGames(
-          username,
-          limit: sampleSize,
-        );
-      }
-    } on ImportException catch (e) {
-      throw StateError(e.userMessage);
+    if (source == 'chess.com') {
+      games = await chessCom.fetchRecentGames(
+        username,
+        limit: sampleSize,
+      );
+    } else {
+      games = await lichess.fetchRecentGames(
+        username,
+        limit: sampleSize,
+      );
     }
 
     if (games.isEmpty) {
-      throw StateError('No games found for $username on $source.');
+      throw ImportException(
+        'No standard public games found for $username on $source.',
+      );
     }
 
     // 2. Walk the list oldest-first so the list the user sees

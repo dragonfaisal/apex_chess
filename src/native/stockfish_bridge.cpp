@@ -90,7 +90,42 @@ struct sf_engine {
   LineQueue from_engine;
   std::thread worker;
   std::atomic<bool> shutting_down{false};
+  std::atomic<bool> destroyed{false};
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Process-wide singleton guard.
+//
+// Stockfish 17+ keeps its `Threads` ThreadPool — and the std::mutex /
+// std::condition_variable members of every worker `Thread` — in a
+// translation-unit-static global. Calling `stockfish_main()` a second time
+// from a fresh worker (or while a previous worker is still tearing down)
+// re-runs `Threads.set(...)` on the same global pool: the old workers'
+// mutexes are destroyed by the resize while the workers are still
+// pthread_mutex_lock-ing them on the way out. That is the
+//
+//   F/libc: FORTIFY: pthread_mutex_lock called on a destroyed mutex
+//   Fatal signal 6 (SIGABRT)
+//
+// crash we hit on Android. Serialising the lifetime of *every* sf_engine
+// behind one process-wide mutex makes the second `stockfish_create` block
+// until the first engine's `stockfish_destroy` has fully drained the
+// ThreadPool, which removes the race entirely.
+//
+// The guard is a recursive-style "only one engine alive" latch: create
+// returns NULL if another engine is still alive in this process. Callers
+// that want to recreate must `stockfish_destroy` the previous handle
+// first; the Dart side already does this on isolate shutdown.
+namespace {
+std::mutex& EngineSingletonMutex() {
+  static std::mutex m;
+  return m;
+}
+std::atomic<sf_engine*>& ActiveEngine() {
+  static std::atomic<sf_engine*> e{nullptr};
+  return e;
+}
+}  // namespace
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Worker implementations
@@ -283,20 +318,57 @@ static void RunEngine(sf_engine* engine) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 extern "C" SF_API sf_engine* stockfish_create(void) {
+  // Hold the singleton mutex for the lifetime of the create call; the
+  // matching unlock happens in stockfish_destroy after the worker has
+  // joined. We use a try_lock here so a leaked / still-shutting-down
+  // previous engine surfaces as a NULL-return rather than a deadlock.
+  if (!EngineSingletonMutex().try_lock()) {
+    return nullptr;
+  }
+  if (ActiveEngine().load(std::memory_order_acquire) != nullptr) {
+    EngineSingletonMutex().unlock();
+    return nullptr;
+  }
   auto* engine = new (std::nothrow) sf_engine();
-  if (engine == nullptr) return nullptr;
+  if (engine == nullptr) {
+    EngineSingletonMutex().unlock();
+    return nullptr;
+  }
+  ActiveEngine().store(engine, std::memory_order_release);
+  // Spawn the worker AFTER publishing the active-engine pointer so that
+  // any concurrent observer (e.g. a unit test reading the singleton)
+  // never sees a half-initialised engine.
   engine->worker = std::thread(RunEngine, engine);
   return engine;
 }
 
 extern "C" SF_API void stockfish_destroy(sf_engine* engine) {
   if (engine == nullptr) return;
-  engine->shutting_down.store(true);
-  engine->to_engine.Push("quit");
+  // Idempotent: if destroy is called twice (e.g. once by the Dart isolate
+  // teardown path and once by a finalizer), the second call is a no-op.
+  if (engine->destroyed.exchange(true)) return;
+
+  // Cancel any in-flight search BEFORE asking Stockfish to quit. Without
+  // this, `quit` while a `go` search is still running races with the
+  // ThreadPool's own teardown of its per-worker mutexes — which is the
+  // origin of the destroyed-mutex SIGABRT in production logs.
+  if (!engine->shutting_down.exchange(true)) {
+    engine->to_engine.Push("stop");
+    engine->to_engine.Push("quit");
+  }
+  // Closing the input queue unblocks DrainWriter / the stub PopBlocking
+  // even if the engine somehow swallows "quit" (defence in depth).
   engine->to_engine.Close();
+
   if (engine->worker.joinable()) engine->worker.join();
   engine->from_engine.Close();
+
+  // Clear the singleton BEFORE deleting so a concurrent stockfish_create
+  // observer sees the slot as free as soon as the engine memory is
+  // unreachable.
+  ActiveEngine().store(nullptr, std::memory_order_release);
   delete engine;
+  EngineSingletonMutex().unlock();
 }
 
 extern "C" SF_API int stockfish_write(sf_engine* engine,
