@@ -73,11 +73,11 @@ the STUB for diagnostic work on desktop.
 Stockfish 16+ requires NNUE at runtime for reasonable play strength. Apex
 ships the lightweight small NNUE beside the bridge by default:
 
-* `APEX_STOCKFISH_USE_NNUE=OFF` (default) — do not embed NNUE in the shared
-  object; CMake copies `nn-37f18f62d772.nnue` beside the library and the
-  bridge points Stockfish's `EvalFile` / `EvalFileSmall` at that file.
+* `APEX_STOCKFISH_USE_NNUE=ON` (default) — embeds `nn-37f18f62d772.nnue` in
+  the shared object so Android does not need to package a separate data file.
 
-* `APEX_STOCKFISH_USE_NNUE=ON` — embeds the same lightweight NNUE via `incbin`.
+* `APEX_STOCKFISH_USE_NNUE=OFF` — copies the same lightweight NNUE beside the
+  native library for local/desktop experiments.
 
 ## C ABI
 

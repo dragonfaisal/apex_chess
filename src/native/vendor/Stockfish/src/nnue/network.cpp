@@ -46,7 +46,9 @@ namespace {
 // Note that this does not work in Microsoft Visual Studio.
 #if !defined(_MSC_VER) && !defined(NNUE_EMBEDDING_OFF)
 INCBIN(EmbeddedNNUEBig, EvalFileDefaultNameBig);
-INCBIN(EmbeddedNNUESmall, EvalFileDefaultNameSmall);
+const unsigned char* const gEmbeddedNNUESmallData = gEmbeddedNNUEBigData;
+const unsigned char* const gEmbeddedNNUESmallEnd  = gEmbeddedNNUEBigEnd;
+const unsigned int         gEmbeddedNNUESmallSize = gEmbeddedNNUEBigSize;
 #else
 const unsigned char        gEmbeddedNNUEBigData[1]   = {0x0};
 const unsigned char* const gEmbeddedNNUEBigEnd       = &gEmbeddedNNUEBigData[1];

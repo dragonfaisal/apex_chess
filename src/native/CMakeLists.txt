@@ -45,7 +45,7 @@ endif()
 
 option(APEX_STOCKFISH_USE_NNUE
        "Embed NNUE weights via incbin (requires real .nnue files in src/)"
-       OFF)
+       ON)
 
 if(DEFINED STOCKFISH_SOURCES_DIR AND EXISTS "${STOCKFISH_SOURCES_DIR}")
   message(STATUS "stockfish_bridge: building with real engine from ${STOCKFISH_SOURCES_DIR}")
@@ -78,11 +78,11 @@ if(DEFINED STOCKFISH_SOURCES_DIR AND EXISTS "${STOCKFISH_SOURCES_DIR}")
   target_compile_definitions(stockfish_bridge PRIVATE STOCKFISH_REAL=1)
   target_compile_definitions(stockfish_bridge PRIVATE APEX_LIGHTWEIGHT_NNUE=1)
 
-  if(NOT APEX_STOCKFISH_USE_NNUE)
-    target_compile_definitions(stockfish_bridge PRIVATE NNUE_EMBEDDING_OFF=1)
-    message(STATUS "stockfish_bridge: lightweight small NNUE loaded from vendor file at runtime.")
+  if(APEX_STOCKFISH_USE_NNUE)
+    message(STATUS "stockfish_bridge: lightweight small NNUE embedded via incbin.")
   else()
-    message(STATUS "stockfish_bridge: NNUE weights will be embedded via incbin.")
+    target_compile_definitions(stockfish_bridge PRIVATE NNUE_EMBEDDING_OFF=1)
+    message(STATUS "stockfish_bridge: lightweight small NNUE copied beside native library.")
   endif()
 
   set(_APEX_NNUE_SMALL "${STOCKFISH_SOURCES_DIR}/nn-37f18f62d772.nnue")

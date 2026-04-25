@@ -186,12 +186,6 @@ static void DrainWriter(int fd, sf_engine* engine) {
 
 static void RunEngine(sf_engine* engine) {
   const std::string native_dir = NativeDir();
-  if (!native_dir.empty()) {
-    const std::string nnue = native_dir + "nn-37f18f62d772.nnue";
-    setenv("kNnueBigFile", nnue.c_str(), 0);
-    setenv("kNnueSmallFile", nnue.c_str(), 0);
-  }
-
   int in_pipe[2] = {-1, -1};
   int out_pipe[2] = {-1, -1};
   if (pipe(in_pipe) != 0 || pipe(out_pipe) != 0) {
