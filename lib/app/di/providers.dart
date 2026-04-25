@@ -1,13 +1,10 @@
 /// Riverpod dependency injection — app-level providers.
 ///
-/// Apex Chess analyses positions via a **cloud-first composite**:
+/// Apex Chess analyses positions via a **local-first composite**:
 ///   * [gameAnalyzerProvider] resolves to a [CompositeGameAnalyzer]
-///     that tries Lichess Cloud Eval first and falls back to the local
-///     Stockfish engine on cloud failure (offline, rate-limited, server
-///     error, persistent "position not found").
+///     that uses local Stockfish as the automatic source of truth.
 ///   * [localGameAnalyzerProvider] is exposed separately for batch
-///     workloads (opponent forensics scans dozens of games at once and
-///     we don't want to hammer the Lichess endpoint).
+///     workloads and forensics.
 ///   * [liveEvalServiceProvider] still uses the local engine — the
 ///     review screen needs deterministic per-position evals at custom
 ///     depths and the cloud database doesn't expose that knob.
@@ -99,8 +96,7 @@ final ecoBookProvider = FutureProvider<EcoBook>((ref) async {
   return EcoBook.load();
 });
 
-/// Local-only Apex AI Grandmaster — exposed for batch workloads
-/// (opponent forensics) where cloud-first would rate-limit aggressively.
+/// Local-only Apex AI Grandmaster.
 final localGameAnalyzerProvider = Provider<LocalGameAnalyzer>((ref) {
   final eval = ref.watch(liveEvalServiceProvider);
   // Hand the analyzer the book *future* directly: on the first
@@ -112,9 +108,7 @@ final localGameAnalyzerProvider = Provider<LocalGameAnalyzer>((ref) {
   return LocalGameAnalyzer(eval: eval, bookFuture: bookFuture);
 });
 
-/// Cloud-first PGN analyser — primary entry point for the Review
-/// pipeline. Falls back to [localGameAnalyzerProvider] when Lichess is
-/// unreachable so the user always gets a verdict.
+/// Local-first PGN analyser — primary entry point for the Review pipeline.
 final gameAnalyzerProvider = Provider<CompositeGameAnalyzer>((ref) {
   final cloud = CloudGameAnalyzer(
     cloudEval: ref.watch(cloudEvalServiceProvider),

@@ -44,5 +44,4 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-# Vendored native dependencies (fetched by scripts/fetch_stockfish.sh)
-src/native/vendor/
+# Vendored Stockfish sources are intentionally tracked; build outputs remain ignored above.
