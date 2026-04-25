@@ -79,8 +79,16 @@ class ChessComRepository {
       if (archivesResp.statusCode == 404) {
         throw const ImportException('Chess.com user not found.');
       }
+      if (archivesResp.statusCode == 429) {
+        // Chess.com's CDN rate-limits aggressive scanners; surface this
+        // distinctly from "no games" so the UI can tell the user to
+        // wait instead of claiming the account is empty.
+        throw const ImportException(
+            'Chess.com is rate-limiting requests. Please wait a moment and retry.');
+      }
       if (archivesResp.statusCode != 200) {
-        throw const ImportException('Chess.com responded unexpectedly.');
+        throw ImportException(
+            'Chess.com archives endpoint returned ${archivesResp.statusCode}.');
       }
       final archivesJson =
           jsonDecode(archivesResp.body) as Map<String, dynamic>;
@@ -89,7 +97,11 @@ class ChessComRepository {
           // Reverse so index 0 = newest archive; stable pagination order.
           .reversed
           .toList();
-      if (archives.isEmpty) return const ImportPage(games: []);
+      if (archives.isEmpty) {
+        throw ImportException(
+            'Chess.com has no public games for "$user". '
+            'Have they played any standard games?');
+      }
 
       // Decode `"archiveIx[:rawOffset]"`. Legacy cursors from older
       // clients that only encoded `archiveIx` still parse correctly

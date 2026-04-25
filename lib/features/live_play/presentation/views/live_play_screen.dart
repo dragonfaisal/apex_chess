@@ -33,6 +33,18 @@ class LivePlayScreen extends ConsumerWidget {
       body: Container(
         decoration: const BoxDecoration(gradient: ApexGradients.spaceCanvas),
         child: SafeArea(
+        // The Column was previously laying out a fixed-aspect 1:1
+        // chessboard (via `ApexChessBoard`'s `AspectRatio`) followed by
+        // the coach dashboard, a `Spacer`, and the footer. On phones
+        // where `width >= remainingHeight - footerStack`, the board's
+        // intrinsic height exceeded the slot the Column had left for
+        // it and Flutter rendered the yellow/black overflow tape under
+        // the chessboard. Wrapping the board in `Expanded` + `Center`
+        // lets the AspectRatio shrink to whichever of (available width,
+        // available height) is smaller — the board stays square and the
+        // dashboard / footer always sit fully on-screen. The trailing
+        // `Spacer` is no longer needed because `Expanded` now owns the
+        // flexible slack.
         child: Column(
           children: [
             ApexEvalBar(
@@ -43,18 +55,27 @@ class LivePlayScreen extends ConsumerWidget {
               errorMessage: s.evalErrorMessage,
             ),
             const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: ApexChessBoard(
-                fen: s.currentFen,
-                selectedSquare: s.selectedSquare,
-                legalMoveSquares: s.legalMoves,
-                lastMove: s.lastMove,
-                isCheck: s.isCheck,
-                lastMoveQuality: s.moveAnalysis?.quality,
-                onSquareTapped: (square) {
-                  ref.read(livePlayProvider.notifier).onSquareTapped(square);
-                },
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Center(
+                  child: AspectRatio(
+                    aspectRatio: 1.0,
+                    child: ApexChessBoard(
+                      fen: s.currentFen,
+                      selectedSquare: s.selectedSquare,
+                      legalMoveSquares: s.legalMoves,
+                      lastMove: s.lastMove,
+                      isCheck: s.isCheck,
+                      lastMoveQuality: s.moveAnalysis?.quality,
+                      onSquareTapped: (square) {
+                        ref
+                            .read(livePlayProvider.notifier)
+                            .onSquareTapped(square);
+                      },
+                    ),
+                  ),
+                ),
               ),
             ),
             const SizedBox(height: 12),
@@ -67,7 +88,7 @@ class LivePlayScreen extends ConsumerWidget {
                 isDraw: s.isDraw,
               ),
             ),
-            const Spacer(),
+            const SizedBox(height: 12),
             Padding(
               padding: const EdgeInsets.only(bottom: 16),
               child: Row(
@@ -77,12 +98,16 @@ class LivePlayScreen extends ConsumerWidget {
                       color: ApexColors.sapphire.withValues(alpha: 0.55),
                       size: 14),
                   const SizedBox(width: 6),
-                  Text(
-                    eval != null
-                        ? '${ApexCopy.depthLabel} ${eval.depth}'
-                        : ApexCopy.liveEngineFooter,
-                    style: ApexTypography.bodyMedium.copyWith(
-                        color: ApexColors.textTertiary, fontSize: 12),
+                  Flexible(
+                    child: Text(
+                      eval != null
+                          ? '${ApexCopy.depthLabel} ${eval.depth}'
+                          : ApexCopy.liveEngineFooter,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: ApexTypography.bodyMedium.copyWith(
+                          color: ApexColors.textTertiary, fontSize: 12),
+                    ),
                   ),
                 ],
               ),
@@ -213,9 +238,18 @@ class _CoachDashboard extends StatelessWidget {
       Icon(Icons.auto_awesome,
           color: ApexColors.sapphireBright.withValues(alpha: 0.55), size: 24),
       const SizedBox(width: 12),
-      Text('${ApexCopy.engineBrand} — play a move to begin',
-          style: ApexTypography.bodyMedium.copyWith(
-              color: ApexColors.textTertiary)),
+      // Wrap in `Expanded` so the brand + prompt string ellipsises on
+      // narrow screens instead of forcing a horizontal RenderFlex
+      // overflow inside the Coach Dashboard's glass panel.
+      Expanded(
+        child: Text(
+          '${ApexCopy.engineBrand} — play a move to begin',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: ApexTypography.bodyMedium
+              .copyWith(color: ApexColors.textTertiary),
+        ),
+      ),
     ]);
   }
 
