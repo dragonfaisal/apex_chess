@@ -48,6 +48,8 @@ class LineQueue {
     while (queue_.empty() && !closed_) {
       if (timeout_ms < 0) {
         cv_.wait(lock);
+      } else if (timeout_ms == 0) {
+        return false;
       } else if (cv_.wait_until(lock, deadline) == std::cv_status::timeout) {
         return false;
       }
@@ -119,12 +121,32 @@ struct sf_engine {
   #define read      _read
   #define write     _write
   #define close     _close
+  #define dup       _dup
   #define dup2      _dup2
   #define STDIN_FILENO  0
   #define STDOUT_FILENO 1
 #endif
+#if !defined(_WIN32)
+  #include <dlfcn.h>
+#endif
 
 extern "C" int stockfish_main(int argc, char** argv);
+
+static std::string NativeDir() {
+#if defined(_WIN32)
+  return {};
+#else
+  Dl_info info{};
+  if (dladdr(reinterpret_cast<void*>(&NativeDir), &info) == 0 ||
+      info.dli_fname == nullptr) {
+    return {};
+  }
+
+  std::string path(info.dli_fname);
+  const auto slash = path.find_last_of('/');
+  return slash == std::string::npos ? std::string() : path.substr(0, slash + 1);
+#endif
+}
 
 static void DrainReader(int fd, sf_engine* engine) {
   std::string buf;
@@ -163,10 +185,25 @@ static void DrainWriter(int fd, sf_engine* engine) {
 }
 
 static void RunEngine(sf_engine* engine) {
+  const std::string native_dir = NativeDir();
   int in_pipe[2] = {-1, -1};
   int out_pipe[2] = {-1, -1};
   if (pipe(in_pipe) != 0 || pipe(out_pipe) != 0) {
     engine->from_engine.Push("info string bridge_error pipe_create_failed");
+    engine->from_engine.Close();
+    return;
+  }
+
+  const int saved_stdin = dup(STDIN_FILENO);
+  const int saved_stdout = dup(STDOUT_FILENO);
+  if (saved_stdin < 0 || saved_stdout < 0) {
+    engine->from_engine.Push("info string bridge_error stdio_save_failed");
+    close(in_pipe[0]);
+    close(in_pipe[1]);
+    close(out_pipe[0]);
+    close(out_pipe[1]);
+    if (saved_stdin >= 0) close(saved_stdin);
+    if (saved_stdout >= 0) close(saved_stdout);
     engine->from_engine.Close();
     return;
   }
@@ -182,13 +219,24 @@ static void RunEngine(sf_engine* engine) {
   std::thread writer(DrainWriter, in_pipe[1], engine);
   std::thread reader(DrainReader, out_pipe[0], engine);
 
-  char arg0[] = "stockfish";
-  char* argv[] = {arg0, nullptr};
+  std::string arg0 = native_dir.empty() ? "stockfish" : native_dir + "stockfish";
+  if (!native_dir.empty()) {
+    const std::string eval_cmd =
+        "setoption name EvalFile value " + native_dir + "nn-37f18f62d772.nnue";
+    const std::string small_eval_cmd = "setoption name EvalFileSmall value " +
+                                       native_dir + "nn-37f18f62d772.nnue";
+    engine->to_engine.Push(eval_cmd);
+    engine->to_engine.Push(small_eval_cmd);
+  }
+  char* argv[] = {arg0.data(), nullptr};
   stockfish_main(1, argv);
 
-  // Engine returned — flush and close stdout so the reader terminates.
+  // Engine returned — flush and restore stdio so future engine instances work.
   std::fflush(stdout);
-  close(STDOUT_FILENO);
+  dup2(saved_stdin, STDIN_FILENO);
+  dup2(saved_stdout, STDOUT_FILENO);
+  close(saved_stdin);
+  close(saved_stdout);
 
   // Push a sentinel to unblock the writer.
   engine->to_engine.Close();

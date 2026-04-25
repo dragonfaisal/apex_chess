@@ -18,11 +18,8 @@
 #     variable `STOCKFISH_SOURCES_DIR` is still honored for custom layouts.
 #
 # NNUE handling:
-#   `APEX_STOCKFISH_USE_NNUE` (default OFF) controls whether the NNUE weight
-#   files are linked into the binary via `incbin`. When OFF, stub `.nnue`
-#   files are expected in the Stockfish src/ directory (created by the
-#   fetch script); the engine compiles but must be pointed at a real NNUE
-#   file at runtime via `setoption name EvalFile value <path>`.
+#   Apex Chess builds Stockfish in lightweight mobile mode by default: the
+#   small NNUE is packaged beside the shared object and loaded at runtime.
 cmake_minimum_required(VERSION 3.14)
 project(stockfish_bridge LANGUAGES CXX)
 
@@ -79,16 +76,27 @@ if(DEFINED STOCKFISH_SOURCES_DIR AND EXISTS "${STOCKFISH_SOURCES_DIR}")
     "${STOCKFISH_SOURCES_DIR}/syzygy"
   )
   target_compile_definitions(stockfish_bridge PRIVATE STOCKFISH_REAL=1)
+  target_compile_definitions(stockfish_bridge PRIVATE APEX_LIGHTWEIGHT_NNUE=1)
 
-  if(NOT APEX_STOCKFISH_USE_NNUE)
-    # Stub .nnue files (created by fetch script) satisfy incbin at link
-    # time; the engine emits a warning if weights are missing at runtime.
-    target_compile_definitions(stockfish_bridge PRIVATE APEX_NO_NNUE_EMBED=1)
-    message(STATUS "stockfish_bridge: NNUE weights NOT embedded (stub .nnue files). "
-                   "Set APEX_STOCKFISH_USE_NNUE=ON and re-run fetch_stockfish.sh --with-nnue for real weights.")
+  if(APEX_STOCKFISH_USE_NNUE)
+    message(STATUS "stockfish_bridge: lightweight small NNUE embedded via incbin.")
   else()
-    message(STATUS "stockfish_bridge: NNUE weights will be embedded via incbin.")
+    target_compile_definitions(stockfish_bridge PRIVATE NNUE_EMBEDDING_OFF=1)
+    message(STATUS "stockfish_bridge: lightweight small NNUE copied beside native library.")
   endif()
+
+  set(_APEX_NNUE_SMALL "${STOCKFISH_SOURCES_DIR}/nn-37f18f62d772.nnue")
+  foreach(_APEX_NNUE_FILE IN ITEMS "${_APEX_NNUE_SMALL}")
+    if(NOT EXISTS "${_APEX_NNUE_FILE}")
+      message(FATAL_ERROR "Missing Stockfish NNUE file: ${_APEX_NNUE_FILE}. Run scripts/fetch_stockfish.sh --with-nnue.")
+    endif()
+    get_filename_component(_APEX_NNUE_NAME "${_APEX_NNUE_FILE}" NAME)
+    add_custom_command(TARGET stockfish_bridge POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              "${_APEX_NNUE_FILE}"
+              "$<TARGET_FILE_DIR:stockfish_bridge>/${_APEX_NNUE_NAME}"
+      VERBATIM)
+  endforeach()
 
   # Stockfish relies on Makefile build flags that CMake does not forward.
   # Minimum viable flags for a portable build:

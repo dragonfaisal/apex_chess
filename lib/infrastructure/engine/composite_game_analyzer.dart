@@ -1,11 +1,9 @@
-/// Cloud-first game analyser with on-device fallback.
+/// Local-first game analyser with manual cloud fallback.
 ///
-/// Apex Chess prefers Lichess Cloud Eval — it's deeper, free, and
-/// avoids spinning up the local engine for the entire game. When the
-/// cloud is unreachable / rate-limited / silent, we transparently fall
-/// back to the on-device Stockfish ([LocalGameAnalyzer]) so the user
-/// always gets a full timeline. Both backends emit the same
-/// [AnalysisTimeline] shape so callers don't care which one ran.
+/// Apex Chess uses on-device Stockfish as the primary source of truth.
+/// Lichess Cloud Eval remains injectable for explicit/manual fallback
+/// flows, but automatic analysis never hits it and therefore cannot be
+/// rate-limited by HTTP 429.
 library;
 
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
@@ -37,21 +35,11 @@ class CompositeGameAnalyzer {
     int? depth,
     Duration? movetime,
   }) async {
-    try {
-      // Cloud knows nothing about depth/movetime — those are local-only
-      // tuning knobs — so we don't forward them here.
-      return await _cloud.analyzeFromPgn(pgn, onProgress: onProgress);
-    } on CloudAnalysisException {
-      // Offline / rate-limited / persistent server error → fall back to
-      // the on-device engine. We deliberately keep the deep depth (or
-      // whatever the caller passed) so the user still gets a quality
-      // verdict; the slowdown is the price of cloud-down.
-      return _local.analyzeFromPgn(
-        pgn,
-        onProgress: onProgress,
-        depth: depth,
-        movetime: movetime,
-      );
-    }
+    return _local.analyzeFromPgn(
+      pgn,
+      onProgress: onProgress,
+      depth: depth,
+      movetime: movetime,
+    );
   }
 }

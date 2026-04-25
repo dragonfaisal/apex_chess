@@ -11,7 +11,7 @@ src/native/
 ├── CMakeLists.txt          # Builds libstockfish_bridge (shared)
 ├── stockfish_bridge.h      # Public C ABI (opened via DynamicLibrary.open)
 ├── stockfish_bridge.cpp    # Worker thread + blocking line queues
-├── vendor/Stockfish/       # Vendored engine (gitignored; fetched via script)
+├── vendor/Stockfish/       # Vendored engine + lightweight NNUE
 └── README.md               # This file
 ```
 
@@ -35,7 +35,7 @@ in. This keeps the Dart pipeline testable with zero external dependencies.
 From the repo root:
 
 ```bash
-scripts/fetch_stockfish.sh           # vendor Stockfish 17, no NNUE weights
+scripts/fetch_stockfish.sh --with-nnue
 cmake -S src/native -B build/native  # auto-detects vendor/Stockfish
 cmake --build build/native -j
 ```
@@ -47,8 +47,9 @@ What the fetch script does:
 2. Renames `int main(int, char**)` → `extern "C" int stockfish_main(...)` in
    `src/main.cpp` (the one and only source patch — Stockfish's UCI I/O is
    redirected via OS pipes, not patched inline).
-3. Creates stub `.nnue` files (empty) so `incbin` can link. Pass
-   `--with-nnue` to download the real weights (~70 MB).
+3. Applies Apex's lightweight patch so the big network slot also uses the
+   mobile small-net architecture.
+4. Downloads only `nn-37f18f62d772.nnue` (~3.4 MB).
 
 Version bumping: `APEX_STOCKFISH_TAG=sf_18 scripts/fetch_stockfish.sh --force`.
 
@@ -69,17 +70,14 @@ the STUB for diagnostic work on desktop.
 
 ## NNUE handling
 
-Stockfish 16+ requires NNUE at runtime for reasonable play strength. The
-bridge compiles without embedded weights by default:
+Stockfish 16+ requires NNUE at runtime for reasonable play strength. Apex
+ships the lightweight small NNUE beside the bridge by default:
 
-* `APEX_STOCKFISH_USE_NNUE=OFF` (default) — stub `.nnue` files satisfy
-  `incbin` at link time; the engine emits a warning when eval is first
-  requested. Load real weights at runtime with:
-  `setoption name EvalFile value /path/to/real.nnue`.
+* `APEX_STOCKFISH_USE_NNUE=ON` (default) — embeds `nn-37f18f62d772.nnue` in
+  the shared object so Android does not need to package a separate data file.
 
-* `APEX_STOCKFISH_USE_NNUE=ON` — downloads weights via
-  `scripts/fetch_stockfish.sh --with-nnue` and embeds them via `incbin` as
-  upstream Stockfish does.
+* `APEX_STOCKFISH_USE_NNUE=OFF` — copies the same lightweight NNUE beside the
+  native library for local/desktop experiments.
 
 ## C ABI
 

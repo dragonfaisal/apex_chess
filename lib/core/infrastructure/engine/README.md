@@ -93,9 +93,8 @@ await engine.dispose();
 See `lib/app/di/providers.dart` for the `stockfishEngineProvider` that owns
 the singleton and disposes it with the `ProviderContainer`.
 
-## Testing without the real engine
+## Testing the native bridge
 
-The native bridge ships with a built-in UCI stub (see
-`src/native/stockfish_bridge.cpp`) so unit tests and hot-reload iteration work
-out of the box. Drop real Stockfish sources in and rebuild — the Dart side
-doesn't change.
+The native bridge ships with real vendored Stockfish by default. If
+`src/native/vendor/Stockfish` is deliberately removed, CMake falls back to the
+built-in UCI stub so the Dart pipeline can still be exercised.
