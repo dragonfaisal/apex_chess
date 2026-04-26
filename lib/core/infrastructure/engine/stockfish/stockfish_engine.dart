@@ -157,17 +157,14 @@ class StockfishEngine implements ChessEngine {
       sendShutdownCommand(port);
       // The worker will send StockfishIsolateClosed when it's done; that
       // triggers _finalizeClose() which completes this future.
-      // Guard against a hung worker with a timeout — but give native
-      // cleanup enough headroom to actually finish. The native bridge
-      // joins Stockfish's ThreadPool inside `stockfish_destroy`, which
-      // can take a couple of seconds on cold devices when a deep search
-      // was in flight. The previous 3 s budget routinely fired *before*
-      // the native worker had finished joining its threads, leaving
-      // half-torn-down `std::mutex` instances behind that the next
-      // `stockfish_create` would then race with — that race is the
-      // root of the destroyed-mutex SIGABRT in production logs.
+      //
+      // The native bridge no longer tears down Stockfish's ThreadPool
+      // inside `stockfish_destroy` (see `src/native/stockfish_bridge.cpp`),
+      // so the shutdown path is now a quick session-gate release. A
+      // short 3 s fallback timeout is plenty and keeps the UI from
+      // hanging forever if the Dart worker itself is wedged.
       unawaited(
-        Future<void>.delayed(const Duration(seconds: 15)).then((_) async {
+        Future<void>.delayed(const Duration(seconds: 3)).then((_) async {
           if (!completer.isCompleted) {
             await _teardown();
             completer.complete();
