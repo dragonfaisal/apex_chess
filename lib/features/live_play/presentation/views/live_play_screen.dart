@@ -33,87 +33,104 @@ class LivePlayScreen extends ConsumerWidget {
       body: Container(
         decoration: const BoxDecoration(gradient: ApexGradients.spaceCanvas),
         child: SafeArea(
-        // The Column was previously laying out a fixed-aspect 1:1
-        // chessboard (via `ApexChessBoard`'s `AspectRatio`) followed by
-        // the coach dashboard, a `Spacer`, and the footer. On phones
-        // where `width >= remainingHeight - footerStack`, the board's
-        // intrinsic height exceeded the slot the Column had left for
-        // it and Flutter rendered the yellow/black overflow tape under
-        // the chessboard. Wrapping the board in `Expanded` + `Center`
-        // lets the AspectRatio shrink to whichever of (available width,
-        // available height) is smaller — the board stays square and the
-        // dashboard / footer always sit fully on-screen. The trailing
-        // `Spacer` is no longer needed because `Expanded` now owns the
-        // flexible slack.
-        child: Column(
-          children: [
-            ApexEvalBar(
-              scoreCp: eval?.scoreCp,
-              mateIn: eval?.mateIn,
-              depth: eval?.depth ?? 0,
-              isSearching: s.isEvaluating,
-              errorMessage: s.evalErrorMessage,
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Center(
-                  child: AspectRatio(
-                    aspectRatio: 1.0,
-                    child: ApexChessBoard(
-                      fen: s.currentFen,
-                      selectedSquare: s.selectedSquare,
-                      legalMoveSquares: s.legalMoves,
-                      lastMove: s.lastMove,
-                      isCheck: s.isCheck,
-                      lastMoveQuality: s.moveAnalysis?.quality,
-                      onSquareTapped: (square) {
-                        ref
-                            .read(livePlayProvider.notifier)
-                            .onSquareTapped(square);
-                      },
-                    ),
+          // The screen was previously built with an `Expanded`-wrapped
+          // board inside a plain `Column`. Once the CoachDashboard gained
+          // the SVG badge + two-line copy its intrinsic height crossed
+          // the point where `EvalBar + Dashboard + footer + paddings`
+          // exceeded the viewport on ≤360 dp phones — at which point
+          // `Expanded` gets 0 height but the non-flex children still
+          // paint at their natural size, yielding the Axis.vertical
+          // RenderFlex overflow tape under the board.
+          //
+          // This now mirrors `ReviewScreen`: a `LayoutBuilder` computes
+          // a board size bounded by both the viewport width and a
+          // fraction of the viewport height, and the whole column sits
+          // inside a `SingleChildScrollView` so that if the content
+          // ever does exceed the viewport (landscape, very small
+          // phones, accessibility text scale) it becomes scrollable
+          // instead of overflowing.
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final maxBoardHeight =
+                  (constraints.maxHeight * 0.62).clamp(240.0, 560.0);
+              final boardSize =
+                  (constraints.maxWidth - 24).clamp(240.0, maxBoardHeight);
+              return SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: ConstrainedBox(
+                  constraints:
+                      BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Column(
+                    children: [
+                      ApexEvalBar(
+                        scoreCp: eval?.scoreCp,
+                        mateIn: eval?.mateIn,
+                        depth: eval?.depth ?? 0,
+                        isSearching: s.isEvaluating,
+                        errorMessage: s.evalErrorMessage,
+                      ),
+                      const SizedBox(height: 8),
+                      Center(
+                        child: SizedBox(
+                          width: boardSize,
+                          height: boardSize,
+                          child: ApexChessBoard(
+                            fen: s.currentFen,
+                            selectedSquare: s.selectedSquare,
+                            legalMoveSquares: s.legalMoves,
+                            lastMove: s.lastMove,
+                            isCheck: s.isCheck,
+                            lastMoveQuality: s.moveAnalysis?.quality,
+                            onSquareTapped: (square) {
+                              ref
+                                  .read(livePlayProvider.notifier)
+                                  .onSquareTapped(square);
+                            },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      BrilliantGlow(
+                        visible: isBrilliant,
+                        child: _CoachDashboard(
+                          moveAnalysis: s.moveAnalysis,
+                          isCheckmate: s.isCheckmate,
+                          isStalemate: s.isStalemate,
+                          isDraw: s.isDraw,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.memory_rounded,
+                                color: ApexColors.sapphire
+                                    .withValues(alpha: 0.55),
+                                size: 14),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                eval != null
+                                    ? '${ApexCopy.depthLabel} ${eval.depth}'
+                                    : ApexCopy.liveEngineFooter,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: ApexTypography.bodyMedium.copyWith(
+                                    color: ApexColors.textTertiary,
+                                    fontSize: 12),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            BrilliantGlow(
-              visible: isBrilliant,
-              child: _CoachDashboard(
-                moveAnalysis: s.moveAnalysis,
-                isCheckmate: s.isCheckmate,
-                isStalemate: s.isStalemate,
-                isDraw: s.isDraw,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.memory_rounded,
-                      color: ApexColors.sapphire.withValues(alpha: 0.55),
-                      size: 14),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      eval != null
-                          ? '${ApexCopy.depthLabel} ${eval.depth}'
-                          : ApexCopy.liveEngineFooter,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: ApexTypography.bodyMedium.copyWith(
-                          color: ApexColors.textTertiary, fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+              );
+            },
+          ),
         ),
       ),
     );

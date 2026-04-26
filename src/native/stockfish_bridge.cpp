@@ -2,8 +2,45 @@
 //
 // Implementation of the Stockfish C bridge.
 //
-// The bridge spawns a worker thread that runs the UCI loop and communicates
-// with the caller via two line-oriented queues. Two build modes are supported:
+// ─────────────────────────────────────────────────────────────────────────────
+// WHY A PROCESS-PERSISTENT ENGINE
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Stockfish 17+ keeps its `Threads` ThreadPool — and the std::mutex /
+// std::condition_variable members of every worker `Thread` — in
+// translation-unit-static globals. Calling `stockfish_main()` a SECOND TIME
+// after it has returned from a previous "quit" re-runs `Threads.set(...)` on
+// the same statics. In production on Android we observed this re-destroying
+// mutexes while worker threads were still unwinding pthread_mutex_lock on
+// them, producing:
+//
+//     F/libc: FORTIFY: pthread_mutex_lock called on a destroyed mutex
+//     Fatal signal 6 (SIGABRT)
+//
+// An earlier mitigation tried to serialise create/destroy with a single
+// std::mutex (lock in create, unlock in destroy). That design is *also* UB:
+// the Dart side spawns a fresh worker Isolate (⇒ fresh native thread) for
+// every new `StockfishEngine`, which means the `std::mutex::unlock` in
+// `stockfish_destroy` runs on a different thread than the `lock` in
+// `stockfish_create` — std::mutex explicitly forbids that.
+//
+// The fix here is structural: **we call `stockfish_main()` exactly once per
+// process lifetime**. sf_engine becomes a thin, singleton-gated session
+// handle:
+//
+//   * `stockfish_create()` blocks (on a condition variable — properly
+//     cross-thread) until the previous session has released the gate, lazy-
+//     spawns the persistent worker on first use, resets engine state with
+//     `stop` + `ucinewgame` + `isready`, and returns a fresh handle.
+//
+//   * `stockfish_destroy()` cancels any in-flight search with `stop` and
+//     releases the session gate. It does NOT kill the persistent worker —
+//     the engine keeps running for the rest of the process lifetime.
+//
+// This makes the destroyed-mutex SIGABRT structurally impossible because
+// the ThreadPool is only ever initialised once.
+//
+// Two build modes are supported:
 //
 //   * STOCKFISH_STUB (default when `STOCKFISH_SOURCES_DIR` is not provided at
 //     configure time): a minimal UCI-ish stub that responds to `uci`,
@@ -83,49 +120,91 @@ class LineQueue {
   bool closed_ = false;
 };
 
-}  // namespace
-
-struct sf_engine {
+// ─────────────────────────────────────────────────────────────────────────────
+// Process-persistent engine state.
+//
+// Exactly one of these exists for the process lifetime. It owns the line
+// queues the session handles talk through and the worker thread that runs
+// `stockfish_main()` (or the stub loop).
+// ─────────────────────────────────────────────────────────────────────────────
+struct PersistentEngine {
   LineQueue to_engine;
   LineQueue from_engine;
-  std::thread worker;
-  std::atomic<bool> shutting_down{false};
-  std::atomic<bool> destroyed{false};
+  std::once_flag start_flag;
+  std::atomic<bool> started{false};
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Process-wide singleton guard.
+PersistentEngine& Persistent() {
+  static PersistentEngine p;
+  return p;
+}
+
+// Session gate — ensures at most one sf_engine* is "active" at a time.
 //
-// Stockfish 17+ keeps its `Threads` ThreadPool — and the std::mutex /
-// std::condition_variable members of every worker `Thread` — in a
-// translation-unit-static global. Calling `stockfish_main()` a second time
-// from a fresh worker (or while a previous worker is still tearing down)
-// re-runs `Threads.set(...)` on the same global pool: the old workers'
-// mutexes are destroyed by the resize while the workers are still
-// pthread_mutex_lock-ing them on the way out. That is the
-//
-//   F/libc: FORTIFY: pthread_mutex_lock called on a destroyed mutex
-//   Fatal signal 6 (SIGABRT)
-//
-// crash we hit on Android. Serialising the lifetime of *every* sf_engine
-// behind one process-wide mutex makes the second `stockfish_create` block
-// until the first engine's `stockfish_destroy` has fully drained the
-// ThreadPool, which removes the race entirely.
-//
-// The guard is a recursive-style "only one engine alive" latch: create
-// returns NULL if another engine is still alive in this process. Callers
-// that want to recreate must `stockfish_destroy` the previous handle
-// first; the Dart side already does this on isolate shutdown.
-namespace {
-std::mutex& EngineSingletonMutex() {
+// Implemented with a std::mutex + std::condition_variable + bool rather
+// than a plain std::mutex held across create/destroy so the lock and the
+// unlock can legally happen on different native threads (the Dart side
+// spawns a fresh Isolate thread per StockfishEngine; the previous engine's
+// destroy therefore races with the new engine's create on potentially
+// distinct threads, which would be UB for std::mutex).
+std::mutex& GateMutex() {
   static std::mutex m;
   return m;
 }
-std::atomic<sf_engine*>& ActiveEngine() {
-  static std::atomic<sf_engine*> e{nullptr};
-  return e;
+
+std::condition_variable& GateCv() {
+  static std::condition_variable cv;
+  return cv;
 }
+
+bool& GateActive() {
+  static bool active = false;  // guarded by GateMutex().
+  return active;
+}
+
+// Forward declaration — concrete worker bodies are defined below per build
+// mode (STOCKFISH_REAL vs STOCKFISH_STUB).
+void RunPersistentWorker();
+
+void EnsurePersistentStarted() {
+  auto& p = Persistent();
+  std::call_once(p.start_flag, []() {
+    std::thread(RunPersistentWorker).detach();
+    Persistent().started.store(true, std::memory_order_release);
+  });
+}
+
+// Best-effort drain of stale engine output between sessions. Each session
+// ends with an in-flight `stop`, after which Stockfish emits a final
+// `bestmove` line plus any trailing `info` chatter. Draining here ensures
+// the next session starts with a clean from_engine queue and its handshake
+// isn't confused by leftovers from the previous session.
+void DrainStaleOutput() {
+  std::string discarded;
+  while (Persistent().from_engine.Pop(&discarded, 0)) {}
+}
+
+// Issue the reset handshake at the start of a new session.
+//
+// We intentionally do NOT block on `readyok` here: on a cold start
+// Stockfish can take a few seconds to load NNUE weights and the caller
+// is expected to run its own `isready` handshake anyway (the test suite
+// and `StockfishEngine` both do). Pushing `stop` + `ucinewgame` is
+// enough to guarantee a clean slate; stale from_engine lines left over
+// from the previous session are drained non-blockingly so they don't
+// leak into the new session's event stream.
+void QuiesceAtSessionStart() {
+  auto& p = Persistent();
+  DrainStaleOutput();
+  p.to_engine.Push("stop");
+  p.to_engine.Push("ucinewgame");
+}
+
 }  // namespace
+
+struct sf_engine {
+  std::atomic<bool> destroyed{false};
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Worker implementations
@@ -167,7 +246,9 @@ std::atomic<sf_engine*>& ActiveEngine() {
 
 extern "C" int stockfish_main(int argc, char** argv);
 
-static std::string NativeDir() {
+namespace {
+
+std::string NativeDir() {
 #if defined(_WIN32)
   return {};
 #else
@@ -183,7 +264,8 @@ static std::string NativeDir() {
 #endif
 }
 
-static void DrainReader(int fd, sf_engine* engine) {
+void DrainReaderFd(int fd) {
+  auto& p = Persistent();
   std::string buf;
   char chunk[4096];
   while (true) {
@@ -195,55 +277,41 @@ static void DrainReader(int fd, sf_engine* engine) {
       std::string line = buf.substr(0, pos);
       // Trim trailing CR for Windows line endings.
       if (!line.empty() && line.back() == '\r') line.pop_back();
-      engine->from_engine.Push(std::move(line));
+      p.from_engine.Push(std::move(line));
       buf.erase(0, pos + 1);
     }
   }
-  if (!buf.empty()) engine->from_engine.Push(std::move(buf));
-  close(fd);
+  if (!buf.empty()) p.from_engine.Push(std::move(buf));
 }
 
-static void DrainWriter(int fd, sf_engine* engine) {
+void DrainWriterFd(int fd) {
+  auto& p = Persistent();
   std::string line;
-  while (engine->to_engine.PopBlocking(&line)) {
+  while (p.to_engine.PopBlocking(&line)) {
     line += '\n';
     ssize_t remaining = static_cast<ssize_t>(line.size());
-    const char* p = line.data();
+    const char* ptr = line.data();
     while (remaining > 0) {
-      const auto n = write(fd, p, remaining);
+      const auto n = write(fd, ptr, remaining);
       if (n <= 0) break;
-      p += n;
+      ptr += n;
       remaining -= n;
     }
   }
-  close(fd);
 }
 
-static void RunEngine(sf_engine* engine) {
+void RunPersistentWorker() {
   const std::string native_dir = NativeDir();
   int in_pipe[2] = {-1, -1};
   int out_pipe[2] = {-1, -1};
   if (pipe(in_pipe) != 0 || pipe(out_pipe) != 0) {
-    engine->from_engine.Push("info string bridge_error pipe_create_failed");
-    engine->from_engine.Close();
+    Persistent().from_engine.Push(
+        "info string bridge_error pipe_create_failed");
     return;
   }
 
-  const int saved_stdin = dup(STDIN_FILENO);
-  const int saved_stdout = dup(STDOUT_FILENO);
-  if (saved_stdin < 0 || saved_stdout < 0) {
-    engine->from_engine.Push("info string bridge_error stdio_save_failed");
-    close(in_pipe[0]);
-    close(in_pipe[1]);
-    close(out_pipe[0]);
-    close(out_pipe[1]);
-    if (saved_stdin >= 0) close(saved_stdin);
-    if (saved_stdout >= 0) close(saved_stdout);
-    engine->from_engine.Close();
-    return;
-  }
-
-  // Redirect process stdin/stdout to our pipes. See CAVEAT above.
+  // Redirect process stdin/stdout to our pipes. Done exactly once per
+  // process — we never restore, because the engine is persistent.
   dup2(in_pipe[0], STDIN_FILENO);
   dup2(out_pipe[1], STDOUT_FILENO);
   close(in_pipe[0]);
@@ -251,8 +319,9 @@ static void RunEngine(sf_engine* engine) {
 
   std::setvbuf(stdout, nullptr, _IOLBF, 0);
 
-  std::thread writer(DrainWriter, in_pipe[1], engine);
-  std::thread reader(DrainReader, out_pipe[0], engine);
+  // Drain helpers run for the full process lifetime too.
+  std::thread(DrainWriterFd, in_pipe[1]).detach();
+  std::thread(DrainReaderFd, out_pipe[0]).detach();
 
   std::string arg0 = native_dir.empty() ? "stockfish" : native_dir + "stockfish";
   if (!native_dir.empty()) {
@@ -260,56 +329,55 @@ static void RunEngine(sf_engine* engine) {
         "setoption name EvalFile value " + native_dir + "nn-37f18f62d772.nnue";
     const std::string small_eval_cmd = "setoption name EvalFileSmall value " +
                                        native_dir + "nn-37f18f62d772.nnue";
-    engine->to_engine.Push(eval_cmd);
-    engine->to_engine.Push(small_eval_cmd);
+    Persistent().to_engine.Push(eval_cmd);
+    Persistent().to_engine.Push(small_eval_cmd);
   }
   char* argv[] = {arg0.data(), nullptr};
+  // stockfish_main returns only if the engine receives "quit" at process
+  // exit. The bridge never sends "quit" from stockfish_destroy any more,
+  // so in practice this call never returns during normal app use.
   stockfish_main(1, argv);
-
-  // Engine returned — flush and restore stdio so future engine instances work.
-  std::fflush(stdout);
-  dup2(saved_stdin, STDIN_FILENO);
-  dup2(saved_stdout, STDOUT_FILENO);
-  close(saved_stdin);
-  close(saved_stdout);
-
-  // Push a sentinel to unblock the writer.
-  engine->to_engine.Close();
-
-  if (writer.joinable()) writer.join();
-  if (reader.joinable()) reader.join();
-  engine->from_engine.Close();
 }
+
+}  // namespace
 
 #else  // STOCKFISH_STUB
 
+namespace {
+
 // Minimal UCI stub so the full Dart pipeline can be tested without the real
 // engine. It replies to the handful of commands the app uses today.
-static void HandleStubCommand(sf_engine* engine, const std::string& cmd) {
+void HandleStubCommand(const std::string& cmd) {
+  auto& p = Persistent();
   if (cmd == "uci") {
-    engine->from_engine.Push("id name ApexChess-Stub");
-    engine->from_engine.Push("id author Apex Chess");
-    engine->from_engine.Push("uciok");
+    p.from_engine.Push("id name ApexChess-Stub");
+    p.from_engine.Push("id author Apex Chess");
+    p.from_engine.Push("uciok");
   } else if (cmd == "isready") {
-    engine->from_engine.Push("readyok");
+    p.from_engine.Push("readyok");
   } else if (cmd.rfind("go", 0) == 0) {
-    engine->from_engine.Push(
+    p.from_engine.Push(
         "info depth 1 seldepth 1 multipv 1 score cp 0 nodes 1 nps 1 time 1 "
         "pv e2e4");
-    engine->from_engine.Push("bestmove e2e4");
+    p.from_engine.Push("bestmove e2e4");
   }
   // Silently accept: ucinewgame, position, setoption, stop, debug, register
 }
 
-static void RunEngine(sf_engine* engine) {
+void RunPersistentWorker() {
+  auto& p = Persistent();
   std::string cmd;
-  while (!engine->shutting_down.load()) {
-    if (!engine->to_engine.PopBlocking(&cmd)) break;
-    if (cmd == "quit") break;
-    HandleStubCommand(engine, cmd);
+  // The stub worker runs for the full process lifetime. It never breaks on
+  // "quit" because that would leave the to_engine queue unclaimed for any
+  // subsequent session; tests expect stockfish_destroy + stockfish_create
+  // to cycle cleanly.
+  while (p.to_engine.PopBlocking(&cmd)) {
+    if (cmd == "quit") continue;
+    HandleStubCommand(cmd);
   }
-  engine->from_engine.Close();
 }
+
+}  // namespace
 
 #endif  // STOCKFISH_REAL / STOCKFISH_STUB
 
@@ -318,27 +386,33 @@ static void RunEngine(sf_engine* engine) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 extern "C" SF_API sf_engine* stockfish_create(void) {
-  // Hold the singleton mutex for the lifetime of the create call; the
-  // matching unlock happens in stockfish_destroy after the worker has
-  // joined. We use a try_lock here so a leaked / still-shutting-down
-  // previous engine surfaces as a NULL-return rather than a deadlock.
-  if (!EngineSingletonMutex().try_lock()) {
-    return nullptr;
+  // Wait for any previous session to release the gate. Unlike the previous
+  // try_lock() design, this cleanly serialises back-to-back recreations
+  // without surfacing spurious "couldn't create engine" errors to the UI.
+  {
+    std::unique_lock<std::mutex> lock(GateMutex());
+    GateCv().wait(lock, [] { return !GateActive(); });
+    GateActive() = true;
   }
-  if (ActiveEngine().load(std::memory_order_acquire) != nullptr) {
-    EngineSingletonMutex().unlock();
-    return nullptr;
-  }
+
   auto* engine = new (std::nothrow) sf_engine();
   if (engine == nullptr) {
-    EngineSingletonMutex().unlock();
+    {
+      std::lock_guard<std::mutex> lock(GateMutex());
+      GateActive() = false;
+    }
+    GateCv().notify_one();
     return nullptr;
   }
-  ActiveEngine().store(engine, std::memory_order_release);
-  // Spawn the worker AFTER publishing the active-engine pointer so that
-  // any concurrent observer (e.g. a unit test reading the singleton)
-  // never sees a half-initialised engine.
-  engine->worker = std::thread(RunEngine, engine);
+
+  // Lazy-spawn the persistent worker on first use. Subsequent sessions
+  // reuse the same worker — this is the core of the destroyed-mutex fix.
+  EnsurePersistentStarted();
+
+  // Reset engine state so the new session starts from a known baseline
+  // even if the previous session left a search or custom position behind.
+  QuiesceAtSessionStart();
+
   return engine;
 }
 
@@ -348,39 +422,32 @@ extern "C" SF_API void stockfish_destroy(sf_engine* engine) {
   // teardown path and once by a finalizer), the second call is a no-op.
   if (engine->destroyed.exchange(true)) return;
 
-  // Cancel any in-flight search BEFORE asking Stockfish to quit. Without
-  // this, `quit` while a `go` search is still running races with the
-  // ThreadPool's own teardown of its per-worker mutexes — which is the
-  // origin of the destroyed-mutex SIGABRT in production logs.
-  if (!engine->shutting_down.exchange(true)) {
-    engine->to_engine.Push("stop");
-    engine->to_engine.Push("quit");
-  }
-  // Closing the input queue unblocks DrainWriter / the stub PopBlocking
-  // even if the engine somehow swallows "quit" (defence in depth).
-  engine->to_engine.Close();
+  // Cancel any in-flight search so its `bestmove` doesn't leak into the
+  // NEXT session's event stream. The persistent worker — and therefore
+  // Stockfish's ThreadPool — is NOT torn down; the next create() will
+  // reuse it.
+  Persistent().to_engine.Push("stop");
 
-  if (engine->worker.joinable()) engine->worker.join();
-  engine->from_engine.Close();
-
-  // Clear the singleton BEFORE deleting so a concurrent stockfish_create
-  // observer sees the slot as free as soon as the engine memory is
-  // unreachable.
-  ActiveEngine().store(nullptr, std::memory_order_release);
   delete engine;
-  EngineSingletonMutex().unlock();
+
+  {
+    std::lock_guard<std::mutex> lock(GateMutex());
+    GateActive() = false;
+  }
+  GateCv().notify_one();
 }
 
 extern "C" SF_API int stockfish_write(sf_engine* engine,
                                       const char* utf8_line) {
   if (engine == nullptr || utf8_line == nullptr) return -1;
+  if (engine->destroyed.load(std::memory_order_acquire)) return -1;
   std::string line(utf8_line);
   while (!line.empty() &&
          (line.back() == '\n' || line.back() == '\r')) {
     line.pop_back();
   }
   const int bytes = static_cast<int>(line.size());
-  engine->to_engine.Push(std::move(line));
+  Persistent().to_engine.Push(std::move(line));
   return bytes;
 }
 
@@ -389,8 +456,8 @@ extern "C" SF_API char* stockfish_read_line(sf_engine* engine,
   if (engine == nullptr) return nullptr;
   std::string line;
   const bool ok = timeout_ms < 0
-                      ? engine->from_engine.PopBlocking(&line)
-                      : engine->from_engine.Pop(&line, timeout_ms);
+                      ? Persistent().from_engine.PopBlocking(&line)
+                      : Persistent().from_engine.Pop(&line, timeout_ms);
   if (!ok) return nullptr;
   char* out = static_cast<char*>(std::malloc(line.size() + 1));
   if (out == nullptr) return nullptr;
@@ -404,5 +471,5 @@ extern "C" SF_API void stockfish_free_string(char* s) {
 }
 
 extern "C" SF_API const char* stockfish_bridge_version(void) {
-  return "apex-stockfish-bridge/0.1.0";
+  return "apex-stockfish-bridge/0.2.0";
 }
