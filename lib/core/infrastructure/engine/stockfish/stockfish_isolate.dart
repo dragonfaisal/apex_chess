@@ -79,6 +79,15 @@ class StockfishIsolateClosed {
   const StockfishIsolateClosed();
 }
 
+/// Truncates a UCI command for inclusion in an error frame. UCI lines can
+/// be very long (`info ... pv ... ... ...`) and the diagnostic only needs
+/// enough to identify the command class.
+String _redact(String line) {
+  const max = 80;
+  if (line.length <= max) return line;
+  return '${line.substring(0, max)}…';
+}
+
 /// Entrypoint for [Isolate.spawn].
 Future<void> stockfishIsolateEntry(StockfishIsolateInit init) async {
   final StockfishBindings bindings;
@@ -114,16 +123,33 @@ Future<void> stockfishIsolateEntry(StockfishIsolateInit init) async {
 
   // Drain native output using a non-blocking poll. See class-level docs for
   // why we prefer this over a blocking readLine(-1).
+  //
+  // Every native call is wrapped: a Dart-side exception in this timer would
+  // otherwise propagate to the isolate's unhandled-error port and (because
+  // `errorsAreFatal: true` on spawn) take the worker down with a SIGABRT in
+  // the host's `DartWorker` thread. Logging + skipping a tick is always
+  // safer than killing the engine session.
   final readTimer = Timer.periodic(_readPollInterval, (_) {
-    // Drain everything available this tick so bursty output (typical during
-    // deep searches) doesn't back up behind the poll cadence.
     while (true) {
-      final linePtr = bindings.readLine(handle, 0);
+      Pointer<Utf8> linePtr;
+      try {
+        linePtr = bindings.readLine(handle, 0);
+      } on Object {
+        // Native side is wedged or the handle is gone — let the next
+        // shutdown drain take care of cleanup.
+        return;
+      }
       if (linePtr == nullptr) break;
       try {
         init.mainSendPort.send(linePtr.toDartString());
+      } on Object {
+        // Send port closed (host isolate disposed) — drop the line.
       } finally {
-        bindings.freeString(linePtr);
+        try {
+          bindings.freeString(linePtr);
+        } on Object {
+          // Best-effort free; nothing useful to do on failure.
+        }
       }
     }
   });
@@ -132,11 +158,26 @@ Future<void> stockfishIsolateEntry(StockfishIsolateInit init) async {
     if (msg is! _WorkerCommand) return;
     switch (msg) {
       case _WriteCommand(:final line):
-        final utf = line.toNativeUtf8();
+        // The host serialises every UCI command through this port. A
+        // single bad write (e.g. a malformed FEN that Stockfish's UCI
+        // parser doesn't tolerate) must NOT abort the worker — the
+        // engine is process-persistent across sessions and we'd lose
+        // every other isolate's view of it.
+        Pointer<Utf8>? utf;
         try {
+          utf = line.toNativeUtf8();
           bindings.write(handle, utf);
+        } on Object {
+          init.mainSendPort.send(StockfishIsolateError(
+              'native write failed for line: ${_redact(line)}'));
         } finally {
-          malloc.free(utf);
+          if (utf != null) {
+            try {
+              malloc.free(utf);
+            } on Object {
+              // Ignore free failure — the process will reclaim on exit.
+            }
+          }
         }
       case _ShutdownCommand():
         if (!shutdownCompleter.isCompleted) shutdownCompleter.complete();

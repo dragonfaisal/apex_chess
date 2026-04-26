@@ -32,6 +32,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import 'package:apex_chess/core/network/api_headers.dart';
+import 'package:apex_chess/core/utils/safe_text.dart';
 import 'package:apex_chess/features/import_match/domain/imported_game.dart';
 
 /// A single page of imported games plus a cursor for the next page.
@@ -188,8 +189,16 @@ class ChessComRepository {
 
     final white = raw['white'] as Map<String, dynamic>?;
     final black = raw['black'] as Map<String, dynamic>?;
-    final whiteName = (white?['username'] as String?) ?? 'Unknown';
-    final blackName = (black?['username'] as String?) ?? 'Unknown';
+    // Sanitize player handles before they reach any Text widget.
+    // Chess.com handles can include code points the Skia paragraph
+    // builder rejects (lone surrogates, non-characters, control bytes);
+    // an unsanitized handle was the proximate cause of the
+    // `ParagraphBuilderImpl.cpp:252: check(fUnicode)` SIGABRT in the
+    // production crash log.
+    final whiteName =
+        safeText(white?['username'] as String?, fallback: 'Unknown');
+    final blackName =
+        safeText(black?['username'] as String?, fallback: 'Unknown');
     final whiteRating = (white?['rating'] as num?)?.toInt();
     final blackRating = (black?['rating'] as num?)?.toInt();
 
@@ -240,15 +249,21 @@ class ChessComRepository {
       // Chess.com's JSON `eco` field is a URL (e.g.
       // https://www.chess.com/openings/Italian-Game), not the ECO code the
       // card wants to render. Extract the actual ECO tag from the PGN.
-      eco: _extractTagValue(pgn, 'ECO'),
+      eco: safeText(_extractTagValue(pgn, 'ECO')).isEmpty
+          ? null
+          : safeText(_extractTagValue(pgn, 'ECO')),
       // Chess.com PGNs don't ship an [Opening] tag — they encode the
       // opening name in the [ECOUrl] slug (e.g. `.../openings/
       // Queens-Gambit-Declined-Queens-Knight-Variation-3...Nf6-4.e3`).
       // Fall back to that slug when [Opening] is absent so the card shows
       // something human-readable next to the ECO code.
-      openingName: _extractTagValue(pgn, 'Opening') ??
-          _openingFromEcoUrl(_extractTagValue(pgn, 'ECOUrl')) ??
-          _openingFromEcoUrl(raw['eco'] as String?),
+      openingName: () {
+        final candidate = _extractTagValue(pgn, 'Opening') ??
+            _openingFromEcoUrl(_extractTagValue(pgn, 'ECOUrl')) ??
+            _openingFromEcoUrl(raw['eco'] as String?);
+        final cleaned = safeText(candidate);
+        return cleaned.isEmpty ? null : cleaned;
+      }(),
       userColor: userColor,
     );
   }

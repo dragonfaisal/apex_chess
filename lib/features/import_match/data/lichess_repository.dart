@@ -17,6 +17,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import 'package:apex_chess/core/network/api_headers.dart';
+import 'package:apex_chess/core/utils/safe_text.dart';
 import 'package:apex_chess/features/import_match/data/chess_com_repository.dart'
     show ImportPage;
 import 'package:apex_chess/features/import_match/domain/imported_game.dart';
@@ -128,10 +129,20 @@ class LichessRepository {
 
     final whiteUser = white['user'] as Map<String, dynamic>?;
     final blackUser = black['user'] as Map<String, dynamic>?;
-    final whiteName = (whiteUser?['name'] as String?) ??
-        (white['aiLevel'] != null ? 'Stockfish L${white['aiLevel']}' : 'Anonymous');
-    final blackName = (blackUser?['name'] as String?) ??
-        (black['aiLevel'] != null ? 'Stockfish L${black['aiLevel']}' : 'Anonymous');
+    // Sanitize player handles before they reach any Text widget — see
+    // ChessComRepository for the Skia `check(fUnicode)` rationale.
+    final whiteName = safeText(
+      whiteUser?['name'] as String?,
+      fallback: white['aiLevel'] != null
+          ? 'Stockfish L${white['aiLevel']}'
+          : 'Anonymous',
+    );
+    final blackName = safeText(
+      blackUser?['name'] as String?,
+      fallback: black['aiLevel'] != null
+          ? 'Stockfish L${black['aiLevel']}'
+          : 'Anonymous',
+    );
     final whiteRating = (white['rating'] as num?)?.toInt();
     final blackRating = (black['rating'] as num?)?.toInt();
 
@@ -199,8 +210,14 @@ class LichessRepository {
       timeControl: timeControl,
       moveCount: (plies / 2).ceil(),
       pgn: pgn,
-      eco: opening?['eco'] as String?,
-      openingName: opening?['name'] as String?,
+      eco: () {
+        final cleaned = safeText(opening?['eco'] as String?);
+        return cleaned.isEmpty ? null : cleaned;
+      }(),
+      openingName: () {
+        final cleaned = safeText(opening?['name'] as String?);
+        return cleaned.isEmpty ? null : cleaned;
+      }(),
       userColor: userColor,
     );
   }
