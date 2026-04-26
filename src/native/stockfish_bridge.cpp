@@ -228,6 +228,7 @@ struct sf_engine {
 // are unaffected; in debug builds, prefer the STUB engine for diagnostics.
 
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #if defined(_WIN32)
   #include <io.h>
@@ -324,13 +325,31 @@ void RunPersistentWorker() {
   std::thread(DrainReaderFd, out_pipe[0]).detach();
 
   std::string arg0 = native_dir.empty() ? "stockfish" : native_dir + "stockfish";
+  // Only point Stockfish at an on-disk NNUE *if the file is actually
+  // readable at that path*. On Android, files dropped into `jniLibs/`
+  // beside the .so are not always extracted to `nativeLibraryDir` at
+  // install time (the platform only guarantees `lib*.so` is). Pushing
+  // `setoption name EvalFile value <bogus path>` made Stockfish 17
+  // fall through unpredictably — sometimes it loads the incbin-embedded
+  // weights, sometimes its NNUE init aborts the process. Skipping the
+  // setoption when the file is missing forces the embedded path, which
+  // is what `APEX_STOCKFISH_USE_NNUE=ON` (the default in CMakeLists) is
+  // built for.
   if (!native_dir.empty()) {
-    const std::string eval_cmd =
-        "setoption name EvalFile value " + native_dir + "nn-37f18f62d772.nnue";
-    const std::string small_eval_cmd = "setoption name EvalFileSmall value " +
-                                       native_dir + "nn-37f18f62d772.nnue";
-    Persistent().to_engine.Push(eval_cmd);
-    Persistent().to_engine.Push(small_eval_cmd);
+    const std::string nnue_path = native_dir + "nn-37f18f62d772.nnue";
+    struct stat st{};
+    if (::stat(nnue_path.c_str(), &st) == 0 && S_ISREG(st.st_mode)) {
+      Persistent().to_engine.Push(
+          "setoption name EvalFile value " + nnue_path);
+      Persistent().to_engine.Push(
+          "setoption name EvalFileSmall value " + nnue_path);
+    } else {
+      // Surface a single diagnostic line on the engine output channel so
+      // the Dart side can see in logs that we deliberately fell back to
+      // the embedded NNUE (vs. the on-disk one).
+      Persistent().from_engine.Push(
+          "info string apex_bridge nnue_on_disk=missing path=" + nnue_path);
+    }
   }
   char* argv[] = {arg0.data(), nullptr};
   // stockfish_main returns only if the engine receives "quit" at process
@@ -471,5 +490,5 @@ extern "C" SF_API void stockfish_free_string(char* s) {
 }
 
 extern "C" SF_API const char* stockfish_bridge_version(void) {
-  return "apex-stockfish-bridge/0.2.0";
+  return "apex-stockfish-bridge/0.3.0";
 }

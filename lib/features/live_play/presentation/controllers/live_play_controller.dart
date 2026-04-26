@@ -142,12 +142,19 @@ class LivePlayNotifier extends Notifier<LivePlayState> {
   final EvaluationAnalyzer _analyzer = const EvaluationAnalyzer();
 
   Chess _position = Chess.initial;
+  // Tracks whether `build` has been disposed so async eval completions
+  // can drop their state writes instead of throwing on a dead notifier.
+  bool _disposed = false;
 
   @override
   LivePlayState build() {
     _eval = ref.watch(liveEvalServiceProvider);
     _audio = ref.watch(audioServiceProvider);
     _position = Chess.initial;
+    _disposed = false;
+    ref.onDispose(() {
+      _disposed = true;
+    });
     return LivePlayState.initial();
   }
 
@@ -282,9 +289,35 @@ class LivePlayNotifier extends Notifier<LivePlayState> {
   // ── Engine Evaluation ──────────────────────────────────────────────────
 
   Future<void> _requestEval() async {
+    // The Notifier may be disposed mid-await if the user backs out of
+    // Live Play before the engine produces a bestmove. Setting `state`
+    // on a disposed notifier throws — and on the very first move (when
+    // the engine isolate is still warming up and the eval takes longer
+    // than the screen's lifecycle) that throw used to escape into the
+    // Flutter framework as an uncaught zone error. Guard every state
+    // write here with the `_disposed` flag set in `ref.onDispose`.
+    if (_disposed) return;
     state = state.copyWith(isEvaluating: true, clearError: true);
 
-    final (snapshot, error) = await _eval.evaluate(state.currentFen);
+    (CloudEvalSnapshot?, CloudEvalError?) result;
+    try {
+      result = await _eval.evaluate(state.currentFen);
+    } on Object {
+      // `evaluate` is contractually non-throwing — it converts every
+      // failure to (null, error). But isolate-tier surprises (FFI bind
+      // failure, OOM during isolate spawn) can still escape; treat
+      // them as a generic offline error so the UI shows the engine-down
+      // banner instead of crashing.
+      if (_disposed) return;
+      state = state.copyWith(
+        isEvaluating: false,
+        evalError: CloudEvalError.offline,
+      );
+      return;
+    }
+
+    if (_disposed) return;
+    final (snapshot, error) = result;
 
     if (error != null) {
       state = state.copyWith(

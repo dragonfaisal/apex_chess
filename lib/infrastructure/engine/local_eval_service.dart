@@ -95,6 +95,16 @@ class LocalEvalService {
     Duration? movetime,
     required Duration timeout,
   }) async {
+    // Reject obviously malformed FENs *before* we touch the engine. The
+    // UCI position parser inside Stockfish 17 is not defensive against
+    // every shape of bad input — feeding it a string that fails this
+    // cheap structural check has, in production, abort()'d the
+    // worker thread (DartWorker SIGABRT) on the very first move of a
+    // game when the upstream caller fed an empty / partial FEN.
+    if (!_isStructurallyValidFen(fen)) {
+      return (null, EvalError.positionNotFound);
+    }
+
     if (!_engine.isRunning) {
       try {
         await _engine.start();
@@ -261,3 +271,41 @@ class LocalEvalService {
     return parts[1].trim().toLowerCase() == 'w';
   }
 }
+
+/// Cheap structural check on a FEN. Does not validate legality — only
+/// the shape Stockfish's UCI `position fen` parser expects.
+///
+/// Rejects:
+///   * null-ish / empty / control-char inputs (Skia / shaper safety),
+///   * fewer than 4 space-separated fields (board, side, castling, ep),
+///   * a board field that isn't 8 ranks separated by `/`,
+///   * a side-to-move field that isn't `w`/`b`.
+///
+/// Exposed for unit testing via the `isStructurallyValidFenForTesting`
+/// indirection at the bottom of this file.
+bool _isStructurallyValidFen(String fen) {
+  if (fen.isEmpty) return false;
+  // Embedded NUL or non-ASCII control bytes are immediate disqualifiers
+  // — neither the UCI parser nor the text shaper handles them.
+  for (var i = 0; i < fen.length; i++) {
+    final cu = fen.codeUnitAt(i);
+    if (cu == 0) return false;
+    if (cu < 0x20 && cu != 0x09) return false;
+  }
+  final parts = fen.split(RegExp(r'\s+'));
+  if (parts.length < 4) return false;
+  final ranks = parts[0].split('/');
+  if (ranks.length != 8) return false;
+  for (final r in ranks) {
+    if (r.isEmpty) return false;
+  }
+  final stm = parts[1].toLowerCase();
+  if (stm != 'w' && stm != 'b') return false;
+  return true;
+}
+
+/// Test-only re-export of [_isStructurallyValidFen] so the structural
+/// validator can be regression-tested without spinning up the engine.
+@pragma('vm:entry-point')
+bool isStructurallyValidFenForTesting(String fen) =>
+    _isStructurallyValidFen(fen);
