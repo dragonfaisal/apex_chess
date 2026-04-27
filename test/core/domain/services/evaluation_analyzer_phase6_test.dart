@@ -62,6 +62,42 @@ void main() {
       expect(r.quality, isNot(MoveQuality.brilliant));
     });
 
+    test('does NOT award Brilliant when mover is being mated', () {
+      // Regression: `currMate` is from White's POV — a negative
+      // value means *Black* delivers mate, not White. The Brilliant
+      // gate's `nearBest` check must treat only *favourable* mate
+      // lines as forcing. White sacrificing into a mate-in-3 against
+      // them must never read as Brilliant.
+      final r = analyzer.analyze(
+        prevCp: -200,
+        currCp: null,
+        currMate: -3, // Black mates White
+        isWhiteMove: true,
+        engineBestMoveUci: 'e2e4',
+        playedMoveUci: 'd1h5',
+        isSacrifice: true,
+      );
+      expect(r.quality, isNot(MoveQuality.brilliant));
+    });
+
+    test('does NOT bypass already-crushing guard on unfavourable mate',
+        () {
+      // White is +600 cp (already crushing) AND currMate = -2 (Black
+      // is delivering mate — white blundered into a forced loss).
+      // The Brilliant gate must refuse: the showmanship guard fires
+      // because the only override is a *favourable* forced mate.
+      final r = analyzer.analyze(
+        prevCp: 600,
+        currCp: null,
+        currMate: -2,
+        isWhiteMove: true,
+        engineBestMoveUci: 'd1h5',
+        playedMoveUci: 'd1h5',
+        isSacrifice: true,
+      );
+      expect(r.quality, isNot(MoveQuality.brilliant));
+    });
+
     test('awards Brilliant when balanced + sacrifice + engine-best', () {
       // Equal-ish position, real sacrifice, played the engine's #1,
       // cp-loss within 40 → Brilliant.

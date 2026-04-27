@@ -231,7 +231,14 @@ class EvaluationAnalyzer {
     //      to look fancy is at most "Best", never Brilliant)
     if (isSacrifice && deltaW >= -2.0) {
       final cpOk = cpLossMover == null || cpLossMover <= 40;
-      final nearBest = wasEngineBestMove || currMate != null;
+      // `currMate` is from White's POV: positive ⇒ White delivers
+      // mate, negative ⇒ Black delivers mate. We must only credit a
+      // forced-mate as "near best" when the mover is the *side
+      // delivering* mate — otherwise sacrificing into a mate-in-3
+      // *against you* would satisfy the gate and read as Brilliant.
+      final moverForcesMate = currMate != null &&
+          (isWhiteMove ? currMate > 0 : currMate < 0);
+      final nearBest = wasEngineBestMove || moverForcesMate;
       // Already-crushing guard. Spec'd at +5.0 pawns of mover-POV cp
       // (the Lichess sigmoid maps that to ≈ 86 Win%, which is below
       // the 90 % threshold we'd otherwise want, so we use the cp
@@ -242,8 +249,11 @@ class EvaluationAnalyzer {
           : (isWhiteMove ? prevCp : -prevCp);
       final wasAlreadyCrushing = moverWinPrev >= 90.0 ||
           (moverCpPrev != null && moverCpPrev >= 500);
+      // Only a *favourable* forced-mate overrides the showmanship
+      // guard — allowing the opponent to mate you while you were
+      // already winning is never Brilliant.
       final winningShowmanship =
-          wasAlreadyCrushing && currMate == null;
+          wasAlreadyCrushing && !moverForcesMate;
       if (cpOk && nearBest && !winningShowmanship) {
         return result(
           MoveQuality.brilliant,
