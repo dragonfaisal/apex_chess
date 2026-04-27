@@ -195,4 +195,67 @@ void main() {
     final profile = service.build(games: games, me: 'me');
     expect(profile.weakestPhase, GamePhase.middlegame);
   });
+
+  test(
+      'MissedWin plies feed missedWinsPerGame AND keep contributing to '
+      'the mistakes/missed-tactic stream (Phase A regression)', () {
+    // Two MissedWin plies and one Mistake — all from "me" (white,
+    // even ply). Pre-Phase-A these would have been three Mistakes
+    // and produced three drills + three "missed-tactic" tags. The
+    // re-classification must not erase any of that signal.
+    final timeline = AnalysisTimeline(
+      startingFen: '',
+      headers: const {},
+      winPercentages: const [],
+      moves: [
+        _ply(
+          ply: 14,
+          white: true,
+          cls: MoveQuality.missedWin,
+          deltaW: -15,
+          uci: 'd1d4',
+          bestUci: 'd1h5',
+        ),
+        _ply(
+          ply: 16,
+          white: true,
+          cls: MoveQuality.missedWin,
+          deltaW: -12,
+          uci: 'a2a3',
+          bestUci: 'g2g4',
+        ),
+        _ply(
+          ply: 18,
+          white: true,
+          cls: MoveQuality.mistake,
+          deltaW: -7,
+          uci: 'b1c3',
+          bestUci: 'b1d2',
+        ),
+      ],
+    );
+    final profile = service.build(
+      games: [
+        _game(
+          id: 'g',
+          white: 'me',
+          black: 'opp',
+          result: '1/2-1/2',
+          timeline: timeline,
+        ),
+      ],
+      me: 'me',
+    );
+
+    // Spec § 5.3: missed wins per game tracked as its own axis.
+    expect(profile.missedWinsPerGame, 2.0);
+    // Mistakes-per-game still includes MissedWin so existing
+    // dashboards / training plans keep firing.
+    expect(profile.mistakesPerGame, 3.0);
+    // The aggregate weakness signal carries through to the tag
+    // stream — `missed-win` and `missed-tactic` both surface (each
+    // ≥ 2 occurrences).
+    expect(profile.tacticalWeaknesses, contains('missed-win'));
+    expect(profile.tacticalWeaknesses, contains('missed-tactic'));
+  });
 }

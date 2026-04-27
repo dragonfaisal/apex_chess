@@ -2,13 +2,18 @@
 /// them into the [MistakeVaultRepository].
 ///
 /// Called fire-and-forget from the same sites that call
-/// [saveAnalysisToArchive] — any Blunder or Mistake ply (from the
-/// user's perspective) becomes a drill. "User's perspective" means
+/// [saveAnalysisToArchive] — any Blunder, Mistake, or Missed Win ply
+/// (from the user's perspective) becomes a drill. Missed Win is
+/// included per spec § 3.6.5 ("surface them in training as special
+/// drills") — these moves used to land in the Mistake / Blunder tier
+/// before the Phase A re-classification, so omitting them would
+/// silently regress drill coverage. "User's perspective" means
 /// every ply played by the opposite colour is skipped when we know
 /// which colour the user played; when colour is unknown we include
 /// both sides so nothing leaks through.
 library;
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
@@ -17,8 +22,15 @@ import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import '../domain/mistake_drill.dart';
 import '../presentation/controllers/mistake_vault_controller.dart';
 
-bool _isDrillWorthy(MoveQuality q) =>
-    q == MoveQuality.blunder || q == MoveQuality.mistake;
+/// Phase A: Blunder, Mistake, and Missed Win plies all generate
+/// drills. Exposed (rather than `_private`) so the regression in
+/// `test/features/mistake_vault/drill_worthiness_test.dart` can pin
+/// the policy directly without spinning up Riverpod / Hive.
+@visibleForTesting
+bool isDrillWorthy(MoveQuality q) =>
+    q == MoveQuality.blunder ||
+    q == MoveQuality.mistake ||
+    q == MoveQuality.missedWin;
 
 /// Stable id: FEN → compact radix-36 hash. FEN is the right key here
 /// because the same mistake across two games should dedupe — we
@@ -39,7 +51,7 @@ Future<int> saveMistakeDrillsFromTimeline({
     final now = DateTime.now();
     final drills = <MistakeDrill>[];
     for (final move in timeline.moves) {
-      if (!_isDrillWorthy(move.classification)) continue;
+      if (!isDrillWorthy(move.classification)) continue;
       if (userIsWhite != null && move.isWhiteMove != userIsWhite) continue;
       if (move.engineBestMoveUci == null ||
           move.engineBestMoveUci!.isEmpty) {
