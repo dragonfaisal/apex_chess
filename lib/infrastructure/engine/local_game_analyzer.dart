@@ -28,8 +28,9 @@ import 'package:dartchess/dartchess.dart';
 
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
+import 'package:apex_chess/core/domain/services/analysis_debug_export.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
-import 'package:apex_chess/core/domain/services/position_heuristics.dart';
+import 'package:apex_chess/core/domain/services/sacrifice_trajectory.dart';
 import 'package:apex_chess/infrastructure/api/cloud_eval_service.dart'
     show CloudEvalError;
 import 'package:apex_chess/infrastructure/engine/eco_book.dart';
@@ -161,6 +162,23 @@ class LocalGameAnalyzer {
     final totalPlies = parsed.length;
     onProgress?.call(0, totalPlies);
 
+    // ── Phase A integration: walk the full move list once to compute
+    //    `isFirstSacrificePly` / `isTrivialRecapture` from material
+    //    trajectory. Without this, every sacrificed-piece ply (including
+    //    the opponent's recapture and the consolidating follow-up) was
+    //    being fed `isFirstSacrificePly = true` and could pass the
+    //    Brilliant gate, which is exactly the regression the user
+    //    flagged in the post-PR-#18 audit. ──
+    final trajectory = SacrificeTrajectory.analyze([
+      for (final m in parsed)
+        TrajectoryPly(
+          fenBefore: m.fenBefore,
+          fenAfter: m.fenAfter,
+          isWhiteMove: m.isWhiteMove,
+          targetSquare: m.targetSquare,
+        ),
+    ]);
+
     // ── Cache engine evals by FEN. fenAfter[ply N] == fenBefore[ply N+1],
     // so each non-book position is evaluated at most once. ──
     final cache = <String, EvalSnapshot>{};
@@ -274,17 +292,21 @@ class LocalGameAnalyzer {
         _backfillBookWinPct(moves, winPctBefore);
       }
 
-      // Real sacrifice detection: if the mover's material drops by at
-      // least a minor piece (3) and the opponent's reply does *not*
-      // win it back, flag the ply as a sacrifice so EvaluationAnalyzer
-      // can award Brilliant when the engine says the position still
-      // holds. Without this signal, Brilliant can never fire.
-      final nextReply = ply + 1 < totalPlies ? parsed[ply + 1] : null;
-      final isSacrifice = PositionHeuristics.isSacrificeMove(
-        before: entry.fenBefore,
-        afterReplyFen: nextReply?.fenAfter ?? entry.fenAfter,
-        isWhiteMove: entry.isWhiteMove,
-      );
+      // Material-trajectory-derived sacrifice signals — see
+      // `SacrificeTrajectory.analyze` for the gating rules. The Brilliant
+      // gate now sees three correctly-computed flags instead of the
+      // legacy `isFirstSacrificePly: true` default that made every
+      // recapture a Brilliant candidate.
+      final sac = trajectory[ply];
+
+      // Opening-phase fallback (spec § 3.6.3): if no ECO match was found
+      // in the local book *and* we're inside the first eight plies of the
+      // game, treat the position as still in the opening so the classifier
+      // applies its book-leniency rules instead of the regular ladder.
+      // This stops the analyser from labelling normal opening preparation
+      // as Inaccuracy / Mistake when the move is just a sideline that
+      // happens not to be in our compact book.
+      final isOpeningPhase = ply < 8;
 
       final result = _analyzer.analyze(
         prevCp: before?.scoreCp,
@@ -294,7 +316,10 @@ class LocalGameAnalyzer {
         isWhiteMove: entry.isWhiteMove,
         engineBestMoveUci: before?.bestMoveUci,
         playedMoveUci: entry.uci,
-        isSacrifice: isSacrifice,
+        isSacrifice: sac.isSacrifice,
+        isTrivialRecapture: sac.isTrivialRecapture,
+        isFirstSacrificePly: sac.isFirstSacrificePly,
+        isBook: isOpeningPhase,
       );
 
       String? engineBestSan;
@@ -327,12 +352,17 @@ class LocalGameAnalyzer {
     }
 
     final winPercentages = moves.map((m) => m.winPercentAfter).toList();
-    return AnalysisTimeline(
+    final timeline = AnalysisTimeline(
       moves: moves,
       startingFen: startingFen,
       headers: headers,
       winPercentages: winPercentages,
     );
+    // Phase A integration audit, step A: structured per-ply log so future
+    // regressions can be triaged from a single device-log dump. No-op in
+    // release.
+    AnalysisDebugExport.dump(timeline, tag: 'local');
+    return timeline;
   }
 
   /// Rewrite contiguous book moves at the tail of [moves] so their

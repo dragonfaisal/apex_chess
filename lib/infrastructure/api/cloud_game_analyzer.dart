@@ -14,8 +14,9 @@ import 'package:dartchess/dartchess.dart';
 
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
+import 'package:apex_chess/core/domain/services/analysis_debug_export.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
-import 'package:apex_chess/core/domain/services/position_heuristics.dart';
+import 'package:apex_chess/core/domain/services/sacrifice_trajectory.dart';
 import 'package:apex_chess/infrastructure/api/cloud_eval_service.dart';
 import 'package:apex_chess/infrastructure/api/opening_service.dart';
 
@@ -113,6 +114,20 @@ class CloudGameAnalyzer {
 
     final totalPlies = moveList.length;
     onProgress?.call(0, totalPlies);
+
+    // Phase A integration audit: walk the full move list once to compute
+    // material-trajectory signals so the Brilliant gate sees correct
+    // `isFirstSacrificePly` / `isTrivialRecapture` flags. See
+    // `SacrificeTrajectory.analyze` for the gating rules.
+    final trajectory = SacrificeTrajectory.analyze([
+      for (final m in moveList)
+        TrajectoryPly(
+          fenBefore: m.fenBefore,
+          fenAfter: m.fenAfter,
+          isWhiteMove: m.isWhiteMove,
+          targetSquare: m.targetSquare,
+        ),
+    ]);
 
     // 2. Get starting position eval.
     final (startEval, startErr) = await _cloudEval.evaluate(startingFen);
@@ -219,16 +234,12 @@ class CloudGameAnalyzer {
       final (beforeEval, _) =
           await _cloudEval.evaluate(entry.fenBefore, multiPv: 2);
 
-      // Sacrifice flag — material balance after the *opponent's* reply
-      // (or after this ply if it's the last move). Same heuristic the
-      // local analyser uses; see [PositionHeuristics.isSacrificeMove].
-      final replyFen =
-          ply + 1 < totalPlies ? moveList[ply + 1].fenAfter : entry.fenAfter;
-      final isSacrifice = PositionHeuristics.isSacrificeMove(
-        before: entry.fenBefore,
-        afterReplyFen: replyFen,
-        isWhiteMove: entry.isWhiteMove,
-      );
+      // Material-trajectory-derived sacrifice signals. These replace the
+      // legacy single-ply heuristic so the Brilliant gate now sees correct
+      // `isFirstSacrificePly` and `isTrivialRecapture` flags rather than
+      // the hard-coded `true` defaults that produced the post-PR-#18
+      // "Brilliant on every recapture" regression.
+      final sac = trajectory[ply];
 
       // Only-winning-move flag — fires when PV[1]'s evaluation drops the
       // mover's Win% by ≥12 percentage points relative to PV[0]. The
@@ -252,8 +263,15 @@ class CloudGameAnalyzer {
         isWhiteMove: entry.isWhiteMove,
         engineBestMoveUci: beforeEval?.bestMoveUci,
         playedMoveUci: entry.uci,
-        isSacrifice: isSacrifice,
+        isSacrifice: sac.isSacrifice,
+        isTrivialRecapture: sac.isTrivialRecapture,
+        isFirstSacrificePly: sac.isFirstSacrificePly,
         isOnlyWinningMove: isOnlyWinningMove,
+        // Cloud analyser also gets the Lichess opening name + ECO when the
+        // book layer surfaced one, so the classifier message reads as
+        // "· ECO • Opening Name" instead of a bare classification.
+        openingName: openingInfo.openingName,
+        ecoCode: openingInfo.ecoCode,
       );
 
       // Resolve engine best move to SAN if available.
@@ -296,12 +314,16 @@ class CloudGameAnalyzer {
     // Build winPercentages array from analyzed moves.
     final winPercentages = moves.map((m) => m.winPercentAfter).toList();
 
-    return AnalysisTimeline(
+    final timeline = AnalysisTimeline(
       moves: moves,
       startingFen: startingFen,
       headers: headers,
       winPercentages: winPercentages,
     );
+    // Phase A integration audit, step A: structured per-ply log so
+    // future regressions can be triaged from a single device-log dump.
+    AnalysisDebugExport.dump(timeline, tag: 'cloud');
+    return timeline;
   }
 
   /// Creates a neutral move when cloud eval is unavailable for a position.

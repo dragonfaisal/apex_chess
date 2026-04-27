@@ -472,9 +472,17 @@ class _ActionsCard extends ConsumerWidget {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
+              // Phase A integration audit: ConnectAccountScreen waits for
+              // an `onComplete` callback before any navigation runs. The
+              // legacy push-without-callback variant left the user on the
+              // connect screen forever after a successful connect, with
+              // only the system back button to escape. Pop back to the
+              // profile screen once the connect / switch / skip resolves.
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
-                  builder: (_) => const ConnectAccountScreen(),
+                  builder: (innerCtx) => ConnectAccountScreen(
+                    onComplete: () => Navigator.of(innerCtx).pop(),
+                  ),
                 ),
               ),
               icon: const Icon(Icons.swap_horiz_rounded, size: 18),

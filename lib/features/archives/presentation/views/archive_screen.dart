@@ -13,6 +13,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import 'package:apex_chess/app/di/providers.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
+import 'package:apex_chess/features/account/presentation/controllers/account_controller.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/archives/presentation/controllers/archive_controller.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
@@ -109,13 +110,17 @@ class ArchiveScreen extends ConsumerWidget {
     WidgetRef ref,
     ArchivedGame game,
   ) async {
-    // Phase 6 instant-reopen: if the saved record carries a cached
-    // timeline, push the review screen straight away without spawning
-    // the engine. The dialog never appears for cached games — the user
-    // experiences a tap-and-open transition.
+    // Phase 6 instant-reopen: if the saved record carries a *current*
+    // cached timeline, push the review screen straight away without
+    // spawning the engine. Phase A audit: stale-cache invalidation —
+    // when the classifier brain has changed under our feet, force a
+    // re-scan rather than show counts produced by the old brain.
     final cached = game.cachedTimeline;
-    if (cached != null && cached.moves.isNotEmpty) {
-      ref.read(reviewControllerProvider.notifier).loadTimeline(cached);
+    final userIsBlack = _userIsBlack(ref, game);
+    if (game.isCacheCurrent && cached != null && cached.moves.isNotEmpty) {
+      ref
+          .read(reviewControllerProvider.notifier)
+          .loadTimeline(cached, userIsBlack: userIsBlack);
       Navigator.of(context).push(
         MaterialPageRoute<void>(builder: (_) => const ReviewScreen()),
       );
@@ -133,7 +138,9 @@ class ArchiveScreen extends ConsumerWidget {
       final analyzer = ref.read(gameAnalyzerProvider);
       final timeline =
           await analyzer.analyzeFromPgn(game.pgn, depth: game.depth);
-      ref.read(reviewControllerProvider.notifier).loadTimeline(timeline);
+      ref
+          .read(reviewControllerProvider.notifier)
+          .loadTimeline(timeline, userIsBlack: userIsBlack);
       // Persist the freshly-computed timeline back onto the archive
       // record so the *next* reopen is instant — even when the user's
       // archive predates Phase 6 and was originally saved without a
@@ -156,6 +163,17 @@ class ArchiveScreen extends ConsumerWidget {
         backgroundColor: ApexColors.rubyDeep,
       ));
     }
+  }
+
+  /// Did the imported user play this game as Black? Compares the
+  /// connected account's username against the PGN's `Black` header
+  /// (case-insensitive). Falls back to `false` (White-at-bottom) when
+  /// no account is connected — same default as a raw PGN import.
+  static bool _userIsBlack(WidgetRef ref, ArchivedGame game) {
+    final account = ref.read(accountControllerProvider).valueOrNull;
+    final me = account?.username.trim().toLowerCase();
+    if (me == null || me.isEmpty) return false;
+    return game.black.trim().toLowerCase() == me;
   }
 }
 

@@ -191,7 +191,7 @@ DashboardStats _buildStats(
     blunders += g.blunderCount;
     mistakes += g.mistakeCount;
     inaccuracies += g.inaccuracyCount;
-    for (final entry in g.qualityCounts.entries) {
+    for (final entry in g.qualityCountsLive.entries) {
       qualityTotals[entry.key] =
           (qualityTotals[entry.key] ?? 0) + entry.value;
     }

@@ -1412,7 +1412,15 @@ class _ImportAnalysisDialogState
         },
       );
       if (!mounted) return;
-      ref.read(reviewControllerProvider.notifier).loadTimeline(timeline);
+      // Phase A integration audit: if the imported user played as Black,
+      // flip the board automatically so they appear at the bottom of the
+      // review screen. `userIsWhite == false` means the imported game's
+      // user is the Black side; `null` falls back to White-at-bottom for
+      // raw PGN imports where user colour is unknowable.
+      ref.read(reviewControllerProvider.notifier).loadTimeline(
+            timeline,
+            userIsBlack: widget.userIsWhite == false,
+          );
       // Fire-and-forget save — failures never block the review flow.
       final archiveId = await saveAnalysisToArchive(
         ref: ref,

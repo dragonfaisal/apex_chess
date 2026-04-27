@@ -225,12 +225,17 @@ class ArchiveController extends Notifier<ArchiveState> {
       analyzedAt: existing.analyzedAt,
       depth: existing.depth,
       pgn: existing.pgn,
-      qualityCounts: existing.qualityCounts,
-      averageCpLoss: existing.averageCpLoss,
-      totalPlies: existing.totalPlies,
+      // Counts come from the *new* timeline so a re-analysis
+      // immediately fixes any stale numbers — the integration-audit
+      // "archive Brilliant count doesn't match timeline" fix.
+      qualityCounts: timeline.qualityCounts,
+      averageCpLoss: timeline.averageCpLoss,
+      totalPlies: timeline.totalPlies,
       openingName: existing.openingName,
       ecoCode: existing.ecoCode,
       cachedTimeline: timeline,
+      classifierVersion: kClassifierVersion,
+      analysisMode: existing.analysisMode,
     );
     await repo.save(updated);
     await _reload();
@@ -262,7 +267,9 @@ class ArchiveController extends Notifier<ArchiveState> {
   Map<MoveQuality, int> get aggregateCounts {
     final out = <MoveQuality, int>{};
     for (final g in state.games) {
-      g.qualityCounts.forEach((k, v) {
+      // Use the live (timeline-derived when available) counts so the
+      // aggregate respects what's actually on disk in the timeline.
+      g.qualityCountsLive.forEach((k, v) {
         out[k] = (out[k] ?? 0) + v;
       });
     }

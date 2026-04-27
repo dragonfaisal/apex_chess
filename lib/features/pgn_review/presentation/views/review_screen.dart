@@ -55,7 +55,12 @@ class ReviewScreen extends ConsumerWidget {
         currentMove?.classification == MoveQuality.brilliant;
 
     return Scaffold(
-      appBar: _buildAppBar(context, timeline.headers),
+      appBar: _buildAppBar(
+        context,
+        timeline.headers,
+        state.flipped,
+        () => ref.read(reviewControllerProvider.notifier).toggleFlip(),
+      ),
       body: Container(
         decoration: const BoxDecoration(gradient: ApexGradients.spaceCanvas),
         child: SafeArea(
@@ -91,6 +96,7 @@ class ReviewScreen extends ConsumerWidget {
                             visible: isBrilliant,
                             child: ApexChessBoard(
                               fen: state.currentFen,
+                              flipped: state.flipped,
                               lastMove: state.lastMove,
                               lastMoveQuality: currentMove?.classification,
                               // Surface the engine's better-move arrow
@@ -195,8 +201,12 @@ class ReviewScreen extends ConsumerWidget {
     return (norm.substring(0, 2), norm.substring(2, 4));
   }
 
-  PreferredSizeWidget _buildAppBar(BuildContext context,
-      [Map<String, String>? headers]) {
+  PreferredSizeWidget _buildAppBar(
+    BuildContext context, [
+    Map<String, String>? headers,
+    bool flipped = false,
+    VoidCallback? onFlip,
+  ]) {
     final white = headers?['White'] ?? 'White';
     final black = headers?['Black'] ?? 'Black';
     final event = headers?['Event'];
@@ -230,6 +240,17 @@ class ReviewScreen extends ConsumerWidget {
         ],
       ),
       centerTitle: true,
+      actions: [
+        if (onFlip != null)
+          IconButton(
+            tooltip: flipped
+                ? 'Flip board (currently Black-at-bottom)'
+                : 'Flip board (currently White-at-bottom)',
+            icon: const Icon(Icons.flip_camera_android_rounded,
+                color: ApexColors.textSecondary),
+            onPressed: onFlip,
+          ),
+      ],
     );
   }
 }

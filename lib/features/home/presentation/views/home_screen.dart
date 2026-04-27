@@ -733,8 +733,14 @@ class _AccountStrip extends ConsumerWidget {
             padding:
                 const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           ),
+          // Pop back to home once the connect / skip resolves so the
+          // user doesn't get stuck on the connect screen with no
+          // forward navigation. ConnectAccountScreen.onComplete is the
+          // sole signal it watches before doing anything navigation-y.
           onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => const ConnectAccountScreen())),
+              builder: (innerCtx) => ConnectAccountScreen(
+                    onComplete: () => Navigator.of(innerCtx).pop(),
+                  ))),
           icon: const Icon(Icons.link_rounded, size: 16),
           label: const Text('CONNECT ACCOUNT'),
         ),
