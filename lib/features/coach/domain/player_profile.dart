@@ -46,6 +46,7 @@ class PlayerProfile {
     required this.openings,
     required this.weakestPhase,
     required this.tacticalWeaknesses,
+    this.missedWinsPerGame = 0,
   });
 
   /// Pure-data empty profile so callers can render "no data yet"
@@ -56,6 +57,7 @@ class PlayerProfile {
         blundersPerGame: 0,
         mistakesPerGame: 0,
         brilliantsPerGame: 0,
+        missedWinsPerGame: 0,
         openings: [],
         weakestPhase: null,
         tacticalWeaknesses: [],
@@ -72,6 +74,13 @@ class PlayerProfile {
   final double blundersPerGame;
   final double mistakesPerGame;
   final double brilliantsPerGame;
+
+  /// Average number of [MoveQuality.missedWin] plies per game — the
+  /// player was winning and let the advantage slip without losing
+  /// the game outright. Tracked separately from `mistakesPerGame`
+  /// per spec § 5.3 so the coach can surface "convert your wins"
+  /// as its own training axis.
+  final double missedWinsPerGame;
 
   /// Top openings the player has played, sorted by frequency.
   final List<OpeningStat> openings;

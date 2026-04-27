@@ -109,5 +109,92 @@ void main() {
     final g = ArchivedGame.fromJson(legacy);
     expect(g.cachedTimeline, isNull);
     expect(g.id, 'legacy-id');
+    // Phase A integration audit: legacy records pre-date the
+    // classifierVersion field, so they must surface as v1 — otherwise
+    // the archive UI cannot detect that a re-scan is needed.
+    expect(g.classifierVersion, 1);
+    expect(g.isCacheCurrent, isFalse,
+        reason: 'no cached timeline + version 1 ⇒ cache not current');
+    // Default analysis mode falls back to deep so older records keep
+    // showing all classification tiers in the UI.
+    expect(g.analysisMode, AnalysisMode.deep);
+  });
+
+  test('current-version record with cached timeline reports cache current',
+      () {
+    final timeline = AnalysisTimeline(
+      startingFen:
+          'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+      moves: const [],
+      winPercentages: const [],
+      headers: const {'White': 'A', 'Black': 'B', 'Result': '*'},
+    );
+    final game = ArchivedGame.fromTimeline(
+      timeline: timeline,
+      id: 'fresh-id',
+      source: ArchiveSource.pgn,
+      depth: 14,
+      pgn: '*',
+    );
+    expect(game.classifierVersion, kClassifierVersion);
+    expect(game.isCacheCurrent, isTrue);
+  });
+
+  test(
+      'qualityCountsLive derives from cached timeline regardless of stored map',
+      () {
+    // Synthetic divergence: the persisted `qualityCounts` map says one
+    // Brilliant, but the cached timeline contains zero. The audit fix
+    // makes [qualityCountsLive] trust the timeline so the archive UI
+    // never advertises Brilliants that the timeline doesn't actually
+    // hold.
+    final timeline = AnalysisTimeline(
+      startingFen:
+          'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+      moves: [
+        MoveAnalysis(
+          ply: 0,
+          san: 'e4',
+          uci: 'e2e4',
+          fenBefore:
+              'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+          fenAfter:
+              'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+          targetSquare: 'e4',
+          winPercentBefore: 50.0,
+          winPercentAfter: 52.0,
+          deltaW: 2.0,
+          isWhiteMove: true,
+          classification: MoveQuality.best,
+          engineBestMoveSan: null,
+          engineBestMoveUci: null,
+          scoreCpAfter: null,
+          mateInAfter: null,
+          inBook: false,
+          message: '',
+        ),
+      ],
+      winPercentages: const [52.0],
+      headers: const {'White': 'A', 'Black': 'B', 'Result': '*'},
+    );
+    final game = ArchivedGame(
+      id: 'divergent',
+      source: ArchiveSource.pgn,
+      white: 'A',
+      black: 'B',
+      result: '*',
+      analyzedAt: DateTime.now(),
+      depth: 14,
+      pgn: '1. e4 *',
+      // Stored map intentionally lies — the live derivation should
+      // override it.
+      qualityCounts: const {MoveQuality.brilliant: 1},
+      averageCpLoss: 0,
+      totalPlies: 1,
+      cachedTimeline: timeline,
+    );
+    expect(game.brilliantCount, 0,
+        reason: 'live counts trust the timeline, not the persisted map');
+    expect(game.qualityCountsLive[MoveQuality.best], 1);
   });
 }

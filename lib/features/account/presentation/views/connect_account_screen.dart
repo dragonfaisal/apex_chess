@@ -113,13 +113,30 @@ class _ConnectAccountScreenState
   Future<void> _connect() async {
     final name = _textController.text.trim();
     if (name.isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context);
     setState(() => _busy = true);
     try {
       await ref.read(accountControllerProvider.notifier).connect(
             ApexAccount(source: _source, username: name),
           );
       if (!mounted) return;
+      // Phase A audit § 7: connect used to silently leave the user on
+      // this screen when the backend failed. Surface success briefly
+      // (so the user knows the connect worked) and call onComplete to
+      // pop back automatically.
+      messenger.showSnackBar(SnackBar(
+        content: Text('Connected to ${_source.wire} as $name'),
+        backgroundColor: ApexColors.aurora,
+        duration: const Duration(seconds: 2),
+      ));
       widget.onComplete?.call();
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(
+        content: Text('Connect failed: $e'),
+        backgroundColor: ApexColors.rubyDeep,
+        duration: const Duration(seconds: 4),
+      ));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

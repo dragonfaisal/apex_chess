@@ -28,6 +28,20 @@ import 'package:apex_chess/shared_ui/widgets/evaluation_chart.dart';
 import '../controllers/review_controller.dart';
 import '../controllers/review_audio_controller.dart';
 
+/// `true` when the played move equals the engine's top line (after
+/// castling normalisation — the engine may emit `e1h1` while dartchess
+/// emits `e1g1` for the same king-side castle).
+///
+/// Used to suppress the "Better: &lt;same SAN&gt;" copy the Phase A audit
+/// flagged on real devices, and to render a "Top engine choice"
+/// chip instead.
+bool _playedEqualsBest(MoveAnalysis m) {
+  final best = m.engineBestMoveUci;
+  final played = m.uci;
+  if (best == null || played.isEmpty) return false;
+  return normalizeCastlingUci(best) == normalizeCastlingUci(played);
+}
+
 class ReviewScreen extends ConsumerWidget {
   const ReviewScreen({super.key});
 
@@ -55,7 +69,30 @@ class ReviewScreen extends ConsumerWidget {
         currentMove?.classification == MoveQuality.brilliant;
 
     return Scaffold(
-      appBar: _buildAppBar(context, timeline.headers),
+      appBar: _buildAppBar(
+        context,
+        timeline.headers,
+        state.flipped,
+        () => ref.read(reviewControllerProvider.notifier).toggleFlip(),
+      ),
+      // Phase A audit § 6: the nav controls + scrubber live in a fixed
+      // bottom bar so the board stays visible while the user scrolls
+      // through the Full Move Report. Previously tapping "Full Move
+      // Report" scrolled the controls off-screen and the user had to
+      // scroll back up to advance a move.
+      bottomNavigationBar: _ReviewBottomBar(
+        currentPly: state.currentPly,
+        totalPlies: state.totalPlies,
+        onStart: () =>
+            ref.read(reviewControllerProvider.notifier).goToStart(),
+        onBack: () =>
+            ref.read(reviewControllerProvider.notifier).prev(),
+        onForward: () =>
+            ref.read(reviewControllerProvider.notifier).next(),
+        onEnd: () => ref.read(reviewControllerProvider.notifier).goToEnd(),
+        onScrub: (ply) =>
+            ref.read(reviewControllerProvider.notifier).jumpTo(ply),
+      ),
       body: Container(
         decoration: const BoxDecoration(gradient: ApexGradients.spaceCanvas),
         child: SafeArea(
@@ -91,14 +128,9 @@ class ReviewScreen extends ConsumerWidget {
                             visible: isBrilliant,
                             child: ApexChessBoard(
                               fen: state.currentFen,
+                              flipped: state.flipped,
                               lastMove: state.lastMove,
                               lastMoveQuality: currentMove?.classification,
-                              // Surface the engine's better-move arrow
-                              // only when the played move was actually
-                              // worse than the engine's top pick — no
-                              // arrow on Best / Excellent / Book / a
-                              // matching Brilliant, since pointing the
-                              // user at "their own move" is just noise.
                               betterMove: _shouldShowArrow(currentMove)
                                   ? _arrowFromUci(
                                       currentMove?.engineBestMoveUci)
@@ -120,30 +152,16 @@ class ReviewScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 10),
                       _CoachCard(move: currentMove, ply: state.currentPly),
-                      const SizedBox(height: 16),
-                      _MoveReportList(
+                      const SizedBox(height: 12),
+                      // Full Move Report is now collapsible — the board
+                      // stays in sight and the user opts in to the long
+                      // list when they want to scan the whole game.
+                      _CollapsibleMoveReport(
                         timeline: timeline,
                         currentPly: state.currentPly,
                         onTapPly: (ply) => ref
                             .read(reviewControllerProvider.notifier)
                             .jumpTo(ply),
-                      ),
-                      const SizedBox(height: 16),
-                      _NavControls(
-                        currentPly: state.currentPly,
-                        totalPlies: state.totalPlies,
-                        onStart: () => ref
-                            .read(reviewControllerProvider.notifier)
-                            .goToStart(),
-                        onBack: () => ref
-                            .read(reviewControllerProvider.notifier)
-                            .prev(),
-                        onForward: () => ref
-                            .read(reviewControllerProvider.notifier)
-                            .next(),
-                        onEnd: () => ref
-                            .read(reviewControllerProvider.notifier)
-                            .goToEnd(),
                       ),
                       const SizedBox(height: 16),
                     ],
@@ -170,10 +188,15 @@ class ReviewScreen extends ConsumerWidget {
       case MoveQuality.best:
       case MoveQuality.book:
         return false;
+      case MoveQuality.forced:
+        // Forced means there was no real alternative — pointing the
+        // user at "the same move" is misleading.
+        return false;
       case MoveQuality.excellent:
       case MoveQuality.good:
       case MoveQuality.inaccuracy:
       case MoveQuality.mistake:
+      case MoveQuality.missedWin:
       case MoveQuality.blunder:
         return true;
     }
@@ -190,8 +213,14 @@ class ReviewScreen extends ConsumerWidget {
     return (norm.substring(0, 2), norm.substring(2, 4));
   }
 
-  PreferredSizeWidget _buildAppBar(BuildContext context,
-      [Map<String, String>? headers]) {
+
+
+  PreferredSizeWidget _buildAppBar(
+    BuildContext context, [
+    Map<String, String>? headers,
+    bool flipped = false,
+    VoidCallback? onFlip,
+  ]) {
     final white = headers?['White'] ?? 'White';
     final black = headers?['Black'] ?? 'Black';
     final event = headers?['Event'];
@@ -225,6 +254,17 @@ class ReviewScreen extends ConsumerWidget {
         ],
       ),
       centerTitle: true,
+      actions: [
+        if (onFlip != null)
+          IconButton(
+            tooltip: flipped
+                ? 'Flip board (currently Black-at-bottom)'
+                : 'Flip board (currently White-at-bottom)',
+            icon: const Icon(Icons.flip_camera_android_rounded,
+                color: ApexColors.textSecondary),
+            onPressed: onFlip,
+          ),
+      ],
     );
   }
 }
@@ -332,39 +372,57 @@ class _CoachCard extends StatelessWidget {
               ),
               if (m.engineBestMoveSan != null) ...[
                 const SizedBox(height: 4),
-                Text(
-                  'Better: ${m.engineBestMoveSan}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: ApexTypography.bodyMedium.copyWith(
-                    color: ApexColors.electricBlue.withAlpha(180),
-                    fontSize: 11,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-                Builder(builder: (_) {
-                  // One-sentence rationale composed from the engine's
-                  // UCI + SAN — see [BetterMoveExplanation] for why we
-                  // never invent specific tactical reasons.
-                  final exp = BetterMoveExplanation.compose(
-                    bestMoveUci: m.engineBestMoveUci,
-                    bestMoveSan: m.engineBestMoveSan,
-                    playedQuality: m.classification,
-                  );
-                  if (exp == null) return const SizedBox.shrink();
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(
-                      exp.sentence,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: ApexTypography.bodyMedium.copyWith(
-                        color: ApexColors.textSecondary,
-                        fontSize: 11,
-                      ),
+                // Phase A audit fix: when the played move already *is*
+                // the engine's top line, "Better: <same SAN>" reads as a
+                // bug. Flip the copy to a positive affirmation instead,
+                // and skip the BetterMoveExplanation sentence below
+                // (which assumes the user deviated from best).
+                if (_playedEqualsBest(m))
+                  Text(
+                    'Top engine choice.',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: ApexTypography.bodyMedium.copyWith(
+                      color: ApexColors.electricBlue.withAlpha(180),
+                      fontSize: 11,
+                      fontStyle: FontStyle.italic,
                     ),
-                  );
-                }),
+                  )
+                else ...[
+                  Text(
+                    'Better: ${m.engineBestMoveSan}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: ApexTypography.bodyMedium.copyWith(
+                      color: ApexColors.electricBlue.withAlpha(180),
+                      fontSize: 11,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                  Builder(builder: (_) {
+                    // One-sentence rationale composed from the engine's
+                    // UCI + SAN — see [BetterMoveExplanation] for why we
+                    // never invent specific tactical reasons.
+                    final exp = BetterMoveExplanation.compose(
+                      bestMoveUci: m.engineBestMoveUci,
+                      bestMoveSan: m.engineBestMoveSan,
+                      playedQuality: m.classification,
+                    );
+                    if (exp == null) return const SizedBox.shrink();
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        exp.sentence,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: ApexTypography.bodyMedium.copyWith(
+                          color: ApexColors.textSecondary,
+                          fontSize: 11,
+                        ),
+                      ),
+                    );
+                  }),
+                ],
               ],
             ],
           ),
@@ -493,6 +551,172 @@ class _NavControls extends StatelessWidget {
       visualDensity: VisualDensity.compact,
       constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
       onPressed: onPressed,
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Review bottom bar — fixed scrubber + nav controls that stay on-screen
+// even while the Full Move Report is expanded. Phase A audit § 6.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ReviewBottomBar extends StatelessWidget {
+  const _ReviewBottomBar({
+    required this.currentPly,
+    required this.totalPlies,
+    required this.onStart,
+    required this.onBack,
+    required this.onForward,
+    required this.onEnd,
+    required this.onScrub,
+  });
+
+  final int currentPly;
+  final int totalPlies;
+  final VoidCallback onStart;
+  final VoidCallback onBack;
+  final VoidCallback onForward;
+  final VoidCallback onEnd;
+  final ValueChanged<int> onScrub;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: ApexColors.cardSurface,
+      elevation: 4,
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (totalPlies > 0)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 4, 14, 0),
+                child: Slider(
+                  value: currentPly
+                      .clamp(-1, totalPlies - 1)
+                      .toDouble()
+                      // Shift `-1` (starting position) to `0` for the
+                      // slider so the track starts at the left edge.
+                      .let((v) => v + 1),
+                  min: 0,
+                  max: totalPlies.toDouble(),
+                  divisions: totalPlies,
+                  label: currentPly < 0
+                      ? 'Start'
+                      : 'Move ${(currentPly ~/ 2) + 1}'
+                          '${currentPly.isEven ? '' : '…'}',
+                  activeColor: ApexColors.electricBlue,
+                  inactiveColor:
+                      ApexColors.subtleBorder.withValues(alpha: 0.6),
+                  onChanged: (v) => onScrub(v.round() - 1),
+                ),
+              ),
+            const SizedBox(height: 2),
+            _NavControls(
+              currentPly: currentPly,
+              totalPlies: totalPlies,
+              onStart: onStart,
+              onBack: onBack,
+              onForward: onForward,
+              onEnd: onEnd,
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Local extension so the Slider `value` expression above stays readable.
+extension _IntLet on double {
+  T let<T>(T Function(double) f) => f(this);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Collapsible wrapper around the Full Move Report — defaults to
+// collapsed so the board stays visible on initial load. Phase A audit § 6.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _CollapsibleMoveReport extends StatefulWidget {
+  const _CollapsibleMoveReport({
+    required this.timeline,
+    required this.currentPly,
+    required this.onTapPly,
+  });
+
+  final AnalysisTimeline timeline;
+  final int currentPly;
+  final ValueChanged<int> onTapPly;
+
+  @override
+  State<_CollapsibleMoveReport> createState() =>
+      _CollapsibleMoveReportState();
+}
+
+class _CollapsibleMoveReportState extends State<_CollapsibleMoveReport> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      child: Container(
+        decoration: BoxDecoration(
+          color: ApexColors.elevatedSurface,
+          borderRadius: BorderRadius.circular(12),
+          border:
+              Border.all(color: ApexColors.subtleBorder, width: 0.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            InkWell(
+              onTap: () => setState(() => _expanded = !_expanded),
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 12),
+                child: Row(
+                  children: [
+                    Icon(
+                      _expanded
+                          ? Icons.expand_less_rounded
+                          : Icons.expand_more_rounded,
+                      color: ApexColors.textSecondary,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Full Move Report',
+                      style: ApexTypography.labelLarge.copyWith(
+                        color: ApexColors.textPrimary,
+                        letterSpacing: 1.6,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '${widget.timeline.moves.length} plies',
+                      style: ApexTypography.bodyMedium.copyWith(
+                        color: ApexColors.textTertiary,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (_expanded)
+              _MoveReportList(
+                timeline: widget.timeline,
+                currentPly: widget.currentPly,
+                onTapPly: widget.onTapPly,
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -689,11 +913,19 @@ class _MoveRow extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
+                    // Phase A audit: only surface "Better: …" on plies
+                    // that actually deviate from the engine's top line.
+                    // When the played move equals best we stay silent
+                    // here — the coach card above already says "Top
+                    // engine choice" and a duplicate line in the move
+                    // list adds no value.
                     if (move.engineBestMoveSan != null &&
                         cls != MoveQuality.best &&
                         cls != MoveQuality.brilliant &&
                         cls != MoveQuality.great &&
-                        cls != MoveQuality.book)
+                        cls != MoveQuality.book &&
+                        cls != MoveQuality.forced &&
+                        !_playedEqualsBest(move))
                       Text(
                         'Better: ${move.engineBestMoveSan}',
                         maxLines: 1,

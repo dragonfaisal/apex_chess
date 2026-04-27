@@ -42,6 +42,7 @@ class PlayerProfileService {
     int blundersMine = 0;
     int mistakesMine = 0;
     int brilliantsMine = 0;
+    int missedWinsMine = 0;
 
     final phaseLoss = <GamePhase, double>{
       GamePhase.opening: 0,
@@ -88,6 +89,13 @@ class PlayerProfileService {
         }
 
         // Tally per-quality counters for the *player's* moves.
+        // Phase A note: MissedWin is tracked as its own axis (per
+        // spec § 5.3 `missed_wins_per_game`) AND counted alongside
+        // mistakes so the existing tactical-weakness derivation
+        // (missed-tactic, opening-mistake, endgame-conversion, …)
+        // continues to fire on plies that were classified as
+        // Mistake under the old thresholds and now read as Missed
+        // Win under the Phase A re-classification.
         switch (m.classification) {
           case MoveQuality.blunder:
             blundersMine += 1;
@@ -96,6 +104,13 @@ class PlayerProfileService {
             break;
           case MoveQuality.mistake:
             mistakesMine += 1;
+            tacticTags['mistake'] = (tacticTags['mistake'] ?? 0) + 1;
+            break;
+          case MoveQuality.missedWin:
+            missedWinsMine += 1;
+            mistakesMine += 1;
+            tacticTags['missed-win'] =
+                (tacticTags['missed-win'] ?? 0) + 1;
             tacticTags['mistake'] = (tacticTags['mistake'] ?? 0) + 1;
             break;
           case MoveQuality.brilliant:
@@ -127,7 +142,8 @@ class PlayerProfileService {
         // "king-safety" when a Mistake/Blunder happened on or near
         // the player's king file inside the first 25 plies.
         if (m.classification == MoveQuality.blunder ||
-            m.classification == MoveQuality.mistake) {
+            m.classification == MoveQuality.mistake ||
+            m.classification == MoveQuality.missedWin) {
           if (m.engineBestMoveUci != null &&
               m.engineBestMoveUci != m.uci) {
             tacticTags['missed-tactic'] =
@@ -199,6 +215,7 @@ class PlayerProfileService {
       blundersPerGame: blundersMine / games.length,
       mistakesPerGame: mistakesMine / games.length,
       brilliantsPerGame: brilliantsMine / games.length,
+      missedWinsPerGame: missedWinsMine / games.length,
       openings: openings,
       weakestPhase: weakest,
       tacticalWeaknesses: tagNames,
@@ -246,6 +263,7 @@ class PlayerProfileService {
     for (final tag in profile.tacticalWeaknesses.take(3)) {
       final headline = switch (tag) {
         'missed-tactic' => 'Missed-tactic drills',
+        'missed-win' => 'Convert your wins',
         'hanging-piece' => 'Stop hanging pieces',
         'king-safety' => 'Improve king safety',
         'endgame-conversion' => 'Convert winning endgames',
@@ -256,6 +274,10 @@ class PlayerProfileService {
         'missed-tactic' =>
           'Several positions had a winning combination you missed. '
               'Try the Apex AI tactical sets at level 1500+ for 15 minutes a day.',
+        'missed-win' =>
+          'You repeatedly reached winning positions and let the advantage '
+              'slip. Replay your best games from the archive and force '
+              'yourself to find the most accurate move at every turn.',
         'hanging-piece' =>
           'Multiple games featured loose pieces. Before committing a move, '
               'list every undefended piece on both sides.',

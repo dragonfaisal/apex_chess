@@ -28,8 +28,11 @@ import 'package:dartchess/dartchess.dart';
 
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
+import 'package:apex_chess/core/domain/services/analysis_debug_export.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
-import 'package:apex_chess/core/domain/services/position_heuristics.dart';
+import 'package:apex_chess/core/domain/services/sacrifice_trajectory.dart';
+import 'package:apex_chess/features/archives/domain/archived_game.dart'
+    show AnalysisMode;
 import 'package:apex_chess/infrastructure/api/cloud_eval_service.dart'
     show CloudEvalError;
 import 'package:apex_chess/infrastructure/engine/eco_book.dart';
@@ -94,8 +97,15 @@ class LocalGameAnalyzer {
     void Function(int completed, int total)? onProgress,
     int? depth,
     Duration? movetime,
+    AnalysisMode mode = AnalysisMode.deep,
   }) async {
     final searchDepth = depth ?? _depth;
+    // Quick scans cannot honestly verify Brilliant / Great / Forced
+    // (spec § 3.6.2/4/6 requires MultiPV + deeper search). Surface the
+    // fact to the classifier so those tiers are never emitted from a
+    // Quick scan — the Phase A audit flagged "D14 claims Brilliant on
+    // a 50 cp drift" as a real-device regression.
+    final suppressTrophyTiers = mode == AnalysisMode.quick;
     // Resolve the movetime budget *after* the caller's depth override is
     // applied — otherwise a depth-22 scan would silently inherit the
     // constructor's depth-14 budget and finish at depth ~14, defeating
@@ -154,12 +164,31 @@ class LocalGameAnalyzer {
         uci: uci,
         targetSquare: targetSquare,
         isWhiteMove: isWhite,
+        terminalAfterEval:
+            _terminalEvalFor(newPos, isWhiteMove: isWhite),
       ));
       position = newPos;
     }
 
     final totalPlies = parsed.length;
     onProgress?.call(0, totalPlies);
+
+    // ── Phase A integration: walk the full move list once to compute
+    //    `isFirstSacrificePly` / `isTrivialRecapture` from material
+    //    trajectory. Without this, every sacrificed-piece ply (including
+    //    the opponent's recapture and the consolidating follow-up) was
+    //    being fed `isFirstSacrificePly = true` and could pass the
+    //    Brilliant gate, which is exactly the regression the user
+    //    flagged in the post-PR-#18 audit. ──
+    final trajectory = SacrificeTrajectory.analyze([
+      for (final m in parsed)
+        TrajectoryPly(
+          fenBefore: m.fenBefore,
+          fenAfter: m.fenAfter,
+          isWhiteMove: m.isWhiteMove,
+          targetSquare: m.targetSquare,
+        ),
+    ]);
 
     // ── Cache engine evals by FEN. fenAfter[ply N] == fenBefore[ply N+1],
     // so each non-book position is evaluated at most once. ──
@@ -250,7 +279,13 @@ class LocalGameAnalyzer {
       }
 
       final before = await evalCached(entry.fenBefore);
-      final after = await evalCached(entry.fenAfter);
+      // Terminal positions (checkmate / stalemate / insufficient material)
+      // are resolved from dartchess at parse time — the engine's response
+      // on a mate-on-the-board position is ambiguous (`mate 0` from STM
+      // POV). Using the synthesised eval avoids classifying the
+      // mate-delivering ply as a Blunder.
+      final after =
+          entry.terminalAfterEval ?? await evalCached(entry.fenAfter);
 
       // Derive the *real* pre-move Win% from the engine — `prevWinPct`
       // may be stale if the previous plies came from the book (book moves
@@ -274,17 +309,21 @@ class LocalGameAnalyzer {
         _backfillBookWinPct(moves, winPctBefore);
       }
 
-      // Real sacrifice detection: if the mover's material drops by at
-      // least a minor piece (3) and the opponent's reply does *not*
-      // win it back, flag the ply as a sacrifice so EvaluationAnalyzer
-      // can award Brilliant when the engine says the position still
-      // holds. Without this signal, Brilliant can never fire.
-      final nextReply = ply + 1 < totalPlies ? parsed[ply + 1] : null;
-      final isSacrifice = PositionHeuristics.isSacrificeMove(
-        before: entry.fenBefore,
-        afterReplyFen: nextReply?.fenAfter ?? entry.fenAfter,
-        isWhiteMove: entry.isWhiteMove,
-      );
+      // Material-trajectory-derived sacrifice signals — see
+      // `SacrificeTrajectory.analyze` for the gating rules. The Brilliant
+      // gate now sees three correctly-computed flags instead of the
+      // legacy `isFirstSacrificePly: true` default that made every
+      // recapture a Brilliant candidate.
+      final sac = trajectory[ply];
+
+      // Opening-phase fallback (spec § 3.6.3): if no ECO match was found
+      // in the local book *and* we're inside the first eight plies of the
+      // game, treat the position as still in the opening so the classifier
+      // applies its book-leniency rules instead of the regular ladder.
+      // This stops the analyser from labelling normal opening preparation
+      // as Inaccuracy / Mistake when the move is just a sideline that
+      // happens not to be in our compact book.
+      final isOpeningPhase = ply < 8;
 
       final result = _analyzer.analyze(
         prevCp: before?.scoreCp,
@@ -294,7 +333,11 @@ class LocalGameAnalyzer {
         isWhiteMove: entry.isWhiteMove,
         engineBestMoveUci: before?.bestMoveUci,
         playedMoveUci: entry.uci,
-        isSacrifice: isSacrifice,
+        isSacrifice: sac.isSacrifice,
+        isTrivialRecapture: sac.isTrivialRecapture,
+        isFirstSacrificePly: sac.isFirstSacrificePly,
+        isBook: isOpeningPhase,
+        suppressTrophyTiers: suppressTrophyTiers,
       );
 
       String? engineBestSan;
@@ -327,12 +370,17 @@ class LocalGameAnalyzer {
     }
 
     final winPercentages = moves.map((m) => m.winPercentAfter).toList();
-    return AnalysisTimeline(
+    final timeline = AnalysisTimeline(
       moves: moves,
       startingFen: startingFen,
       headers: headers,
       winPercentages: winPercentages,
     );
+    // Phase A integration audit, step A: structured per-ply log so future
+    // regressions can be triaged from a single device-log dump. No-op in
+    // release.
+    AnalysisDebugExport.dump(timeline, tag: 'local');
+    return timeline;
   }
 
   /// Rewrite contiguous book moves at the tail of [moves] so their
@@ -442,6 +490,7 @@ class _ParsedMove {
     required this.uci,
     required this.targetSquare,
     required this.isWhiteMove,
+    this.terminalAfterEval,
   });
 
   final String fenBefore;
@@ -450,4 +499,46 @@ class _ParsedMove {
   final String uci;
   final String targetSquare;
   final bool isWhiteMove;
+
+  /// Pre-synthesised eval for the post-move position when the move
+  /// resulted in a terminal state (checkmate / stalemate / insufficient
+  /// material). When non-null, the pipeline skips the engine call on
+  /// `fenAfter` and uses this directly — fixes the Phase A audit bug
+  /// where Stockfish's `mate 0` on a checkmate position was being
+  /// normalised to `mateInWhite = 0` and tripping the classifier's
+  /// "opponent forces mate" short-circuit on a move that *delivered*
+  /// mate.
+  final EvalSnapshot? terminalAfterEval;
+}
+
+/// Build a signed-from-white-POV [EvalSnapshot] for the position that
+/// results from a terminal ply. Returns `null` when the post-move
+/// position is not terminal — caller falls back to the normal engine
+/// eval path.
+///
+///   * checkmate: `mateIn = isWhiteMove ? 1 : -1` so the classifier's
+///     `moverForcesMate` predicate sees the favourable side and the
+///     move is no longer classified as Blunder.
+///   * stalemate / insufficient material / 75-move / 5-fold: `scoreCp = 0`
+///     so the position reads as drawn, not as "engine unreachable".
+EvalSnapshot? _terminalEvalFor(Position post, {required bool isWhiteMove}) {
+  if (post.isCheckmate) {
+    return EvalSnapshot(
+      scoreCp: null,
+      mateIn: isWhiteMove ? 1 : -1,
+      depth: 0,
+      bestMoveUci: null,
+      pvMoves: const <String>[],
+    );
+  }
+  if (post.isStalemate || post.isInsufficientMaterial) {
+    return const EvalSnapshot(
+      scoreCp: 0,
+      mateIn: null,
+      depth: 0,
+      bestMoveUci: null,
+      pvMoves: <String>[],
+    );
+  }
+  return null;
 }

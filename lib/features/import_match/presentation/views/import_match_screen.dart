@@ -1400,9 +1400,16 @@ class _ImportAnalysisDialogState
   Future<void> _run() async {
     try {
       final analyzer = ref.read(gameAnalyzerProvider);
+      // Phase A audit § 3: depth alone decides Quick vs Deep for imported
+      // games. D14 is Quick (no Brilliant / Great / Forced claims), D22
+      // is Deep (full ladder). The flag is forwarded end-to-end: analyzer
+      // → classifier → archive record.
+      final mode =
+          widget.depth <= 14 ? AnalysisMode.quick : AnalysisMode.deep;
       final timeline = await analyzer.analyzeFromPgn(
         widget.pgn,
         depth: widget.depth,
+        mode: mode,
         onProgress: (c, t) {
           if (!mounted) return;
           setState(() {
@@ -1412,7 +1419,15 @@ class _ImportAnalysisDialogState
         },
       );
       if (!mounted) return;
-      ref.read(reviewControllerProvider.notifier).loadTimeline(timeline);
+      // Phase A integration audit: if the imported user played as Black,
+      // flip the board automatically so they appear at the bottom of the
+      // review screen. `userIsWhite == false` means the imported game's
+      // user is the Black side; `null` falls back to White-at-bottom for
+      // raw PGN imports where user colour is unknowable.
+      ref.read(reviewControllerProvider.notifier).loadTimeline(
+            timeline,
+            userIsBlack: widget.userIsWhite == false,
+          );
       // Fire-and-forget save — failures never block the review flow.
       final archiveId = await saveAnalysisToArchive(
         ref: ref,
@@ -1421,6 +1436,7 @@ class _ImportAnalysisDialogState
         depth: widget.depth,
         source: widget.source,
         playedAt: widget.playedAt,
+        analysisMode: mode,
       );
       if (archiveId != null) {
         unawaited(saveMistakeDrillsFromTimeline(

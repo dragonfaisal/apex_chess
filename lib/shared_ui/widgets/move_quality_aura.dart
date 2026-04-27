@@ -41,11 +41,17 @@ import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
       );
     case MoveQuality.blunder:
       return (inner: ApexColors.rubyBright, outer: ApexColors.rubyDeep);
+    case MoveQuality.missedWin:
+      // Same warning aura as Blunder — Missed Win means the eval
+      // dropped from winning to equal, which deserves a visible
+      // ruby halo so the user spots it on the board.
+      return (inner: ApexColors.rubyBright, outer: ApexColors.rubyDeep);
     // Everything else is not flashy enough to warrant a neon halo.
     case MoveQuality.good:
     case MoveQuality.inaccuracy:
     case MoveQuality.mistake:
     case MoveQuality.book:
+    case MoveQuality.forced:
       return null;
   }
 }

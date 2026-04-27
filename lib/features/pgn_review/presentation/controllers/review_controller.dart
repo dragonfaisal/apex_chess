@@ -27,11 +27,18 @@ class ReviewState {
   /// Error message if loading failed.
   final String? error;
 
+  /// Board orientation — `false` (default) = White at bottom; `true` =
+  /// Black at bottom. Set automatically from the imported user's
+  /// colour at [ReviewController.loadTimeline] time and toggleable
+  /// via [ReviewController.toggleFlip] for manual override.
+  final bool flipped;
+
   const ReviewState({
     this.timeline,
     this.currentPly = -1,
     this.isLoading = false,
     this.error,
+    this.flipped = false,
   });
 
   ReviewState copyWith({
@@ -39,12 +46,14 @@ class ReviewState {
     int? currentPly,
     bool? isLoading,
     String? error,
+    bool? flipped,
   }) =>
       ReviewState(
         timeline: timeline ?? this.timeline,
         currentPly: currentPly ?? this.currentPly,
         isLoading: isLoading ?? this.isLoading,
         error: error,
+        flipped: flipped ?? this.flipped,
       );
 
   /// O(1) access to the current ply's analysis.
@@ -112,8 +121,22 @@ class ReviewController extends Notifier<ReviewState> {
   }
 
   /// Loads a pre-computed timeline into the review controller.
-  void loadTimeline(AnalysisTimeline timeline) {
-    state = ReviewState(timeline: timeline, currentPly: -1);
+  ///
+  /// [userIsBlack] auto-flips the board so the imported user is at the
+  /// bottom — the integration-audit fix for the "my games show me at
+  /// the top when I imported as Black" perspective bug.
+  void loadTimeline(AnalysisTimeline timeline, {bool userIsBlack = false}) {
+    state = ReviewState(
+      timeline: timeline,
+      currentPly: -1,
+      flipped: userIsBlack,
+    );
+  }
+
+  /// Toggle the manual board-flip override. The orientation persists
+  /// for the lifetime of the loaded timeline.
+  void toggleFlip() {
+    state = state.copyWith(flipped: !state.flipped);
   }
 
   /// Navigates to a specific ply.

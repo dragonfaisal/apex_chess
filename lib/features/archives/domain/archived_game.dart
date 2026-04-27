@@ -10,6 +10,33 @@ library;
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 
+/// Bumped on every classifier-behaviour change so cached timelines
+/// produced by an older brain are recomputed instead of silently
+/// surfaced as stale verdicts. Persisted alongside each archived game
+/// in [ArchivedGame.classifierVersion]; the archive UI uses this to
+/// decide whether the [ArchivedGame.cachedTimeline] is reusable.
+///
+///   * `1` — Phase 6 brain (pre-PR-#18, no Forced/MissedWin tiers).
+///   * `2` — Phase A brain (PR #18, Win%-Δ primary, strict Brilliant).
+///   * `3` — Phase A integration (post-#18 audit): trajectory-driven
+///            `isFirstSacrificePly` / `isTrivialRecapture`, opening-
+///            phase fallback, archive counts derived from timeline.
+const int kClassifierVersion = 3;
+
+/// Analysis mode used when the timeline was produced. Stored so a
+/// Quick scan does not masquerade as a Deep one when listed alongside
+/// it; the archive UI can also surface this as a pill.
+enum AnalysisMode {
+  quick('quick'),
+  deep('deep');
+
+  const AnalysisMode(this.wire);
+  final String wire;
+
+  static AnalysisMode fromWire(String? s) =>
+      values.firstWhere((v) => v.wire == s, orElse: () => AnalysisMode.deep);
+}
+
 /// Source of the original game. Keep stable — persisted as a string
 /// in the Hive box so renames would silently invalidate old records.
 enum ArchiveSource {
@@ -45,7 +72,19 @@ class ArchivedGame {
   final int depth;
   /// Raw PGN — required to rebuild the board on re-open.
   final String pgn;
-  /// Per-classification counts, for filter UI and at-a-glance stats.
+  /// Classifier version this record was produced under. The archive
+  /// list uses this together with [kClassifierVersion] to decide if
+  /// the cached timeline can be re-used or must be recomputed before
+  /// any UI numbers are shown.
+  final int classifierVersion;
+  /// Quick or Deep analysis mode — Quick suppresses Brilliant / Great
+  /// / Forced gating since they require deep verification + MultiPV.
+  final AnalysisMode analysisMode;
+  /// Per-classification counts. **Derived from the cached timeline**
+  /// (when present) via [qualityCountsLive] so the counts can never
+  /// drift from the actual classifications on disk — the
+  /// integration-audit fix that closes the "archive shows Brilliants
+  /// that don't exist in the timeline" regression.
   final Map<MoveQuality, int> qualityCounts;
   /// White-perspective average centipawn loss (for accuracy column).
   final double averageCpLoss;
@@ -81,14 +120,37 @@ class ArchivedGame {
     this.openingName,
     this.ecoCode,
     this.cachedTimeline,
+    this.classifierVersion = kClassifierVersion,
+    this.analysisMode = AnalysisMode.deep,
   });
 
+  /// True when the cached timeline was produced under the *current*
+  /// classifier brain. The archive list uses this to decide whether
+  /// re-opening can use the cache or must trigger a re-scan.
+  bool get isCacheCurrent =>
+      classifierVersion == kClassifierVersion && cachedTimeline != null;
+
+  /// Live quality counts — derived from the cached timeline when
+  /// present, falling back to the persisted `qualityCounts` map for
+  /// older records that pre-date the Phase A integration audit.
+  Map<MoveQuality, int> get qualityCountsLive {
+    final tl = cachedTimeline;
+    if (tl != null) return tl.qualityCounts;
+    return qualityCounts;
+  }
+
+  // All count getters route through [qualityCountsLive] so they reflect
+  // the *actual* classifications stored in the timeline. The legacy
+  // [qualityCounts] map is still persisted for backward compatibility
+  // with records that pre-date the cached-timeline schema.
   int get brilliantCount =>
-      qualityCounts[MoveQuality.brilliant] ?? 0;
-  int get blunderCount => qualityCounts[MoveQuality.blunder] ?? 0;
-  int get mistakeCount => qualityCounts[MoveQuality.mistake] ?? 0;
+      qualityCountsLive[MoveQuality.brilliant] ?? 0;
+  int get blunderCount => qualityCountsLive[MoveQuality.blunder] ?? 0;
+  int get mistakeCount => qualityCountsLive[MoveQuality.mistake] ?? 0;
   int get inaccuracyCount =>
-      qualityCounts[MoveQuality.inaccuracy] ?? 0;
+      qualityCountsLive[MoveQuality.inaccuracy] ?? 0;
+  int get missedWinCount =>
+      qualityCountsLive[MoveQuality.missedWin] ?? 0;
 
   // ── Serialisation ──────────────────────────────────────────────
   // Hive can persist `Map<String, dynamic>` directly via its default
@@ -114,6 +176,8 @@ class ArchivedGame {
         'totalPlies': totalPlies,
         'openingName': openingName,
         'ecoCode': ecoCode,
+        'classifierVersion': classifierVersion,
+        'analysisMode': analysisMode.wire,
         if (cachedTimeline != null) 'cachedTimeline': cachedTimeline!.toJson(),
       };
 
@@ -146,6 +210,12 @@ class ArchivedGame {
       cachedTimeline: j['cachedTimeline'] is Map
           ? AnalysisTimeline.fromJson(j['cachedTimeline'] as Map)
           : null,
+      // Old records without a stored version are treated as v1 so the
+      // archive UI can offer to re-scan them. Old records without an
+      // explicit mode default to `deep` since pre-audit scans always
+      // ran the full ladder.
+      classifierVersion: (j['classifierVersion'] as num?)?.toInt() ?? 1,
+      analysisMode: AnalysisMode.fromWire(j['analysisMode'] as String?),
     );
   }
 
@@ -158,6 +228,7 @@ class ArchivedGame {
     required int depth,
     required String pgn,
     DateTime? playedAt,
+    AnalysisMode analysisMode = AnalysisMode.deep,
   }) {
     final h = timeline.headers;
     return ArchivedGame(
@@ -178,6 +249,8 @@ class ArchivedGame {
       openingName: h['Opening'],
       ecoCode: h['ECO'],
       cachedTimeline: timeline,
+      classifierVersion: kClassifierVersion,
+      analysisMode: analysisMode,
     );
   }
 

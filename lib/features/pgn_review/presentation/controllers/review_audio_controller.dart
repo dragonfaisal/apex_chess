@@ -88,6 +88,7 @@ class ReviewAudioController {
     switch (q) {
       case MoveQuality.blunder:
       case MoveQuality.mistake:
+      case MoveQuality.missedWin:
         sfxFile = 'error.mp3';
       case MoveQuality.brilliant:
         sfxFile = 'confirmation.mp3';
@@ -104,6 +105,7 @@ class ReviewAudioController {
   bool _isMajor(MoveQuality q) =>
       q == MoveQuality.blunder ||
       q == MoveQuality.mistake ||
+      q == MoveQuality.missedWin ||
       q == MoveQuality.brilliant;
 
   Future<void> dispose() async {

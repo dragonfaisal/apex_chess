@@ -28,6 +28,14 @@ enum ArchiveSort {
 
 enum ArchiveResultFilter { any, wins, losses, draws }
 
+/// Colour filter — only meaningful when [ArchiveFilters.perspective] is
+/// set, because "user played White" needs to know which side is the
+/// user. `any` disables the filter.
+enum ArchiveColorFilter { any, white, black }
+
+/// Mode filter for the Quick/Deep split. `any` disables.
+enum ArchiveModeFilter { any, quick, deep }
+
 class ArchiveFilters {
   final ArchiveSort sort;
   final ArchiveResultFilter result;
@@ -36,12 +44,26 @@ class ArchiveFilters {
   final String? perspective;
   /// Only show games with at least this many brilliant moves.
   final int minBrilliants;
+  /// When non-null, only games from this source are shown.
+  final ArchiveSource? source;
+  /// Only show games where the user (per [perspective]) played this
+  /// colour. Requires `perspective != null` to have any effect.
+  final ArchiveColorFilter color;
+  /// Only show Quick / Deep scans (or both).
+  final ArchiveModeFilter mode;
+  /// Free-text filter applied to opponent name + opening name + ECO.
+  /// Empty string disables the filter.
+  final String search;
 
   const ArchiveFilters({
     this.sort = ArchiveSort.newest,
     this.result = ArchiveResultFilter.any,
     this.perspective,
     this.minBrilliants = 0,
+    this.source,
+    this.color = ArchiveColorFilter.any,
+    this.mode = ArchiveModeFilter.any,
+    this.search = '',
   });
 
   ArchiveFilters copyWith({
@@ -50,6 +72,11 @@ class ArchiveFilters {
     String? perspective,
     bool clearPerspective = false,
     int? minBrilliants,
+    ArchiveSource? source,
+    bool clearSource = false,
+    ArchiveColorFilter? color,
+    ArchiveModeFilter? mode,
+    String? search,
   }) =>
       ArchiveFilters(
         sort: sort ?? this.sort,
@@ -57,6 +84,10 @@ class ArchiveFilters {
         perspective:
             clearPerspective ? null : (perspective ?? this.perspective),
         minBrilliants: minBrilliants ?? this.minBrilliants,
+        source: clearSource ? null : (source ?? this.source),
+        color: color ?? this.color,
+        mode: mode ?? this.mode,
+        search: search ?? this.search,
       );
 }
 
@@ -94,11 +125,37 @@ class ArchiveState {
   /// surface area.
   List<ArchivedGame> get visible {
     final out = <ArchivedGame>[];
+    final search = filters.search.trim().toLowerCase();
+    final me = filters.perspective?.toLowerCase();
     for (final g in games) {
       if (g.brilliantCount < filters.minBrilliants) continue;
+      if (filters.source != null && g.source != filters.source) continue;
+      if (filters.mode != ArchiveModeFilter.any) {
+        final isQuick = g.analysisMode == AnalysisMode.quick;
+        if (filters.mode == ArchiveModeFilter.quick && !isQuick) continue;
+        if (filters.mode == ArchiveModeFilter.deep && isQuick) continue;
+      }
+      if (filters.color != ArchiveColorFilter.any && me != null) {
+        final whiteIsMe = g.white.toLowerCase() == me;
+        final blackIsMe = g.black.toLowerCase() == me;
+        if (filters.color == ArchiveColorFilter.white && !whiteIsMe) {
+          continue;
+        }
+        if (filters.color == ArchiveColorFilter.black && !blackIsMe) {
+          continue;
+        }
+      }
+      if (search.isNotEmpty) {
+        final hay = <String>[
+          g.white,
+          g.black,
+          g.openingName ?? '',
+          g.ecoCode ?? '',
+        ].map((s) => s.toLowerCase()).join(' ');
+        if (!hay.contains(search)) continue;
+      }
       if (filters.result != ArchiveResultFilter.any &&
           filters.perspective != null) {
-        final me = filters.perspective!.toLowerCase();
         final whiteIsMe = g.white.toLowerCase() == me;
         final blackIsMe = g.black.toLowerCase() == me;
         if (!whiteIsMe && !blackIsMe) continue;
@@ -225,12 +282,17 @@ class ArchiveController extends Notifier<ArchiveState> {
       analyzedAt: existing.analyzedAt,
       depth: existing.depth,
       pgn: existing.pgn,
-      qualityCounts: existing.qualityCounts,
-      averageCpLoss: existing.averageCpLoss,
-      totalPlies: existing.totalPlies,
+      // Counts come from the *new* timeline so a re-analysis
+      // immediately fixes any stale numbers — the integration-audit
+      // "archive Brilliant count doesn't match timeline" fix.
+      qualityCounts: timeline.qualityCounts,
+      averageCpLoss: timeline.averageCpLoss,
+      totalPlies: timeline.totalPlies,
       openingName: existing.openingName,
       ecoCode: existing.ecoCode,
       cachedTimeline: timeline,
+      classifierVersion: kClassifierVersion,
+      analysisMode: existing.analysisMode,
     );
     await repo.save(updated);
     await _reload();
@@ -257,12 +319,44 @@ class ArchiveController extends Notifier<ArchiveState> {
     );
   }
 
+  /// `null` clears the source filter (show all sources).
+  void setSource(ArchiveSource? source) {
+    state = state.copyWith(
+      filters: state.filters.copyWith(
+        source: source,
+        clearSource: source == null,
+      ),
+    );
+  }
+
+  void setColorFilter(ArchiveColorFilter color, {String? perspective}) {
+    state = state.copyWith(
+      filters: state.filters.copyWith(
+        color: color,
+        perspective: perspective,
+        clearPerspective: perspective == null,
+      ),
+    );
+  }
+
+  void setModeFilter(ArchiveModeFilter mode) {
+    state = state.copyWith(
+      filters: state.filters.copyWith(mode: mode),
+    );
+  }
+
+  void setSearch(String query) {
+    state = state.copyWith(filters: state.filters.copyWith(search: query));
+  }
+
   /// Exposed purely for tests / debug — returns the raw quality
   /// counts across the entire archive.
   Map<MoveQuality, int> get aggregateCounts {
     final out = <MoveQuality, int>{};
     for (final g in state.games) {
-      g.qualityCounts.forEach((k, v) {
+      // Use the live (timeline-derived when available) counts so the
+      // aggregate respects what's actually on disk in the timeline.
+      g.qualityCountsLive.forEach((k, v) {
         out[k] = (out[k] ?? 0) + v;
       });
     }

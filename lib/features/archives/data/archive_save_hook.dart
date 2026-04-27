@@ -28,6 +28,11 @@ String archiveIdForPgn(String pgn) {
 }
 
 /// Fire-and-forget save. Returns the resulting id so callers can log it.
+///
+/// [analysisMode] is persisted on the [ArchivedGame] so Quick and Deep
+/// scans can be filtered / surfaced separately in the archive — see
+/// Phase A audit § 3. Defaults to Deep for backwards compatibility
+/// with callers that pre-date the split.
 Future<String?> saveAnalysisToArchive({
   required WidgetRef ref,
   required AnalysisTimeline timeline,
@@ -35,6 +40,7 @@ Future<String?> saveAnalysisToArchive({
   required int depth,
   required ArchiveSource source,
   DateTime? playedAt,
+  AnalysisMode analysisMode = AnalysisMode.deep,
 }) async {
   try {
     final id = archiveIdForPgn(pgn);
@@ -45,6 +51,7 @@ Future<String?> saveAnalysisToArchive({
       depth: depth,
       pgn: pgn,
       playedAt: playedAt,
+      analysisMode: analysisMode,
     );
     await ref.read(archiveControllerProvider.notifier).save(game);
     return id;
