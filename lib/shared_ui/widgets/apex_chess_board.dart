@@ -28,6 +28,13 @@ class ApexChessBoard extends StatelessWidget {
   final ValueChanged<String>? onSquareTapped;
   final MoveQuality? lastMoveQuality;
 
+  /// Optional engine "better move" arrow rendered from the source square
+  /// to the destination, in algebraic form (e.g. `('f8', 'e7')` for
+  /// `Be7`). Independent of [lastMove] so the arrow can survive and
+  /// guide the user even when the last-played move is highlighted in a
+  /// different colour. `null` hides the arrow entirely.
+  final (String, String)? betterMove;
+
   const ApexChessBoard({
     super.key,
     required this.fen,
@@ -38,6 +45,7 @@ class ApexChessBoard extends StatelessWidget {
     this.isCheck = false,
     this.onSquareTapped,
     this.lastMoveQuality,
+    this.betterMove,
   });
 
   @override
@@ -90,6 +98,29 @@ class ApexChessBoard extends StatelessWidget {
                 if (lastMove != null && lastMoveQuality != null)
                   _buildQualityOverlay(
                       lastMove!.$2, squareSize, lastMoveQuality!),
+                // Engine "better move" arrow + destination halo. Drawn
+                // *after* pieces so it reads on top of the board, but
+                // *before* coordinates so the file/rank labels stay
+                // legible. Only renders for valid algebraic squares —
+                // out-of-band data is silently skipped.
+                if (betterMove != null) ...[
+                  _buildBetterMoveHalo(betterMove!.$2, squareSize),
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        painter: _BetterMoveArrowPainter(
+                          fromFile: _fileFromAlgebraic(betterMove!.$1),
+                          fromRank: _rankFromAlgebraic(betterMove!.$1),
+                          toFile: _fileFromAlgebraic(betterMove!.$2),
+                          toRank: _rankFromAlgebraic(betterMove!.$2),
+                          flipped: flipped,
+                        ),
+                        isComplex: false,
+                        willChange: false,
+                      ),
+                    ),
+                  ),
+                ],
                 Positioned.fill(
                   child: CustomPaint(
                     painter: _CoordinatePainter(flipped: flipped),
@@ -245,6 +276,31 @@ class ApexChessBoard extends StatelessWidget {
     );
   }
 
+  /// Soft cyan halo on the destination square of the engine's better
+  /// move — reads as "look here" without competing with the per-quality
+  /// aura already on the played-move square.
+  Widget _buildBetterMoveHalo(String square, double squareSize) {
+    final pos = _squareToPosition(square, squareSize);
+    return Positioned(
+      left: pos.dx,
+      top: pos.dy,
+      width: squareSize,
+      height: squareSize,
+      child: IgnorePointer(
+        child: Container(
+          decoration: BoxDecoration(
+            color: ApexColors.electricBlue.withAlpha(45),
+            border: Border.all(
+              color: ApexColors.electricBlue.withAlpha(160),
+              width: 1.5,
+            ),
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildPiece(String key, (int, int, String) value, double squareSize) {
     final (file, rank, pieceChar) = value;
     final pos = _squareToPositionFromFileRank(file, rank, squareSize);
@@ -330,6 +386,86 @@ class _ApexBoardPainter extends CustomPainter {
   @override
   bool shouldRepaint(_ApexBoardPainter oldDelegate) =>
       flipped != oldDelegate.flipped;
+}
+
+/// Draws an electric-blue arrow from the source to destination square
+/// of the engine's better-move suggestion. Coordinates are board-local
+/// (top-left origin) and respect [flipped] so a Black-perspective board
+/// still draws the arrow correctly.
+class _BetterMoveArrowPainter extends CustomPainter {
+  _BetterMoveArrowPainter({
+    required this.fromFile,
+    required this.fromRank,
+    required this.toFile,
+    required this.toRank,
+    required this.flipped,
+  });
+
+  final int fromFile;
+  final int fromRank;
+  final int toFile;
+  final int toRank;
+  final bool flipped;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (fromFile < 0 || fromFile > 7 || toFile < 0 || toFile > 7) return;
+    if (fromRank < 0 || fromRank > 7 || toRank < 0 || toRank > 7) return;
+    if (fromFile == toFile && fromRank == toRank) return;
+
+    final squareSize = size.width / 8;
+    Offset center(int file, int rank) {
+      final df = flipped ? 7 - file : file;
+      final dr = flipped ? rank : 7 - rank;
+      return Offset(
+        df * squareSize + squareSize / 2,
+        dr * squareSize + squareSize / 2,
+      );
+    }
+
+    final start = center(fromFile, fromRank);
+    final end = center(toFile, toRank);
+    final dir = end - start;
+    final dist = dir.distance;
+    if (dist <= 1) return;
+    final unit = Offset(dir.dx / dist, dir.dy / dist);
+
+    // Pull the shaft endpoints in by a small margin so the arrow
+    // doesn't overlap the centre of the source piece nor poke past the
+    // destination square.
+    final shaftStart = start + unit * (squareSize * 0.32);
+    final tip = end - unit * (squareSize * 0.18);
+    final shaftEnd = tip - unit * (squareSize * 0.30);
+
+    final shaftPaint = Paint()
+      ..color = ApexColors.electricBlue.withAlpha(220)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = squareSize * 0.16
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(shaftStart, shaftEnd, shaftPaint);
+
+    final perp = Offset(-unit.dy, unit.dx);
+    final headHalfWidth = squareSize * 0.28;
+    final headBaseLeft = shaftEnd + perp * headHalfWidth;
+    final headBaseRight = shaftEnd - perp * headHalfWidth;
+    final headPath = Path()
+      ..moveTo(tip.dx, tip.dy)
+      ..lineTo(headBaseLeft.dx, headBaseLeft.dy)
+      ..lineTo(headBaseRight.dx, headBaseRight.dy)
+      ..close();
+    final headPaint = Paint()
+      ..color = ApexColors.electricBlue.withAlpha(230)
+      ..style = PaintingStyle.fill;
+    canvas.drawPath(headPath, headPaint);
+  }
+
+  @override
+  bool shouldRepaint(_BetterMoveArrowPainter old) =>
+      old.fromFile != fromFile ||
+      old.fromRank != fromRank ||
+      old.toFile != toFile ||
+      old.toRank != toRank ||
+      old.flipped != flipped;
 }
 
 class _CoordinatePainter extends CustomPainter {

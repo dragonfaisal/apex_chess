@@ -109,6 +109,19 @@ class ArchiveScreen extends ConsumerWidget {
     WidgetRef ref,
     ArchivedGame game,
   ) async {
+    // Phase 6 instant-reopen: if the saved record carries a cached
+    // timeline, push the review screen straight away without spawning
+    // the engine. The dialog never appears for cached games — the user
+    // experiences a tap-and-open transition.
+    final cached = game.cachedTimeline;
+    if (cached != null && cached.moves.isNotEmpty) {
+      ref.read(reviewControllerProvider.notifier).loadTimeline(cached);
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => const ReviewScreen()),
+      );
+      return;
+    }
+
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
     showDialog<void>(
@@ -121,6 +134,15 @@ class ArchiveScreen extends ConsumerWidget {
       final timeline =
           await analyzer.analyzeFromPgn(game.pgn, depth: game.depth);
       ref.read(reviewControllerProvider.notifier).loadTimeline(timeline);
+      // Persist the freshly-computed timeline back onto the archive
+      // record so the *next* reopen is instant — even when the user's
+      // archive predates Phase 6 and was originally saved without a
+      // cached timeline.
+      try {
+        await ref
+            .read(archiveControllerProvider.notifier)
+            .updateCachedTimeline(game.id, timeline);
+      } catch (_) {/* persistence is best-effort */}
       if (!navigator.mounted) return;
       navigator.pop();
       navigator.push(

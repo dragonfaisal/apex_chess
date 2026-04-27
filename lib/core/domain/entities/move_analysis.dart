@@ -92,4 +92,65 @@ class MoveAnalysis {
   String toString() =>
       'MoveAnalysis(ply: $ply, san: $san, class: ${classification.label}, '
       'win: ${winPercentAfter.toStringAsFixed(1)}%)';
+
+  // ── Serialisation ──────────────────────────────────────────────
+  // Used by the archive layer to persist a full analysed timeline
+  // alongside the PGN so a re-opened game skips analysis entirely.
+  // Schema is intentionally explicit (no reflection) so a future
+  // field rename never silently invalidates old records — instead
+  // the missing key falls through to a sensible default in
+  // [fromJson].
+
+  Map<String, dynamic> toJson() => {
+        'ply': ply,
+        'san': san,
+        'uci': uci,
+        'fenBefore': fenBefore,
+        'fenAfter': fenAfter,
+        'targetSquare': targetSquare,
+        'winPercentBefore': winPercentBefore,
+        'winPercentAfter': winPercentAfter,
+        'deltaW': deltaW,
+        'isWhiteMove': isWhiteMove,
+        'classification': classification.name,
+        'engineBestMoveUci': engineBestMoveUci,
+        'engineBestMoveSan': engineBestMoveSan,
+        'scoreCpAfter': scoreCpAfter,
+        'mateInAfter': mateInAfter,
+        'inBook': inBook,
+        'openingName': openingName,
+        'ecoCode': ecoCode,
+        'message': message,
+      };
+
+  factory MoveAnalysis.fromJson(Map<dynamic, dynamic> j) {
+    final classRaw = j['classification'] as String?;
+    final classification = MoveQuality.values.firstWhere(
+      (q) => q.name == classRaw,
+      orElse: () => MoveQuality.good,
+    );
+    return MoveAnalysis(
+      ply: (j['ply'] as num).toInt(),
+      san: j['san'] as String? ?? '',
+      uci: j['uci'] as String? ?? '',
+      fenBefore: j['fenBefore'] as String? ?? '',
+      fenAfter: j['fenAfter'] as String? ?? '',
+      targetSquare: j['targetSquare'] as String? ?? '',
+      winPercentBefore:
+          (j['winPercentBefore'] as num?)?.toDouble() ?? 50.0,
+      winPercentAfter:
+          (j['winPercentAfter'] as num?)?.toDouble() ?? 50.0,
+      deltaW: (j['deltaW'] as num?)?.toDouble() ?? 0.0,
+      isWhiteMove: j['isWhiteMove'] as bool? ?? true,
+      classification: classification,
+      engineBestMoveUci: j['engineBestMoveUci'] as String?,
+      engineBestMoveSan: j['engineBestMoveSan'] as String?,
+      scoreCpAfter: (j['scoreCpAfter'] as num?)?.toInt(),
+      mateInAfter: (j['mateInAfter'] as num?)?.toInt(),
+      inBook: j['inBook'] as bool? ?? false,
+      openingName: j['openingName'] as String?,
+      ecoCode: j['ecoCode'] as String?,
+      message: j['message'] as String? ?? '',
+    );
+  }
 }

@@ -211,7 +211,6 @@ class LivePlayNotifier extends Notifier<LivePlayState> {
     if (fromSq == null || toSq == null) return;
 
     final targetPiece = _position.board.pieceAt(toSq);
-    final isCapture = targetPiece != null;
     final isWhiteMoving = _position.turn == Side.white;
 
     final movingPiece = _position.board.pieceAt(fromSq);
@@ -219,13 +218,35 @@ class LivePlayNotifier extends Notifier<LivePlayState> {
         movingPiece.role == Role.pawn &&
         (toSq.rank == 0 || toSq.rank == 7);
 
-    // Castling = king moving two files horizontally on the back rank.
-    // Detected here so the audio layer can play a dedicated `castle.mp3`
-    // instead of falling into the generic `move` bucket (or — if dart-
-    // chess ever emits king→rook-square castling — the `capture` bucket).
-    final isCastling = movingPiece != null &&
+    // Castling detection.
+    //
+    // dartchess emits castling as king-captures-rook (e1→h1, e1→a1) — its
+    // `legalMovesOf(king)` returns the rook squares, *not* g1/c1. So the
+    // tap that lands on `to=h1` is a legal short castle and `play()` does
+    // the right thing internally. The bug we're fixing here is purely
+    // visual: the move-quality aura was being painted on h1 / a1 because
+    // `lastMove` carried the rook square.
+    //
+    // Treat any king move from e-file landing on the back rank's a/c/g/h
+    // file as a castling candidate, then map to the FIDE king-target so
+    // every downstream consumer (aura, sound, last-move highlight) sees
+    // g1/c1/g8/c8 — never the rook square.
+    final isCastlingCandidate = movingPiece != null &&
         movingPiece.role == Role.king &&
-        (toSq.file - fromSq.file).abs() == 2;
+        from.length == 2 && from[0] == 'e' &&
+        to.length == 2 && to[1] == from[1] &&
+        (to[0] == 'a' || to[0] == 'c' || to[0] == 'g' || to[0] == 'h');
+    final fidetoFile = isCastlingCandidate
+        ? ((to[0] == 'h' || to[0] == 'g') ? 'g' : 'c')
+        : null;
+    final fidetoSquare =
+        fidetoFile == null ? to : '$fidetoFile${to[1]}';
+    final isCastling = isCastlingCandidate;
+
+    // `isCapture` must be derived from the *original* tapped square: a
+    // king-captures-rook castling target has the friendly rook sitting
+    // on it, but it is NOT a real capture.
+    final isCapture = targetPiece != null && !isCastling;
 
     final move = NormalMove(
         from: fromSq, to: toSq,
@@ -265,7 +286,10 @@ class LivePlayNotifier extends Notifier<LivePlayState> {
     state = state.copyWith(
       currentFen: _position.fen,
       clearSelection: true,
-      lastMove: (from, to),
+      // For castling, store the FIDE king-target (g1/c1/g8/c8) — never
+      // the rook square — so the move-quality aura paints on the correct
+      // square. See the `isCastlingCandidate` block above.
+      lastMove: (from, fidetoSquare),
       isCheck: _position.isCheck,
       isCheckmate: _position.isCheckmate,
       isStalemate: _position.isStalemate,

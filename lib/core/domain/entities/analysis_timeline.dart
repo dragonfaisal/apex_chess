@@ -57,4 +57,38 @@ class AnalysisTimeline {
     }
     return totalLoss / moves.length;
   }
+
+  // ── Serialisation ──────────────────────────────────────────────
+  // Persisted alongside [ArchivedGame] so the archive can re-open a
+  // game **instantly** instead of replaying the entire engine
+  // pipeline. Heavy fields (per-ply FEN strings) dominate the size,
+  // but a typical 60-move game lands at ~15–25 KB JSON which is
+  // trivial for Hive's `Box<String>` to hold.
+
+  Map<String, dynamic> toJson() => {
+        'startingFen': startingFen,
+        'headers': headers,
+        'winPercentages': winPercentages,
+        'moves': moves.map((m) => m.toJson()).toList(growable: false),
+      };
+
+  factory AnalysisTimeline.fromJson(Map<dynamic, dynamic> j) {
+    final headersRaw = (j['headers'] as Map?) ?? const {};
+    final winsRaw = (j['winPercentages'] as List?) ?? const [];
+    final movesRaw = (j['moves'] as List?) ?? const [];
+    return AnalysisTimeline(
+      startingFen: j['startingFen'] as String? ?? '',
+      headers: {
+        for (final e in headersRaw.entries)
+          e.key.toString(): e.value?.toString() ?? '',
+      },
+      winPercentages: [
+        for (final v in winsRaw) (v as num).toDouble(),
+      ],
+      moves: [
+        for (final m in movesRaw)
+          MoveAnalysis.fromJson(m as Map),
+      ],
+    );
+  }
 }
