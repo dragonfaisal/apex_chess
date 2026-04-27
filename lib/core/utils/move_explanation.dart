@@ -119,11 +119,15 @@ class BetterMoveExplanation {
         return 'to avoid losing material and steady the position.';
       case MoveQuality.mistake:
         return 'to keep the position safe and recover the eval.';
+      case MoveQuality.missedWin:
+        return 'to convert the winning advantage instead of letting it slip.';
       case MoveQuality.inaccuracy:
         return 'for a stronger continuation that holds the eval.';
       case MoveQuality.good:
       case MoveQuality.excellent:
         return 'to stay flush with the engine\'s top line.';
+      case MoveQuality.forced:
+        return 'as the only move that keeps the position alive.';
       case MoveQuality.best:
       case MoveQuality.brilliant:
       case MoveQuality.great:
