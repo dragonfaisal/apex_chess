@@ -170,10 +170,15 @@ class ReviewScreen extends ConsumerWidget {
       case MoveQuality.best:
       case MoveQuality.book:
         return false;
+      case MoveQuality.forced:
+        // Forced means there was no real alternative — pointing the
+        // user at "the same move" is misleading.
+        return false;
       case MoveQuality.excellent:
       case MoveQuality.good:
       case MoveQuality.inaccuracy:
       case MoveQuality.mistake:
+      case MoveQuality.missedWin:
       case MoveQuality.blunder:
         return true;
     }
@@ -693,7 +698,8 @@ class _MoveRow extends StatelessWidget {
                         cls != MoveQuality.best &&
                         cls != MoveQuality.brilliant &&
                         cls != MoveQuality.great &&
-                        cls != MoveQuality.book)
+                        cls != MoveQuality.book &&
+                        cls != MoveQuality.forced)
                       Text(
                         'Better: ${move.engineBestMoveSan}',
                         maxLines: 1,
