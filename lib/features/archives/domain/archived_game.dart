@@ -53,6 +53,16 @@ class ArchivedGame {
   final String? openingName;
   final String? ecoCode;
 
+  /// Optional cached full timeline. When present, re-opening the game
+  /// from the Archived Intel screen skips the engine entirely and
+  /// rebuilds the review state from this snapshot — that's how Phase 6
+  /// "open saved report instantly" works in practice.
+  ///
+  /// Older records persisted before this field existed simply leave it
+  /// `null` and fall through to the legacy re-analysis path; the schema
+  /// is forward-compatible.
+  final AnalysisTimeline? cachedTimeline;
+
   const ArchivedGame({
     required this.id,
     required this.source,
@@ -70,6 +80,7 @@ class ArchivedGame {
     required this.totalPlies,
     this.openingName,
     this.ecoCode,
+    this.cachedTimeline,
   });
 
   int get brilliantCount =>
@@ -103,6 +114,7 @@ class ArchivedGame {
         'totalPlies': totalPlies,
         'openingName': openingName,
         'ecoCode': ecoCode,
+        if (cachedTimeline != null) 'cachedTimeline': cachedTimeline!.toJson(),
       };
 
   factory ArchivedGame.fromJson(Map<dynamic, dynamic> j) {
@@ -131,6 +143,9 @@ class ArchivedGame {
       totalPlies: (j['totalPlies'] as num).toInt(),
       openingName: j['openingName'] as String?,
       ecoCode: j['ecoCode'] as String?,
+      cachedTimeline: j['cachedTimeline'] is Map
+          ? AnalysisTimeline.fromJson(j['cachedTimeline'] as Map)
+          : null,
     );
   }
 
@@ -162,6 +177,7 @@ class ArchivedGame {
       totalPlies: timeline.totalPlies,
       openingName: h['Opening'],
       ecoCode: h['ECO'],
+      cachedTimeline: timeline,
     );
   }
 

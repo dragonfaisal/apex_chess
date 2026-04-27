@@ -10,6 +10,7 @@ library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/domain/entities/analysis_timeline.dart';
 import '../../../../core/domain/services/evaluation_analyzer.dart';
 import '../../data/archive_repository.dart';
 import '../../domain/archived_game.dart';
@@ -198,6 +199,40 @@ class ArchiveController extends Notifier<ArchiveState> {
   Future<void> clearAll() async {
     final repo = await ref.read(archiveRepositoryProvider.future);
     await repo.clear();
+    await _reload();
+  }
+
+  /// Persist a freshly-recomputed [AnalysisTimeline] back onto the
+  /// existing record so subsequent re-opens are instant. No-op if the
+  /// id is missing from the in-memory list (the user may have deleted
+  /// the record while analysis was running).
+  Future<void> updateCachedTimeline(
+    String id,
+    AnalysisTimeline timeline,
+  ) async {
+    final repo = await ref.read(archiveRepositoryProvider.future);
+    final existing = repo.find(id);
+    if (existing == null) return;
+    final updated = ArchivedGame(
+      id: existing.id,
+      source: existing.source,
+      white: existing.white,
+      black: existing.black,
+      whiteRating: existing.whiteRating,
+      blackRating: existing.blackRating,
+      result: existing.result,
+      playedAt: existing.playedAt,
+      analyzedAt: existing.analyzedAt,
+      depth: existing.depth,
+      pgn: existing.pgn,
+      qualityCounts: existing.qualityCounts,
+      averageCpLoss: existing.averageCpLoss,
+      totalPlies: existing.totalPlies,
+      openingName: existing.openingName,
+      ecoCode: existing.ecoCode,
+      cachedTimeline: timeline,
+    );
+    await repo.save(updated);
     await _reload();
   }
 
