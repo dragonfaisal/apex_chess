@@ -58,6 +58,30 @@ class AnalysisTimeline {
     return totalLoss / moves.length;
   }
 
+  /// Average centipawn loss for plies played by the White side.
+  ///
+  /// Used by the archive card to surface per-colour accuracy. When the
+  /// user knows which colour they played (imported Chess.com / Lichess
+  /// game), we show "You: X ACPL · Opponent: Y ACPL" instead of the
+  /// single aggregate number — the Phase A audit flagged the latter as
+  /// misleading because it blends the user's accuracy with the
+  /// opponent's.
+  double get averageCpLossWhite => _acplForSide(isWhite: true);
+
+  /// Average centipawn loss for plies played by the Black side.
+  double get averageCpLossBlack => _acplForSide(isWhite: false);
+
+  double _acplForSide({required bool isWhite}) {
+    double total = 0;
+    int count = 0;
+    for (final m in moves) {
+      if (m.isWhiteMove != isWhite) continue;
+      count++;
+      total += m.deltaW < 0 ? m.deltaW.abs() : 0;
+    }
+    return count == 0 ? 0 : total / count;
+  }
+
   // ── Serialisation ──────────────────────────────────────────────
   // Persisted alongside [ArchivedGame] so the archive can re-open a
   // game **instantly** instead of replaying the entire engine

@@ -107,6 +107,7 @@ class MoveClassificationInput {
     this.isBook = false,
     this.openingName,
     this.ecoCode,
+    this.suppressTrophyTiers = false,
   });
 
   /// Side that just made the played move.
@@ -164,6 +165,17 @@ class MoveClassificationInput {
   /// Optional opening metadata for the result message.
   final String? openingName;
   final String? ecoCode;
+
+  /// When `true`, the classifier skips the Brilliant / Great / Forced
+  /// short-circuits and routes straight to the Win% / cp-loss ladder.
+  ///
+  /// Used by Quick scans (D14, single PV) — those scans cannot honestly
+  /// verify a Brilliant / Great / Forced claim (the spec requires
+  /// deeper search + MultiPV for all three, § 3.6.2/4/6). Surfacing
+  /// a trophy tier off a shallow search misleads the user, so Quick
+  /// mode emits only Blunder / Mistake / Inaccuracy / Good / Excellent /
+  /// Best / Book / MissedWin.
+  final bool suppressTrophyTiers;
 }
 
 class MoveClassifier {
@@ -264,7 +276,19 @@ class MoveClassifier {
       in_.currWhiteMate,
       isWhiteMove: in_.isWhiteMove,
     );
-    final opponentForcesMate = in_.currWhiteMate != null && !moverForcesMate;
+    // Defensive guard against a `mate == 0` leaking through from the
+    // engine layer. Stockfish reports `mate 0` from side-to-move POV on
+    // a checkmate-on-the-board position; if the caller forgot to resolve
+    // that from dartchess it could arrive here ambiguous. Treat `0` as
+    // "mate has already been delivered" — neither mover-forces-mate nor
+    // opponent-forces-mate — so the classifier falls through to the
+    // normal Win% / cp-loss ladder instead of mis-firing Blunder on a
+    // mate-delivering ply. Analyzer pipelines should pre-synthesise a
+    // signed ±1 mate and never emit raw `0`; this guard is belt-and-
+    // braces.
+    final opponentForcesMate = in_.currWhiteMate != null &&
+        in_.currWhiteMate != 0 &&
+        !moverForcesMate;
 
     final wasEngineBestMove = _isEngineBest(
       engine: in_.engineBestMoveUci,
@@ -306,20 +330,25 @@ class MoveClassifier {
     }
 
     // ── Brilliant (very strict — § 3.6.6) ─────────────────────────────
-    final brilliantQ = _classifyBrilliant(
-      in_: in_,
-      deltaW: deltaW,
-      moverWinBefore: moverWinBefore,
-      moverWinAfter: moverWinAfter,
-      cpLossMover: cpLossMover,
-      moverForcesMate: moverForcesMate,
-      wasEngineBestMove: wasEngineBestMove,
-    );
-    if (brilliantQ != null) {
-      return finish(
-        MoveQuality.brilliant,
-        'Brilliant sacrifice — Apex AI confirms the attack.',
+    // Quick scans (D14, single PV) cannot honestly verify a Brilliant
+    // claim — skipped when `suppressTrophyTiers` is set (spec § 3.6.6
+    // requires MultiPV + alt-line Win% to gate Brilliant).
+    if (!in_.suppressTrophyTiers) {
+      final brilliantQ = _classifyBrilliant(
+        in_: in_,
+        deltaW: deltaW,
+        moverWinBefore: moverWinBefore,
+        moverWinAfter: moverWinAfter,
+        cpLossMover: cpLossMover,
+        moverForcesMate: moverForcesMate,
+        wasEngineBestMove: wasEngineBestMove,
       );
+      if (brilliantQ != null) {
+        return finish(
+          MoveQuality.brilliant,
+          'Brilliant sacrifice — Apex AI confirms the attack.',
+        );
+      }
     }
 
     // ── Missed Win (§ 3.6.5) ──────────────────────────────────────────
@@ -340,26 +369,30 @@ class MoveClassifier {
     if (missedWin != null) return finish(missedWin, 'Missed a winning line.');
 
     // ── Forced (§ 3.6.2) ──────────────────────────────────────────────
-    final forced = _classifyForced(
-      in_: in_,
-      deltaW: deltaW,
-      wasEngineBestMove: wasEngineBestMove,
-    );
-    if (forced != null) {
-      return finish(MoveQuality.forced, 'Forced — only move that holds.');
-    }
+    // Requires MultiPV to prove every alternative line drops > 20 pp.
+    // Quick scans (single PV) cannot honour this gate honestly.
+    if (!in_.suppressTrophyTiers) {
+      final forced = _classifyForced(
+        in_: in_,
+        deltaW: deltaW,
+        wasEngineBestMove: wasEngineBestMove,
+      );
+      if (forced != null) {
+        return finish(MoveQuality.forced, 'Forced — only move that holds.');
+      }
 
-    // ── Great (§ 3.6.4) ───────────────────────────────────────────────
-    final great = _classifyGreat(
-      in_: in_,
-      deltaW: deltaW,
-      whiteWinAfter: whiteWinAfter,
-      moverWinBefore: moverWinBefore,
-      moverWinAfter: moverWinAfter,
-      wasEngineBestMove: wasEngineBestMove,
-    );
-    if (great != null) {
-      return finish(MoveQuality.great, 'Great find — pivotal move.');
+      // ── Great (§ 3.6.4) ─────────────────────────────────────────────
+      final great = _classifyGreat(
+        in_: in_,
+        deltaW: deltaW,
+        whiteWinAfter: whiteWinAfter,
+        moverWinBefore: moverWinBefore,
+        moverWinAfter: moverWinAfter,
+        wasEngineBestMove: wasEngineBestMove,
+      );
+      if (great != null) {
+        return finish(MoveQuality.great, 'Great find — pivotal move.');
+      }
     }
 
     // ── Best ──────────────────────────────────────────────────────────

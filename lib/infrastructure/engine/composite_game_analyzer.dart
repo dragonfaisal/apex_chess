@@ -7,6 +7,8 @@
 library;
 
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
+import 'package:apex_chess/features/archives/domain/archived_game.dart'
+    show AnalysisMode;
 import 'package:apex_chess/infrastructure/api/cloud_game_analyzer.dart';
 import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
 
@@ -34,12 +36,14 @@ class CompositeGameAnalyzer {
     void Function(int completed, int total)? onProgress,
     int? depth,
     Duration? movetime,
+    AnalysisMode mode = AnalysisMode.deep,
   }) async {
     return _local.analyzeFromPgn(
       pgn,
       onProgress: onProgress,
       depth: depth,
       movetime: movetime,
+      mode: mode,
     );
   }
 }

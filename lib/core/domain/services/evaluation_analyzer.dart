@@ -159,6 +159,7 @@ class EvaluationAnalyzer {
     double? altLineWhiteWinPercent,
     bool isTrivialRecapture = false,
     bool isFirstSacrificePly = true,
+    bool suppressTrophyTiers = false,
   }) {
     final detailed = classifyDetailed(
       prevCp: prevCp,
@@ -178,6 +179,7 @@ class EvaluationAnalyzer {
       altLineWhiteWinPercent: altLineWhiteWinPercent,
       isTrivialRecapture: isTrivialRecapture,
       isFirstSacrificePly: isFirstSacrificePly,
+      suppressTrophyTiers: suppressTrophyTiers,
     );
     return MoveAnalysisResult(
       quality: detailed.quality,
@@ -209,6 +211,7 @@ class EvaluationAnalyzer {
     double? altLineWhiteWinPercent,
     bool isTrivialRecapture = false,
     bool isFirstSacrificePly = true,
+    bool suppressTrophyTiers = false,
   }) {
     // Backward-compat: the old API took `isOnlyWinningMove` as a
     // boolean assertion that "this move is the *only* winning line".
@@ -243,6 +246,7 @@ class EvaluationAnalyzer {
       secondBestWhiteWinPercent: secondBestWhiteWinPercent,
       multiPvWhiteWinPercents: pvList,
       altLineWhiteWinPercent: altLineWhiteWinPercent,
+      suppressTrophyTiers: suppressTrophyTiers,
     ));
   }
 

@@ -91,10 +91,15 @@ class ArchiveScreen extends ConsumerWidget {
         label: 'No games match the current filters.',
       );
     }
+    final account = ref.watch(accountControllerProvider).valueOrNull;
+    final handle = account?.username.trim().toLowerCase();
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(18, 4, 18, 28),
       itemBuilder: (_, i) => _ArchiveCard(
         game: visible[i],
+        // `null` if no account is connected — card falls back to a
+        // "White vs Black" layout without a user perspective.
+        userHandle: handle,
         onTap: () => _openArchivedGame(context, ref, visible[i]),
         onDelete: () => ref
             .read(archiveControllerProvider.notifier)
@@ -136,8 +141,14 @@ class ArchiveScreen extends ConsumerWidget {
     );
     try {
       final analyzer = ref.read(gameAnalyzerProvider);
-      final timeline =
-          await analyzer.analyzeFromPgn(game.pgn, depth: game.depth);
+      final timeline = await analyzer.analyzeFromPgn(
+        game.pgn,
+        depth: game.depth,
+        // Re-analysis must honour the original Quick/Deep choice so a
+        // Quick archive doesn't silently re-run as Deep (and acquire
+        // Brilliant / Great / Forced tags it never had).
+        mode: game.analysisMode,
+      );
       ref
           .read(reviewControllerProvider.notifier)
           .loadTimeline(timeline, userIsBlack: userIsBlack);
@@ -237,32 +248,119 @@ class _FilterBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            _FilterChip(
-              label: _sortLabel(filters.sort),
-              icon: Icons.sort_rounded,
-              onTap: () => _showSortSheet(context, ref),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _ArchiveSearchField(current: filters.search),
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _FilterChip(
+                  label: _sortLabel(filters.sort),
+                  icon: Icons.sort_rounded,
+                  onTap: () => _showSortSheet(context, ref),
+                ),
+                const SizedBox(width: 8),
+                _FilterChip(
+                  label: _sourceLabel(filters.source),
+                  icon: Icons.cloud_outlined,
+                  onTap: () => _showSourceSheet(context, ref),
+                ),
+                const SizedBox(width: 8),
+                _FilterChip(
+                  label: _modeLabel(filters.mode),
+                  icon: Icons.flash_on_rounded,
+                  onTap: () => _showModeSheet(context, ref),
+                ),
+                const SizedBox(width: 8),
+                _FilterChip(
+                  label: _colorLabel(filters.color),
+                  icon: Icons.swap_vert_rounded,
+                  onTap: () => _showColorSheet(context, ref),
+                ),
+                const SizedBox(width: 8),
+                _FilterChip(
+                  label: _resultLabel(filters.result),
+                  icon: Icons.flag_outlined,
+                  onTap: () => _showResultSheet(context, ref),
+                ),
+                const SizedBox(width: 8),
+                _FilterChip(
+                  label: filters.minBrilliants > 0
+                      ? '≥${filters.minBrilliants} brilliants'
+                      : 'Any brilliants',
+                  icon: Icons.auto_awesome_rounded,
+                  onTap: () => _showBrilliantsSheet(context, ref),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            _FilterChip(
-              label: _resultLabel(filters.result),
-              icon: Icons.flag_outlined,
-              onTap: () => _showResultSheet(context, ref),
-            ),
-            const SizedBox(width: 8),
-            _FilterChip(
-              label: filters.minBrilliants > 0
-                  ? '≥${filters.minBrilliants} brilliants'
-                  : 'Any brilliants',
-              icon: Icons.auto_awesome_rounded,
-              onTap: () => _showBrilliantsSheet(context, ref),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
+    );
+  }
+
+  String _sourceLabel(ArchiveSource? s) => switch (s) {
+        null => 'All sources',
+        ArchiveSource.chessCom => 'Chess.com',
+        ArchiveSource.lichess => 'Lichess',
+        ArchiveSource.pgn => 'PGN paste',
+      };
+
+  String _modeLabel(ArchiveModeFilter m) => switch (m) {
+        ArchiveModeFilter.any => 'Any mode',
+        ArchiveModeFilter.quick => 'Quick only',
+        ArchiveModeFilter.deep => 'Deep only',
+      };
+
+  String _colorLabel(ArchiveColorFilter c) => switch (c) {
+        ArchiveColorFilter.any => 'Any colour',
+        ArchiveColorFilter.white => 'You: White',
+        ArchiveColorFilter.black => 'You: Black',
+      };
+
+  void _showSourceSheet(BuildContext context, WidgetRef ref) {
+    _showSheet(context, 'Source', [
+      ('All sources', () {
+        ref.read(archiveControllerProvider.notifier).setSource(null);
+        Navigator.of(context).pop();
+      }),
+      for (final s in ArchiveSource.values)
+        (_sourceLabel(s), () {
+          ref.read(archiveControllerProvider.notifier).setSource(s);
+          Navigator.of(context).pop();
+        }),
+    ]);
+  }
+
+  void _showModeSheet(BuildContext context, WidgetRef ref) {
+    _showSheet(context, 'Analysis mode', [
+      for (final m in ArchiveModeFilter.values)
+        (_modeLabel(m), () {
+          ref.read(archiveControllerProvider.notifier).setModeFilter(m);
+          Navigator.of(context).pop();
+        }),
+    ]);
+  }
+
+  void _showColorSheet(BuildContext context, WidgetRef ref) {
+    final current = ref.read(archiveControllerProvider).filters.perspective;
+    _showSheet(
+      context,
+      current == null
+          ? 'Set your player name on a game to filter by colour'
+          : 'Filter by your colour ($current)',
+      [
+        for (final c in ArchiveColorFilter.values)
+          (_colorLabel(c), () {
+            ref
+                .read(archiveControllerProvider.notifier)
+                .setColorFilter(c, perspective: current);
+            Navigator.of(context).pop();
+          }),
+      ],
     );
   }
 
@@ -361,6 +459,73 @@ class _FilterBar extends ConsumerWidget {
   }
 }
 
+/// Plain-text archive search field — matches against opponent name,
+/// opening name, and ECO code (lower-cased substring).
+class _ArchiveSearchField extends ConsumerStatefulWidget {
+  const _ArchiveSearchField({required this.current});
+  final String current;
+
+  @override
+  ConsumerState<_ArchiveSearchField> createState() =>
+      _ArchiveSearchFieldState();
+}
+
+class _ArchiveSearchFieldState extends ConsumerState<_ArchiveSearchField> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.current);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: _controller,
+      style: ApexTypography.bodyMedium.copyWith(
+        color: ApexColors.textPrimary,
+        fontSize: 12,
+      ),
+      decoration: InputDecoration(
+        isDense: true,
+        prefixIcon: const Icon(Icons.search_rounded,
+            size: 16, color: ApexColors.textTertiary),
+        hintText: 'Search opponent, opening, ECO…',
+        hintStyle: ApexTypography.bodyMedium
+            .copyWith(color: ApexColors.textTertiary, fontSize: 12),
+        filled: true,
+        fillColor: ApexColors.nebula.withValues(alpha: 0.6),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+              color: ApexColors.stardustLine.withValues(alpha: 0.4)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+              color: ApexColors.stardustLine.withValues(alpha: 0.4)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+              color: ApexColors.sapphire.withValues(alpha: 0.55)),
+        ),
+      ),
+      onChanged: (v) =>
+          ref.read(archiveControllerProvider.notifier).setSearch(v),
+    );
+  }
+}
+
 class _FilterChip extends StatelessWidget {
   const _FilterChip(
       {required this.label, required this.icon, required this.onTap});
@@ -404,13 +569,29 @@ class _FilterChip extends StatelessWidget {
 class _ArchiveCard extends StatelessWidget {
   const _ArchiveCard({
     required this.game,
+    required this.userHandle,
     required this.onTap,
     required this.onDelete,
   });
 
   final ArchivedGame game;
+
+  /// Connected account handle, lower-cased. `null` when no account is
+  /// connected — card falls back to the legacy "White vs Black" layout.
+  final String? userHandle;
   final VoidCallback onTap;
   final VoidCallback onDelete;
+
+  /// `true` if the user played Black in this game, `false` for White,
+  /// `null` when we can't tell (raw PGN or handle doesn't match either
+  /// side).
+  bool? get _userIsBlack {
+    final me = userHandle;
+    if (me == null || me.isEmpty) return null;
+    if (game.black.trim().toLowerCase() == me) return true;
+    if (game.white.trim().toLowerCase() == me) return false;
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -419,6 +600,9 @@ class _ArchiveCard extends StatelessWidget {
         : (game.blunderCount >= 3
             ? ApexColors.ruby
             : ApexColors.sapphire);
+    final userIsBlack = _userIsBlack;
+    final matchupText = _matchupText(userIsBlack);
+    final acplText = _acplText(userIsBlack);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(18),
@@ -432,19 +616,25 @@ class _ArchiveCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
+                  // Phase A audit § 4: top pill strip may now include
+                  // Source / Result / Depth / Mode / User-side. Wrap so
+                  // it line-breaks on narrow phones instead of forcing
+                  // the card into overflow.
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
                     children: [
                       _SourcePill(source: game.source),
-                      const SizedBox(width: 6),
                       _ResultPill(result: game.result),
-                      const SizedBox(width: 6),
                       _DepthPill(depth: game.depth),
+                      _ModePill(mode: game.analysisMode),
+                      if (userIsBlack != null)
+                        _UserSidePill(isBlack: userIsBlack),
                     ],
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '${_nameOf(game.white, game.whiteRating)}  vs  '
-                    '${_nameOf(game.black, game.blackRating)}',
+                    matchupText,
                     style: ApexTypography.titleMedium
                         .copyWith(fontSize: 14, letterSpacing: 0.2),
                     maxLines: 1,
@@ -452,7 +642,7 @@ class _ArchiveCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '${game.openingName ?? '—'}  ·  ${game.totalPlies} plies  ·  ${game.averageCpLoss.toStringAsFixed(1)} ACPL',
+                    '${game.openingName ?? '—'}  ·  ${game.totalPlies} plies  ·  $acplText',
                     style: ApexTypography.bodyMedium.copyWith(
                       color: ApexColors.textTertiary,
                       fontSize: 11,
@@ -504,6 +694,60 @@ class _ArchiveCard extends StatelessWidget {
 
   static String _nameOf(String name, String? rating) =>
       rating == null || rating.isEmpty ? name : '$name ($rating)';
+
+  /// Headline line on the card. When we know the user's side we render
+  /// "You (rating) vs Opponent (rating)" so the archive reads from the
+  /// user's perspective; otherwise we fall back to the legacy "White
+  /// vs Black" format.
+  String _matchupText(bool? userIsBlack) {
+    if (userIsBlack == null) {
+      return '${_nameOf(game.white, game.whiteRating)}  vs  '
+          '${_nameOf(game.black, game.blackRating)}';
+    }
+    final myRating = userIsBlack ? game.blackRating : game.whiteRating;
+    final oppName = userIsBlack ? game.white : game.black;
+    final oppRating = userIsBlack ? game.whiteRating : game.blackRating;
+    final me = myRating == null || myRating.isEmpty ? 'You' : 'You ($myRating)';
+    return '$me  vs  ${_nameOf(oppName, oppRating)}';
+  }
+
+  /// ACPL line — per-side when we know the user, aggregate otherwise.
+  /// Only the cached timeline can yield per-side ACPL; pre-cache records
+  /// fall back to the single persisted figure.
+  String _acplText(bool? userIsBlack) {
+    final tl = game.cachedTimeline;
+    if (userIsBlack == null || tl == null) {
+      return '${game.averageCpLoss.toStringAsFixed(1)} ACPL';
+    }
+    final you = userIsBlack ? tl.averageCpLossBlack : tl.averageCpLossWhite;
+    final opp = userIsBlack ? tl.averageCpLossWhite : tl.averageCpLossBlack;
+    return 'You ${you.toStringAsFixed(1)} · Opp ${opp.toStringAsFixed(1)} ACPL';
+  }
+}
+
+class _ModePill extends StatelessWidget {
+  const _ModePill({required this.mode});
+  final AnalysisMode mode;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = mode == AnalysisMode.quick ? 'QUICK' : 'DEEP';
+    final color = mode == AnalysisMode.quick
+        ? ApexColors.electricBlue
+        : ApexColors.sapphireBright;
+    return _Pill(label: label, color: color);
+  }
+}
+
+class _UserSidePill extends StatelessWidget {
+  const _UserSidePill({required this.isBlack});
+  final bool isBlack;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = isBlack ? 'YOU ◼' : 'YOU ◻';
+    return _Pill(label: label, color: ApexColors.aurora);
+  }
 }
 
 class _SourcePill extends StatelessWidget {

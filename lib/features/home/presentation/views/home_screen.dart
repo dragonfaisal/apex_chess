@@ -185,16 +185,107 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  void _showPgnDialog(BuildContext context, WidgetRef ref) {
-    final controller = TextEditingController();
-    showDialog(
+  void _showPgnDialog(BuildContext context, WidgetRef ref) async {
+    final result = await showDialog<_PgnPasteResult>(
       context: context,
       barrierColor: ApexColors.spaceVoid.withValues(alpha: 0.72),
-      builder: (ctx) => Dialog(
-        insetPadding:
-            const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-        child: GlassPanel.dialog(
-          accentColor: ApexColors.sapphire,
+      builder: (_) => const _PgnPasteDialog(),
+    );
+    if (result == null) return;
+    if (!context.mounted) return;
+    _startLocalAnalysis(context, ref, result);
+  }
+
+  void _startLocalAnalysis(
+      BuildContext context, WidgetRef ref, _PgnPasteResult result) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: ApexColors.spaceVoid.withValues(alpha: 0.72),
+      builder: (_) => _LocalAnalysisProgressDialog(
+        pgn: result.pgn,
+        mode: result.mode,
+        userIsWhite: result.userIsWhite,
+        userHandle: result.userHandle,
+      ),
+    );
+  }
+}
+
+/// Result of the PGN paste dialog — captures the text, user-side
+/// preference, and analysis depth so the progress dialog + archive
+/// record know what the user asked for.
+///
+/// Phase A audit § 3: the original dialog had a single "Run Scan" CTA
+/// with no colour or mode input, which forced every PGN paste to run
+/// through the default D14 analyzer with `userIsWhite = null`. That
+/// produced misleading archives where White-as-user and Black-as-user
+/// games were indistinguishable, and Quick scans silently claimed
+/// Brilliants.
+class _PgnPasteResult {
+  const _PgnPasteResult({
+    required this.pgn,
+    required this.mode,
+    required this.userIsWhite,
+    required this.userHandle,
+  });
+  final String pgn;
+  final AnalysisMode mode;
+
+  /// `true` → user played White, `false` → Black, `null` → unknown
+  /// (ingest both sides' mistakes into the Vault; no board auto-flip).
+  final bool? userIsWhite;
+
+  /// Optional handle the user typed. Not wired into the archive
+  /// metadata yet, but threaded down so future enhancements can plug
+  /// into it without reshaping the dialog API.
+  final String? userHandle;
+}
+
+/// PGN paste dialog with side selector, optional handle, and split
+/// Quick / Deep analyse buttons. See [_PgnPasteResult] for why each
+/// field is needed.
+class _PgnPasteDialog extends StatefulWidget {
+  const _PgnPasteDialog();
+
+  @override
+  State<_PgnPasteDialog> createState() => _PgnPasteDialogState();
+}
+
+class _PgnPasteDialogState extends State<_PgnPasteDialog> {
+  final _pgnController = TextEditingController();
+  final _handleController = TextEditingController();
+  // `null` == "unknown" — the default preserves the legacy PGN-paste
+  // behaviour (both sides' mistakes ingested, no board flip).
+  bool? _userIsWhite;
+
+  @override
+  void dispose() {
+    _pgnController.dispose();
+    _handleController.dispose();
+    super.dispose();
+  }
+
+  void _pop(AnalysisMode mode) {
+    final pgn = _pgnController.text.trim();
+    if (pgn.isEmpty) return;
+    final handle = _handleController.text.trim();
+    Navigator.of(context).pop(_PgnPasteResult(
+      pgn: pgn,
+      mode: mode,
+      userIsWhite: _userIsWhite,
+      userHandle: handle.isEmpty ? null : handle,
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding:
+          const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      child: GlassPanel.dialog(
+        accentColor: ApexColors.sapphire,
+        child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -210,49 +301,63 @@ class HomeScreen extends ConsumerWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
               TextField(
-                controller: controller,
-                maxLines: 8,
+                controller: _pgnController,
+                maxLines: 6,
                 style: ApexTypography.bodyMedium.copyWith(
                   fontFamily: 'JetBrainsMono',
                   fontSize: 12,
                   color: ApexColors.textPrimary,
                 ),
-                decoration: InputDecoration(
-                  hintText: ApexCopy.pgnDialogHint,
-                  hintStyle: ApexTypography.bodyMedium
-                      .copyWith(color: ApexColors.textTertiary),
-                  filled: true,
-                  fillColor: ApexColors.deepSpace.withValues(alpha: 0.55),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide:
-                        const BorderSide(color: ApexColors.subtleBorder),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide:
-                        const BorderSide(color: ApexColors.subtleBorder),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                        color: ApexColors.sapphire
-                            .withValues(alpha: 0.55)),
-                  ),
+                decoration: _dialogField(
+                  hint: ApexCopy.pgnDialogHint,
                 ),
               ),
-              const SizedBox(height: 20),
-              _DialogPrimaryAction(
-                label: ApexCopy.pgnDialogCta,
-                icon: Icons.flash_on_rounded,
-                onTap: () {
-                  final pgn = controller.text.trim();
-                  if (pgn.isEmpty) return;
-                  Navigator.of(ctx).pop();
-                  _startLocalAnalysis(context, ref, pgn);
-                },
+              const SizedBox(height: 12),
+              TextField(
+                controller: _handleController,
+                style: ApexTypography.bodyMedium.copyWith(
+                  fontSize: 12,
+                  color: ApexColors.textPrimary,
+                ),
+                decoration: _dialogField(
+                  hint: 'Your handle (optional)',
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'You played as',
+                style: ApexTypography.bodyMedium.copyWith(
+                  color: ApexColors.textTertiary,
+                  fontSize: 11,
+                  letterSpacing: 1.3,
+                ),
+              ),
+              const SizedBox(height: 6),
+              _SideSelector(
+                value: _userIsWhite,
+                onChanged: (v) => setState(() => _userIsWhite = v),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: _DialogPrimaryAction(
+                      label: 'QUICK (D14)',
+                      icon: Icons.flash_on_rounded,
+                      onTap: () => _pop(AnalysisMode.quick),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _DialogPrimaryAction(
+                      label: 'DEEP (D22)',
+                      icon: Icons.auto_awesome_rounded,
+                      onTap: () => _pop(AnalysisMode.deep),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -261,12 +366,113 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  void _startLocalAnalysis(BuildContext context, WidgetRef ref, String pgn) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      barrierColor: ApexColors.spaceVoid.withValues(alpha: 0.72),
-      builder: (_) => _LocalAnalysisProgressDialog(pgn: pgn),
+  InputDecoration _dialogField({required String hint}) => InputDecoration(
+        hintText: hint,
+        hintStyle: ApexTypography.bodyMedium
+            .copyWith(color: ApexColors.textTertiary),
+        filled: true,
+        fillColor: ApexColors.deepSpace.withValues(alpha: 0.55),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: ApexColors.subtleBorder),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: ApexColors.subtleBorder),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+              color: ApexColors.sapphire.withValues(alpha: 0.55)),
+        ),
+      );
+}
+
+/// Three-way segmented selector: White / Black / Unknown. Used by the
+/// PGN paste dialog to capture which colour the user played; the value
+/// is threaded through to the analyzer (board auto-flip) and the
+/// Mistake Vault hook (colour-filtered ingest).
+class _SideSelector extends StatelessWidget {
+  const _SideSelector({required this.value, required this.onChanged});
+  final bool? value;
+  final ValueChanged<bool?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _SideChip(
+            label: 'White',
+            selected: value == true,
+            onTap: () => onChanged(true),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _SideChip(
+            label: 'Black',
+            selected: value == false,
+            onTap: () => onChanged(false),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _SideChip(
+            label: 'Unknown',
+            selected: value == null,
+            onTap: () => onChanged(null),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SideChip extends StatelessWidget {
+  const _SideChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected
+                ? ApexColors.sapphire.withValues(alpha: 0.22)
+                : ApexColors.elevatedSurface.withValues(alpha: 0.55),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: selected
+                  ? ApexColors.sapphire.withValues(alpha: 0.55)
+                  : ApexColors.subtleBorder,
+              width: 0.6,
+            ),
+          ),
+          child: Text(
+            label,
+            style: ApexTypography.labelLarge.copyWith(
+              color: selected
+                  ? ApexColors.textPrimary
+                  : ApexColors.textSecondary,
+              fontSize: 11,
+              letterSpacing: 1.2,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -519,8 +725,24 @@ class _TileCard extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _LocalAnalysisProgressDialog extends ConsumerStatefulWidget {
-  const _LocalAnalysisProgressDialog({required this.pgn});
+  const _LocalAnalysisProgressDialog({
+    required this.pgn,
+    this.mode = AnalysisMode.quick,
+    this.userIsWhite,
+    this.userHandle,
+  });
   final String pgn;
+  final AnalysisMode mode;
+
+  /// `true` → user played White, `false` → Black, `null` → unknown.
+  /// When non-null the review board auto-flips for Black users and the
+  /// Mistake Vault hook only ingests that colour's plies.
+  final bool? userIsWhite;
+
+  /// Optional handle the user typed on the paste dialog. Reserved for
+  /// future archive-metadata enhancements; currently unused by this
+  /// dialog.
+  final String? userHandle;
 
   @override
   ConsumerState<_LocalAnalysisProgressDialog> createState() =>
@@ -548,14 +770,26 @@ class _LocalAnalysisProgressDialogState
   Future<void> _runAnalysis() async {
     try {
       final analyzer = ref.read(gameAnalyzerProvider);
+      // Phase A audit § 3: PGN paste now carries an explicit Quick/Deep
+      // choice and a user-side preference. Depth is derived from the
+      // mode (14 vs 22); the mode flag is what actually gates trophy
+      // tiers in the classifier.
+      final depth = widget.mode == AnalysisMode.quick ? 14 : 22;
       final timeline = await analyzer.analyzeFromPgn(
         widget.pgn,
+        depth: depth,
+        mode: widget.mode,
         onProgress: (c, t) {
           if (mounted) setState(() { _completed = c; _total = t; });
         },
       );
       if (mounted) {
-        ref.read(reviewControllerProvider.notifier).loadTimeline(timeline);
+        ref.read(reviewControllerProvider.notifier).loadTimeline(
+              timeline,
+              // Auto-flip the board if the user told us they played
+              // Black. Unknown-side PGNs keep White at the bottom.
+              userIsBlack: widget.userIsWhite == false,
+            );
         // Archive save is awaited so we have the id to hand the
         // Mistake Vault hook; both are still best-effort and never
         // block the review flow on failure.
@@ -563,17 +797,19 @@ class _LocalAnalysisProgressDialogState
           ref: ref,
           timeline: timeline,
           pgn: widget.pgn,
-          depth: 14,
+          depth: depth,
           source: ArchiveSource.pgn,
+          analysisMode: widget.mode,
         );
         if (archiveId != null) {
           unawaited(saveMistakeDrillsFromTimeline(
             ref: ref,
             timeline: timeline,
             archiveId: archiveId,
-            // PGN upload path — unknown which colour the user
-            // played, so ingest both sides’ mistakes.
-            userIsWhite: null,
+            // When the user specified a colour on the paste dialog, only
+            // that side's mistakes flow into the Vault. Unknown-side
+            // paste keeps the legacy both-sides behaviour.
+            userIsWhite: widget.userIsWhite,
           ));
         }
         if (!mounted) return;

@@ -31,6 +31,8 @@ import 'package:apex_chess/core/domain/entities/move_analysis.dart';
 import 'package:apex_chess/core/domain/services/analysis_debug_export.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/core/domain/services/sacrifice_trajectory.dart';
+import 'package:apex_chess/features/archives/domain/archived_game.dart'
+    show AnalysisMode;
 import 'package:apex_chess/infrastructure/api/cloud_eval_service.dart'
     show CloudEvalError;
 import 'package:apex_chess/infrastructure/engine/eco_book.dart';
@@ -95,8 +97,15 @@ class LocalGameAnalyzer {
     void Function(int completed, int total)? onProgress,
     int? depth,
     Duration? movetime,
+    AnalysisMode mode = AnalysisMode.deep,
   }) async {
     final searchDepth = depth ?? _depth;
+    // Quick scans cannot honestly verify Brilliant / Great / Forced
+    // (spec § 3.6.2/4/6 requires MultiPV + deeper search). Surface the
+    // fact to the classifier so those tiers are never emitted from a
+    // Quick scan — the Phase A audit flagged "D14 claims Brilliant on
+    // a 50 cp drift" as a real-device regression.
+    final suppressTrophyTiers = mode == AnalysisMode.quick;
     // Resolve the movetime budget *after* the caller's depth override is
     // applied — otherwise a depth-22 scan would silently inherit the
     // constructor's depth-14 budget and finish at depth ~14, defeating
@@ -155,6 +164,8 @@ class LocalGameAnalyzer {
         uci: uci,
         targetSquare: targetSquare,
         isWhiteMove: isWhite,
+        terminalAfterEval:
+            _terminalEvalFor(newPos, isWhiteMove: isWhite),
       ));
       position = newPos;
     }
@@ -268,7 +279,13 @@ class LocalGameAnalyzer {
       }
 
       final before = await evalCached(entry.fenBefore);
-      final after = await evalCached(entry.fenAfter);
+      // Terminal positions (checkmate / stalemate / insufficient material)
+      // are resolved from dartchess at parse time — the engine's response
+      // on a mate-on-the-board position is ambiguous (`mate 0` from STM
+      // POV). Using the synthesised eval avoids classifying the
+      // mate-delivering ply as a Blunder.
+      final after =
+          entry.terminalAfterEval ?? await evalCached(entry.fenAfter);
 
       // Derive the *real* pre-move Win% from the engine — `prevWinPct`
       // may be stale if the previous plies came from the book (book moves
@@ -320,6 +337,7 @@ class LocalGameAnalyzer {
         isTrivialRecapture: sac.isTrivialRecapture,
         isFirstSacrificePly: sac.isFirstSacrificePly,
         isBook: isOpeningPhase,
+        suppressTrophyTiers: suppressTrophyTiers,
       );
 
       String? engineBestSan;
@@ -472,6 +490,7 @@ class _ParsedMove {
     required this.uci,
     required this.targetSquare,
     required this.isWhiteMove,
+    this.terminalAfterEval,
   });
 
   final String fenBefore;
@@ -480,4 +499,46 @@ class _ParsedMove {
   final String uci;
   final String targetSquare;
   final bool isWhiteMove;
+
+  /// Pre-synthesised eval for the post-move position when the move
+  /// resulted in a terminal state (checkmate / stalemate / insufficient
+  /// material). When non-null, the pipeline skips the engine call on
+  /// `fenAfter` and uses this directly — fixes the Phase A audit bug
+  /// where Stockfish's `mate 0` on a checkmate position was being
+  /// normalised to `mateInWhite = 0` and tripping the classifier's
+  /// "opponent forces mate" short-circuit on a move that *delivered*
+  /// mate.
+  final EvalSnapshot? terminalAfterEval;
+}
+
+/// Build a signed-from-white-POV [EvalSnapshot] for the position that
+/// results from a terminal ply. Returns `null` when the post-move
+/// position is not terminal — caller falls back to the normal engine
+/// eval path.
+///
+///   * checkmate: `mateIn = isWhiteMove ? 1 : -1` so the classifier's
+///     `moverForcesMate` predicate sees the favourable side and the
+///     move is no longer classified as Blunder.
+///   * stalemate / insufficient material / 75-move / 5-fold: `scoreCp = 0`
+///     so the position reads as drawn, not as "engine unreachable".
+EvalSnapshot? _terminalEvalFor(Position post, {required bool isWhiteMove}) {
+  if (post.isCheckmate) {
+    return EvalSnapshot(
+      scoreCp: null,
+      mateIn: isWhiteMove ? 1 : -1,
+      depth: 0,
+      bestMoveUci: null,
+      pvMoves: const <String>[],
+    );
+  }
+  if (post.isStalemate || post.isInsufficientMaterial) {
+    return const EvalSnapshot(
+      scoreCp: 0,
+      mateIn: null,
+      depth: 0,
+      bestMoveUci: null,
+      pvMoves: <String>[],
+    );
+  }
+  return null;
 }

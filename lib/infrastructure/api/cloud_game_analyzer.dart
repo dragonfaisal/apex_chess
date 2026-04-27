@@ -17,6 +17,8 @@ import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/services/analysis_debug_export.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/core/domain/services/sacrifice_trajectory.dart';
+import 'package:apex_chess/features/archives/domain/archived_game.dart'
+    show AnalysisMode;
 import 'package:apex_chess/infrastructure/api/cloud_eval_service.dart';
 import 'package:apex_chess/infrastructure/api/opening_service.dart';
 
@@ -69,7 +71,9 @@ class CloudGameAnalyzer {
   Future<AnalysisTimeline> analyzeFromPgn(
     String pgn, {
     void Function(int completed, int total)? onProgress,
+    AnalysisMode mode = AnalysisMode.deep,
   }) async {
+    final suppressTrophyTiers = mode == AnalysisMode.quick;
     // 1. Parse PGN → extract all positions + moves.
     final game = PgnGame.parsePgn(pgn);
     final headers = Map<String, String>.from(game.headers);
@@ -107,6 +111,8 @@ class CloudGameAnalyzer {
         uci: uci,
         targetSquare: targetSquare,
         isWhiteMove: isWhite,
+        terminalAfterEval:
+            _terminalEvalFor(newPos, isWhiteMove: isWhite),
       ));
 
       position = newPos;
@@ -187,7 +193,18 @@ class CloudGameAnalyzer {
       }
 
       // ── DEVIATION or OUT-OF-BOOK → must evaluate via Cloud Eval ──
-      final (afterEval, afterErr) = await _cloudEval.evaluate(entry.fenAfter);
+      // Terminal positions are resolved from dartchess: the cloud eval
+      // for a mate-on-the-board FEN is ambiguous (`mate 0` from STM POV)
+      // and classifying a mate-delivering ply as a Blunder is exactly
+      // the Phase-A-audit regression we're fixing.
+      final (CloudEvalSnapshot?, CloudEvalError?) evalResult;
+      if (entry.terminalAfterEval != null) {
+        evalResult = (entry.terminalAfterEval, null);
+      } else {
+        evalResult = await _cloudEval.evaluate(entry.fenAfter);
+      }
+      final afterEval = evalResult.$1;
+      final afterErr = evalResult.$2;
 
       if (afterErr == CloudEvalError.offline) {
         throw CloudAnalysisException(
@@ -272,6 +289,7 @@ class CloudGameAnalyzer {
         // "· ECO • Opening Name" instead of a bare classification.
         openingName: openingInfo.openingName,
         ecoCode: openingInfo.ecoCode,
+        suppressTrophyTiers: suppressTrophyTiers,
       );
 
       // Resolve engine best move to SAN if available.
@@ -429,6 +447,39 @@ class CloudGameAnalyzer {
 // Internal
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Build a signed-from-white-POV [CloudEvalSnapshot] for the position
+/// that results from a terminal ply. Returns `null` when the post-move
+/// position is not terminal — caller falls back to the cloud eval path.
+///
+///   * checkmate: `mateIn = isWhiteMove ? 1 : -1` so the classifier's
+///     `moverForcesMate` predicate sees the favourable side and the
+///     move is no longer classified as Blunder.
+///   * stalemate / insufficient material / 75-move / 5-fold: `scoreCp = 0`.
+CloudEvalSnapshot? _terminalEvalFor(
+  Position post, {
+  required bool isWhiteMove,
+}) {
+  if (post.isCheckmate) {
+    return CloudEvalSnapshot(
+      scoreCp: null,
+      mateIn: isWhiteMove ? 1 : -1,
+      depth: 0,
+      bestMoveUci: null,
+      pvMoves: const <String>[],
+    );
+  }
+  if (post.isStalemate || post.isInsufficientMaterial) {
+    return const CloudEvalSnapshot(
+      scoreCp: 0,
+      mateIn: null,
+      depth: 0,
+      bestMoveUci: null,
+      pvMoves: <String>[],
+    );
+  }
+  return null;
+}
+
 class _ParsedMove {
   final String fenBefore;
   final String fenAfter;
@@ -437,6 +488,10 @@ class _ParsedMove {
   final String targetSquare;
   final bool isWhiteMove;
 
+  /// Pre-synthesised eval for the post-move position when the move
+  /// resulted in a terminal state. See [_terminalEvalFor].
+  final CloudEvalSnapshot? terminalAfterEval;
+
   const _ParsedMove({
     required this.fenBefore,
     required this.fenAfter,
@@ -444,5 +499,6 @@ class _ParsedMove {
     required this.uci,
     required this.targetSquare,
     required this.isWhiteMove,
+    this.terminalAfterEval,
   });
 }
