@@ -31,7 +31,7 @@ import 'package:apex_chess/features/import_match/presentation/controllers/recent
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
 import 'package:apex_chess/features/user_validation/presentation/username_validation_controller.dart';
 import 'package:apex_chess/features/user_validation/presentation/widgets/username_validation_pill.dart';
-import 'package:apex_chess/features/pgn_review/presentation/views/review_screen.dart';
+import 'package:apex_chess/features/pgn_review/presentation/views/review_summary_screen.dart';
 import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
@@ -1427,6 +1427,8 @@ class _ImportAnalysisDialogState
       ref.read(reviewControllerProvider.notifier).loadTimeline(
             timeline,
             userIsBlack: widget.userIsWhite == false,
+            mode: mode,
+            userIsWhite: widget.userIsWhite,
           );
       // Fire-and-forget save — failures never block the review flow.
       final archiveId = await saveAnalysisToArchive(
@@ -1463,7 +1465,7 @@ class _ImportAnalysisDialogState
         if (!mounted) return;
         Navigator.of(context).pop();
         Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const ReviewScreen()),
+          MaterialPageRoute(builder: (_) => const ReviewSummaryScreen()),
         );
       });
     }

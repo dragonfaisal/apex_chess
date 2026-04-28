@@ -28,7 +28,7 @@ import 'package:apex_chess/features/import_match/presentation/views/import_match
 import 'package:apex_chess/features/live_play/presentation/views/live_play_screen.dart';
 import 'package:apex_chess/features/mistake_vault/data/mistake_vault_save_hook.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
-import 'package:apex_chess/features/pgn_review/presentation/views/review_screen.dart';
+import 'package:apex_chess/features/pgn_review/presentation/views/review_summary_screen.dart';
 import 'package:apex_chess/features/profile/presentation/views/profile_screen.dart';
 import 'package:apex_chess/features/profile_scanner/presentation/views/profile_scanner_screen.dart';
 import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
@@ -302,9 +302,17 @@ class _PgnPasteDialogState extends State<_PgnPasteDialog> {
                 ],
               ),
               const SizedBox(height: 14),
+              // Phase 20.1 device feedback § 7: explicit cursor colour
+              // and disabled autofill suppress Android's yellow autofill
+              // bar / default cyan cursor that previously leaked through
+              // the dark theme.
               TextField(
                 controller: _pgnController,
                 maxLines: 6,
+                cursorColor: ApexColors.sapphireBright,
+                autofillHints: const [],
+                enableSuggestions: false,
+                autocorrect: false,
                 style: ApexTypography.bodyMedium.copyWith(
                   fontFamily: 'JetBrainsMono',
                   fontSize: 12,
@@ -317,6 +325,10 @@ class _PgnPasteDialogState extends State<_PgnPasteDialog> {
               const SizedBox(height: 12),
               TextField(
                 controller: _handleController,
+                cursorColor: ApexColors.sapphireBright,
+                autofillHints: const [],
+                enableSuggestions: false,
+                autocorrect: false,
                 style: ApexTypography.bodyMedium.copyWith(
                   fontSize: 12,
                   color: ApexColors.textPrimary,
@@ -358,6 +370,20 @@ class _PgnPasteDialogState extends State<_PgnPasteDialog> {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 8),
+              // Phase 20.1 § 1: reinforce that Quick is preview-only
+              // before the user commits to a mode. Deep is the
+              // recommended path for trustworthy tactical badges.
+              Text(
+                'Quick is a preview (≤D14, single PV). Deep (D22 + MultiPV) is '
+                'recommended for trustworthy Brilliant / Great / Forced verdicts.',
+                style: ApexTypography.bodyMedium.copyWith(
+                  color: ApexColors.textTertiary,
+                  fontSize: 10,
+                  height: 1.35,
+                ),
+                textAlign: TextAlign.center,
               ),
             ],
           ),
@@ -441,11 +467,17 @@ class _SideChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Phase 20.1 device feedback § 7: explicit splash/highlight colours
+    // so Material's default ripple (yellow on Android) doesn't bleed
+    // through the dark theme as a white/yellow flash on tap.
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(10),
+        splashColor: ApexColors.sapphire.withValues(alpha: 0.18),
+        highlightColor: ApexColors.sapphire.withValues(alpha: 0.10),
+        hoverColor: ApexColors.sapphire.withValues(alpha: 0.08),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10),
           alignment: Alignment.center,
@@ -789,6 +821,12 @@ class _LocalAnalysisProgressDialogState
               // Auto-flip the board if the user told us they played
               // Black. Unknown-side PGNs keep White at the bottom.
               userIsBlack: widget.userIsWhite == false,
+              // Phase 20.1: thread the analysis mode and the user's
+              // colour so the coach card can attribute "Allowed
+              // forced mate" correctly and surface the "Needs Deep
+              // Scan" chip on Quick-mode ambiguous plies.
+              mode: widget.mode,
+              userIsWhite: widget.userIsWhite,
             );
         // Archive save is awaited so we have the id to hand the
         // Mistake Vault hook; both are still best-effort and never
@@ -829,8 +867,12 @@ class _LocalAnalysisProgressDialogState
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         Navigator.of(context).pop();
+        // Phase 20.1 § 3: land on the ReviewSummaryScreen first so the
+        // user gets accuracy + counts + phase breakdown + CTAs before
+        // jumping into move-by-move review. The summary screen's
+        // "Review Moves" CTA pushes ReviewScreen itself.
         Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const ReviewScreen()),
+          MaterialPageRoute(builder: (_) => const ReviewSummaryScreen()),
         );
       });
     }
