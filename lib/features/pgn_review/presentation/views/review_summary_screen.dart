@@ -124,10 +124,22 @@ class _SummaryBody extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
           children: [
             _ResultHeader(summary: summary, mode: mode),
+            if (mode == AnalysisMode.quick) ...[
+              const SizedBox(height: 10),
+              const _QuickScanBanner(),
+            ] else ...[
+              const SizedBox(height: 10),
+              const _DeepMultiPvNotice(),
+            ],
             const SizedBox(height: 16),
             _AccuracyRow(summary: summary),
             const SizedBox(height: 16),
-            _CountsStrip(counts: summary.counts),
+            // Phase 20.1 device feedback § 4: per-player split is the
+            // primary counts view when we know the user's colour.
+            if (summary.userIsWhite != null)
+              _PerPlayerCounts(counts: summary.counts)
+            else
+              _CountsStrip(counts: summary.counts),
             const SizedBox(height: 16),
             _HighlightsBlock(summary: summary),
             const SizedBox(height: 16),
@@ -342,6 +354,293 @@ class _AccuracyCard extends StatelessWidget {
               color: ApexColors.textSecondary,
               fontSize: 11,
               fontFamily: 'JetBrains Mono',
+            ),
+          ),
+          const SizedBox(height: 4),
+          // Phase 20.1 device feedback § 5: never present a single
+          // game's accuracy as stable player skill. The summary screen
+          // is always one game by definition, so we always tag the
+          // figure as preliminary here. Profile-level "preliminary"
+          // gating across multiple games lands in PR #21.
+          Text(
+            'Preliminary · 1 game',
+            style: ApexTypography.bodyMedium.copyWith(
+              color: ApexColors.textTertiary,
+              fontSize: 10,
+              letterSpacing: 0.6,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Quick scan banner ──────────────────────────────────────────────
+
+/// Phase 20.1 device feedback § 2: when running in Deep mode the local
+/// engine still feeds the classifier with a single PV (MultiPV is not
+/// yet wired through the FFI binding — out of scope for PR #20). The
+/// classifier honestly reports this by gating Brilliant / Great / Forced
+/// behind first-ply sacrifice trajectory + win-cutoff guards instead of
+/// silently downgrading those reads to Best/Excellent.
+///
+/// This banner surfaces the limitation honestly instead of pretending
+/// Deep mode is fully verified. PR #21 will add MultiPV support to the
+/// engine binding so the classifier can prove the alt-line drop.
+class _DeepMultiPvNotice extends StatelessWidget {
+  const _DeepMultiPvNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    final color = ApexColors.sapphireBright;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withAlpha(20),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withAlpha(90), width: 0.6),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline_rounded, size: 16, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Deep Review — single PV',
+                  style: ApexTypography.labelLarge.copyWith(
+                    color: color,
+                    fontSize: 11,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Brilliant / Great / Forced reads use sacrifice-trajectory '
+                  'and first-ply guards. MultiPV alt-line verification is '
+                  'a known PR #20 limitation — landing in PR #21.',
+                  style: ApexTypography.bodyMedium.copyWith(
+                    color: ApexColors.textSecondary,
+                    fontSize: 11,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuickScanBanner extends StatelessWidget {
+  const _QuickScanBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final color = ApexColors.inaccuracy;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withAlpha(28),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withAlpha(120), width: 0.6),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.flash_on_rounded, size: 16, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Quick Scan — preview only',
+                  style: ApexTypography.labelLarge.copyWith(
+                    color: color.withAlpha(240),
+                    fontSize: 11,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Brilliant / Great / Forced badges and final tactical '
+                  'verdicts require a Deep Review (D20+ with MultiPV). '
+                  'Tap "Re-analyze Deep" below for the trustworthy version.',
+                  style: ApexTypography.bodyMedium.copyWith(
+                    color: ApexColors.textSecondary,
+                    fontSize: 11,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Per-player counts ──────────────────────────────────────────────
+
+class _PerPlayerCounts extends StatelessWidget {
+  const _PerPlayerCounts({required this.counts});
+
+  final ReviewCounts counts;
+
+  /// Display order: trophy tiers → Best/Excellent/Good → Book →
+  /// problem tiers (Inaccuracy/Mistake/Missed/Blunder). Same on both
+  /// sides so the YOU and OPPONENT columns line up visually.
+  static const List<MoveQuality> _displayOrder = [
+    MoveQuality.brilliant,
+    MoveQuality.great,
+    MoveQuality.best,
+    MoveQuality.excellent,
+    MoveQuality.good,
+    MoveQuality.book,
+    MoveQuality.inaccuracy,
+    MoveQuality.mistake,
+    MoveQuality.missedWin,
+    MoveQuality.blunder,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: ApexColors.cardSurface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: ApexColors.subtleBorder, width: 0.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'COUNTS BY PLAYER',
+            style: ApexTypography.labelLarge.copyWith(
+              fontSize: 10,
+              letterSpacing: 1.6,
+              color: ApexColors.textTertiary,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _PlayerCountColumn(
+                  label: 'YOU',
+                  tiers: counts.user,
+                  displayOrder: _displayOrder,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Container(
+                width: 0.5,
+                height: 240,
+                color: ApexColors.subtleBorder,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _PlayerCountColumn(
+                  label: 'OPPONENT',
+                  tiers: counts.opponent,
+                  displayOrder: _displayOrder,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PlayerCountColumn extends StatelessWidget {
+  const _PlayerCountColumn({
+    required this.label,
+    required this.tiers,
+    required this.displayOrder,
+  });
+
+  final String label;
+  final ReviewCountsByTier tiers;
+  final List<MoveQuality> displayOrder;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: ApexTypography.labelLarge.copyWith(
+            fontSize: 11,
+            letterSpacing: 1.6,
+            color: ApexColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        for (final tier in displayOrder)
+          _PerTierRow(tier: tier, count: tiers.forTier(tier)),
+      ],
+    );
+  }
+}
+
+class _PerTierRow extends StatelessWidget {
+  const _PerTierRow({required this.tier, required this.count});
+
+  final MoveQuality tier;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final dim = count == 0;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          SvgPicture.asset(
+            tier.svgAssetPath,
+            width: 12,
+            height: 12,
+            colorFilter: dim
+                ? const ColorFilter.mode(
+                    Color(0x66808080), BlendMode.srcATop)
+                : null,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              tier.label,
+              style: ApexTypography.bodyMedium.copyWith(
+                color: dim
+                    ? ApexColors.textTertiary
+                    : tier.color.withAlpha(230),
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Text(
+            '$count',
+            style: ApexTypography.bodyMedium.copyWith(
+              color: dim
+                  ? ApexColors.textTertiary
+                  : ApexColors.textPrimary,
+              fontSize: 11,
+              fontFamily: 'JetBrains Mono',
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],

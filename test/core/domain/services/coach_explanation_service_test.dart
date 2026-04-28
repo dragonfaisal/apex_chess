@@ -184,7 +184,8 @@ void main() {
   });
 
   group('Rule 3 — Played == best → Top engine choice', () {
-    test('Played UCI matches best UCI → headline "Top engine choice"', () {
+    test('Played UCI matches best UCI → headline "Best", no better-move line',
+        () {
       final cls = svc.explain(CoachExplanationInput(
         move: _m(
           ply: 12,
@@ -198,8 +199,15 @@ void main() {
         mode: AnalysisMode.deep,
       ));
       expect(cls.headline.contains('Best'), isTrue);
-      expect(cls.subline.toLowerCase(), contains('top engine choice'));
       expect(cls.betterMoveSan, isNull);
+      // Phase 20.1 device feedback § 9: subline must be human and
+      // free of engine jargon.
+      final sub = cls.subline.toLowerCase();
+      expect(sub.contains('stockfish'), isFalse,
+          reason: 'subline must avoid engine-name jargon');
+      expect(sub.contains('pv1'), isFalse,
+          reason: 'subline must avoid PV jargon');
+      expect(sub.isNotEmpty, isTrue);
     });
 
     test('Castling UCI variants compare equal (e1g1 vs e1h1)', () {
@@ -217,7 +225,10 @@ void main() {
         ),
         mode: AnalysisMode.deep,
       ));
-      expect(cls.subline.toLowerCase(), contains('top engine choice'));
+      // Phase 20.1: subline now describes the move concretely
+      // ("Castles short — king to safety, …") instead of a generic
+      // "Top engine choice — matches Stockfish's #1 line."
+      expect(cls.subline.toLowerCase(), contains('castle'));
       expect(cls.betterMoveSan, isNull);
     });
   });
@@ -364,6 +375,139 @@ void main() {
       ));
       expect(cls.betterMoveSan, 'Rb1');
       expect(cls.betterMoveReason, isNotNull);
+    });
+  });
+
+  // Phase 20.1 device feedback § 3 — Opening Book vs Opening phase.
+  group('Rule 8 — Opening phase vs Book', () {
+    test('Out-of-book early ply (ply<8, not inBook) appends Opening phase '
+        'caveat to subline', () {
+      final cls = svc.explain(CoachExplanationInput(
+        move: _m(
+          ply: 3,
+          san: 'a3',
+          uci: 'a2a3',
+          classification: MoveQuality.good,
+          // Not in book — this is the bug PR #20 device feedback § 3
+          // exposed: ply<8 was being labelled Book just for being
+          // early.
+          inBook: false,
+          message: 'Solid — no significant Win% loss.',
+        ),
+        mode: AnalysisMode.deep,
+      ));
+      expect(cls.headline.contains('Solid'), isTrue);
+      expect(
+        cls.subline.toLowerCase(),
+        contains('opening phase'),
+        reason: 'Non-book early plies must surface the Opening phase '
+            'caveat so users can tell a sideline from real theory.',
+      );
+    });
+
+    test('In-book ply (inBook=true) reads "Book move." and never says '
+        '"Opening phase"', () {
+      final cls = svc.explain(CoachExplanationInput(
+        move: _m(
+          ply: 4,
+          san: 'd4',
+          uci: 'd2d4',
+          classification: MoveQuality.book,
+          inBook: true,
+          ecoCode: 'A04',
+          openingName: 'Zukertort Opening',
+        ),
+        mode: AnalysisMode.deep,
+      ));
+      expect(cls.headline, 'Book move.');
+      expect(cls.subline.contains('A04'), isTrue);
+      expect(cls.subline.toLowerCase().contains('opening phase'), isFalse,
+          reason: 'Real Book/Theory must not be labelled "Opening phase".');
+    });
+  });
+
+  // Phase 20.1 device feedback § 9 — Coach explanations must feel human.
+  group('Rule 9 — Human, tactic-aware coach copy on Best moves', () {
+    test('Capture-with-check Best reads as "captures with check"', () {
+      final cls = svc.explain(CoachExplanationInput(
+        move: _m(
+          ply: 18,
+          san: 'Bxh7+',
+          uci: 'd3h7',
+          bestUci: 'd3h7',
+          bestSan: 'Bxh7+',
+          classification: MoveQuality.best,
+        ),
+        mode: AnalysisMode.deep,
+      ));
+      final sub = cls.subline.toLowerCase();
+      expect(sub.contains('capture'), isTrue);
+      expect(sub.contains('check'), isTrue);
+      expect(sub.contains('stockfish'), isFalse,
+          reason: 'No engine-name jargon in human copy.');
+    });
+
+    test('Castling Best reads as "Castles short — king to safety"', () {
+      final cls = svc.explain(CoachExplanationInput(
+        move: _m(
+          ply: 9,
+          san: 'O-O',
+          uci: 'e1g1',
+          bestUci: 'e1g1',
+          bestSan: 'O-O',
+          classification: MoveQuality.best,
+        ),
+        mode: AnalysisMode.deep,
+      ));
+      final sub = cls.subline.toLowerCase();
+      expect(sub.contains('castle'), isTrue);
+      expect(sub.contains('king'), isTrue);
+    });
+
+    test('Promotion Best reads as "Promotes the pawn"', () {
+      final cls = svc.explain(CoachExplanationInput(
+        move: _m(
+          ply: 80,
+          san: 'a8=Q',
+          uci: 'a7a8q',
+          bestUci: 'a7a8q',
+          bestSan: 'a8=Q',
+          classification: MoveQuality.best,
+        ),
+        mode: AnalysisMode.deep,
+      ));
+      expect(cls.subline.toLowerCase(), contains('promote'));
+    });
+
+    test('No engine jargon ("Stockfish", "PV1", "centipawn") on any '
+        'Best subline', () {
+      final samples = [
+        ('Nf3', 'g1f3'),
+        ('e4', 'e2e4'),
+        ('Bxc6', 'b5c6'),
+        ('Qd5+', 'd1d5'),
+        ('O-O', 'e1g1'),
+      ];
+      for (final (san, uci) in samples) {
+        final cls = svc.explain(CoachExplanationInput(
+          move: _m(
+            ply: 14,
+            san: san,
+            uci: uci,
+            bestUci: uci,
+            bestSan: san,
+            classification: MoveQuality.best,
+          ),
+          mode: AnalysisMode.deep,
+        ));
+        final sub = cls.subline.toLowerCase();
+        expect(sub.contains('stockfish'), isFalse,
+            reason: 'Subline for $san must avoid "Stockfish" jargon.');
+        expect(sub.contains('pv1'), isFalse,
+            reason: 'Subline for $san must avoid "PV1" jargon.');
+        expect(sub.contains('centipawn'), isFalse,
+            reason: 'Subline for $san must avoid "centipawn" jargon.');
+      }
     });
   });
 }

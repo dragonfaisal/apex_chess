@@ -92,15 +92,22 @@ void main() {
 
     // Result header.
     expect(find.text('You won'), findsOneWidget);
-    // Accuracy pair.
-    expect(find.text('YOU'), findsOneWidget);
-    expect(find.text('OPPONENT'), findsOneWidget);
-    // Counts block title.
-    expect(find.text('COUNTS'), findsOneWidget);
-    // Key moments block.
-    expect(find.text('KEY MOMENTS'), findsOneWidget);
-    // Phase breakdown block.
-    expect(find.text('PHASE PERFORMANCE'), findsOneWidget);
+    // Accuracy pair + per-player counts both render "YOU"/"OPPONENT"
+    // labels (Phase 20.1 device feedback § 4: per-player split is now
+    // the primary counts view), so we expect each to appear twice.
+    expect(find.text('YOU'), findsNWidgets(2));
+    expect(find.text('OPPONENT'), findsNWidgets(2));
+    // Per-player counts header (replaces the old "COUNTS" strip when
+    // userIsWhite is known).
+    expect(find.text('COUNTS BY PLAYER'), findsOneWidget);
+    // The summary is a long ListView on test surfaces — scroll the
+    // remaining sections into the viewport before asserting.
+    final keyMoments = find.text('KEY MOMENTS');
+    await tester.scrollUntilVisible(keyMoments, 200);
+    expect(keyMoments, findsOneWidget);
+    final phasePerf = find.text('PHASE PERFORMANCE');
+    await tester.scrollUntilVisible(phasePerf, 200);
+    expect(phasePerf, findsOneWidget);
     // Primary CTA — scroll into view first, the summary is a long
     // ListView.
     final reviewCta = find.text('Review Moves');

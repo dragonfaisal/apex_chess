@@ -106,6 +106,20 @@ class LocalGameAnalyzer {
     // Quick scan — the Phase A audit flagged "D14 claims Brilliant on
     // a 50 cp drift" as a real-device regression.
     final suppressTrophyTiers = mode == AnalysisMode.quick;
+    // Phase 20.1 device feedback § 2 (PR #20 KNOWN LIMITATION):
+    // The local engine binding currently runs single-PV (MultiPV
+    // wiring lands in PR #21 — see lib/core/infrastructure/engine/
+    // stockfish_ffi.dart). That means the classifier never receives
+    // `multiPvWhiteWinPercents`, `secondBestWhiteWinPercent`, or
+    // `altLineWhiteWinPercent`, so:
+    //   * Forced is gated by `isOnlyWinningMove` (synthesised in
+    //     evaluation_analyzer.dart only when the caller asserts it),
+    //   * Great's PV2-drop check can't fire,
+    //   * Brilliant uses the sacrifice trajectory + first-ply +
+    //     winningCutoff guards as the authoritative gate.
+    // Deep mode is therefore honestly labelled "Deep Review — single
+    // PV" on the summary screen so users know what the badges are
+    // verified against.
     // Resolve the movetime budget *after* the caller's depth override is
     // applied — otherwise a depth-22 scan would silently inherit the
     // constructor's depth-14 budget and finish at depth ~14, defeating
@@ -316,15 +330,14 @@ class LocalGameAnalyzer {
       // recapture a Brilliant candidate.
       final sac = trajectory[ply];
 
-      // Opening-phase fallback (spec § 3.6.3): if no ECO match was found
-      // in the local book *and* we're inside the first eight plies of the
-      // game, treat the position as still in the opening so the classifier
-      // applies its book-leniency rules instead of the regular ladder.
-      // This stops the analyser from labelling normal opening preparation
-      // as Inaccuracy / Mistake when the move is just a sideline that
-      // happens not to be in our compact book.
-      final isOpeningPhase = ply < 8;
-
+      // Phase 20.1 device feedback § 3: do NOT label moves as Book
+      // just because `ply < 8`. Real Book/Theory means the position
+      // matched our local ECO/SAN book (handled above on the
+      // `bookHit != null` branch). For non-book early moves we still
+      // run the regular classification ladder, and the coach card
+      // surfaces "Opening phase" via [CoachExplanationService] when
+      // `move.ply < 8 && !move.inBook` so users can tell a sideline
+      // from real theory.
       final result = _analyzer.analyze(
         prevCp: before?.scoreCp,
         prevMate: before?.mateIn,
@@ -336,7 +349,11 @@ class LocalGameAnalyzer {
         isSacrifice: sac.isSacrifice,
         isTrivialRecapture: sac.isTrivialRecapture,
         isFirstSacrificePly: sac.isFirstSacrificePly,
-        isBook: isOpeningPhase,
+        // Only flag `isBook` when the position actually matched our
+        // ECO book (handled on the `bookHit != null` branch above —
+        // we don't reach here when it did). The classifier no longer
+        // forces Book just because we're early in the game.
+        isBook: false,
         suppressTrophyTiers: suppressTrophyTiers,
       );
 

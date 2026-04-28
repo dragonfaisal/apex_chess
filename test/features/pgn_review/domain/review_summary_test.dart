@@ -82,6 +82,57 @@ void main() {
       expect(s.counts.missedWin, 1);
       expect(s.counts.totalClassified, 8);
     });
+
+    test(
+        'Per-player split: user (White) and opponent (Black) counts add up '
+        'to global totals', () {
+      // Phase 20.1 device feedback § 4 — the summary screen now splits
+      // counts per side. The legacy aggregate fields stay in lockstep
+      // with `user.X + opponent.X` so archive cards (which read the
+      // aggregates) never drift from the per-player view.
+      final t = _timeline([
+        _m(ply: 0, isWhite: true, cls: MoveQuality.best), // user
+        _m(ply: 1, isWhite: false, cls: MoveQuality.blunder, deltaW: -30), // opp
+        _m(ply: 2, isWhite: true, cls: MoveQuality.mistake, deltaW: -12), // user
+        _m(ply: 3, isWhite: false, cls: MoveQuality.best), // opp
+        _m(ply: 4, isWhite: true, cls: MoveQuality.brilliant, deltaW: 5), // user
+        _m(ply: 5, isWhite: false, cls: MoveQuality.brilliant, deltaW: 5), // opp
+      ]);
+      final s = svc.compute(timeline: t, userIsWhite: true);
+      // User = White
+      expect(s.counts.user.best, 1);
+      expect(s.counts.user.mistake, 1);
+      expect(s.counts.user.brilliant, 1);
+      expect(s.counts.user.blunder, 0);
+      // Opponent = Black
+      expect(s.counts.opponent.best, 1);
+      expect(s.counts.opponent.blunder, 1);
+      expect(s.counts.opponent.brilliant, 1);
+      expect(s.counts.opponent.mistake, 0);
+      // Aggregate equals user + opponent
+      expect(s.counts.best, s.counts.user.best + s.counts.opponent.best);
+      expect(s.counts.blunder,
+          s.counts.user.blunder + s.counts.opponent.blunder);
+      expect(s.counts.brilliant,
+          s.counts.user.brilliant + s.counts.opponent.brilliant);
+    });
+
+    test(
+        'Per-player split: when userIsWhite is null, splits stay empty '
+        'and aggregate is preserved', () {
+      // PGN paste with no side selector leaves userIsWhite=null.
+      // We must still produce aggregates; the per-player split is
+      // empty so the summary screen falls back to the legacy strip.
+      final t = _timeline([
+        _m(ply: 0, isWhite: true, cls: MoveQuality.best),
+        _m(ply: 1, isWhite: false, cls: MoveQuality.blunder, deltaW: -30),
+      ]);
+      final s = svc.compute(timeline: t, userIsWhite: null);
+      expect(s.counts.best, 1);
+      expect(s.counts.blunder, 1);
+      expect(s.counts.user.total, 0);
+      expect(s.counts.opponent.total, 0);
+    });
   });
 
   group('Accuracy per colour', () {

@@ -510,8 +510,15 @@ class _ArchiveSearchFieldState extends ConsumerState<_ArchiveSearchField> {
 
   @override
   Widget build(BuildContext context) {
+    // Phase 20.1 device feedback § 7: explicit cursor colour and
+    // disabled autofill kill Android's yellow autofill bar that was
+    // flashing through the dark theme on the search field.
     return TextField(
       controller: _controller,
+      cursorColor: ApexColors.sapphireBright,
+      autofillHints: const [],
+      enableSuggestions: false,
+      autocorrect: false,
       style: ApexTypography.bodyMedium.copyWith(
         color: ApexColors.textPrimary,
         fontSize: 12,
@@ -558,29 +565,37 @@ class _FilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: ApexColors.nebula.withValues(alpha: 0.6),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: ApexColors.stardustLine.withValues(alpha: 0.4),
+    // Phase 20.1 device feedback § 7: pinned splash/highlight stop the
+    // default Material yellow ripple from leaking through on Android.
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        splashColor: ApexColors.sapphire.withValues(alpha: 0.18),
+        highlightColor: ApexColors.sapphire.withValues(alpha: 0.10),
+        hoverColor: ApexColors.sapphire.withValues(alpha: 0.08),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: ApexColors.nebula.withValues(alpha: 0.6),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: ApexColors.stardustLine.withValues(alpha: 0.4),
+            ),
           ),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 14, color: ApexColors.sapphireBright),
-            const SizedBox(width: 6),
-            Text(label,
-                style: ApexTypography.bodyMedium.copyWith(
-                  color: ApexColors.textPrimary,
-                  fontSize: 12,
-                  letterSpacing: 0.5,
-                )),
-          ],
+          child: Row(
+            children: [
+              Icon(icon, size: 14, color: ApexColors.sapphireBright),
+              const SizedBox(width: 6),
+              Text(label,
+                  style: ApexTypography.bodyMedium.copyWith(
+                    color: ApexColors.textPrimary,
+                    fontSize: 12,
+                    letterSpacing: 0.5,
+                  )),
+            ],
+          ),
         ),
       ),
     );
@@ -663,13 +678,30 @@ class _ArchiveCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
+                  // Phase 20.1 device feedback § 6: tighter vertical
+                  // rhythm — opening + plies live on one quiet line, and
+                  // per-side ACPL gets a dedicated row in monospace so
+                  // the user can compare YOU vs OPPONENT at a glance.
                   Text(
-                    '${game.openingName ?? '—'}  ·  ${game.totalPlies} plies  ·  $acplText',
+                    '${game.openingName ?? '—'}  ·  ${game.totalPlies} plies',
                     style: ApexTypography.bodyMedium.copyWith(
                       color: ApexColors.textTertiary,
                       fontSize: 11,
                       letterSpacing: 0.5,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    acplText,
+                    style: ApexTypography.bodyMedium.copyWith(
+                      color: ApexColors.textSecondary,
+                      fontSize: 11,
+                      fontFamily: 'JetBrains Mono',
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.3,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,

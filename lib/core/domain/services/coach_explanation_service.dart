@@ -194,6 +194,10 @@ class CoachExplanationService {
     // ── Rule 4: Played move equals engine's top line. Addendum rule
     // 4: never render `Better: <same SAN>`; the headline reads
     // `Top engine choice.` and we suppress the better-line subline.
+    //
+    // Phase 20.1 device feedback § 9: replace the generic
+    // "matches Stockfish's #1 line" subline with concrete
+    // tactic-aware copy a 600–900 player can act on.
     final playedEqualsBest = _playedEqualsBest(m);
     if (playedEqualsBest) {
       final moveNum = _moveNumberLabel(m.ply);
@@ -202,7 +206,7 @@ class CoachExplanationService {
         headline: tier == null
             ? '$moveNum ${m.san} — Top engine choice'
             : '$moveNum ${m.san} — $tier',
-        subline: 'Top engine choice — matches Stockfish\'s #1 line.',
+        subline: _humanBestSubline(m),
       );
     }
 
@@ -225,6 +229,11 @@ class CoachExplanationService {
     String subline = m.message.isNotEmpty
         ? m.message
         : _fallbackMessage(m.classification);
+
+    // Phase 20.1 § 3: append "Opening phase — out of our book." for
+    // early non-book plies so the user reads the move was evaluated
+    // as a normal sideline, not theory.
+    subline = _maybeAppendOpeningPhase(subline, m);
 
     if (needsDeepScan) {
       // Append, rather than replace — the user still sees the
@@ -406,5 +415,77 @@ class CoachExplanationService {
       playedQuality: m.classification,
     );
     return exp?.sentence;
+  }
+
+  /// Concrete tactic-aware copy for "played == engine's top line".
+  /// Rotates through SAN markers (#, +, x, O-O, =) so the user reads
+  /// what the move *did* on the board instead of meaningless engine
+  /// jargon. Falls back to phase-aware phrasing for quiet moves.
+  ///
+  /// All copy is calibrated for a 600–900 Elo audience: no "Stockfish",
+  /// no "PV1", no centipawn talk.
+  static String _humanBestSubline(MoveAnalysis m) {
+    final san = m.san;
+
+    // Phase 20.1 § 3: opening phase fallback for early non-book plies.
+    // We surface this even when the move is "Best" so the user can
+    // tell a sideline from real theory without a confusing badge.
+    final isOpeningPhase = m.ply < 8 && !m.inBook;
+
+    if (san.endsWith('#')) {
+      return 'Checkmate — clean finish.';
+    }
+    if (san.contains('=') && (san.contains('=Q') || san.contains('=R'))) {
+      return san.endsWith('+')
+          ? 'Promotes with check — decisive.'
+          : 'Promotes the pawn — decisive material gain.';
+    }
+    if (san.startsWith('O-O-O')) {
+      return san.endsWith('+')
+          ? 'Castles long with check — king safe, rook active.'
+          : 'Castles long — king tucked away, rook activated.';
+    }
+    if (san.startsWith('O-O')) {
+      return san.endsWith('+')
+          ? 'Castles short with check — king safe, attack continues.'
+          : 'Castles short — king to safety, rook joins the game.';
+    }
+    if (san.contains('x') && san.endsWith('+')) {
+      return 'Captures with check — wins material and keeps the '
+          'initiative.';
+    }
+    if (san.contains('x')) {
+      return 'Captures cleanly — picks up material with no good reply.';
+    }
+    if (san.endsWith('+')) {
+      return 'Forcing check — pressures the king and limits replies.';
+    }
+    if (isOpeningPhase) {
+      return 'Sound opening move — develops a piece and keeps the '
+          'centre flexible. (Opening phase, out of our book.)';
+    }
+    // Quiet positional best — derive a hint from the post-move Win%.
+    // High mover Win% → improving a winning position; near 50 → keeps
+    // the balance.
+    final w = m.isWhiteMove ? m.winPercentAfter : 100.0 - m.winPercentAfter;
+    if (w >= 75) {
+      return 'Keeps your advantage — improves a piece without giving '
+          'the opponent counterplay.';
+    }
+    if (w <= 25) {
+      return 'Best defensive try — limits damage and waits for chances.';
+    }
+    return 'Solid choice — improves piece activity and keeps the '
+        'position balanced.';
+  }
+
+  /// Append "Opening phase" caveat to the subline when the ply is in
+  /// the early game but not in our ECO book. Keeps coaching honest:
+  /// the classifier evaluated a normal sideline, not theory.
+  static String _maybeAppendOpeningPhase(String subline, MoveAnalysis m) {
+    if (m.inBook) return subline;
+    if (m.ply >= 8) return subline;
+    if (subline.toLowerCase().contains('opening phase')) return subline;
+    return '$subline (Opening phase — out of our book.)';
   }
 }

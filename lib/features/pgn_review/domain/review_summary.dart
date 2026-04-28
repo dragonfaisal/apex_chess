@@ -24,6 +24,11 @@ enum GamePhase { opening, middlegame, endgame }
 /// Aggregated quality counts per classification, populated from the
 /// timeline (never from a stale `qualityCounts` field on the archive
 /// record — Phase A audit § 4 flagged drift between the two).
+///
+/// Phase 20.1 device feedback § 4: also exposes per-side splits so
+/// the summary screen can render YOU / OPPONENT columns. The legacy
+/// totals are still available for callers that don't care about the
+/// split (archive card, etc.).
 class ReviewCounts {
   const ReviewCounts({
     required this.best,
@@ -37,6 +42,8 @@ class ReviewCounts {
     required this.brilliant,
     required this.great,
     required this.forced,
+    this.user = const ReviewCountsByTier.empty(),
+    this.opponent = const ReviewCountsByTier.empty(),
   });
 
   final int best;
@@ -51,7 +58,99 @@ class ReviewCounts {
   final int great;
   final int forced;
 
+  /// User-side counts (rendered in the YOU column on the summary).
+  /// Empty when [ReviewSummary.userIsWhite] is `null`.
+  final ReviewCountsByTier user;
+
+  /// Opponent-side counts (rendered in the OPPONENT column).
+  final ReviewCountsByTier opponent;
+
   int get totalClassified =>
+      best +
+      excellent +
+      good +
+      book +
+      inaccuracy +
+      mistake +
+      blunder +
+      missedWin +
+      brilliant +
+      great +
+      forced;
+}
+
+/// Per-tier classification counts for a single side. Used by the
+/// per-player split on the summary screen. The legacy [ReviewCounts]
+/// totals (`best`, `mistake`, …) are kept for backwards compatibility
+/// with any callers that read them directly.
+class ReviewCountsByTier {
+  const ReviewCountsByTier({
+    required this.best,
+    required this.excellent,
+    required this.good,
+    required this.book,
+    required this.inaccuracy,
+    required this.mistake,
+    required this.blunder,
+    required this.missedWin,
+    required this.brilliant,
+    required this.great,
+    required this.forced,
+  });
+
+  const ReviewCountsByTier.empty()
+      : best = 0,
+        excellent = 0,
+        good = 0,
+        book = 0,
+        inaccuracy = 0,
+        mistake = 0,
+        blunder = 0,
+        missedWin = 0,
+        brilliant = 0,
+        great = 0,
+        forced = 0;
+
+  final int best;
+  final int excellent;
+  final int good;
+  final int book;
+  final int inaccuracy;
+  final int mistake;
+  final int blunder;
+  final int missedWin;
+  final int brilliant;
+  final int great;
+  final int forced;
+
+  int forTier(MoveQuality q) {
+    switch (q) {
+      case MoveQuality.best:
+        return best;
+      case MoveQuality.excellent:
+        return excellent;
+      case MoveQuality.good:
+        return good;
+      case MoveQuality.book:
+        return book;
+      case MoveQuality.inaccuracy:
+        return inaccuracy;
+      case MoveQuality.mistake:
+        return mistake;
+      case MoveQuality.blunder:
+        return blunder;
+      case MoveQuality.missedWin:
+        return missedWin;
+      case MoveQuality.brilliant:
+        return brilliant;
+      case MoveQuality.great:
+        return great;
+      case MoveQuality.forced:
+        return forced;
+    }
+  }
+
+  int get total =>
       best +
       excellent +
       good +
@@ -178,7 +277,7 @@ class ReviewSummaryService {
     required bool? userIsWhite,
   }) {
     final moves = timeline.moves;
-    final counts = _counts(moves);
+    final counts = _counts(moves, userIsWhite: userIsWhite);
 
     // Per-colour cp-loss splits were added in Phase A (analysis_timeline.dart).
     final whiteCpLoss = timeline.averageCpLossWhite;
@@ -221,56 +320,38 @@ class ReviewSummaryService {
 
   // ── Counts ──────────────────────────────────────────────────────
 
-  static ReviewCounts _counts(List<MoveAnalysis> moves) {
-    int best = 0,
-        excellent = 0,
-        good = 0,
-        book = 0,
-        inaccuracy = 0,
-        mistake = 0,
-        blunder = 0,
-        missedWin = 0,
-        brilliant = 0,
-        great = 0,
-        forced = 0;
+  static ReviewCounts _counts(
+    List<MoveAnalysis> moves, {
+    required bool? userIsWhite,
+  }) {
+    final tot = _MutableTier();
+    final user = _MutableTier();
+    final opp = _MutableTier();
+
     for (final m in moves) {
-      switch (m.classification) {
-        case MoveQuality.best:
-          best++;
-        case MoveQuality.excellent:
-          excellent++;
-        case MoveQuality.good:
-          good++;
-        case MoveQuality.book:
-          book++;
-        case MoveQuality.inaccuracy:
-          inaccuracy++;
-        case MoveQuality.mistake:
-          mistake++;
-        case MoveQuality.blunder:
-          blunder++;
-        case MoveQuality.missedWin:
-          missedWin++;
-        case MoveQuality.brilliant:
-          brilliant++;
-        case MoveQuality.great:
-          great++;
-        case MoveQuality.forced:
-          forced++;
+      tot.bump(m.classification);
+      if (userIsWhite == null) continue;
+      if (m.isWhiteMove == userIsWhite) {
+        user.bump(m.classification);
+      } else {
+        opp.bump(m.classification);
       }
     }
+
     return ReviewCounts(
-      best: best,
-      excellent: excellent,
-      good: good,
-      book: book,
-      inaccuracy: inaccuracy,
-      mistake: mistake,
-      blunder: blunder,
-      missedWin: missedWin,
-      brilliant: brilliant,
-      great: great,
-      forced: forced,
+      best: tot.best,
+      excellent: tot.excellent,
+      good: tot.good,
+      book: tot.book,
+      inaccuracy: tot.inaccuracy,
+      mistake: tot.mistake,
+      blunder: tot.blunder,
+      missedWin: tot.missedWin,
+      brilliant: tot.brilliant,
+      great: tot.great,
+      forced: tot.forced,
+      user: user.toCounts(),
+      opponent: opp.toCounts(),
     );
   }
 
@@ -441,4 +522,61 @@ class ReviewSummaryService {
     if (eco != null && name != null) return '$eco · $name';
     return name ?? eco;
   }
+}
+
+/// Internal mutable counter — keeps `_counts` readable without
+/// allocating an entire [ReviewCountsByTier] per increment.
+class _MutableTier {
+  int best = 0;
+  int excellent = 0;
+  int good = 0;
+  int book = 0;
+  int inaccuracy = 0;
+  int mistake = 0;
+  int blunder = 0;
+  int missedWin = 0;
+  int brilliant = 0;
+  int great = 0;
+  int forced = 0;
+
+  void bump(MoveQuality q) {
+    switch (q) {
+      case MoveQuality.best:
+        best++;
+      case MoveQuality.excellent:
+        excellent++;
+      case MoveQuality.good:
+        good++;
+      case MoveQuality.book:
+        book++;
+      case MoveQuality.inaccuracy:
+        inaccuracy++;
+      case MoveQuality.mistake:
+        mistake++;
+      case MoveQuality.blunder:
+        blunder++;
+      case MoveQuality.missedWin:
+        missedWin++;
+      case MoveQuality.brilliant:
+        brilliant++;
+      case MoveQuality.great:
+        great++;
+      case MoveQuality.forced:
+        forced++;
+    }
+  }
+
+  ReviewCountsByTier toCounts() => ReviewCountsByTier(
+        best: best,
+        excellent: excellent,
+        good: good,
+        book: book,
+        inaccuracy: inaccuracy,
+        mistake: mistake,
+        blunder: blunder,
+        missedWin: missedWin,
+        brilliant: brilliant,
+        great: great,
+        forced: forced,
+      );
 }

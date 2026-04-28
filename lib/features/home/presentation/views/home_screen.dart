@@ -302,9 +302,17 @@ class _PgnPasteDialogState extends State<_PgnPasteDialog> {
                 ],
               ),
               const SizedBox(height: 14),
+              // Phase 20.1 device feedback § 7: explicit cursor colour
+              // and disabled autofill suppress Android's yellow autofill
+              // bar / default cyan cursor that previously leaked through
+              // the dark theme.
               TextField(
                 controller: _pgnController,
                 maxLines: 6,
+                cursorColor: ApexColors.sapphireBright,
+                autofillHints: const [],
+                enableSuggestions: false,
+                autocorrect: false,
                 style: ApexTypography.bodyMedium.copyWith(
                   fontFamily: 'JetBrainsMono',
                   fontSize: 12,
@@ -317,6 +325,10 @@ class _PgnPasteDialogState extends State<_PgnPasteDialog> {
               const SizedBox(height: 12),
               TextField(
                 controller: _handleController,
+                cursorColor: ApexColors.sapphireBright,
+                autofillHints: const [],
+                enableSuggestions: false,
+                autocorrect: false,
                 style: ApexTypography.bodyMedium.copyWith(
                   fontSize: 12,
                   color: ApexColors.textPrimary,
@@ -358,6 +370,20 @@ class _PgnPasteDialogState extends State<_PgnPasteDialog> {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 8),
+              // Phase 20.1 § 1: reinforce that Quick is preview-only
+              // before the user commits to a mode. Deep is the
+              // recommended path for trustworthy tactical badges.
+              Text(
+                'Quick is a preview (≤D14, single PV). Deep (D22 + MultiPV) is '
+                'recommended for trustworthy Brilliant / Great / Forced verdicts.',
+                style: ApexTypography.bodyMedium.copyWith(
+                  color: ApexColors.textTertiary,
+                  fontSize: 10,
+                  height: 1.35,
+                ),
+                textAlign: TextAlign.center,
               ),
             ],
           ),
@@ -441,11 +467,17 @@ class _SideChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Phase 20.1 device feedback § 7: explicit splash/highlight colours
+    // so Material's default ripple (yellow on Android) doesn't bleed
+    // through the dark theme as a white/yellow flash on tap.
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(10),
+        splashColor: ApexColors.sapphire.withValues(alpha: 0.18),
+        highlightColor: ApexColors.sapphire.withValues(alpha: 0.10),
+        hoverColor: ApexColors.sapphire.withValues(alpha: 0.08),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10),
           alignment: Alignment.center,

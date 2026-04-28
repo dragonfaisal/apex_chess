@@ -26,17 +26,37 @@ class ReviewAudioController {
   DateTime _lastHeavySfxTime = DateTime(2000);
   NavigationEvent? _pendingEvent;
 
-  static const Duration _debounceInterval = Duration(milliseconds: 100);
+  /// Generation counter — bumped on every [onNavigationEvent] so any
+  /// in-flight `_executePendingEvent` can detect that a newer event
+  /// arrived mid-await and bail out before stacking another sound.
+  /// Phase 20.1 device feedback § 8: rapid prev/next was producing
+  /// overlapping classification SFX because the 120 ms post-move
+  /// delay couldn't be cancelled by a fresh debounce — the new event
+  /// would fire while the old play() was still racing through.
+  int _generation = 0;
+
+  /// Phase 20.1: bumped from 100 → 140 ms so a casual prev / next /
+  /// prev burst (≈80–100 ms gaps on Android) coalesces into a single
+  /// final play() call instead of two stacked plays.
+  static const Duration _debounceInterval = Duration(milliseconds: 140);
   static const Duration _heavySfxCooldown = Duration(milliseconds: 350);
 
   /// Called by [ReviewController] on every ply change.
   void onNavigationEvent(NavigationEvent event) {
     _pendingEvent = event;
+    _generation++;
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(_debounceInterval, _executePendingEvent);
+    // Stop any move SFX still playing from the previous event so the
+    // user never hears two move sounds layered. The classification
+    // player's own stop() is handled inside _maybePlayClassificationSound.
+    _movePlayer.stop();
+    _classificationPlayer.stop();
+    final gen = _generation;
+    _debounceTimer = Timer(_debounceInterval, () => _executePendingEvent(gen));
   }
 
-  Future<void> _executePendingEvent() async {
+  Future<void> _executePendingEvent(int gen) async {
+    if (gen != _generation) return; // newer event arrived; skip
     final event = _pendingEvent;
     if (event == null) return;
     _pendingEvent = null;
@@ -44,7 +64,8 @@ class ReviewAudioController {
     try {
       if (event.isSequential && event.moveAnalysis != null) {
         await _playMoveSound(event.moveAnalysis!);
-        await _maybePlayClassificationSound(event.moveAnalysis!);
+        if (gen != _generation) return; // bail before classification SFX
+        await _maybePlayClassificationSound(event.moveAnalysis!, gen);
       }
     } catch (_) {
       // Audio errors never crash the app.
@@ -74,7 +95,8 @@ class ReviewAudioController {
     await _movePlayer.play(AssetSource('sounds/$soundFile'));
   }
 
-  Future<void> _maybePlayClassificationSound(MoveAnalysis move) async {
+  Future<void> _maybePlayClassificationSound(
+      MoveAnalysis move, int gen) async {
     final q = move.classification;
     if (!_isMajor(q)) return;
 
@@ -83,6 +105,10 @@ class ReviewAudioController {
     _lastHeavySfxTime = now;
 
     await Future<void>.delayed(const Duration(milliseconds: 120));
+    // A new navigation event during the post-move delay invalidates
+    // this classification SFX — skip playing it so we don't stack two
+    // heavy sounds when the user is scrubbing fast.
+    if (gen != _generation) return;
 
     String? sfxFile;
     switch (q) {
