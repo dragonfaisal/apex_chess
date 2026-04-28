@@ -19,8 +19,9 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../../../shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
+import 'package:apex_chess/core/domain/services/coach_explanation_service.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
-import 'package:apex_chess/core/utils/move_explanation.dart';
+import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_chess_board.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_eval_bar.dart';
 import 'package:apex_chess/shared_ui/widgets/brilliant_glow.dart';
@@ -151,7 +152,13 @@ class ReviewScreen extends ConsumerWidget {
                         },
                       ),
                       const SizedBox(height: 10),
-                      _CoachCard(move: currentMove, ply: state.currentPly),
+                      _CoachCard(
+                        move: currentMove,
+                        ply: state.currentPly,
+                        timeline: timeline,
+                        mode: state.mode,
+                        userIsWhite: state.userIsWhite,
+                      ),
                       const SizedBox(height: 12),
                       // Full Move Report is now collapsible — the board
                       // stays in sight and the user opts in to the long
@@ -276,7 +283,17 @@ class ReviewScreen extends ConsumerWidget {
 class _CoachCard extends StatelessWidget {
   final MoveAnalysis? move;
   final int ply;
-  const _CoachCard({this.move, required this.ply});
+  final AnalysisTimeline? timeline;
+  final AnalysisMode mode;
+  final bool? userIsWhite;
+
+  const _CoachCard({
+    this.move,
+    required this.ply,
+    this.timeline,
+    this.mode = AnalysisMode.deep,
+    this.userIsWhite,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -316,7 +333,18 @@ class _CoachCard extends StatelessWidget {
 
   Widget _moveContent() {
     final m = move!;
-    final moveNum = '${(ply ~/ 2) + 1}${ply % 2 == 0 ? "." : "..."}';
+    // All coach copy flows through the single service — UI is now a
+    // pure renderer, no classification/copy branching in the widget
+    // layer. Phase 20.1 addendum rules (never "Better: <same>", mate
+    // reads "Checkmate.", Quick-mode "Needs Deep Scan") are enforced
+    // authoritatively by [CoachExplanationService].
+    const svc = CoachExplanationService();
+    final explanation = svc.explain(CoachExplanationInput(
+      move: m,
+      mode: mode,
+      userIsWhite: userIsWhite,
+      previousUserMove: _previousUserMove(m),
+    ));
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -354,7 +382,7 @@ class _CoachCard extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                '$moveNum ${m.san} — ${m.classification.label}',
+                explanation.headline,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: ApexTypography.titleMedium.copyWith(
@@ -364,71 +392,63 @@ class _CoachCard extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                m.message,
+                explanation.subline,
                 style: ApexTypography.bodyMedium.copyWith(
                     color: ApexColors.textTertiary, fontSize: 12),
-                maxLines: 2,
+                maxLines: 3,
                 overflow: TextOverflow.ellipsis,
               ),
-              if (m.engineBestMoveSan != null) ...[
+              if (explanation.betterMoveSan != null) ...[
                 const SizedBox(height: 4),
-                // Phase A audit fix: when the played move already *is*
-                // the engine's top line, "Better: <same SAN>" reads as a
-                // bug. Flip the copy to a positive affirmation instead,
-                // and skip the BetterMoveExplanation sentence below
-                // (which assumes the user deviated from best).
-                if (_playedEqualsBest(m))
-                  Text(
-                    'Top engine choice.',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: ApexTypography.bodyMedium.copyWith(
-                      color: ApexColors.electricBlue.withAlpha(180),
-                      fontSize: 11,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  )
-                else ...[
-                  Text(
-                    'Better: ${m.engineBestMoveSan}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: ApexTypography.bodyMedium.copyWith(
-                      color: ApexColors.electricBlue.withAlpha(180),
-                      fontSize: 11,
-                      fontStyle: FontStyle.italic,
+                Text(
+                  'Better: ${explanation.betterMoveSan}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: ApexTypography.bodyMedium.copyWith(
+                    color: ApexColors.electricBlue.withAlpha(180),
+                    fontSize: 11,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+                if (explanation.betterMoveReason != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      explanation.betterMoveReason!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: ApexTypography.bodyMedium.copyWith(
+                        color: ApexColors.textSecondary,
+                        fontSize: 11,
+                      ),
                     ),
                   ),
-                  Builder(builder: (_) {
-                    // One-sentence rationale composed from the engine's
-                    // UCI + SAN — see [BetterMoveExplanation] for why we
-                    // never invent specific tactical reasons.
-                    final exp = BetterMoveExplanation.compose(
-                      bestMoveUci: m.engineBestMoveUci,
-                      bestMoveSan: m.engineBestMoveSan,
-                      playedQuality: m.classification,
-                    );
-                    if (exp == null) return const SizedBox.shrink();
-                    return Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        exp.sentence,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: ApexTypography.bodyMedium.copyWith(
-                          color: ApexColors.textSecondary,
-                          fontSize: 11,
-                        ),
-                      ),
-                    );
-                  }),
-                ],
+              ],
+              if (explanation.needsDeepScan) ...[
+                const SizedBox(height: 8),
+                const _NeedsDeepScanChip(),
               ],
             ],
           ),
         ),
       ],
     );
+  }
+
+  /// Find the user's ply immediately preceding the current one — used
+  /// by the coach service to redirect "Allowed forced mate" blame to
+  /// the correct ply. Returns `null` when we don't know the user's
+  /// colour (unknown-side PGN paste) or when [move] is itself the
+  /// first ply of the game.
+  MoveAnalysis? _previousUserMove(MoveAnalysis m) {
+    if (userIsWhite == null) return null;
+    final t = timeline;
+    if (t == null) return null;
+    for (var i = m.ply - 1; i >= 0; i--) {
+      final prior = t.moves[i];
+      if (prior.isWhiteMove == userIsWhite) return prior;
+    }
+    return null;
   }
 
   Widget _emptyContent() {
@@ -443,6 +463,49 @@ class _CoachCard extends StatelessWidget {
               color: ApexColors.textTertiary),
         ),
       ],
+    );
+  }
+}
+
+/// Small amber chip surfaced under the coach card when the current
+/// classification depends on Quick-mode eval and Deep analysis should
+/// re-verify it. Intentionally stateless / stand-alone so the Live
+/// Play screen can reuse it for the post-move feedback banner in
+/// Phase 20.3.
+class _NeedsDeepScanChip extends StatelessWidget {
+  const _NeedsDeepScanChip();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: ApexColors.inaccuracy.withAlpha(30),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: ApexColors.inaccuracy.withAlpha(120),
+          width: 0.6,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.radar_rounded,
+            size: 14,
+            color: ApexColors.inaccuracy.withAlpha(220),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            'Needs Deep Scan',
+            style: ApexTypography.labelLarge.copyWith(
+              color: ApexColors.inaccuracy.withAlpha(220),
+              fontSize: 10,
+              letterSpacing: 1.4,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

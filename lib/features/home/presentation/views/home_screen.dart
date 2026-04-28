@@ -28,7 +28,7 @@ import 'package:apex_chess/features/import_match/presentation/views/import_match
 import 'package:apex_chess/features/live_play/presentation/views/live_play_screen.dart';
 import 'package:apex_chess/features/mistake_vault/data/mistake_vault_save_hook.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
-import 'package:apex_chess/features/pgn_review/presentation/views/review_screen.dart';
+import 'package:apex_chess/features/pgn_review/presentation/views/review_summary_screen.dart';
 import 'package:apex_chess/features/profile/presentation/views/profile_screen.dart';
 import 'package:apex_chess/features/profile_scanner/presentation/views/profile_scanner_screen.dart';
 import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
@@ -789,6 +789,12 @@ class _LocalAnalysisProgressDialogState
               // Auto-flip the board if the user told us they played
               // Black. Unknown-side PGNs keep White at the bottom.
               userIsBlack: widget.userIsWhite == false,
+              // Phase 20.1: thread the analysis mode and the user's
+              // colour so the coach card can attribute "Allowed
+              // forced mate" correctly and surface the "Needs Deep
+              // Scan" chip on Quick-mode ambiguous plies.
+              mode: widget.mode,
+              userIsWhite: widget.userIsWhite,
             );
         // Archive save is awaited so we have the id to hand the
         // Mistake Vault hook; both are still best-effort and never
@@ -829,8 +835,12 @@ class _LocalAnalysisProgressDialogState
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         Navigator.of(context).pop();
+        // Phase 20.1 § 3: land on the ReviewSummaryScreen first so the
+        // user gets accuracy + counts + phase breakdown + CTAs before
+        // jumping into move-by-move review. The summary screen's
+        // "Review Moves" CTA pushes ReviewScreen itself.
         Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const ReviewScreen()),
+          MaterialPageRoute(builder: (_) => const ReviewSummaryScreen()),
         );
       });
     }

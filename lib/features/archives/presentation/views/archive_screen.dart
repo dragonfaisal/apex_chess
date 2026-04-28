@@ -17,7 +17,7 @@ import 'package:apex_chess/features/account/presentation/controllers/account_con
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/archives/presentation/controllers/archive_controller.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
-import 'package:apex_chess/features/pgn_review/presentation/views/review_screen.dart';
+import 'package:apex_chess/features/pgn_review/presentation/views/review_summary_screen.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
@@ -122,12 +122,20 @@ class ArchiveScreen extends ConsumerWidget {
     // re-scan rather than show counts produced by the old brain.
     final cached = game.cachedTimeline;
     final userIsBlack = _userIsBlack(ref, game);
+    // `userIsWhite` for the coach service: if the archive row knows
+    // which colour the user played, pass the opposite of `userIsBlack`;
+    // otherwise stay `null` so the coach copy falls back to the
+    // unknown-side phrasing.
+    final bool? userIsWhite = _userColorKnown(ref, game) ? !userIsBlack : null;
     if (game.isCacheCurrent && cached != null && cached.moves.isNotEmpty) {
-      ref
-          .read(reviewControllerProvider.notifier)
-          .loadTimeline(cached, userIsBlack: userIsBlack);
+      ref.read(reviewControllerProvider.notifier).loadTimeline(
+            cached,
+            userIsBlack: userIsBlack,
+            mode: game.analysisMode,
+            userIsWhite: userIsWhite,
+          );
       Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => const ReviewScreen()),
+        MaterialPageRoute<void>(builder: (_) => const ReviewSummaryScreen()),
       );
       return;
     }
@@ -149,9 +157,12 @@ class ArchiveScreen extends ConsumerWidget {
         // Brilliant / Great / Forced tags it never had).
         mode: game.analysisMode,
       );
-      ref
-          .read(reviewControllerProvider.notifier)
-          .loadTimeline(timeline, userIsBlack: userIsBlack);
+      ref.read(reviewControllerProvider.notifier).loadTimeline(
+            timeline,
+            userIsBlack: userIsBlack,
+            mode: game.analysisMode,
+            userIsWhite: userIsWhite,
+          );
       // Persist the freshly-computed timeline back onto the archive
       // record so the *next* reopen is instant — even when the user's
       // archive predates Phase 6 and was originally saved without a
@@ -164,7 +175,7 @@ class ArchiveScreen extends ConsumerWidget {
       if (!navigator.mounted) return;
       navigator.pop();
       navigator.push(
-        MaterialPageRoute<void>(builder: (_) => const ReviewScreen()),
+        MaterialPageRoute<void>(builder: (_) => const ReviewSummaryScreen()),
       );
     } catch (e) {
       if (!navigator.mounted) return;
@@ -185,6 +196,18 @@ class ArchiveScreen extends ConsumerWidget {
     final me = account?.username.trim().toLowerCase();
     if (me == null || me.isEmpty) return false;
     return game.black.trim().toLowerCase() == me;
+  }
+
+  /// Did we match the connected handle against either side? When
+  /// `false` the coach card should render the "unknown side" copy
+  /// variants instead of attributing "Allowed forced mate" blame to
+  /// a colour we only guessed at.
+  static bool _userColorKnown(WidgetRef ref, ArchivedGame game) {
+    final account = ref.read(accountControllerProvider).valueOrNull;
+    final me = account?.username.trim().toLowerCase();
+    if (me == null || me.isEmpty) return false;
+    return game.white.trim().toLowerCase() == me ||
+        game.black.trim().toLowerCase() == me;
   }
 }
 

@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/domain/entities/analysis_timeline.dart';
 import '../../../../core/domain/entities/move_analysis.dart';
+import '../../../../features/archives/domain/archived_game.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // State
@@ -33,12 +34,29 @@ class ReviewState {
   /// via [ReviewController.toggleFlip] for manual override.
   final bool flipped;
 
+  /// Analysis mode the timeline was produced under. Drives the
+  /// `CoachExplanationService` "Needs Deep Scan" affordance — Quick
+  /// timelines never surface final Brilliant / Great / Forced claims
+  /// without a Deep re-scan. Defaults to [AnalysisMode.deep] so
+  /// pre-existing call sites that haven't been threaded through yet
+  /// get the less-conservative (trusted) behaviour.
+  final AnalysisMode mode;
+
+  /// `true` when the user played the White pieces, `false` when
+  /// Black, `null` when unknown (e.g. a PGN paste without a side
+  /// selector). Used by the coach-explanation service to redirect
+  /// "Allowed forced mate" blame to the correct colour's previous
+  /// ply.
+  final bool? userIsWhite;
+
   const ReviewState({
     this.timeline,
     this.currentPly = -1,
     this.isLoading = false,
     this.error,
     this.flipped = false,
+    this.mode = AnalysisMode.deep,
+    this.userIsWhite,
   });
 
   ReviewState copyWith({
@@ -47,6 +65,8 @@ class ReviewState {
     bool? isLoading,
     String? error,
     bool? flipped,
+    AnalysisMode? mode,
+    bool? userIsWhite,
   }) =>
       ReviewState(
         timeline: timeline ?? this.timeline,
@@ -54,6 +74,8 @@ class ReviewState {
         isLoading: isLoading ?? this.isLoading,
         error: error,
         flipped: flipped ?? this.flipped,
+        mode: mode ?? this.mode,
+        userIsWhite: userIsWhite ?? this.userIsWhite,
       );
 
   /// O(1) access to the current ply's analysis.
@@ -125,11 +147,29 @@ class ReviewController extends Notifier<ReviewState> {
   /// [userIsBlack] auto-flips the board so the imported user is at the
   /// bottom — the integration-audit fix for the "my games show me at
   /// the top when I imported as Black" perspective bug.
-  void loadTimeline(AnalysisTimeline timeline, {bool userIsBlack = false}) {
+  ///
+  /// [mode] is persisted on the state so the coach card can surface
+  /// "Needs Deep Scan" on ambiguous Quick plies. [userIsWhite] is
+  /// persisted so the coach service can attribute "Allowed forced
+  /// mate" to the correct colour's previous ply. Both default to
+  /// backward-compatible values so call sites that haven't been
+  /// threaded through yet still work.
+  void loadTimeline(
+    AnalysisTimeline timeline, {
+    bool userIsBlack = false,
+    AnalysisMode mode = AnalysisMode.deep,
+    bool? userIsWhite,
+  }) {
     state = ReviewState(
       timeline: timeline,
       currentPly: -1,
       flipped: userIsBlack,
+      mode: mode,
+      // If the caller didn't specify `userIsWhite` explicitly, derive
+      // it from `userIsBlack` — PR #19 flipped based on that so the
+      // inverse is a safe default. `null` remains reachable when a
+      // PGN paste deliberately picks "Unknown side".
+      userIsWhite: userIsWhite ?? (userIsBlack ? false : null),
     );
   }
 
