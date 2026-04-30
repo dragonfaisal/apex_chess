@@ -45,6 +45,7 @@ void main() {
         engineBestMoveUci: 'd1h5',
         playedMoveUci: 'd1h5',
         isSacrifice: true,
+        multiPvWhiteWinPercents: [95.0, 72.0, 64.0],
       );
       expect(r.quality, MoveQuality.brilliant);
     });
@@ -80,8 +81,7 @@ void main() {
       expect(r.quality, isNot(MoveQuality.brilliant));
     });
 
-    test('does NOT bypass already-crushing guard on unfavourable mate',
-        () {
+    test('does NOT bypass already-crushing guard on unfavourable mate', () {
       // White is +600 cp (already crushing) AND currMate = -2 (Black
       // is delivering mate — white blundered into a forced loss).
       // The Brilliant gate must refuse: the showmanship guard fires
@@ -108,6 +108,7 @@ void main() {
         engineBestMoveUci: 'b2b4',
         playedMoveUci: 'b2b4',
         isSacrifice: true,
+        multiPvWhiteWinPercents: [51.0, 50.0, 49.0],
       );
       expect(r.quality, MoveQuality.brilliant);
     });
@@ -118,22 +119,13 @@ void main() {
       // Win% sigmoid in the wings of -800 cp barely changes for a
       // 50 cp slip — pre-Phase 6 this could read as Inaccuracy via
       // `deltaW ≤ -2`. The cp-floor now caps at Excellent.
-      final r = analyzer.analyze(
-        prevCp: -800,
-        currCp: -850,
-        isWhiteMove: true,
-      );
+      final r = analyzer.analyze(prevCp: -800, currCp: -850, isWhiteMove: true);
       expect(r.quality, MoveQuality.excellent);
     });
 
     test('caps to Inaccuracy when cp-loss ≤ 120', () {
-      final r = analyzer.analyze(
-        prevCp: 0,
-        currCp: -100,
-        isWhiteMove: true,
-      );
-      expect(r.quality,
-          isIn([MoveQuality.inaccuracy, MoveQuality.good]));
+      final r = analyzer.analyze(prevCp: 0, currCp: -100, isWhiteMove: true);
+      expect(r.quality, isIn([MoveQuality.inaccuracy, MoveQuality.good]));
       // Either tier is acceptable per spec — the key is *not*
       // Mistake / Blunder.
       expect(r.quality, isNot(MoveQuality.mistake));
@@ -143,20 +135,12 @@ void main() {
     test('Blunder requires cp-loss > 250', () {
       // 150 cp loss should never read as Blunder, even if Win% says
       // so. Concretely a slip from +0 → -150 lands in Mistake.
-      final r = analyzer.analyze(
-        prevCp: 0,
-        currCp: -150,
-        isWhiteMove: true,
-      );
+      final r = analyzer.analyze(prevCp: 0, currCp: -150, isWhiteMove: true);
       expect(r.quality, isNot(MoveQuality.blunder));
     });
 
     test('Blunder fires when cp-loss > 250 AND Win% drops', () {
-      final r = analyzer.analyze(
-        prevCp: 100,
-        currCp: -300,
-        isWhiteMove: true,
-      );
+      final r = analyzer.analyze(prevCp: 100, currCp: -300, isWhiteMove: true);
       expect(r.quality, MoveQuality.blunder);
     });
   });
@@ -177,11 +161,7 @@ void main() {
       // From +800 to +600 — still winning. Pre-Phase 6 the Win%
       // sigmoid + cp-loss combo could land here as Blunder, which
       // misrepresents an inaccuracy that gives back small advantage.
-      final r = analyzer.analyze(
-        prevCp: 800,
-        currCp: 600,
-        isWhiteMove: true,
-      );
+      final r = analyzer.analyze(prevCp: 800, currCp: 600, isWhiteMove: true);
       expect(r.quality, isNot(MoveQuality.blunder));
     });
   });

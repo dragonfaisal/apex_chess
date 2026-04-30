@@ -79,12 +79,12 @@ class MoveAnalysisResult {
   });
 
   factory MoveAnalysisResult.none() => const MoveAnalysisResult(
-        quality: MoveQuality.good,
-        deltaW: 0,
-        winPercentBefore: 50,
-        winPercentAfter: 50,
-        message: 'Awaiting analysis…',
-      );
+    quality: MoveQuality.good,
+    deltaW: 0,
+    winPercentBefore: 50,
+    winPercentAfter: 50,
+    message: 'Awaiting analysis…',
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -122,9 +122,8 @@ String normalizeCastlingUci(String uci) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class EvaluationAnalyzer {
-  const EvaluationAnalyzer({
-    MoveClassifier classifier = const MoveClassifier(),
-  }) : _classifier = classifier;
+  const EvaluationAnalyzer({MoveClassifier classifier = const MoveClassifier()})
+    : _classifier = classifier;
 
   final MoveClassifier _classifier;
 
@@ -218,36 +217,39 @@ class EvaluationAnalyzer {
     // We translate that into a synthetic 2-element MultiPV list when
     // the caller has not supplied a real one — the Forced gate then
     // recognises the move as forced.
-    final pvList = multiPvWhiteWinPercents ??
+    final pvList =
+        multiPvWhiteWinPercents ??
         (isOnlyWinningMove
             ? <double>[
                 const WinPercentCalculator().forCp(cp: currCp, mate: currMate),
                 // Synthetic alt: drop ≥ 25 pp below the played line so
                 // the Forced gate fires.
-                const WinPercentCalculator()
-                        .forCp(cp: currCp, mate: currMate) -
+                const WinPercentCalculator().forCp(cp: currCp, mate: currMate) -
                     (isWhiteMove ? 25.0 : -25.0),
+                const WinPercentCalculator().forCp(cp: currCp, mate: currMate) -
+                    (isWhiteMove ? 30.0 : -30.0),
               ]
             : null);
-    return _classifier.classify(MoveClassificationInput(
-      isWhiteMove: isWhiteMove,
-      prevWhiteCp: prevCp,
-      prevWhiteMate: prevMate,
-      currWhiteCp: currCp,
-      currWhiteMate: currMate,
-      engineBestMoveUci: engineBestMoveUci,
-      playedMoveUci: playedMoveUci,
-      isSacrifice: isSacrifice,
-      isTrivialRecapture: isTrivialRecapture,
-      isFirstSacrificePly: isFirstSacrificePly,
-      isBook: isBook,
-      openingName: openingName,
-      ecoCode: ecoCode,
-      secondBestWhiteWinPercent: secondBestWhiteWinPercent,
-      multiPvWhiteWinPercents: pvList,
-      altLineWhiteWinPercent: altLineWhiteWinPercent,
-      suppressTrophyTiers: suppressTrophyTiers,
-    ));
+    return _classifier.classify(
+      MoveClassificationInput(
+        isWhiteMove: isWhiteMove,
+        prevWhiteCp: prevCp,
+        prevWhiteMate: prevMate,
+        currWhiteCp: currCp,
+        currWhiteMate: currMate,
+        engineBestMoveUci: engineBestMoveUci,
+        playedMoveUci: playedMoveUci,
+        isSacrifice: isSacrifice,
+        isTrivialRecapture: isTrivialRecapture,
+        isFirstSacrificePly: isFirstSacrificePly,
+        isBook: isBook,
+        openingName: openingName,
+        ecoCode: ecoCode,
+        secondBestWhiteWinPercent: secondBestWhiteWinPercent,
+        multiPvWhiteWinPercents: pvList,
+        altLineWhiteWinPercent: altLineWhiteWinPercent,
+        suppressTrophyTiers: suppressTrophyTiers,
+      ),
+    );
   }
-
 }

@@ -8,6 +8,8 @@
 /// The caller must handle `null` gracefully (show "requires internet" state).
 library;
 
+import 'package:apex_chess/core/domain/entities/engine_line.dart';
+import 'package:apex_chess/core/domain/services/win_percent_calculator.dart';
 import 'package:apex_chess/infrastructure/api/lichess_cloud_eval_client.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -37,6 +39,9 @@ class CloudEvalSnapshot {
   /// Principal variation (list of UCI moves).
   final List<String> pvMoves;
 
+  /// Ranked candidate lines when the backend supplied MultiPV.
+  final List<EngineLine> engineLines;
+
   const CloudEvalSnapshot({
     this.scoreCp,
     this.mateIn,
@@ -45,6 +50,7 @@ class CloudEvalSnapshot {
     required this.depth,
     this.bestMoveUci,
     this.pvMoves = const [],
+    this.engineLines = const <EngineLine>[],
   });
 }
 
@@ -74,7 +80,7 @@ class CloudEvalService {
   final LichessCloudEvalClient _client;
 
   CloudEvalService({LichessCloudEvalClient? client})
-      : _client = client ?? LichessCloudEvalClient();
+    : _client = client ?? LichessCloudEvalClient();
 
   /// Evaluates a FEN position via the Lichess Cloud Eval API.
   ///
@@ -106,8 +112,30 @@ class CloudEvalService {
 
       // Lichess Cloud Eval returns scores from White's perspective already.
       // But PV moves are always from side-to-move's perspective.
-      final bestMove =
-          result.pvMoves.isNotEmpty ? result.pvMoves.first : null;
+      final bestMove = result.pvMoves.isNotEmpty ? result.pvMoves.first : null;
+      final win = const WinPercentCalculator();
+      final engineLines = <EngineLine>[
+        EngineLine(
+          rank: 1,
+          moveUci: bestMove,
+          scoreCp: result.scoreCp,
+          mateIn: result.mateIn,
+          depth: result.depth,
+          whiteWinPercent: win.forCp(cp: result.scoreCp, mate: result.mateIn),
+          pvMoves: result.pvMoves,
+        ),
+        if (result.secondBestCp != null || result.secondBestMate != null)
+          EngineLine(
+            rank: 2,
+            scoreCp: result.secondBestCp,
+            mateIn: result.secondBestMate,
+            depth: result.depth,
+            whiteWinPercent: win.forCp(
+              cp: result.secondBestCp,
+              mate: result.secondBestMate,
+            ),
+          ),
+      ];
 
       return (
         CloudEvalSnapshot(
@@ -118,6 +146,7 @@ class CloudEvalService {
           depth: result.depth,
           bestMoveUci: bestMove,
           pvMoves: result.pvMoves,
+          engineLines: engineLines,
         ),
         null,
       );

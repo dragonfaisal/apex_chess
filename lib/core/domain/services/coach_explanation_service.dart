@@ -144,16 +144,17 @@ class CoachExplanationService {
     // can't leak "Blunder — checkmate" into the UI.
     final isMateDelivery = _isMateDelivery(m);
     if (isMateDelivery) {
-      final moverIsUser = in_.userIsWhite != null && m.isWhiteMove == in_.userIsWhite;
+      final moverIsUser =
+          in_.userIsWhite != null && m.isWhiteMove == in_.userIsWhite;
       final blameRedirect = !moverIsUser && in_.previousUserMove != null;
       return CoachExplanation(
         headline: 'Checkmate.',
         subline: moverIsUser
             ? 'You delivered mate. No legal reply.'
             : blameRedirect
-                ? 'Opponent delivered mate. The allowing move was your '
-                    'previous ply — look for defensive resources earlier.'
-                : 'Mate on the board. No legal reply.',
+            ? 'Opponent delivered mate. The allowing move was your '
+                  'previous ply — look for defensive resources earlier.'
+            : 'Mate on the board. No legal reply.',
         blameRedirectToPreviousPly: blameRedirect,
       );
     }
@@ -169,7 +170,8 @@ class CoachExplanationService {
           : (name ?? eco ?? 'Opening theory');
       return CoachExplanation(
         headline: 'Book move.',
-        subline: '$label — in theory. No coach verdict while the game '
+        subline:
+            '$label — in theory. No coach verdict while the game '
             'stays in book.',
       );
     }
@@ -184,7 +186,8 @@ class CoachExplanationService {
       final moveNum = _moveNumberLabel(m.ply);
       return CoachExplanation(
         headline: '$moveNum ${m.san} — Blunder',
-        subline: 'Allowed forced mate. Defensive resources were '
+        subline:
+            'Allowed forced mate. Defensive resources were '
             'available — look one ply earlier for the critical choice.',
         betterMoveSan: m.engineBestMoveSan,
         betterMoveReason: _composeBetterLineReason(m),
@@ -217,8 +220,8 @@ class CoachExplanationService {
     // candidate for a Deep re-scan. The UI surfaces an amber chip
     // with a re-analyze CTA — this service never promotes the tier
     // by itself.
-    final needsDeepScan = in_.mode == AnalysisMode.quick &&
-        _looksLikeDeepScanCandidate(m);
+    final needsDeepScan =
+        in_.mode == AnalysisMode.quick && _looksLikeDeepScanCandidate(m);
 
     // ── Rule 6: General coach copy — tier headline + classifier
     // message + optional better line.
@@ -238,7 +241,8 @@ class CoachExplanationService {
     if (needsDeepScan) {
       // Append, rather than replace — the user still sees the
       // tentative verdict but is told it's Quick-mode bounded.
-      subline = '$subline Deep scan recommended — Quick mode can\'t '
+      subline =
+          '$subline Deep scan recommended — Quick mode can\'t '
           'verify trophy-tier reads.';
     }
 
@@ -247,8 +251,7 @@ class CoachExplanationService {
       headline: headline,
       subline: subline,
       betterMoveSan: shouldShowBetter ? m.engineBestMoveSan : null,
-      betterMoveReason:
-          shouldShowBetter ? _composeBetterLineReason(m) : null,
+      betterMoveReason: shouldShowBetter ? _composeBetterLineReason(m) : null,
       needsDeepScan: needsDeepScan,
     );
   }
@@ -267,13 +270,15 @@ class CoachExplanationService {
     // one that the classifier reserves for mate (brilliant / best)
     // with a score trail that screams terminal. Keep loose so an
     // older cached timeline without `mateInAfter=0` still qualifies.
-    if (m.winPercentAfter >= 99.9 && m.isWhiteMove && m.classification == MoveQuality.best) {
-      return m.message.toLowerCase().contains('mate') ||
-          m.san.endsWith('#');
+    if (m.winPercentAfter >= 99.9 &&
+        m.isWhiteMove &&
+        m.classification == MoveQuality.best) {
+      return m.message.toLowerCase().contains('mate') || m.san.endsWith('#');
     }
-    if (m.winPercentAfter <= 0.1 && !m.isWhiteMove && m.classification == MoveQuality.best) {
-      return m.message.toLowerCase().contains('mate') ||
-          m.san.endsWith('#');
+    if (m.winPercentAfter <= 0.1 &&
+        !m.isWhiteMove &&
+        m.classification == MoveQuality.best) {
+      return m.message.toLowerCase().contains('mate') || m.san.endsWith('#');
     }
     // SAN `#` suffix is the canonical PGN marker for mate; honour it
     // even when the analyzer layer didn't surface a `mateInAfter=0`.
@@ -307,10 +312,10 @@ class CoachExplanationService {
       return false;
     }
     if (m.inBook) return false;
+    if (m.openingStatus == OpeningStatus.bookTheory) return false;
     if (m.ply < 8) return false;
-    final sanLooksTactical = m.san.contains('x') ||
-        m.san.contains('+') ||
-        m.san.contains('=');
+    final sanLooksTactical =
+        m.san.contains('x') || m.san.contains('+') || m.san.contains('=');
     if (!sanLooksTactical) return false;
     // Non-trivial Win% gain signals "something happened" beyond a
     // quiet positional move. A pure quiet Best doesn't need Deep.
@@ -430,7 +435,10 @@ class CoachExplanationService {
     // Phase 20.1 § 3: opening phase fallback for early non-book plies.
     // We surface this even when the move is "Best" so the user can
     // tell a sideline from real theory without a confusing badge.
-    final isOpeningPhase = m.ply < 8 && !m.inBook;
+    final isOpeningPhase =
+        m.openingStatus == OpeningStatus.openingPhaseUnknown ||
+        m.openingStatus == OpeningStatus.bookDeviation ||
+        (m.ply < 8 && !m.inBook);
 
     if (san.endsWith('#')) {
       return 'Checkmate — clean finish.';
@@ -483,9 +491,16 @@ class CoachExplanationService {
   /// the early game but not in our ECO book. Keeps coaching honest:
   /// the classifier evaluated a normal sideline, not theory.
   static String _maybeAppendOpeningPhase(String subline, MoveAnalysis m) {
-    if (m.inBook) return subline;
-    if (m.ply >= 8) return subline;
+    if (m.inBook || m.openingStatus == OpeningStatus.bookTheory) {
+      return subline;
+    }
     if (subline.toLowerCase().contains('opening phase')) return subline;
+    if (m.openingStatus == OpeningStatus.bookDeviation) {
+      return '$subline (Opening phase — book deviation.)';
+    }
+    if (m.openingStatus == OpeningStatus.notOpening && m.ply >= 8) {
+      return subline;
+    }
     return '$subline (Opening phase — out of our book.)';
   }
 }

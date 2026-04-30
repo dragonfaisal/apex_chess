@@ -65,8 +65,11 @@ class ReviewSummaryScreen extends ConsumerWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded,
-              color: ApexColors.textSecondary, size: 18),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: ApexColors.textSecondary,
+            size: 18,
+          ),
           onPressed: () => Navigator.of(context).maybePop(),
         ),
         title: Text(
@@ -378,16 +381,8 @@ class _AccuracyCard extends StatelessWidget {
 
 // ── Quick scan banner ──────────────────────────────────────────────
 
-/// Phase 20.1 device feedback § 2: when running in Deep mode the local
-/// engine still feeds the classifier with a single PV (MultiPV is not
-/// yet wired through the FFI binding — out of scope for PR #20). The
-/// classifier honestly reports this by gating Brilliant / Great / Forced
-/// behind first-ply sacrifice trajectory + win-cutoff guards instead of
-/// silently downgrading those reads to Best/Excellent.
-///
-/// This banner surfaces the limitation honestly instead of pretending
-/// Deep mode is fully verified. PR #21 will add MultiPV support to the
-/// engine binding so the classifier can prove the alt-line drop.
+/// Deep-mode notice: local Stockfish runs PV1-PV3 and the classifier uses
+/// the alternate lines to verify Brilliant / Great / Forced reads.
 class _DeepMultiPvNotice extends StatelessWidget {
   const _DeepMultiPvNotice();
 
@@ -411,7 +406,7 @@ class _DeepMultiPvNotice extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Deep Review — single PV',
+                  'Deep Review - MultiPV',
                   style: ApexTypography.labelLarge.copyWith(
                     color: color,
                     fontSize: 11,
@@ -420,9 +415,8 @@ class _DeepMultiPvNotice extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Brilliant / Great / Forced reads use sacrifice-trajectory '
-                  'and first-ply guards. MultiPV alt-line verification is '
-                  'a known PR #20 limitation — landing in PR #21.',
+                  'PV1-PV3 are checked before final Brilliant / Great / '
+                  'Forced verdicts. Quick Scan remains preview-only.',
                   style: ApexTypography.bodyMedium.copyWith(
                     color: ApexColors.textSecondary,
                     fontSize: 11,
@@ -613,8 +607,7 @@ class _PerTierRow extends StatelessWidget {
             width: 12,
             height: 12,
             colorFilter: dim
-                ? const ColorFilter.mode(
-                    Color(0x66808080), BlendMode.srcATop)
+                ? const ColorFilter.mode(Color(0x66808080), BlendMode.srcATop)
                 : null,
           ),
           const SizedBox(width: 6),
@@ -635,9 +628,7 @@ class _PerTierRow extends StatelessWidget {
           Text(
             '$count',
             style: ApexTypography.bodyMedium.copyWith(
-              color: dim
-                  ? ApexColors.textTertiary
-                  : ApexColors.textPrimary,
+              color: dim ? ApexColors.textTertiary : ApexColors.textPrimary,
               fontSize: 11,
               fontFamily: 'JetBrains Mono',
               fontWeight: FontWeight.w600,
@@ -849,8 +840,11 @@ class _HighlightRow extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  SvgPicture.asset(m.classification.svgAssetPath,
-                      width: 14, height: 14),
+                  SvgPicture.asset(
+                    m.classification.svgAssetPath,
+                    width: 14,
+                    height: 14,
+                  ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
@@ -931,7 +925,10 @@ class _PhaseBlock extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           for (final phase in summary.phases) ...[
-            _PhaseRow(breakdown: phase, isWeakest: weakest?.phase == phase.phase),
+            _PhaseRow(
+              breakdown: phase,
+              isWeakest: weakest?.phase == phase.phase,
+            ),
             const SizedBox(height: 6),
           ],
         ],
@@ -980,8 +977,8 @@ class _PhaseRow extends StatelessWidget {
             empty
                 ? '—'
                 : '${breakdown.accuracyPct.toStringAsFixed(0)}% · ACPL '
-                    '${breakdown.averageCpLoss.toStringAsFixed(1)} · '
-                    '${breakdown.plies} plies',
+                      '${breakdown.averageCpLoss.toStringAsFixed(1)} · '
+                      '${breakdown.plies} plies',
             style: ApexTypography.bodyMedium.copyWith(
               color: ApexColors.textSecondary,
               fontSize: 11,
@@ -1027,9 +1024,9 @@ class _CtaRow extends StatelessWidget {
       children: [
         ElevatedButton.icon(
           onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const ReviewScreen()),
-            );
+            Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const ReviewScreen()));
           },
           icon: const Icon(Icons.play_arrow_rounded),
           label: const Text('Review Moves'),
@@ -1063,10 +1060,7 @@ class _CtaRow extends StatelessWidget {
             label: const Text('Add Mistakes to Academy'),
             style: OutlinedButton.styleFrom(
               foregroundColor: ApexColors.textPrimary,
-              side: BorderSide(
-                color: ApexColors.subtleBorder,
-                width: 0.7,
-              ),
+              side: BorderSide(color: ApexColors.subtleBorder, width: 0.7),
               padding: const EdgeInsets.symmetric(vertical: 12),
             ),
           ),

@@ -5,7 +5,20 @@
 /// All Win% values are from White's perspective (0–100).
 library;
 
+import 'package:apex_chess/core/domain/entities/engine_line.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
+
+/// Opening-state provenance for a move.
+///
+/// `bookTheory` is reserved for confirmed ECO/book hits. Early moves that
+/// are not in the local book stay explicitly separate so UI copy can say
+/// "Opening phase" without pretending the move is known theory.
+enum OpeningStatus {
+  bookTheory,
+  openingPhaseUnknown,
+  bookDeviation,
+  notOpening,
+}
 
 /// Immutable per-move analysis.
 class MoveAnalysis {
@@ -57,11 +70,18 @@ class MoveAnalysis {
   /// Whether this position is in the opening book.
   final bool inBook;
 
+  /// Whether this move is confirmed theory, an early sideline, or no longer
+  /// in the opening.
+  final OpeningStatus openingStatus;
+
   /// Opening name (if detected).
   final String? openingName;
 
   /// ECO code (e.g., "B97").
   final String? ecoCode;
+
+  /// Ranked engine lines from the position before this move.
+  final List<EngineLine> engineLines;
 
   /// Human-readable coach message.
   final String message;
@@ -83,8 +103,10 @@ class MoveAnalysis {
     this.scoreCpAfter,
     this.mateInAfter,
     this.inBook = false,
+    this.openingStatus = OpeningStatus.notOpening,
     this.openingName,
     this.ecoCode,
+    this.engineLines = const <EngineLine>[],
     required this.message,
   });
 
@@ -102,26 +124,28 @@ class MoveAnalysis {
   // [fromJson].
 
   Map<String, dynamic> toJson() => {
-        'ply': ply,
-        'san': san,
-        'uci': uci,
-        'fenBefore': fenBefore,
-        'fenAfter': fenAfter,
-        'targetSquare': targetSquare,
-        'winPercentBefore': winPercentBefore,
-        'winPercentAfter': winPercentAfter,
-        'deltaW': deltaW,
-        'isWhiteMove': isWhiteMove,
-        'classification': classification.name,
-        'engineBestMoveUci': engineBestMoveUci,
-        'engineBestMoveSan': engineBestMoveSan,
-        'scoreCpAfter': scoreCpAfter,
-        'mateInAfter': mateInAfter,
-        'inBook': inBook,
-        'openingName': openingName,
-        'ecoCode': ecoCode,
-        'message': message,
-      };
+    'ply': ply,
+    'san': san,
+    'uci': uci,
+    'fenBefore': fenBefore,
+    'fenAfter': fenAfter,
+    'targetSquare': targetSquare,
+    'winPercentBefore': winPercentBefore,
+    'winPercentAfter': winPercentAfter,
+    'deltaW': deltaW,
+    'isWhiteMove': isWhiteMove,
+    'classification': classification.name,
+    'engineBestMoveUci': engineBestMoveUci,
+    'engineBestMoveSan': engineBestMoveSan,
+    'scoreCpAfter': scoreCpAfter,
+    'mateInAfter': mateInAfter,
+    'inBook': inBook,
+    'openingStatus': openingStatus.name,
+    'openingName': openingName,
+    'ecoCode': ecoCode,
+    'engineLines': engineLines.map((l) => l.toJson()).toList(),
+    'message': message,
+  };
 
   factory MoveAnalysis.fromJson(Map<dynamic, dynamic> j) {
     final classRaw = j['classification'] as String?;
@@ -129,6 +153,14 @@ class MoveAnalysis {
       (q) => q.name == classRaw,
       orElse: () => MoveQuality.good,
     );
+    final openingStatusRaw = j['openingStatus'] as String?;
+    final openingStatus = OpeningStatus.values.firstWhere(
+      (s) => s.name == openingStatusRaw,
+      orElse: () => (j['inBook'] as bool? ?? false)
+          ? OpeningStatus.bookTheory
+          : OpeningStatus.notOpening,
+    );
+    final rawLines = j['engineLines'] as List<dynamic>?;
     return MoveAnalysis(
       ply: (j['ply'] as num).toInt(),
       san: j['san'] as String? ?? '',
@@ -136,10 +168,8 @@ class MoveAnalysis {
       fenBefore: j['fenBefore'] as String? ?? '',
       fenAfter: j['fenAfter'] as String? ?? '',
       targetSquare: j['targetSquare'] as String? ?? '',
-      winPercentBefore:
-          (j['winPercentBefore'] as num?)?.toDouble() ?? 50.0,
-      winPercentAfter:
-          (j['winPercentAfter'] as num?)?.toDouble() ?? 50.0,
+      winPercentBefore: (j['winPercentBefore'] as num?)?.toDouble() ?? 50.0,
+      winPercentAfter: (j['winPercentAfter'] as num?)?.toDouble() ?? 50.0,
       deltaW: (j['deltaW'] as num?)?.toDouble() ?? 0.0,
       isWhiteMove: j['isWhiteMove'] as bool? ?? true,
       classification: classification,
@@ -148,8 +178,15 @@ class MoveAnalysis {
       scoreCpAfter: (j['scoreCpAfter'] as num?)?.toInt(),
       mateInAfter: (j['mateInAfter'] as num?)?.toInt(),
       inBook: j['inBook'] as bool? ?? false,
+      openingStatus: openingStatus,
       openingName: j['openingName'] as String?,
       ecoCode: j['ecoCode'] as String?,
+      engineLines:
+          rawLines
+              ?.whereType<Map<dynamic, dynamic>>()
+              .map(EngineLine.fromJson)
+              .toList(growable: false) ??
+          const <EngineLine>[],
       message: j['message'] as String? ?? '',
     );
   }
