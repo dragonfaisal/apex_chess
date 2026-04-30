@@ -393,19 +393,19 @@ class CoachExplanationService {
       case MoveQuality.great:
         return 'Only this move holds the advantage.';
       case MoveQuality.best:
-        return 'Stockfish\'s top choice.';
+        return 'Top choice.';
       case MoveQuality.excellent:
-        return 'Close to the engine\'s top line.';
+        return 'Strong and accurate.';
       case MoveQuality.good:
-        return 'Solid — no significant Win% loss.';
+        return 'Solid - keeps the position under control.';
       case MoveQuality.inaccuracy:
         return 'Slight drift from the best continuation.';
       case MoveQuality.mistake:
-        return 'Noticeable Win% loss — a stronger plan was available.';
+        return 'A stronger plan was available.';
       case MoveQuality.missedWin:
         return 'You were winning; this gave up the advantage.';
       case MoveQuality.blunder:
-        return 'Decisive Win% loss.';
+        return 'Gives the opponent a decisive chance.';
       case MoveQuality.forced:
         return 'Only move — any other loses.';
       case MoveQuality.book:
@@ -431,6 +431,25 @@ class CoachExplanationService {
   /// no "PV1", no centipawn talk.
   static String _humanBestSubline(MoveAnalysis m) {
     final san = m.san;
+
+    switch (m.classification) {
+      case MoveQuality.forced:
+        return 'Only move - all alternatives allow the attack to break through.';
+      case MoveQuality.great:
+        return 'Finds the key idea and changes the course of the position.';
+      case MoveQuality.brilliant:
+        return 'The sacrifice opens the king and keeps the attack alive.';
+      case MoveQuality.missedWin:
+        return 'A decisive winning line was available.';
+      case MoveQuality.book:
+      case MoveQuality.best:
+      case MoveQuality.excellent:
+      case MoveQuality.good:
+      case MoveQuality.inaccuracy:
+      case MoveQuality.mistake:
+      case MoveQuality.blunder:
+        break;
+    }
 
     // Phase 20.1 § 3: opening phase fallback for early non-book plies.
     // We surface this even when the move is "Best" so the user can
@@ -463,7 +482,7 @@ class CoachExplanationService {
           'initiative.';
     }
     if (san.contains('x')) {
-      return 'Captures cleanly — picks up material with no good reply.';
+      return 'Wins material and keeps your threats active.';
     }
     if (san.endsWith('+')) {
       return 'Forcing check — pressures the king and limits replies.';

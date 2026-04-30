@@ -55,6 +55,28 @@ class MoveAnalysis {
   /// Move quality classification.
   final MoveQuality classification;
 
+  /// Classification before rare review badges are applied.
+  final MoveQuality baseClassification;
+
+  /// Final classification after strict special-tier gates.
+  final MoveQuality finalClassification;
+
+  /// Stable machine-readable reason for calibration/debug export.
+  final String reasonCode;
+
+  /// Whether the played move matched the engine's PV1 move.
+  final bool playedEqualsPv1;
+
+  /// Mover-perspective centipawn loss, when both evals are cp scores.
+  final int? moverCpLoss;
+
+  /// Tactical/material tags used by the classifier and debug export.
+  final bool isCapture;
+  final bool isFreeCapture;
+  final bool isRecapture;
+  final bool isSacrifice;
+  final bool isFirstSacrificePly;
+
   /// Engine's best move for the position before (UCI).
   final String? engineBestMoveUci;
 
@@ -98,6 +120,16 @@ class MoveAnalysis {
     required this.deltaW,
     required this.isWhiteMove,
     required this.classification,
+    MoveQuality? baseClassification,
+    MoveQuality? finalClassification,
+    this.reasonCode = 'legacy',
+    this.playedEqualsPv1 = false,
+    this.moverCpLoss,
+    this.isCapture = false,
+    this.isFreeCapture = false,
+    this.isRecapture = false,
+    this.isSacrifice = false,
+    this.isFirstSacrificePly = false,
     this.engineBestMoveUci,
     this.engineBestMoveSan,
     this.scoreCpAfter,
@@ -108,7 +140,8 @@ class MoveAnalysis {
     this.ecoCode,
     this.engineLines = const <EngineLine>[],
     required this.message,
-  });
+  }) : baseClassification = baseClassification ?? classification,
+       finalClassification = finalClassification ?? classification;
 
   @override
   String toString() =>
@@ -135,6 +168,16 @@ class MoveAnalysis {
     'deltaW': deltaW,
     'isWhiteMove': isWhiteMove,
     'classification': classification.name,
+    'baseClassification': baseClassification.name,
+    'finalClassification': finalClassification.name,
+    'reasonCode': reasonCode,
+    'playedEqualsPv1': playedEqualsPv1,
+    'moverCpLoss': moverCpLoss,
+    'isCapture': isCapture,
+    'isFreeCapture': isFreeCapture,
+    'isRecapture': isRecapture,
+    'isSacrifice': isSacrifice,
+    'isFirstSacrificePly': isFirstSacrificePly,
     'engineBestMoveUci': engineBestMoveUci,
     'engineBestMoveSan': engineBestMoveSan,
     'scoreCpAfter': scoreCpAfter,
@@ -153,6 +196,9 @@ class MoveAnalysis {
       (q) => q.name == classRaw,
       orElse: () => MoveQuality.good,
     );
+    MoveQuality parseQuality(String? raw, MoveQuality fallback) => MoveQuality
+        .values
+        .firstWhere((q) => q.name == raw, orElse: () => fallback);
     final openingStatusRaw = j['openingStatus'] as String?;
     final openingStatus = OpeningStatus.values.firstWhere(
       (s) => s.name == openingStatusRaw,
@@ -173,6 +219,22 @@ class MoveAnalysis {
       deltaW: (j['deltaW'] as num?)?.toDouble() ?? 0.0,
       isWhiteMove: j['isWhiteMove'] as bool? ?? true,
       classification: classification,
+      baseClassification: parseQuality(
+        j['baseClassification'] as String?,
+        classification,
+      ),
+      finalClassification: parseQuality(
+        j['finalClassification'] as String?,
+        classification,
+      ),
+      reasonCode: j['reasonCode'] as String? ?? 'legacy',
+      playedEqualsPv1: j['playedEqualsPv1'] as bool? ?? false,
+      moverCpLoss: (j['moverCpLoss'] as num?)?.toInt(),
+      isCapture: j['isCapture'] as bool? ?? false,
+      isFreeCapture: j['isFreeCapture'] as bool? ?? false,
+      isRecapture: j['isRecapture'] as bool? ?? false,
+      isSacrifice: j['isSacrifice'] as bool? ?? false,
+      isFirstSacrificePly: j['isFirstSacrificePly'] as bool? ?? false,
       engineBestMoveUci: j['engineBestMoveUci'] as String?,
       engineBestMoveSan: j['engineBestMoveSan'] as String?,
       scoreCpAfter: (j['scoreCpAfter'] as num?)?.toInt(),

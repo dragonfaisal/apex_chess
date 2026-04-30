@@ -63,26 +63,38 @@ enum MoveQuality {
 
 class MoveAnalysisResult {
   final MoveQuality quality;
+  final MoveQuality baseQuality;
+  final String reasonCode;
+  final bool playedEqualsPv1;
   final double deltaW;
   final double winPercentBefore;
   final double winPercentAfter;
+  final int? moverCpLoss;
   final String message;
   final String? engineBestMove;
 
   const MoveAnalysisResult({
     required this.quality,
+    required this.baseQuality,
+    required this.reasonCode,
+    required this.playedEqualsPv1,
     required this.deltaW,
     required this.winPercentBefore,
     required this.winPercentAfter,
+    this.moverCpLoss,
     required this.message,
     this.engineBestMove,
   });
 
   factory MoveAnalysisResult.none() => const MoveAnalysisResult(
     quality: MoveQuality.good,
+    baseQuality: MoveQuality.good,
+    reasonCode: 'none',
+    playedEqualsPv1: false,
     deltaW: 0,
     winPercentBefore: 50,
     winPercentAfter: 50,
+    moverCpLoss: null,
     message: 'Awaiting analysis…',
   );
 }
@@ -156,6 +168,10 @@ class EvaluationAnalyzer {
     double? secondBestWhiteWinPercent,
     List<double>? multiPvWhiteWinPercents,
     double? altLineWhiteWinPercent,
+    bool isCapture = false,
+    bool isFreeCapture = false,
+    bool isRecapture = false,
+    bool hasTacticalMotif = false,
     bool isTrivialRecapture = false,
     bool isFirstSacrificePly = true,
     bool suppressTrophyTiers = false,
@@ -176,15 +192,23 @@ class EvaluationAnalyzer {
       secondBestWhiteWinPercent: secondBestWhiteWinPercent,
       multiPvWhiteWinPercents: multiPvWhiteWinPercents,
       altLineWhiteWinPercent: altLineWhiteWinPercent,
+      isCapture: isCapture,
+      isFreeCapture: isFreeCapture,
+      isRecapture: isRecapture,
+      hasTacticalMotif: hasTacticalMotif,
       isTrivialRecapture: isTrivialRecapture,
       isFirstSacrificePly: isFirstSacrificePly,
       suppressTrophyTiers: suppressTrophyTiers,
     );
     return MoveAnalysisResult(
       quality: detailed.quality,
+      baseQuality: detailed.baseQuality,
+      reasonCode: detailed.reasonCode,
+      playedEqualsPv1: detailed.playedEqualsPv1,
       deltaW: detailed.deltaW,
       winPercentBefore: detailed.winPercentBefore,
       winPercentAfter: detailed.winPercentAfter,
+      moverCpLoss: detailed.moverCpLoss,
       message: detailed.message,
       engineBestMove: detailed.engineBestMoveUci,
     );
@@ -208,6 +232,10 @@ class EvaluationAnalyzer {
     double? secondBestWhiteWinPercent,
     List<double>? multiPvWhiteWinPercents,
     double? altLineWhiteWinPercent,
+    bool isCapture = false,
+    bool isFreeCapture = false,
+    bool isRecapture = false,
+    bool hasTacticalMotif = false,
     bool isTrivialRecapture = false,
     bool isFirstSacrificePly = true,
     bool suppressTrophyTiers = false,
@@ -240,6 +268,10 @@ class EvaluationAnalyzer {
         engineBestMoveUci: engineBestMoveUci,
         playedMoveUci: playedMoveUci,
         isSacrifice: isSacrifice,
+        isCapture: isCapture,
+        isFreeCapture: isFreeCapture,
+        isRecapture: isRecapture,
+        hasTacticalMotif: hasTacticalMotif,
         isTrivialRecapture: isTrivialRecapture,
         isFirstSacrificePly: isFirstSacrificePly,
         isBook: isBook,

@@ -31,6 +31,7 @@ import 'package:apex_chess/core/domain/entities/engine_line.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
 import 'package:apex_chess/core/domain/services/analysis_debug_export.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
+import 'package:apex_chess/core/domain/services/position_heuristics.dart';
 import 'package:apex_chess/core/domain/services/sacrifice_trajectory.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart'
     show AnalysisMode;
@@ -167,6 +168,7 @@ class LocalGameAnalyzer {
           uci: uci,
           targetSquare: targetSquare,
           isWhiteMove: isWhite,
+          isCapture: move is NormalMove && _isCapture(position, move),
           terminalAfterEval: _terminalEvalFor(newPos, isWhiteMove: isWhite),
         ),
       );
@@ -203,7 +205,9 @@ class LocalGameAnalyzer {
     var consecutiveFailures = 0;
 
     Future<EvalSnapshot?> evalCached(String fen) async {
-      final hit = cache[fen];
+      final cacheKey =
+          '$fen|engine=local|depth=$searchDepth|movetime=${searchMovetime.inMilliseconds}|multipv=$analysisMultiPv';
+      final hit = cache[cacheKey];
       if (hit != null) {
         consecutiveFailures = 0;
         return hit;
@@ -233,7 +237,7 @@ class LocalGameAnalyzer {
         return null;
       }
       consecutiveFailures = 0;
-      cache[fen] = snap;
+      cache[cacheKey] = snap;
       return snap;
     }
 
@@ -272,6 +276,10 @@ class LocalGameAnalyzer {
             winPercentAfter: prevWinPct,
             deltaW: 0,
             classification: MoveQuality.book,
+            baseClassification: MoveQuality.book,
+            finalClassification: MoveQuality.book,
+            reasonCode: 'book_theory',
+            playedEqualsPv1: false,
             isWhiteMove: entry.isWhiteMove,
             engineBestMoveSan: null,
             engineBestMoveUci: null,
@@ -282,6 +290,8 @@ class LocalGameAnalyzer {
             openingName: bookHit.name,
             ecoCode: bookHit.eco,
             engineLines: const <EngineLine>[],
+            isCapture: entry.isCapture,
+            isRecapture: _isRecapture(parsed, ply),
             message: '${bookHit.eco} • ${bookHit.name}',
           ),
         );
@@ -329,6 +339,14 @@ class LocalGameAnalyzer {
       // legacy `isFirstSacrificePly: true` default that made every
       // recapture a Brilliant candidate.
       final sac = trajectory[ply];
+      final isRecapture = _isRecapture(parsed, ply);
+      final isFreeCapture = _isFreeCapture(parsed, ply);
+      final hasTacticalMotif =
+          entry.san.contains('+') ||
+          entry.san.contains('#') ||
+          entry.san.contains('=') ||
+          sac.isSacrifice ||
+          (entry.isCapture && !isFreeCapture);
       final beforeLines = before?.engineLines ?? const <EngineLine>[];
       final multiPvWhiteWinPercents = beforeLines.length >= 2
           ? beforeLines.map((l) => l.whiteWinPercent).toList(growable: false)
@@ -356,6 +374,10 @@ class LocalGameAnalyzer {
         engineBestMoveUci: before?.bestMoveUci,
         playedMoveUci: entry.uci,
         isSacrifice: sac.isSacrifice,
+        isCapture: entry.isCapture,
+        isFreeCapture: isFreeCapture,
+        isRecapture: isRecapture,
+        hasTacticalMotif: hasTacticalMotif,
         isTrivialRecapture: sac.isTrivialRecapture,
         isFirstSacrificePly: sac.isFirstSacrificePly,
         secondBestWhiteWinPercent: secondBestWhiteWinPercent,
@@ -396,6 +418,16 @@ class LocalGameAnalyzer {
           inBook: false,
           openingStatus: openingStatus,
           engineLines: beforeLines,
+          baseClassification: result.baseQuality,
+          finalClassification: result.quality,
+          reasonCode: result.reasonCode,
+          playedEqualsPv1: result.playedEqualsPv1,
+          moverCpLoss: result.moverCpLoss,
+          isCapture: entry.isCapture,
+          isFreeCapture: isFreeCapture,
+          isRecapture: isRecapture,
+          isSacrifice: sac.isSacrifice,
+          isFirstSacrificePly: sac.isFirstSacrificePly,
           message: result.message,
         ),
       );
@@ -461,9 +493,41 @@ class LocalGameAnalyzer {
         openingName: src.openingName,
         ecoCode: src.ecoCode,
         engineLines: src.engineLines,
+        baseClassification: src.baseClassification,
+        finalClassification: src.finalClassification,
+        reasonCode: src.reasonCode,
+        playedEqualsPv1: src.playedEqualsPv1,
+        moverCpLoss: src.moverCpLoss,
+        isCapture: src.isCapture,
+        isFreeCapture: src.isFreeCapture,
+        isRecapture: src.isRecapture,
+        isSacrifice: src.isSacrifice,
+        isFirstSacrificePly: src.isFirstSacrificePly,
         message: src.message,
       );
     }
+  }
+
+  bool _isRecapture(List<_ParsedMove> parsed, int ply) {
+    if (ply <= 0) return false;
+    final prev = parsed[ply - 1];
+    final curr = parsed[ply];
+    return curr.isCapture &&
+        prev.targetSquare.isNotEmpty &&
+        prev.targetSquare == curr.targetSquare;
+  }
+
+  bool _isFreeCapture(List<_ParsedMove> parsed, int ply) {
+    final curr = parsed[ply];
+    if (!curr.isCapture) return false;
+    final before = PositionHeuristics.materialBalanceFromFen(curr.fenBefore);
+    final replyFen = ply + 1 < parsed.length
+        ? parsed[ply + 1].fenAfter
+        : curr.fenAfter;
+    final after = PositionHeuristics.materialBalanceFromFen(replyFen);
+    if (before == null || after == null) return false;
+    final moverSign = curr.isWhiteMove ? 1 : -1;
+    return (after - before) * moverSign > 0;
   }
 
   static const int _openingPhaseMaxPly = 20;
@@ -562,6 +626,18 @@ class LocalGameAnalyzer {
     }
   }
 
+  bool _isCapture(Position position, NormalMove move) {
+    final movingPiece = position.board.pieceAt(move.from);
+    final targetPiece = position.board.pieceAt(move.to);
+    if (targetPiece == null) return false;
+    final isCastling =
+        movingPiece != null &&
+        movingPiece.role == Role.king &&
+        move.from.file == 4 &&
+        (move.to.file == 0 || move.to.file == 7);
+    return !isCastling;
+  }
+
   static Square? _parseSquare(String alg) {
     if (alg.length != 2) return null;
     final file = alg.codeUnitAt(0) - 'a'.codeUnitAt(0);
@@ -598,6 +674,7 @@ class _ParsedMove {
     required this.uci,
     required this.targetSquare,
     required this.isWhiteMove,
+    required this.isCapture,
     this.terminalAfterEval,
   });
 
@@ -607,6 +684,7 @@ class _ParsedMove {
   final String uci;
   final String targetSquare;
   final bool isWhiteMove;
+  final bool isCapture;
 
   /// Pre-synthesised eval for the post-move position when the move
   /// resulted in a terminal state (checkmate / stalemate / insufficient

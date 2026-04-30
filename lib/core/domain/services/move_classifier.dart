@@ -52,6 +52,9 @@ import 'package:apex_chess/core/domain/services/win_percent_calculator.dart';
 class MoveClassification {
   const MoveClassification({
     required this.quality,
+    required this.baseQuality,
+    required this.reasonCode,
+    required this.playedEqualsPv1,
     required this.deltaW,
     required this.winPercentBefore,
     required this.winPercentAfter,
@@ -61,6 +64,9 @@ class MoveClassification {
   });
 
   final MoveQuality quality;
+  final MoveQuality baseQuality;
+  final String reasonCode;
+  final bool playedEqualsPv1;
 
   /// Mover-POV Win% delta across the played ply. Negative ⇒ mover
   /// worsened their position; positive ⇒ improved.
@@ -102,6 +108,10 @@ class MoveClassificationInput {
     this.multiPvWhiteWinPercents,
     this.altLineWhiteWinPercent,
     this.isSacrifice = false,
+    this.isCapture = false,
+    this.isFreeCapture = false,
+    this.isRecapture = false,
+    this.hasTacticalMotif = false,
     this.isTrivialRecapture = false,
     this.isFirstSacrificePly = true,
     this.isBook = false,
@@ -145,6 +155,19 @@ class MoveClassificationInput {
   /// Caller asserts the played move surrendered ≥ minor-piece
   /// material. The classifier never invents sacrifices on its own.
   final bool isSacrifice;
+
+  /// Caller asserts the move captures material.
+  final bool isCapture;
+
+  /// Caller asserts the capture wins material cleanly.
+  final bool isFreeCapture;
+
+  /// Caller asserts the move is a recapture.
+  final bool isRecapture;
+
+  /// Caller asserts the move has a tactical feature (check, promotion,
+  /// sacrifice, discovered tactical sequence, etc.).
+  final bool hasTacticalMotif;
 
   /// Caller asserts the move is a routine recapture (e.g. opponent
   /// played NxN, mover played NxN). Trivial recaptures can never
@@ -294,23 +317,35 @@ class MoveClassifier {
       played: in_.playedMoveUci,
     );
 
-    MoveClassification finish(MoveQuality q, String message) =>
-        MoveClassification(
-          quality: q,
-          deltaW: deltaW,
-          winPercentBefore: whiteWinBefore,
-          winPercentAfter: whiteWinAfter,
-          moverCpLoss: cpLossMover,
-          message: message,
-          engineBestMoveUci: in_.engineBestMoveUci,
-        );
+    MoveClassification finish(
+      MoveQuality q,
+      String message, {
+      required MoveQuality baseQuality,
+      required String reasonCode,
+    }) => MoveClassification(
+      quality: q,
+      baseQuality: baseQuality,
+      reasonCode: reasonCode,
+      playedEqualsPv1: wasEngineBestMove,
+      deltaW: deltaW,
+      winPercentBefore: whiteWinBefore,
+      winPercentAfter: whiteWinAfter,
+      moverCpLoss: cpLossMover,
+      message: message,
+      engineBestMoveUci: in_.engineBestMoveUci,
+    );
 
     // ── Mate-against-mover short-circuit ──────────────────────────────
     // Spec § 3.4: a move that yields a forced mate against the mover
     // is a Blunder, regardless of cp. Done up-front so the Brilliant /
     // Great / Missed Win gates below cannot mis-fire on it.
     if (opponentForcesMate) {
-      return finish(MoveQuality.blunder, 'Blunder — allows forced mate.');
+      return finish(
+        MoveQuality.blunder,
+        'Blunder - allows forced mate.',
+        baseQuality: MoveQuality.blunder,
+        reasonCode: 'allows_mate',
+      );
     }
 
     // ── Book / Theory ─────────────────────────────────────────────────
@@ -322,36 +357,23 @@ class MoveClassifier {
       final headline = in_.ecoCode != null && in_.openingName != null
           ? '${in_.ecoCode} • ${in_.openingName}'
           : in_.openingName ?? 'Opening theory.';
-      return finish(MoveQuality.book, headline);
+      return finish(
+        MoveQuality.book,
+        headline,
+        baseQuality: MoveQuality.book,
+        reasonCode: 'book_theory',
+      );
     }
 
-    // ── Brilliant (very strict — § 3.6.6) ─────────────────────────────
-    // Quick scans (D14, single PV) cannot honestly verify a Brilliant
-    // claim — skipped when `suppressTrophyTiers` is set (spec § 3.6.6
-    // requires MultiPV + alt-line Win% to gate Brilliant).
-    if (!in_.suppressTrophyTiers) {
-      final brilliantQ = _classifyBrilliant(
-        in_: in_,
-        deltaW: deltaW,
-        moverWinBefore: moverWinBefore,
-        moverWinAfter: moverWinAfter,
-        cpLossMover: cpLossMover,
-        moverForcesMate: moverForcesMate,
-        wasEngineBestMove: wasEngineBestMove,
-      );
-      if (brilliantQ != null) {
-        return finish(
-          MoveQuality.brilliant,
-          'Brilliant sacrifice — Apex AI confirms the attack.',
-        );
-      }
-    }
+    final baseQuality = _baselineQuality(
+      deltaW: deltaW,
+      cpLossMover: cpLossMover,
+      moverWinBefore: moverWinBefore,
+      moverWinAfter: moverWinAfter,
+      wasEngineBestMove: wasEngineBestMove,
+    );
 
     // ── Missed Win (§ 3.6.5) ──────────────────────────────────────────
-    // Mover was winning *before* (mover Win% > 70) and the played
-    // move drops the position to equal/worse. We surface this even
-    // when ΔW would otherwise read as Inaccuracy or Mistake — the
-    // tag is more informative for training.
     final missedWin = _classifyMissedWin(
       bestMoverWinBefore: _bestMoverWinBeforeFromPv(
         in_,
@@ -360,61 +382,93 @@ class MoveClassifier {
       moverWinAfter: moverWinAfter,
       deltaW: deltaW,
       hasMultiPvEvidence: (in_.multiPvWhiteWinPercents?.length ?? 0) >= 2,
+      wasEngineBestMove: wasEngineBestMove,
       prevMoverMate: _persp.moverForcesMate(
         in_.prevWhiteMate,
         isWhiteMove: in_.isWhiteMove,
       ),
       currMoverMate: moverForcesMate,
     );
-    if (missedWin != null) return finish(missedWin, 'Missed a winning line.');
+    if (missedWin != null) {
+      return finish(
+        missedWin.quality,
+        missedWin.message,
+        baseQuality: baseQuality,
+        reasonCode: missedWin.reasonCode,
+      );
+    }
 
-    // ── Forced (§ 3.6.2) ──────────────────────────────────────────────
-    // Requires MultiPV to prove every alternative line drops > 20 pp.
-    // Quick scans (single PV) cannot honour this gate honestly.
     if (!in_.suppressTrophyTiers) {
       final forced = _classifyForced(
         in_: in_,
         deltaW: deltaW,
+        moverWinBefore: moverWinBefore,
         wasEngineBestMove: wasEngineBestMove,
       );
       if (forced != null) {
-        return finish(MoveQuality.forced, 'Forced — only move that holds.');
+        return finish(
+          forced.quality,
+          forced.message,
+          baseQuality: baseQuality,
+          reasonCode: forced.reasonCode,
+        );
       }
 
-      // ── Great (§ 3.6.4) ─────────────────────────────────────────────
       final great = _classifyGreat(
         in_: in_,
         deltaW: deltaW,
-        whiteWinAfter: whiteWinAfter,
         moverWinBefore: moverWinBefore,
         moverWinAfter: moverWinAfter,
         wasEngineBestMove: wasEngineBestMove,
       );
       if (great != null) {
-        return finish(MoveQuality.great, 'Great find — pivotal move.');
+        return finish(
+          great.quality,
+          great.message,
+          baseQuality: baseQuality,
+          reasonCode: great.reasonCode,
+        );
+      }
+
+      final brilliant = _classifyBrilliant(
+        in_: in_,
+        deltaW: deltaW,
+        moverWinBefore: moverWinBefore,
+        moverWinAfter: moverWinAfter,
+        cpLossMover: cpLossMover,
+        moverForcesMate: moverForcesMate,
+        wasEngineBestMove: wasEngineBestMove,
+      );
+      if (brilliant != null) {
+        return finish(
+          brilliant.quality,
+          brilliant.message,
+          baseQuality: baseQuality,
+          reasonCode: brilliant.reasonCode,
+        );
       }
     }
 
-    // ── Best ──────────────────────────────────────────────────────────
-    if (wasEngineBestMove && deltaW >= dwExcellent) {
-      return finish(MoveQuality.best, "Best — Apex AI's #1 choice.");
-    }
+    return finish(
+      baseQuality,
+      _messageFor(baseQuality, deltaW, cpLossMover),
+      baseQuality: baseQuality,
+      reasonCode: _baseReason(baseQuality, wasEngineBestMove),
+    );
+  }
 
-    // ── Win%-derived primary tier (§ 3.3.2) ──────────────────────────
+  // ─── Tier helpers ────────────────────────────────────────────────────
+
+  MoveQuality _baselineQuality({
+    required double deltaW,
+    required int? cpLossMover,
+    required double moverWinBefore,
+    required double moverWinAfter,
+    required bool wasEngineBestMove,
+  }) {
     var primary = _fromWinDelta(deltaW);
+    primary = _safetyNet(primary, cpLossMover);
 
-    // ── cp-loss safety net ────────────────────────────────────────────
-    // ONLY softens — never escalates. A flat-but-tiny cp drift in the
-    // wings of the sigmoid (e.g. losing 30 cp in an already-resigned
-    // position) must not read as Mistake/Blunder.
-    final softened = _safetyNet(primary, cpLossMover);
-    primary = softened;
-
-    // ── Damping at the eval extremes (§ 3.4 + spec § 3.6.1) ──────────
-    // (a) Already-lost on the mover side: a single ply is not the
-    //     move that lost the game — at most a Mistake.
-    // (b) Already-winning drift while still up: small advantage drift
-    //     should not read as Blunder.
     final wasAlreadyLost = moverWinBefore <= 10.0;
     final winningDrift =
         moverWinBefore >= 90.0 &&
@@ -424,10 +478,28 @@ class MoveClassifier {
       primary = MoveQuality.mistake;
     }
 
-    return finish(primary, _messageFor(primary, deltaW, cpLossMover));
+    if (wasEngineBestMove && deltaW >= dwExcellent) {
+      return MoveQuality.best;
+    }
+    return primary;
   }
 
-  // ─── Tier helpers ────────────────────────────────────────────────────
+  String _baseReason(MoveQuality q, bool wasEngineBestMove) {
+    if (q == MoveQuality.best && wasEngineBestMove) return 'pv1_best';
+    return switch (q) {
+      MoveQuality.excellent => 'baseline_excellent',
+      MoveQuality.good => 'baseline_solid',
+      MoveQuality.inaccuracy => 'baseline_inaccuracy',
+      MoveQuality.mistake => 'baseline_mistake',
+      MoveQuality.blunder => 'baseline_blunder',
+      MoveQuality.best => 'baseline_best',
+      MoveQuality.book => 'book_theory',
+      MoveQuality.brilliant => 'brilliant',
+      MoveQuality.great => 'great',
+      MoveQuality.forced => 'forced',
+      MoveQuality.missedWin => 'missed_win',
+    };
+  }
 
   MoveQuality _fromWinDelta(double deltaW) {
     if (deltaW < dwMistake) return MoveQuality.blunder;
@@ -470,7 +542,7 @@ class MoveClassifier {
 
   // ─── Brilliant gate — strict, all six conditions must hold ────────
 
-  MoveQuality? _classifyBrilliant({
+  _SpecialClassification? _classifyBrilliant({
     required MoveClassificationInput in_,
     required double deltaW,
     required double moverWinBefore,
@@ -481,9 +553,11 @@ class MoveClassifier {
   }) {
     if (!in_.isSacrifice) return null;
     if (in_.isTrivialRecapture) return null;
+    if (in_.isRecapture) return null;
+    if (in_.isFreeCapture) return null;
     if (!in_.isFirstSacrificePly) return null;
     if (in_.multiPvWhiteWinPercents == null ||
-        in_.multiPvWhiteWinPercents!.length < 2) {
+        in_.multiPvWhiteWinPercents!.length < 3) {
       return null;
     }
 
@@ -516,42 +590,73 @@ class MoveClassifier {
       if (altMover >= triviallyWinning) return null;
     }
 
-    return MoveQuality.brilliant;
+    final pvs = _moverPvWinPercents(in_);
+    if (pvs == null || pvs.first < 50.0) return null;
+
+    return const _SpecialClassification(
+      quality: MoveQuality.brilliant,
+      reasonCode: 'sound_sacrifice',
+      message: 'Brilliant sacrifice - opens the attack and stays sound.',
+    );
   }
 
   // ─── Missed Win gate (§ 3.6.5) ────────────────────────────────────
 
-  MoveQuality? _classifyMissedWin({
+  _SpecialClassification? _classifyMissedWin({
     required double bestMoverWinBefore,
     required double moverWinAfter,
     required double deltaW,
     required bool hasMultiPvEvidence,
+    required bool wasEngineBestMove,
     required bool prevMoverMate,
     required bool currMoverMate,
   }) {
+    if (wasEngineBestMove) return null;
     // Mover was *forced-mate-up* before but no longer after ⇒
     // Missed Win regardless of cp drift.
     if (prevMoverMate && !currMoverMate) {
-      return MoveQuality.missedWin;
+      if (moverWinAfter >= 50.0) {
+        return const _SpecialClassification(
+          quality: MoveQuality.missedWin,
+          reasonCode: 'missed_forced_mate',
+          message: 'Missed win - a forced mate was available.',
+        );
+      }
+      return const _SpecialClassification(
+        quality: MoveQuality.blunder,
+        reasonCode: 'missed_win_collapse',
+        message: 'Blunder - missed a forced win and gave the opponent chances.',
+      );
     }
     // Mover was clearly winning before; played move drops the
     // position to equal/worse — i.e. spec's "winning → equal/worse".
     if (bestMoverWinBefore > winningCutoff &&
         moverWinAfter < equalCeiling &&
         deltaW <= dwInaccuracy) {
-      if (deltaW <= dwMistake && !hasMultiPvEvidence) {
-        return null;
+      if (moverWinAfter >= 50.0) {
+        return const _SpecialClassification(
+          quality: MoveQuality.missedWin,
+          reasonCode: 'missed_decisive_line',
+          message: 'Missed win - a decisive line was available.',
+        );
       }
-      return MoveQuality.missedWin;
+      if (deltaW <= dwMistake && hasMultiPvEvidence) {
+        return const _SpecialClassification(
+          quality: MoveQuality.blunder,
+          reasonCode: 'missed_win_collapse',
+          message: 'Blunder - missed a winning line and let the position turn.',
+        );
+      }
     }
     return null;
   }
 
   // ─── Forced gate (§ 3.6.2) ────────────────────────────────────────
 
-  MoveQuality? _classifyForced({
+  _SpecialClassification? _classifyForced({
     required MoveClassificationInput in_,
     required double deltaW,
+    required double moverWinBefore,
     required bool wasEngineBestMove,
   }) {
     final pvs = in_.multiPvWhiteWinPercents;
@@ -560,40 +665,53 @@ class MoveClassifier {
       return null; // capped at "Okay"; severe drops aren't forced
     }
     if (!wasEngineBestMove) return null;
+    if (in_.isBook) return null;
+    if (in_.isSacrifice) return null;
+    if (in_.isFreeCapture || in_.isRecapture || in_.isTrivialRecapture) {
+      return null;
+    }
 
     // Convert to mover-POV so the comparison is symmetric.
-    final movPvs = pvs
-        .map((w) => _persp.moverWinPercent(w, isWhiteMove: in_.isWhiteMove))
-        .toList(growable: false);
+    final movPvs = _moverPvWinPercents(in_);
+    if (movPvs == null || movPvs.length < 3) return null;
     final best = movPvs.first;
-    var withinTolerance = 0;
-    var allOthersDrop = true;
-    for (var i = 1; i < movPvs.length; i++) {
-      final gap = best - movPvs[i];
-      if (gap <= forcedTolerancePp) {
-        withinTolerance += 1;
-      }
-      if (gap < forcedDropPp) {
-        allOthersDrop = false;
-      }
-    }
-    if (withinTolerance == 0 && allOthersDrop) {
-      return MoveQuality.forced;
+    final second = movPvs[1];
+    final third = movPvs[2];
+    final gap12 = best - second;
+    final gap13 = best - third;
+
+    if (gap12 <= forcedTolerancePp || gap13 <= forcedTolerancePp) return null;
+    if (gap12 <= forcedDropPp || gap13 <= forcedDropPp) return null;
+    if (moverWinBefore >= 85.0 || best >= 90.0) return null;
+
+    final alternativesCollapse =
+        second <= 20.0 || third <= 20.0 || second <= moverWinBefore - 15.0;
+    final defensiveOnlyMove = moverWinBefore <= 65.0 && alternativesCollapse;
+    if (defensiveOnlyMove) {
+      return const _SpecialClassification(
+        quality: MoveQuality.forced,
+        reasonCode: 'only_defense',
+        message:
+            'Only move - all alternatives allow the attack to break through.',
+      );
     }
     return null;
   }
 
   // ─── Great gate (§ 3.6.4) ─────────────────────────────────────────
 
-  MoveQuality? _classifyGreat({
+  _SpecialClassification? _classifyGreat({
     required MoveClassificationInput in_,
     required double deltaW,
-    required double whiteWinAfter,
     required double moverWinBefore,
     required double moverWinAfter,
     required bool wasEngineBestMove,
   }) {
     if (in_.isTrivialRecapture) return null;
+    if (in_.isRecapture) return null;
+    if (in_.isFreeCapture) return null;
+    if (in_.isSacrifice) return null;
+    if (!wasEngineBestMove) return null;
     // Position after the move must not be clearly losing.
     if (moverWinAfter < 30.0) return null;
 
@@ -604,21 +722,28 @@ class MoveClassifier {
         moverWinBefore >= 40.0 &&
         moverWinAfter >= 60.0;
     if (deltaW > 10.0 && (crossedFromLosing || crossedFromEqual)) {
-      return MoveQuality.great;
+      return const _SpecialClassification(
+        quality: MoveQuality.great,
+        reasonCode: 'outcome_swing',
+        message: 'Great find - changes the course of the position.',
+      );
     }
 
-    // Variant B: PV1 vs PV2 gap ≥ 10 pp (mover-POV) and the mover
-    // actually played PV1.
-    if (wasEngineBestMove &&
-        deltaW >= dwExcellent &&
-        _secondBestWhiteWinPercent(in_) != null) {
-      final altMover = _persp.moverWinPercent(
-        _secondBestWhiteWinPercent(in_)!,
-        isWhiteMove: in_.isWhiteMove,
-      );
-      final gap = moverWinAfter - altMover;
-      if (gap >= greatPv1MinusPv2Pp) {
-        return MoveQuality.great;
+    final pvs = _moverPvWinPercents(in_);
+    if (pvs != null && pvs.length >= 3 && deltaW >= dwExcellent) {
+      final gap12 = pvs.first - pvs[1];
+      final gap13 = pvs.first - pvs[2];
+      final sharp = in_.hasTacticalMotif || in_.isCapture;
+      final practicalRange = moverWinBefore >= 25.0 && moverWinBefore <= 75.0;
+      if (sharp &&
+          practicalRange &&
+          gap12 >= greatPv1MinusPv2Pp + 5.0 &&
+          gap13 >= greatPv1MinusPv2Pp + 5.0) {
+        return const _SpecialClassification(
+          quality: MoveQuality.great,
+          reasonCode: 'tactical_breakthrough',
+          message: 'Great find - spots the tactic at the right moment.',
+        );
       }
     }
 
@@ -641,33 +766,41 @@ class MoveClassifier {
     return _persp.moverWinPercent(pvs.first, isWhiteMove: in_.isWhiteMove);
   }
 
-  double? _secondBestWhiteWinPercent(MoveClassificationInput in_) {
-    if (in_.secondBestWhiteWinPercent != null) {
-      return in_.secondBestWhiteWinPercent;
-    }
+  List<double>? _moverPvWinPercents(MoveClassificationInput in_) {
     final pvs = in_.multiPvWhiteWinPercents;
-    if (pvs == null || pvs.length < 2) return null;
-    return pvs[1];
+    if (pvs == null) return null;
+    return pvs
+        .map((w) => _persp.moverWinPercent(w, isWhiteMove: in_.isWhiteMove))
+        .toList(growable: false);
   }
 
   String _messageFor(MoveQuality q, double deltaW, int? cpLoss) {
-    final cpStr = cpLoss == null
-        ? ''
-        : ' (≈ ${(cpLoss / 100).toStringAsFixed(2)} pawns)';
-    final dwStr = deltaW.abs().toStringAsFixed(1);
     return switch (q) {
-      MoveQuality.blunder => 'Blunder — $dwStr% Win% surrendered$cpStr.',
-      MoveQuality.mistake => 'Mistake — $dwStr% Win% lost$cpStr.',
-      MoveQuality.inaccuracy => 'Inaccuracy — $dwStr% better move existed.',
-      MoveQuality.good => 'Solid — within tolerance of the best line.',
-      MoveQuality.excellent => 'Excellent — effectively engine-grade.',
-      MoveQuality.best => "Best — Apex AI's #1 choice.",
+      MoveQuality.blunder => 'Blunder - gives the opponent a decisive chance.',
+      MoveQuality.mistake => 'Mistake - a stronger continuation was available.',
+      MoveQuality.inaccuracy => 'Inaccuracy - a cleaner move was available.',
+      MoveQuality.good => 'Solid - keeps the position playable.',
+      MoveQuality.excellent => 'Excellent - strong, accurate move.',
+      MoveQuality.best => 'Best move - top engine choice.',
       MoveQuality.brilliant =>
-        'Brilliant sacrifice — Apex AI confirms the attack.',
-      MoveQuality.great => 'Great find — pivotal move.',
+        'Brilliant sacrifice - opens the attack and stays sound.',
+      MoveQuality.great => 'Great find - changes the course of the position.',
       MoveQuality.book => 'Opening theory.',
-      MoveQuality.forced => 'Forced — only move that holds.',
-      MoveQuality.missedWin => 'Missed a winning line.',
+      MoveQuality.forced =>
+        'Only move - all alternatives allow the attack to break through.',
+      MoveQuality.missedWin => 'Missed win - a decisive line was available.',
     };
   }
+}
+
+class _SpecialClassification {
+  const _SpecialClassification({
+    required this.quality,
+    required this.reasonCode,
+    required this.message,
+  });
+
+  final MoveQuality quality;
+  final String reasonCode;
+  final String message;
 }

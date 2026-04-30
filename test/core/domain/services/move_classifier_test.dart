@@ -392,33 +392,41 @@ void main() {
       expect(cls.quality, MoveQuality.missedWin);
     });
 
-    test('Mover was winning, position now LOSING ⇒ Missed Win', () {
-      final cls = classifier.classify(
-        const MoveClassificationInput(
-          isWhiteMove: true,
-          prevWhiteCp: 400,
-          prevWhiteMate: null,
-          currWhiteCp: -400,
-          currWhiteMate: null,
-          multiPvWhiteWinPercents: [82.0, 58.0, 45.0],
-        ),
-      );
-      expect(cls.quality, MoveQuality.missedWin);
-    });
+    test(
+      'Mover was winning, position now LOSING ⇒ Blunder with missed-win reason',
+      () {
+        final cls = classifier.classify(
+          const MoveClassificationInput(
+            isWhiteMove: true,
+            prevWhiteCp: 400,
+            prevWhiteMate: null,
+            currWhiteCp: -400,
+            currWhiteMate: null,
+            multiPvWhiteWinPercents: [82.0, 58.0, 45.0],
+          ),
+        );
+        expect(cls.quality, MoveQuality.blunder);
+        expect(cls.reasonCode, 'missed_win_collapse');
+      },
+    );
 
-    test('Black missed a winning PV1 line uses Black perspective', () {
-      final cls = classifier.classify(
-        const MoveClassificationInput(
-          isWhiteMove: false,
-          prevWhiteCp: -400,
-          prevWhiteMate: null,
-          currWhiteCp: 400,
-          currWhiteMate: null,
-          multiPvWhiteWinPercents: [18.0, 45.0, 52.0],
-        ),
-      );
-      expect(cls.quality, MoveQuality.missedWin);
-    });
+    test(
+      'Black missed a winning PV1 line and collapses uses Black perspective',
+      () {
+        final cls = classifier.classify(
+          const MoveClassificationInput(
+            isWhiteMove: false,
+            prevWhiteCp: -400,
+            prevWhiteMate: null,
+            currWhiteCp: 400,
+            currWhiteMate: null,
+            multiPvWhiteWinPercents: [18.0, 45.0, 52.0],
+          ),
+        );
+        expect(cls.quality, MoveQuality.blunder);
+        expect(cls.reasonCode, 'missed_win_collapse');
+      },
+    );
   });
 
   // ─── Forced (MultiPV) ─────────────────────────────────────────────
@@ -438,6 +446,28 @@ void main() {
         ),
       );
       expect(cls.quality, MoveQuality.forced);
+      expect(cls.reasonCode, 'only_defense');
+    });
+
+    test('PV1 simple free material capture stays Best, not Forced/Great', () {
+      final cls = classifier.classify(
+        const MoveClassificationInput(
+          isWhiteMove: true,
+          prevWhiteCp: 50,
+          prevWhiteMate: null,
+          currWhiteCp: 220,
+          currWhiteMate: null,
+          engineBestMoveUci: 'a1a8',
+          playedMoveUci: 'a1a8',
+          isCapture: true,
+          isFreeCapture: true,
+          multiPvWhiteWinPercents: [72.0, 35.0, 30.0],
+        ),
+      );
+      expect(cls.quality, MoveQuality.best);
+      expect(cls.quality, isNot(MoveQuality.forced));
+      expect(cls.quality, isNot(MoveQuality.great));
+      expect(cls.reasonCode, 'pv1_best');
     });
 
     test('Two of three MultiPV lines hold ⇒ NOT Forced', () {
@@ -506,9 +536,40 @@ void main() {
           prevWhiteMate: null,
           currWhiteCp: 50,
           currWhiteMate: null,
+          engineBestMoveUci: 'g1f3',
+          playedMoveUci: 'g1f3',
+          hasTacticalMotif: true,
         ),
       );
       expect(cls.quality, MoveQuality.great);
+      expect(cls.reasonCode, anyOf('outcome_swing', 'tactical_breakthrough'));
+    });
+
+    test('Great requires a human-meaningful reason code', () {
+      final cls = classifier.classify(
+        const MoveClassificationInput(
+          isWhiteMove: true,
+          prevWhiteCp: -250,
+          prevWhiteMate: null,
+          currWhiteCp: 80,
+          currWhiteMate: null,
+          engineBestMoveUci: 'f2f4',
+          playedMoveUci: 'f2f4',
+          hasTacticalMotif: true,
+        ),
+      );
+      expect(cls.quality, MoveQuality.great);
+      expect(
+        cls.reasonCode,
+        isIn([
+          'only_move',
+          'only_defense',
+          'defensive_resource',
+          'avoids_mate',
+          'tactical_breakthrough',
+          'outcome_swing',
+        ]),
+      );
     });
   });
 
