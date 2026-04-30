@@ -30,6 +30,8 @@ import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/engine_line.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
 import 'package:apex_chess/core/domain/services/analysis_debug_export.dart';
+import 'package:apex_chess/core/domain/services/analysis_versions.dart';
+import 'package:apex_chess/core/domain/services/deep_tactical_verifier.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/core/domain/services/position_heuristics.dart';
 import 'package:apex_chess/core/domain/services/sacrifice_trajectory.dart';
@@ -58,6 +60,7 @@ class LocalGameAnalyzer {
     EcoBook? book,
     Future<EcoBook>? bookFuture,
     EvaluationAnalyzer analyzer = const EvaluationAnalyzer(),
+    DeepTacticalVerifier tacticalVerifier = const DeepTacticalVerifier(),
     int depth = 14,
     // Optional wall-clock cap per position. When null, the analyzer
     // picks a sensible budget for the effective search depth via
@@ -69,6 +72,7 @@ class LocalGameAnalyzer {
        _book = book,
        _bookFuture = bookFuture,
        _analyzer = analyzer,
+       _tacticalVerifier = tacticalVerifier,
        _depth = depth,
        _movetimeOverride = movetime;
 
@@ -91,6 +95,7 @@ class LocalGameAnalyzer {
   EcoBook? _book;
   final Future<EcoBook>? _bookFuture;
   final EvaluationAnalyzer _analyzer;
+  final DeepTacticalVerifier _tacticalVerifier;
   final int _depth;
   final Duration? _movetimeOverride;
 
@@ -204,9 +209,18 @@ class LocalGameAnalyzer {
     // keep going. Only abort when the engine is *sustainedly* broken.
     var consecutiveFailures = 0;
 
-    Future<EvalSnapshot?> evalCached(String fen) async {
+    Future<EvalSnapshot?> evalCached(
+      String fen, {
+      int? evalDepth,
+      Duration? evalMovetime,
+      int? evalMultiPv,
+      String profile = 'main',
+    }) async {
+      final effectiveDepth = evalDepth ?? searchDepth;
+      final effectiveMovetime = evalMovetime ?? searchMovetime;
+      final effectiveMultiPv = evalMultiPv ?? analysisMultiPv;
       final cacheKey =
-          '$fen|engine=local|depth=$searchDepth|movetime=${searchMovetime.inMilliseconds}|multipv=$analysisMultiPv';
+          '$fen|engine=local-${_eval.engineVersion}|classifier=$kApexClassifierVersion|profile=$profile|depth=$effectiveDepth|movetime=${effectiveMovetime.inMilliseconds}|multipv=$effectiveMultiPv';
       final hit = cache[cacheKey];
       if (hit != null) {
         consecutiveFailures = 0;
@@ -214,9 +228,9 @@ class LocalGameAnalyzer {
       }
       final (snap, err) = await _eval.evaluate(
         fen,
-        depth: searchDepth,
-        movetime: searchMovetime,
-        multiPv: analysisMultiPv,
+        depth: effectiveDepth,
+        movetime: effectiveMovetime,
+        multiPv: effectiveMultiPv,
       );
       if (err != null && err != CloudEvalError.positionNotFound) {
         consecutiveFailures++;
@@ -293,6 +307,11 @@ class LocalGameAnalyzer {
             isCapture: entry.isCapture,
             isRecapture: _isRecapture(parsed, ply),
             message: '${bookHit.eco} • ${bookHit.name}',
+            coachExplanation: 'This is opening theory.',
+            analysisMode: mode.wire,
+            classifierVersion: kApexClassifierVersion,
+            engineVersion: _eval.engineVersion,
+            debugMetadata: const {'classifierProfile': kApexClassifierProfile},
           ),
         );
         onProgress?.call(ply + 1, totalPlies);
@@ -364,6 +383,84 @@ class LocalGameAnalyzer {
         entry: entry,
         ply: ply,
       );
+      final actualContinuation = _actualContinuation(parsed, ply);
+      var tacticalVerdict = _tacticalVerifier.verify(
+        DeepTacticalInput(
+          fenBefore: entry.fenBefore,
+          playedMoveUci: entry.uci,
+          san: entry.san,
+          isWhiteMove: entry.isWhiteMove,
+          actualContinuationUci: actualContinuation,
+          lowDepthLines: beforeLines,
+          isCapture: entry.isCapture,
+          isFreeCapture: isFreeCapture,
+          isRecapture: isRecapture,
+          isSacrifice: sac.isSacrifice,
+          deltaW:
+              (winPctAfter - winPctBefore) * (entry.isWhiteMove ? 1.0 : -1.0),
+        ),
+      );
+
+      EvalSnapshot? lowCandidateEval;
+      EvalSnapshot? highCandidateEval;
+      final shouldVerifyCandidate =
+          mode == AnalysisMode.deep && tacticalVerdict.isCandidate;
+      if (shouldVerifyCandidate) {
+        final lowDepth = searchDepth <= 10 ? searchDepth : 10;
+        lowCandidateEval = await evalCached(
+          entry.fenBefore,
+          evalDepth: lowDepth,
+          evalMovetime: const Duration(milliseconds: 650),
+          evalMultiPv: 3,
+          profile: 'candidate_low_v$kApexClassifierVersion',
+        );
+        final verificationDepth = searchDepth >= 22
+            ? (searchDepth + 2 > 24 ? 24 : searchDepth + 2)
+            : 22;
+        highCandidateEval = await evalCached(
+          entry.fenBefore,
+          evalDepth: verificationDepth,
+          evalMovetime: searchMovetime + const Duration(milliseconds: 1500),
+          evalMultiPv: 5,
+          profile: 'candidate_high_v$kApexClassifierVersion',
+        );
+        tacticalVerdict = _tacticalVerifier.verify(
+          DeepTacticalInput(
+            fenBefore: entry.fenBefore,
+            playedMoveUci: entry.uci,
+            san: entry.san,
+            isWhiteMove: entry.isWhiteMove,
+            actualContinuationUci: actualContinuation,
+            lowDepthLines: lowCandidateEval?.engineLines ?? beforeLines,
+            highDepthLines:
+                highCandidateEval?.engineLines ?? const <EngineLine>[],
+            isCapture: entry.isCapture,
+            isFreeCapture: isFreeCapture,
+            isRecapture: isRecapture,
+            isSacrifice: sac.isSacrifice,
+            deltaW:
+                (winPctAfter - winPctBefore) * (entry.isWhiteMove ? 1.0 : -1.0),
+            verificationDepth: verificationDepth,
+            verificationMultiPV: 5,
+          ),
+        );
+      }
+
+      final classificationLines =
+          highCandidateEval?.engineLines.isNotEmpty == true
+          ? highCandidateEval!.engineLines
+          : beforeLines;
+      final engineBestMoveUci = classificationLines.isNotEmpty
+          ? classificationLines.first.moveUci
+          : before?.bestMoveUci;
+      final classificationWinPercents = classificationLines.length >= 2
+          ? classificationLines
+                .map((l) => l.whiteWinPercent)
+                .toList(growable: false)
+          : multiPvWhiteWinPercents;
+      final classificationSecondBest = classificationLines.length >= 2
+          ? classificationLines[1].whiteWinPercent
+          : secondBestWhiteWinPercent;
 
       final result = _analyzer.analyze(
         prevCp: before?.scoreCp,
@@ -371,17 +468,18 @@ class LocalGameAnalyzer {
         currCp: after?.scoreCp,
         currMate: after?.mateIn,
         isWhiteMove: entry.isWhiteMove,
-        engineBestMoveUci: before?.bestMoveUci,
+        engineBestMoveUci: engineBestMoveUci,
         playedMoveUci: entry.uci,
         isSacrifice: sac.isSacrifice,
         isCapture: entry.isCapture,
         isFreeCapture: isFreeCapture,
         isRecapture: isRecapture,
         hasTacticalMotif: hasTacticalMotif,
+        tacticalVerdict: tacticalVerdict,
         isTrivialRecapture: sac.isTrivialRecapture,
         isFirstSacrificePly: sac.isFirstSacrificePly,
-        secondBestWhiteWinPercent: secondBestWhiteWinPercent,
-        multiPvWhiteWinPercents: multiPvWhiteWinPercents,
+        secondBestWhiteWinPercent: classificationSecondBest,
+        multiPvWhiteWinPercents: classificationWinPercents,
         altLineWhiteWinPercent: altLineWhiteWinPercent,
         // Only flag `isBook` when the position actually matched our
         // ECO book (handled on the `bookHit != null` branch above —
@@ -392,10 +490,11 @@ class LocalGameAnalyzer {
       );
 
       String? engineBestSan;
-      if (beforeLines.isNotEmpty && beforeLines.first.moveSan != null) {
-        engineBestSan = beforeLines.first.moveSan;
-      } else if (before?.bestMoveUci != null) {
-        engineBestSan = _tryUciToSan(entry.fenBefore, before!.bestMoveUci!);
+      if (classificationLines.isNotEmpty &&
+          classificationLines.first.moveSan != null) {
+        engineBestSan = classificationLines.first.moveSan;
+      } else if (engineBestMoveUci != null) {
+        engineBestSan = _tryUciToSan(entry.fenBefore, engineBestMoveUci);
       }
 
       moves.add(
@@ -412,12 +511,12 @@ class LocalGameAnalyzer {
           classification: result.quality,
           isWhiteMove: entry.isWhiteMove,
           engineBestMoveSan: engineBestSan,
-          engineBestMoveUci: before?.bestMoveUci,
+          engineBestMoveUci: engineBestMoveUci,
           scoreCpAfter: after?.scoreCp,
           mateInAfter: after?.mateIn,
           inBook: false,
           openingStatus: openingStatus,
-          engineLines: beforeLines,
+          engineLines: classificationLines,
           baseClassification: result.baseQuality,
           finalClassification: result.quality,
           reasonCode: result.reasonCode,
@@ -428,7 +527,20 @@ class LocalGameAnalyzer {
           isRecapture: isRecapture,
           isSacrifice: sac.isSacrifice,
           isFirstSacrificePly: sac.isFirstSacrificePly,
+          tacticalVerdict: tacticalVerdict,
           message: result.message,
+          coachExplanation: tacticalVerdict.humanExplanation.isNotEmpty
+              ? tacticalVerdict.humanExplanation
+              : result.message,
+          analysisMode: mode.wire,
+          classifierVersion: kApexClassifierVersion,
+          engineVersion: _eval.engineVersion,
+          debugMetadata: {
+            'classifierProfile': kApexClassifierProfile,
+            'candidateVerified': tacticalVerdict.candidateVerified,
+            'verificationDepth': tacticalVerdict.verificationDepth,
+            'verificationMultiPV': tacticalVerdict.verificationMultiPV,
+          },
         ),
       );
 
@@ -442,6 +554,9 @@ class LocalGameAnalyzer {
       startingFen: startingFen,
       headers: headers,
       winPercentages: winPercentages,
+      analysisMode: mode.wire,
+      classifierVersion: kApexClassifierVersion,
+      engineVersion: _eval.engineVersion,
     );
     // Phase A integration audit, step A: structured per-ply log so future
     // regressions can be triaged from a single device-log dump. No-op in
@@ -503,7 +618,13 @@ class LocalGameAnalyzer {
         isRecapture: src.isRecapture,
         isSacrifice: src.isSacrifice,
         isFirstSacrificePly: src.isFirstSacrificePly,
+        tacticalVerdict: src.tacticalVerdict,
         message: src.message,
+        coachExplanation: src.coachExplanation,
+        analysisMode: src.analysisMode,
+        classifierVersion: src.classifierVersion,
+        engineVersion: src.engineVersion,
+        debugMetadata: src.debugMetadata,
       );
     }
   }
@@ -528,6 +649,19 @@ class LocalGameAnalyzer {
     if (before == null || after == null) return false;
     final moverSign = curr.isWhiteMove ? 1 : -1;
     return (after - before) * moverSign > 0;
+  }
+
+  List<String> _actualContinuation(List<_ParsedMove> parsed, int ply) {
+    final out = <String>[];
+    for (
+      var i = ply + 1;
+      i < parsed.length && out.length < DeepTacticalVerifier.replayLimitPlies;
+      i++
+    ) {
+      final uci = parsed[i].uci;
+      if (uci.length >= 4) out.add(uci);
+    }
+    return out;
   }
 
   static const int _openingPhaseMaxPly = 20;

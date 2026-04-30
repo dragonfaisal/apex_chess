@@ -6,6 +6,8 @@
 library;
 
 import 'package:apex_chess/core/domain/entities/engine_line.dart';
+import 'package:apex_chess/core/domain/entities/deep_tactical_verdict.dart';
+import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 
 /// Opening-state provenance for a move.
@@ -77,6 +79,9 @@ class MoveAnalysis {
   final bool isSacrifice;
   final bool isFirstSacrificePly;
 
+  /// Candidate-only deep tactical verification result.
+  final DeepTacticalVerdict tacticalVerdict;
+
   /// Engine's best move for the position before (UCI).
   final String? engineBestMoveUci;
 
@@ -108,6 +113,16 @@ class MoveAnalysis {
   /// Human-readable coach message.
   final String message;
 
+  /// Shared coach explanation seed written by the analysis brain. UI copy
+  /// services may adapt this, but should not re-run classification rules.
+  final String coachExplanation;
+
+  /// Analysis/cache provenance for archive invalidation and debug export.
+  final String analysisMode;
+  final int classifierVersion;
+  final String engineVersion;
+  final Map<String, dynamic> debugMetadata;
+
   const MoveAnalysis({
     required this.ply,
     required this.san,
@@ -130,6 +145,7 @@ class MoveAnalysis {
     this.isRecapture = false,
     this.isSacrifice = false,
     this.isFirstSacrificePly = false,
+    this.tacticalVerdict = DeepTacticalVerdict.none,
     this.engineBestMoveUci,
     this.engineBestMoveSan,
     this.scoreCpAfter,
@@ -140,8 +156,14 @@ class MoveAnalysis {
     this.ecoCode,
     this.engineLines = const <EngineLine>[],
     required this.message,
+    String? coachExplanation,
+    this.analysisMode = 'deep',
+    this.classifierVersion = kApexClassifierVersion,
+    this.engineVersion = 'unknown',
+    this.debugMetadata = const <String, dynamic>{},
   }) : baseClassification = baseClassification ?? classification,
-       finalClassification = finalClassification ?? classification;
+       finalClassification = finalClassification ?? classification,
+       coachExplanation = coachExplanation ?? message;
 
   @override
   String toString() =>
@@ -178,6 +200,7 @@ class MoveAnalysis {
     'isRecapture': isRecapture,
     'isSacrifice': isSacrifice,
     'isFirstSacrificePly': isFirstSacrificePly,
+    'tacticalVerdict': tacticalVerdict.toJson(),
     'engineBestMoveUci': engineBestMoveUci,
     'engineBestMoveSan': engineBestMoveSan,
     'scoreCpAfter': scoreCpAfter,
@@ -188,6 +211,11 @@ class MoveAnalysis {
     'ecoCode': ecoCode,
     'engineLines': engineLines.map((l) => l.toJson()).toList(),
     'message': message,
+    'coachExplanation': coachExplanation,
+    'analysisMode': analysisMode,
+    'classifierVersion': classifierVersion,
+    'engineVersion': engineVersion,
+    'debugMetadata': debugMetadata,
   };
 
   factory MoveAnalysis.fromJson(Map<dynamic, dynamic> j) {
@@ -235,6 +263,9 @@ class MoveAnalysis {
       isRecapture: j['isRecapture'] as bool? ?? false,
       isSacrifice: j['isSacrifice'] as bool? ?? false,
       isFirstSacrificePly: j['isFirstSacrificePly'] as bool? ?? false,
+      tacticalVerdict: DeepTacticalVerdict.fromJson(
+        j['tacticalVerdict'] is Map ? j['tacticalVerdict'] as Map : null,
+      ),
       engineBestMoveUci: j['engineBestMoveUci'] as String?,
       engineBestMoveSan: j['engineBestMoveSan'] as String?,
       scoreCpAfter: (j['scoreCpAfter'] as num?)?.toInt(),
@@ -250,6 +281,15 @@ class MoveAnalysis {
               .toList(growable: false) ??
           const <EngineLine>[],
       message: j['message'] as String? ?? '',
+      coachExplanation: j['coachExplanation'] as String?,
+      analysisMode: j['analysisMode'] as String? ?? 'deep',
+      classifierVersion: (j['classifierVersion'] as num?)?.toInt() ?? 1,
+      engineVersion: j['engineVersion'] as String? ?? 'unknown',
+      debugMetadata:
+          (j['debugMetadata'] as Map?)?.map(
+            (k, v) => MapEntry(k.toString(), v),
+          ) ??
+          const <String, dynamic>{},
     );
   }
 }

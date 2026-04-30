@@ -43,6 +43,7 @@
 ///                       sacrifice.
 library;
 
+import 'package:apex_chess/core/domain/entities/deep_tactical_verdict.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart'
     show MoveQuality, normalizeCastlingUci;
 import 'package:apex_chess/core/domain/services/win_percent_calculator.dart';
@@ -112,6 +113,7 @@ class MoveClassificationInput {
     this.isFreeCapture = false,
     this.isRecapture = false,
     this.hasTacticalMotif = false,
+    this.tacticalVerdict = DeepTacticalVerdict.none,
     this.isTrivialRecapture = false,
     this.isFirstSacrificePly = true,
     this.isBook = false,
@@ -168,6 +170,11 @@ class MoveClassificationInput {
   /// Caller asserts the move has a tactical feature (check, promotion,
   /// sacrifice, discovered tactical sequence, etc.).
   final bool hasTacticalMotif;
+
+  /// Candidate-only tactical verification, produced by the shared analysis
+  /// brain. MultiPV is evidence; this result supplies the human tactical
+  /// story across the next few plies.
+  final DeepTacticalVerdict tacticalVerdict;
 
   /// Caller asserts the move is a routine recapture (e.g. opponent
   /// played NxN, mover played NxN). Trivial recaptures can never
@@ -322,18 +329,34 @@ class MoveClassifier {
       String message, {
       required MoveQuality baseQuality,
       required String reasonCode,
-    }) => MoveClassification(
-      quality: q,
-      baseQuality: baseQuality,
-      reasonCode: reasonCode,
-      playedEqualsPv1: wasEngineBestMove,
-      deltaW: deltaW,
-      winPercentBefore: whiteWinBefore,
-      winPercentAfter: whiteWinAfter,
-      moverCpLoss: cpLossMover,
-      message: message,
-      engineBestMoveUci: in_.engineBestMoveUci,
-    );
+    }) {
+      var finalQuality = q;
+      var finalMessage = message;
+      var finalReasonCode = reasonCode;
+
+      // Hard invariant: if the played move is the engine's top line after
+      // UCI normalisation, never surface a negative label. This guards stale
+      // eval pair drift and mate-sign edge cases from producing
+      // "Better: same move" or PV1-as-Blunder reads.
+      if (wasEngineBestMove && _pv1InvariantShouldPromote(q)) {
+        finalQuality = MoveQuality.best;
+        finalMessage = 'Best move - top engine choice.';
+        finalReasonCode = 'pv1_best_invariant';
+      }
+
+      return MoveClassification(
+        quality: finalQuality,
+        baseQuality: baseQuality,
+        reasonCode: finalReasonCode,
+        playedEqualsPv1: wasEngineBestMove,
+        deltaW: deltaW,
+        winPercentBefore: whiteWinBefore,
+        winPercentAfter: whiteWinAfter,
+        moverCpLoss: cpLossMover,
+        message: finalMessage,
+        engineBestMoveUci: in_.engineBestMoveUci,
+      );
+    }
 
     // ── Mate-against-mover short-circuit ──────────────────────────────
     // Spec § 3.4: a move that yields a forced mate against the mover
@@ -414,22 +437,6 @@ class MoveClassifier {
         );
       }
 
-      final great = _classifyGreat(
-        in_: in_,
-        deltaW: deltaW,
-        moverWinBefore: moverWinBefore,
-        moverWinAfter: moverWinAfter,
-        wasEngineBestMove: wasEngineBestMove,
-      );
-      if (great != null) {
-        return finish(
-          great.quality,
-          great.message,
-          baseQuality: baseQuality,
-          reasonCode: great.reasonCode,
-        );
-      }
-
       final brilliant = _classifyBrilliant(
         in_: in_,
         deltaW: deltaW,
@@ -445,6 +452,22 @@ class MoveClassifier {
           brilliant.message,
           baseQuality: baseQuality,
           reasonCode: brilliant.reasonCode,
+        );
+      }
+
+      final great = _classifyGreat(
+        in_: in_,
+        deltaW: deltaW,
+        moverWinBefore: moverWinBefore,
+        moverWinAfter: moverWinAfter,
+        wasEngineBestMove: wasEngineBestMove,
+      );
+      if (great != null) {
+        return finish(
+          great.quality,
+          great.message,
+          baseQuality: baseQuality,
+          reasonCode: great.reasonCode,
         );
       }
     }
@@ -551,23 +574,45 @@ class MoveClassifier {
     required bool moverForcesMate,
     required bool wasEngineBestMove,
   }) {
-    if (!in_.isSacrifice) return null;
+    final tactical = in_.tacticalVerdict;
+    final verifiedNonObviousCommitment =
+        (tactical.matingNet || tactical.promotionNet) &&
+        tactical.lowDepthRejectedHighDepthApproved &&
+        tactical.isNonObvious;
+    final tacticalSacrifice =
+        tactical.verified &&
+        tactical.isBestOrNearBest &&
+        tactical.hasForcingOutcome &&
+        (tactical.hasSacrificeMotif || verifiedNonObviousCommitment) &&
+        (tactical.firstCommitmentPly != null ||
+            tactical.queenSacrifice ||
+            tactical.rookSacrifice);
+    if (!in_.isSacrifice && !tacticalSacrifice) return null;
     if (in_.isTrivialRecapture) return null;
     if (in_.isRecapture) return null;
-    if (in_.isFreeCapture) return null;
-    if (!in_.isFirstSacrificePly) return null;
-    if (in_.multiPvWhiteWinPercents == null ||
-        in_.multiPvWhiteWinPercents!.length < 3) {
+    if (in_.isFreeCapture && !tactical.hasSacrificeMotif) return null;
+    if (!in_.isFirstSacrificePly && !tacticalSacrifice) return null;
+    if (!tacticalSacrifice &&
+        (in_.multiPvWhiteWinPercents == null ||
+            in_.multiPvWhiteWinPercents!.length < 3)) {
       return null;
     }
 
     // Soundness
-    if (deltaW < -2.0) return null;
-    if (cpLossMover != null && cpLossMover > brilliantCpLossCap) return null;
-    if (!moverForcesMate && moverWinAfter < 50.0) return null;
+    if (deltaW < -2.0 && !tactical.forcedMate) return null;
+    if (!tacticalSacrifice &&
+        cpLossMover != null &&
+        cpLossMover > brilliantCpLossCap) {
+      return null;
+    }
+    if (!moverForcesMate && !tactical.forcedMate && moverWinAfter < 50.0) {
+      return null;
+    }
 
     // Near-best (engine #1 OR favourable forced mate)
-    if (!wasEngineBestMove && !moverForcesMate) return null;
+    if (!wasEngineBestMove && !moverForcesMate && !tactical.isBestOrNearBest) {
+      return null;
+    }
 
     // Already-crushing guard (Win% AND cp variants) — favourable
     // forced mate overrides because mating from +6 is still a real
@@ -578,7 +623,12 @@ class MoveClassifier {
     final wasAlreadyCrushing =
         moverWinBefore >= crushingCutoff ||
         (moverCpBefore != null && moverCpBefore >= 500);
-    if (wasAlreadyCrushing && !moverForcesMate) return null;
+    if (wasAlreadyCrushing &&
+        moverWinBefore >= triviallyWinning &&
+        !moverForcesMate &&
+        !tactical.forcedMate) {
+      return null;
+    }
 
     // Alternative-line guard: if a non-sacrificial line was already
     // trivially winning, the sacrifice is "win more" — not Brilliant.
@@ -591,7 +641,17 @@ class MoveClassifier {
     }
 
     final pvs = _moverPvWinPercents(in_);
-    if (pvs == null || pvs.first < 50.0) return null;
+    if (!tacticalSacrifice && (pvs == null || pvs.first < 50.0)) return null;
+
+    if (tacticalSacrifice) {
+      return _SpecialClassification(
+        quality: MoveQuality.brilliant,
+        reasonCode: tactical.reasonCode,
+        message: tactical.humanExplanation.isNotEmpty
+            ? tactical.humanExplanation
+            : 'Brilliant sacrifice - the tactic works after the forcing line.',
+      );
+    }
 
     return const _SpecialClassification(
       quality: MoveQuality.brilliant,
@@ -707,6 +767,28 @@ class MoveClassifier {
     required double moverWinAfter,
     required bool wasEngineBestMove,
   }) {
+    final tactical = in_.tacticalVerdict;
+    final tacticalGreat =
+        tactical.isCandidate &&
+        (tactical.verified || tactical.hasForcingOutcome) &&
+        (wasEngineBestMove || tactical.isBestOrNearBest) &&
+        tactical.hasForcingOutcome;
+    if (tacticalGreat &&
+        !in_.isBook &&
+        !in_.isRecapture &&
+        !in_.isTrivialRecapture &&
+        (!in_.isFreeCapture || tactical.hasSacrificeMotif)) {
+      return _SpecialClassification(
+        quality: MoveQuality.great,
+        reasonCode: tactical.reasonCode == 'none'
+            ? 'deep_tactical_idea'
+            : tactical.reasonCode,
+        message: tactical.humanExplanation.isNotEmpty
+            ? tactical.humanExplanation
+            : 'Great find - deep review confirms the forcing idea.',
+      );
+    }
+
     if (in_.isTrivialRecapture) return null;
     if (in_.isRecapture) return null;
     if (in_.isFreeCapture) return null;
@@ -756,6 +838,20 @@ class MoveClassifier {
     if (engine == null || played == null) return false;
     return normalizeCastlingUci(engine) == normalizeCastlingUci(played);
   }
+
+  bool _pv1InvariantShouldPromote(MoveQuality q) => switch (q) {
+    MoveQuality.brilliant ||
+    MoveQuality.great ||
+    MoveQuality.best ||
+    MoveQuality.book ||
+    MoveQuality.forced => false,
+    MoveQuality.excellent ||
+    MoveQuality.good ||
+    MoveQuality.inaccuracy ||
+    MoveQuality.mistake ||
+    MoveQuality.blunder ||
+    MoveQuality.missedWin => true,
+  };
 
   double _bestMoverWinBeforeFromPv(
     MoveClassificationInput in_, {

@@ -431,14 +431,23 @@ class CoachExplanationService {
   /// no "PV1", no centipawn talk.
   static String _humanBestSubline(MoveAnalysis m) {
     final san = m.san;
+    final tacticalCopy = m.tacticalVerdict.humanExplanation;
+    if (tacticalCopy.isNotEmpty &&
+        m.tacticalVerdict.reasonCode != 'needs_deep_review') {
+      return tacticalCopy;
+    }
 
     switch (m.classification) {
       case MoveQuality.forced:
         return 'Only move - all alternatives allow the attack to break through.';
       case MoveQuality.great:
-        return 'Finds the key idea and changes the course of the position.';
+        return tacticalCopy.isNotEmpty
+            ? tacticalCopy
+            : 'Finds the key idea and changes the course of the position.';
       case MoveQuality.brilliant:
-        return 'The sacrifice opens the king and keeps the attack alive.';
+        return tacticalCopy.isNotEmpty
+            ? tacticalCopy
+            : 'The sacrifice opens the king and keeps the attack alive.';
       case MoveQuality.missedWin:
         return 'A decisive winning line was available.';
       case MoveQuality.book:

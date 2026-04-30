@@ -18,6 +18,7 @@
 library;
 
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
+import 'package:apex_chess/core/domain/entities/deep_tactical_verdict.dart';
 import 'package:apex_chess/core/domain/services/move_classifier.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -76,7 +77,6 @@ void main() {
           prevWhiteMate: null,
           currWhiteCp: null,
           currWhiteMate: -3,
-          engineBestMoveUci: 'd1h5',
           playedMoveUci: 'd1h5',
           isSacrifice: true,
         ),
@@ -122,6 +122,105 @@ void main() {
       );
       expect(cls.quality, MoveQuality.brilliant);
     });
+
+    test(
+      'Low-depth rejected, high-depth verified queen sac can be Brilliant',
+      () {
+        final cls = classifier.classify(
+          const MoveClassificationInput(
+            isWhiteMove: false,
+            prevWhiteCp: -250,
+            prevWhiteMate: null,
+            currWhiteCp: null,
+            currWhiteMate: -3,
+            engineBestMoveUci: 'b2a1',
+            playedMoveUci: 'b2a1',
+            isCapture: true,
+            tacticalVerdict: DeepTacticalVerdict(
+              isCandidate: true,
+              verified: true,
+              candidateType: 'queen_sacrifice',
+              isBestOrNearBest: true,
+              isOnlyMove: false,
+              isNonObvious: true,
+              lowDepthRejectedHighDepthApproved: true,
+              forcingLineLength: 3,
+              forcedMate: true,
+              forcedPromotion: true,
+              decisiveMaterialWin: false,
+              sacrificeTrajectory: true,
+              delayedSacrifice: true,
+              queenSacrifice: true,
+              rookSacrifice: false,
+              decoy: true,
+              deflection: false,
+              matingNet: true,
+              promotionNet: true,
+              reasonCode: 'queen_sacrifice_mating_net',
+              humanExplanation:
+                  'The queen can be captured, but the pawn promotes with checkmate.',
+              lowDepthRank: null,
+              highDepthRank: 1,
+              nonObviousScore: 1,
+              candidateVerified: true,
+              verificationDepth: 24,
+              verificationMultiPV: 5,
+              firstCommitmentPly: 0,
+            ),
+          ),
+        );
+        expect(cls.quality, MoveQuality.brilliant);
+        expect(cls.reasonCode, 'queen_sacrifice_mating_net');
+      },
+    );
+
+    test(
+      'First commitment in verified mating net becomes Brilliant or Great',
+      () {
+        final cls = classifier.classify(
+          const MoveClassificationInput(
+            isWhiteMove: false,
+            prevWhiteCp: -180,
+            prevWhiteMate: null,
+            currWhiteCp: -220,
+            currWhiteMate: null,
+            engineBestMoveUci: 'f8b4',
+            playedMoveUci: 'f8b4',
+            tacticalVerdict: DeepTacticalVerdict(
+              isCandidate: true,
+              verified: true,
+              candidateType: 'sacrifice_trajectory',
+              isBestOrNearBest: true,
+              isOnlyMove: false,
+              isNonObvious: true,
+              lowDepthRejectedHighDepthApproved: true,
+              forcingLineLength: 5,
+              forcedMate: true,
+              forcedPromotion: true,
+              decisiveMaterialWin: false,
+              sacrificeTrajectory: true,
+              delayedSacrifice: true,
+              queenSacrifice: false,
+              rookSacrifice: false,
+              decoy: true,
+              deflection: true,
+              matingNet: true,
+              promotionNet: true,
+              reasonCode: 'delayed_sacrifice_mating_net',
+              humanExplanation: 'This starts a forcing mating net.',
+              highDepthRank: 1,
+              nonObviousScore: 0.9,
+              candidateVerified: true,
+              verificationDepth: 24,
+              verificationMultiPV: 5,
+              firstCommitmentPly: 0,
+            ),
+          ),
+        );
+        expect(cls.quality, anyOf(MoveQuality.brilliant, MoveQuality.great));
+        expect(cls.reasonCode, isNot('pv1_best'));
+      },
+    );
 
     test('Sound sacrifice without MultiPV evidence is NOT Brilliant', () {
       final cls = classifier.classify(
@@ -315,6 +414,68 @@ void main() {
       // Spec § 3.4: any move that results in a forced mate against
       // the mover is a Blunder regardless of cp / damping.
       expect(cls.quality, MoveQuality.blunder);
+    });
+  });
+
+  group('Best-move invariant', () {
+    test('played == best cannot produce Inaccuracy/Mistake/Blunder', () {
+      final cls = classifier.classify(
+        const MoveClassificationInput(
+          isWhiteMove: true,
+          prevWhiteCp: 300,
+          prevWhiteMate: null,
+          currWhiteCp: -350,
+          currWhiteMate: null,
+          engineBestMoveUci: 'd1h5',
+          playedMoveUci: 'd1h5',
+        ),
+      );
+      expect(cls.playedEqualsPv1, isTrue);
+      expect(cls.quality, MoveQuality.best);
+      expect(cls.reasonCode, 'pv1_best_invariant');
+    });
+
+    test('Quick mode never finalizes tactical Brilliant/Great/Forced', () {
+      final cls = classifier.classify(
+        const MoveClassificationInput(
+          isWhiteMove: false,
+          prevWhiteCp: -250,
+          prevWhiteMate: null,
+          currWhiteCp: null,
+          currWhiteMate: -3,
+          engineBestMoveUci: 'b2a1',
+          playedMoveUci: 'b2a1',
+          isCapture: true,
+          suppressTrophyTiers: true,
+          tacticalVerdict: DeepTacticalVerdict(
+            isCandidate: true,
+            verified: true,
+            candidateType: 'queen_sacrifice',
+            isBestOrNearBest: true,
+            isOnlyMove: false,
+            isNonObvious: true,
+            lowDepthRejectedHighDepthApproved: true,
+            forcingLineLength: 3,
+            forcedMate: true,
+            forcedPromotion: true,
+            decisiveMaterialWin: false,
+            sacrificeTrajectory: true,
+            delayedSacrifice: true,
+            queenSacrifice: true,
+            rookSacrifice: false,
+            decoy: true,
+            deflection: false,
+            matingNet: true,
+            promotionNet: true,
+            reasonCode: 'queen_sacrifice_mating_net',
+            humanExplanation:
+                'The queen can be captured, but the pawn promotes with checkmate.',
+          ),
+        ),
+      );
+      expect(cls.quality, isNot(MoveQuality.brilliant));
+      expect(cls.quality, isNot(MoveQuality.great));
+      expect(cls.quality, isNot(MoveQuality.forced));
     });
   });
 

@@ -7,6 +7,7 @@
 library;
 
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
+import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'move_analysis.dart';
 
 class AnalysisTimeline {
@@ -22,11 +23,20 @@ class AnalysisTimeline {
   /// Win% array (White's perspective) — one value per ply for the chart.
   final List<double> winPercentages;
 
+  /// Shared analysis provenance. Individual moves also carry this data so
+  /// partial exports remain self-describing.
+  final String analysisMode;
+  final int classifierVersion;
+  final String engineVersion;
+
   const AnalysisTimeline({
     required this.moves,
     required this.startingFen,
     required this.headers,
     required this.winPercentages,
+    this.analysisMode = 'deep',
+    this.classifierVersion = kApexClassifierVersion,
+    this.engineVersion = 'unknown',
   });
 
   /// Total number of plies.
@@ -90,11 +100,14 @@ class AnalysisTimeline {
   // trivial for Hive's `Box<String>` to hold.
 
   Map<String, dynamic> toJson() => {
-        'startingFen': startingFen,
-        'headers': headers,
-        'winPercentages': winPercentages,
-        'moves': moves.map((m) => m.toJson()).toList(growable: false),
-      };
+    'startingFen': startingFen,
+    'headers': headers,
+    'winPercentages': winPercentages,
+    'analysisMode': analysisMode,
+    'classifierVersion': classifierVersion,
+    'engineVersion': engineVersion,
+    'moves': moves.map((m) => m.toJson()).toList(growable: false),
+  };
 
   factory AnalysisTimeline.fromJson(Map<dynamic, dynamic> j) {
     final headersRaw = (j['headers'] as Map?) ?? const {};
@@ -106,13 +119,11 @@ class AnalysisTimeline {
         for (final e in headersRaw.entries)
           e.key.toString(): e.value?.toString() ?? '',
       },
-      winPercentages: [
-        for (final v in winsRaw) (v as num).toDouble(),
-      ],
-      moves: [
-        for (final m in movesRaw)
-          MoveAnalysis.fromJson(m as Map),
-      ],
+      winPercentages: [for (final v in winsRaw) (v as num).toDouble()],
+      analysisMode: j['analysisMode'] as String? ?? 'deep',
+      classifierVersion: (j['classifierVersion'] as num?)?.toInt() ?? 1,
+      engineVersion: j['engineVersion'] as String? ?? 'unknown',
+      moves: [for (final m in movesRaw) MoveAnalysis.fromJson(m as Map)],
     );
   }
 }

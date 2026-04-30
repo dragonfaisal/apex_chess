@@ -20,6 +20,7 @@
 library;
 
 import 'package:apex_chess/core/domain/services/move_classifier.dart';
+import 'package:apex_chess/core/domain/entities/deep_tactical_verdict.dart';
 import 'package:apex_chess/core/domain/services/win_percent_calculator.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:flutter/material.dart';
@@ -172,6 +173,7 @@ class EvaluationAnalyzer {
     bool isFreeCapture = false,
     bool isRecapture = false,
     bool hasTacticalMotif = false,
+    DeepTacticalVerdict tacticalVerdict = DeepTacticalVerdict.none,
     bool isTrivialRecapture = false,
     bool isFirstSacrificePly = true,
     bool suppressTrophyTiers = false,
@@ -196,6 +198,7 @@ class EvaluationAnalyzer {
       isFreeCapture: isFreeCapture,
       isRecapture: isRecapture,
       hasTacticalMotif: hasTacticalMotif,
+      tacticalVerdict: tacticalVerdict,
       isTrivialRecapture: isTrivialRecapture,
       isFirstSacrificePly: isFirstSacrificePly,
       suppressTrophyTiers: suppressTrophyTiers,
@@ -236,6 +239,7 @@ class EvaluationAnalyzer {
     bool isFreeCapture = false,
     bool isRecapture = false,
     bool hasTacticalMotif = false,
+    DeepTacticalVerdict tacticalVerdict = DeepTacticalVerdict.none,
     bool isTrivialRecapture = false,
     bool isFirstSacrificePly = true,
     bool suppressTrophyTiers = false,
@@ -272,6 +276,7 @@ class EvaluationAnalyzer {
         isFreeCapture: isFreeCapture,
         isRecapture: isRecapture,
         hasTacticalMotif: hasTacticalMotif,
+        tacticalVerdict: tacticalVerdict,
         isTrivialRecapture: isTrivialRecapture,
         isFirstSacrificePly: isFirstSacrificePly,
         isBook: isBook,

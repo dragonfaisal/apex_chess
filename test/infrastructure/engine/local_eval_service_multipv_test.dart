@@ -71,6 +71,35 @@ void main() {
       expect(snapshot.engineLines[0].whiteWinPercent, lessThan(50));
       expect(snapshot.engineLines[0].moveSan, 'e5');
     });
+
+    test('candidate verification can request MultiPV 5', () async {
+      final engine = _FakeChessEngine(
+        bestMove: 'e2e4',
+        infos: const [
+          EngineInfo(depth: 20, multipv: 1, scoreCp: 30, pv: ['e2e4']),
+          EngineInfo(depth: 20, multipv: 2, scoreCp: 20, pv: ['d2d4']),
+          EngineInfo(depth: 20, multipv: 3, scoreCp: 10, pv: ['g1f3']),
+          EngineInfo(depth: 20, multipv: 4, scoreCp: 0, pv: ['c2c4']),
+          EngineInfo(depth: 20, multipv: 5, scoreCp: -10, pv: ['b1c3']),
+        ],
+      );
+      final service = LocalEvalService(engine: engine);
+
+      final (snapshot, error) = await service.evaluate(
+        startFen,
+        depth: 20,
+        multiPv: 5,
+        timeout: const Duration(seconds: 1),
+      );
+
+      expect(error, isNull);
+      expect(snapshot!.engineLines, hasLength(5));
+      expect(snapshot.engineLines.map((l) => l.rank), [1, 2, 3, 4, 5]);
+      expect(
+        engine.commands.whereType<UciSetOption>().map((c) => c.toUci()),
+        contains('setoption name MultiPV value 5'),
+      );
+    });
   });
 }
 

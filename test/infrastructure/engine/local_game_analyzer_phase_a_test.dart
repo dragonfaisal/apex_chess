@@ -141,6 +141,32 @@ Qxa1+ 15. Nxa1 c1=Q# 0-1
         expect(mate.classification, isNot(MoveQuality.blunder));
         expect(mate.isWhiteMove, isFalse);
 
+        final bb4 = timeline.moves.singleWhere((m) => m.san == 'Bb4');
+        expect(bb4.tacticalVerdict.matingNet, isTrue);
+        expect(bb4.tacticalVerdict.deflection, isTrue);
+        expect(
+          bb4.classification,
+          anyOf(MoveQuality.brilliant, MoveQuality.great),
+        );
+
+        final c2 = timeline.moves.singleWhere((m) => m.san == 'c2');
+        expect(c2.tacticalVerdict.isCandidate, isTrue);
+        expect(c2.tacticalVerdict.promotionNet, isTrue);
+
+        final qxa1 = timeline.moves.singleWhere((m) => m.san == 'Qxa1+');
+        expect(qxa1.tacticalVerdict.queenSacrifice, isTrue);
+        expect(qxa1.tacticalVerdict.decoy, isTrue);
+        expect(qxa1.tacticalVerdict.matingNet, isTrue);
+        expect(
+          qxa1.classification,
+          anyOf(MoveQuality.brilliant, MoveQuality.great),
+        );
+
+        expect([
+          bb4.classification,
+          qxa1.classification,
+        ], contains(MoveQuality.brilliant));
+
         final debugLine = AnalysisDebugExport.jsonLines(timeline)
             .split('\n')
             .map((line) => jsonDecode(line) as Map<String, dynamic>)
@@ -152,6 +178,25 @@ Qxa1+ 15. Nxa1 c1=Q# 0-1
         expect(debugLine['pv2'], isNotNull);
         expect(debugLine['pv3'], isNotNull);
         expect(debugLine['isFreeCapture'], isTrue);
+
+        final criticalDebug = AnalysisDebugExport.jsonLines(timeline)
+            .split('\n')
+            .map((line) => jsonDecode(line) as Map<String, dynamic>)
+            .where(
+              (j) => {'dxc3', 'c2', 'Bb4', 'Qxa1+', 'c1=Q#'}.contains(j['san']),
+            )
+            .toList(growable: false);
+        expect(criticalDebug, hasLength(5));
+        expect(
+          criticalDebug.singleWhere(
+            (j) => j['san'] == 'Qxa1+',
+          )['queenSacrifice'],
+          isTrue,
+        );
+        expect(
+          criticalDebug.singleWhere((j) => j['san'] == 'Bb4')['matingNet'],
+          isTrue,
+        );
       },
     );
   });
@@ -216,6 +261,15 @@ class _PgnFixtureEvalService extends LocalEvalService {
     final dxc3 = moves.singleWhere((m) => m.san == 'dxc3');
     scoreByFen[dxc3.fenBefore] = -200;
     scoreByFen[dxc3.fenAfter] = -260;
+    final c2 = moves.singleWhere((m) => m.san == 'c2');
+    scoreByFen[c2.fenBefore] = -260;
+    scoreByFen[c2.fenAfter] = -300;
+    final bb4 = moves.singleWhere((m) => m.san == 'Bb4');
+    scoreByFen[bb4.fenBefore] = -300;
+    scoreByFen[bb4.fenAfter] = -320;
+    final qxa1 = moves.singleWhere((m) => m.san == 'Qxa1+');
+    scoreByFen[qxa1.fenBefore] = -320;
+    mateByFen[qxa1.fenAfter] = -3;
     final mate = moves.singleWhere((m) => m.san == 'c1=Q#');
     scoreByFen[mate.fenBefore] = -900;
   }
@@ -224,6 +278,7 @@ class _PgnFixtureEvalService extends LocalEvalService {
   final bestByFen = <String, String>{};
   final sanByFen = <String, String>{};
   final scoreByFen = <String, int>{};
+  final mateByFen = <String, int>{};
   static const _win = WinPercentCalculator();
 
   @override
@@ -234,19 +289,37 @@ class _PgnFixtureEvalService extends LocalEvalService {
     Duration? timeout,
     int multiPv = 1,
   }) async {
-    final requested = multiPv.clamp(1, 3).toInt();
+    final requested = multiPv.clamp(1, 5).toInt();
     final best = bestByFen[fen] ?? _fallbackMove(fen);
-    final score = scoreByFen[fen] ?? 0;
+    final mate = mateByFen[fen];
+    final score = mate == null ? scoreByFen[fen] ?? 0 : null;
+    final fixtureMove = moves.where((m) => m.fenBefore == fen).firstOrNull;
     final isDxc3Before = moves.any(
       (m) => m.san == 'dxc3' && m.fenBefore == fen,
     );
+    final critical =
+        fixtureMove != null &&
+        (fixtureMove.san == 'Bb4' || fixtureMove.san == 'Qxa1+');
     final altScores = isDxc3Before
-        ? const <int>[-200, 200, 300]
-        : <int>[score, score - 5, score + 5];
+        ? const <int?>[-200, 200, 300, 350, 400]
+        : critical && multiPv >= 5
+        ? const <int?>[null, 0, 100, 180, 240]
+        : <int?>[
+            score,
+            (score ?? 0) - 5,
+            (score ?? 0) + 5,
+            (score ?? 0) + 12,
+            (score ?? 0) - 12,
+          ];
+    final altMates = critical && multiPv >= 5
+        ? const <int?>[-5, null, null, null, null]
+        : <int?>[mate, null, null, null, null];
     final altMoves = <String>[
       best,
       _alternateMove(fen, best, 0),
       _alternateMove(fen, best, 1),
+      _alternateMove(fen, best, 2),
+      _alternateMove(fen, best, 3),
     ];
     final lines = <EngineLine>[
       for (var i = 0; i < requested; i++)
@@ -255,14 +328,18 @@ class _PgnFixtureEvalService extends LocalEvalService {
           moveUci: altMoves[i],
           moveSan: i == 0 ? sanByFen[fen] : null,
           scoreCp: altScores[i],
+          mateIn: altMates[i],
           depth: depth ?? 12,
-          whiteWinPercent: _win.forCp(cp: altScores[i]),
-          pvMoves: [altMoves[i]],
+          whiteWinPercent: _win.forCp(cp: altScores[i], mate: altMates[i]),
+          pvMoves: i == 0 && critical
+              ? [altMoves[i], ..._continuationAfter(fixtureMove)]
+              : [altMoves[i]],
         ),
     ];
     return (
       EvalSnapshot(
         scoreCp: score,
+        mateIn: mate,
         depth: depth ?? 12,
         bestMoveUci: best,
         pvMoves: [best],
@@ -285,6 +362,17 @@ class _PgnFixtureEvalService extends LocalEvalService {
       (m) => m != best,
       orElse: () => candidates[index],
     );
+  }
+
+  List<String> _continuationAfter(_FixtureMove move) {
+    final index = moves.indexOf(move);
+    if (index < 0) return const <String>[];
+    return moves
+        .skip(index + 1)
+        .take(8)
+        .map((m) => m.uci)
+        .where((uci) => uci.length >= 4)
+        .toList(growable: false);
   }
 }
 

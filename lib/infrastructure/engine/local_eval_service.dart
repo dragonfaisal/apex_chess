@@ -63,6 +63,8 @@ class LocalEvalService {
   final int _defaultDepth;
   final Duration _defaultTimeout;
 
+  String get engineVersion => _engine.bridgeVersion;
+
   /// Serializes evaluate() calls so only one UCI search is in flight at a
   /// time. Essential — the engine has a single position slot.
   Future<void> _queue = Future<void>.value();
@@ -135,7 +137,7 @@ class LocalEvalService {
 
     // MultiPV is a sticky UCI option. Set it on every call so a Deep
     // review does not leak PV3 searches into Quick/live evaluations.
-    final requestedMultiPv = multiPv.clamp(1, 3).toInt();
+    final requestedMultiPv = multiPv.clamp(1, 5).toInt();
     _engine.send(
       UciSetOption(name: 'MultiPV', value: requestedMultiPv.toString()),
     );

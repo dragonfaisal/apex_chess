@@ -8,6 +8,7 @@
 library;
 
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
+import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 
 /// Bumped on every classifier-behaviour change so cached timelines
@@ -21,7 +22,10 @@ import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 ///   * `3` — Phase A integration (post-#18 audit): trajectory-driven
 ///            `isFirstSacrificePly` / `isTrivialRecapture`, opening-
 ///            phase fallback, archive counts derived from timeline.
-const int kClassifierVersion = 3;
+///   * `4` — Deep tactical verifier: candidate-only low/high depth
+///            verification, delayed sacrifice/mating-net metadata, and
+///            PV1 invariant.
+const int kClassifierVersion = kApexClassifierVersion;
 
 /// Analysis mode used when the timeline was produced. Stored so a
 /// Quick scan does not masquerade as a Deep one when listed alongside
@@ -47,10 +51,8 @@ enum ArchiveSource {
   const ArchiveSource(this.wire);
   final String wire;
 
-  static ArchiveSource fromWire(String s) => values.firstWhere(
-        (v) => v.wire == s,
-        orElse: () => ArchiveSource.pgn,
-      );
+  static ArchiveSource fromWire(String s) =>
+      values.firstWhere((v) => v.wire == s, orElse: () => ArchiveSource.pgn);
 }
 
 /// Immutable, serialisable record of one analyzed game.
@@ -64,28 +66,35 @@ class ArchivedGame {
   final String black;
   final String? whiteRating;
   final String? blackRating;
+
   /// '1-0' | '0-1' | '1/2-1/2' | '*'
   final String result;
   final DateTime? playedAt;
   final DateTime analyzedAt;
+
   /// 14 (Fast) or 22 (Quantum). Surfaced in the list as a pill.
   final int depth;
+
   /// Raw PGN — required to rebuild the board on re-open.
   final String pgn;
+
   /// Classifier version this record was produced under. The archive
   /// list uses this together with [kClassifierVersion] to decide if
   /// the cached timeline can be re-used or must be recomputed before
   /// any UI numbers are shown.
   final int classifierVersion;
+
   /// Quick or Deep analysis mode — Quick suppresses Brilliant / Great
   /// / Forced gating since they require deep verification + MultiPV.
   final AnalysisMode analysisMode;
+
   /// Per-classification counts. **Derived from the cached timeline**
   /// (when present) via [qualityCountsLive] so the counts can never
   /// drift from the actual classifications on disk — the
   /// integration-audit fix that closes the "archive shows Brilliants
   /// that don't exist in the timeline" regression.
   final Map<MoveQuality, int> qualityCounts;
+
   /// White-perspective average centipawn loss (for accuracy column).
   final double averageCpLoss;
   final int totalPlies;
@@ -128,7 +137,9 @@ class ArchivedGame {
   /// classifier brain. The archive list uses this to decide whether
   /// re-opening can use the cache or must trigger a re-scan.
   bool get isCacheCurrent =>
-      classifierVersion == kClassifierVersion && cachedTimeline != null;
+      classifierVersion == kClassifierVersion &&
+      cachedTimeline != null &&
+      cachedTimeline!.classifierVersion == kClassifierVersion;
 
   /// Live quality counts — derived from the cached timeline when
   /// present, falling back to the persisted `qualityCounts` map for
@@ -143,14 +154,11 @@ class ArchivedGame {
   // the *actual* classifications stored in the timeline. The legacy
   // [qualityCounts] map is still persisted for backward compatibility
   // with records that pre-date the cached-timeline schema.
-  int get brilliantCount =>
-      qualityCountsLive[MoveQuality.brilliant] ?? 0;
+  int get brilliantCount => qualityCountsLive[MoveQuality.brilliant] ?? 0;
   int get blunderCount => qualityCountsLive[MoveQuality.blunder] ?? 0;
   int get mistakeCount => qualityCountsLive[MoveQuality.mistake] ?? 0;
-  int get inaccuracyCount =>
-      qualityCountsLive[MoveQuality.inaccuracy] ?? 0;
-  int get missedWinCount =>
-      qualityCountsLive[MoveQuality.missedWin] ?? 0;
+  int get inaccuracyCount => qualityCountsLive[MoveQuality.inaccuracy] ?? 0;
+  int get missedWinCount => qualityCountsLive[MoveQuality.missedWin] ?? 0;
 
   // ── Serialisation ──────────────────────────────────────────────
   // Hive can persist `Map<String, dynamic>` directly via its default
@@ -158,28 +166,28 @@ class ArchivedGame {
   // and keeps the schema readable when someone inspects the box.
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'source': source.wire,
-        'white': white,
-        'black': black,
-        'whiteRating': whiteRating,
-        'blackRating': blackRating,
-        'result': result,
-        'playedAt': playedAt?.toIso8601String(),
-        'analyzedAt': analyzedAt.toIso8601String(),
-        'depth': depth,
-        'pgn': pgn,
-        'qualityCounts': {
-          for (final e in qualityCounts.entries) e.key.name: e.value,
-        },
-        'averageCpLoss': averageCpLoss,
-        'totalPlies': totalPlies,
-        'openingName': openingName,
-        'ecoCode': ecoCode,
-        'classifierVersion': classifierVersion,
-        'analysisMode': analysisMode.wire,
-        if (cachedTimeline != null) 'cachedTimeline': cachedTimeline!.toJson(),
-      };
+    'id': id,
+    'source': source.wire,
+    'white': white,
+    'black': black,
+    'whiteRating': whiteRating,
+    'blackRating': blackRating,
+    'result': result,
+    'playedAt': playedAt?.toIso8601String(),
+    'analyzedAt': analyzedAt.toIso8601String(),
+    'depth': depth,
+    'pgn': pgn,
+    'qualityCounts': {
+      for (final e in qualityCounts.entries) e.key.name: e.value,
+    },
+    'averageCpLoss': averageCpLoss,
+    'totalPlies': totalPlies,
+    'openingName': openingName,
+    'ecoCode': ecoCode,
+    'classifierVersion': classifierVersion,
+    'analysisMode': analysisMode.wire,
+    if (cachedTimeline != null) 'cachedTimeline': cachedTimeline!.toJson(),
+  };
 
   factory ArchivedGame.fromJson(Map<dynamic, dynamic> j) {
     final counts = (j['qualityCounts'] as Map?) ?? const {};
@@ -194,14 +202,12 @@ class ArchivedGame {
       playedAt: j['playedAt'] == null
           ? null
           : DateTime.tryParse(j['playedAt'] as String),
-      analyzedAt:
-          DateTime.parse(j['analyzedAt'] as String),
+      analyzedAt: DateTime.parse(j['analyzedAt'] as String),
       depth: (j['depth'] as num).toInt(),
       pgn: j['pgn'] as String,
       qualityCounts: {
         for (final k in MoveQuality.values)
-          if (counts[k.name] != null)
-            k: (counts[k.name] as num).toInt(),
+          if (counts[k.name] != null) k: (counts[k.name] as num).toInt(),
       },
       averageCpLoss: (j['averageCpLoss'] as num).toDouble(),
       totalPlies: (j['totalPlies'] as num).toInt(),

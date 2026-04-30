@@ -43,6 +43,9 @@ bool _playedEqualsBest(MoveAnalysis m) {
   return normalizeCastlingUci(best) == normalizeCastlingUci(played);
 }
 
+bool shouldShowBetterMoveArrowForTesting(MoveAnalysis? m) =>
+    ReviewScreen._shouldShowArrow(m);
+
 class ReviewScreen extends ConsumerWidget {
   const ReviewScreen({super.key});
 
@@ -59,15 +62,16 @@ class ReviewScreen extends ConsumerWidget {
         backgroundColor: ApexColors.darkSurface,
         appBar: _buildAppBar(context),
         body: const Center(
-          child: Text('No analysis loaded.',
-              style: TextStyle(color: ApexColors.textTertiary)),
+          child: Text(
+            'No analysis loaded.',
+            style: TextStyle(color: ApexColors.textTertiary),
+          ),
         ),
       );
     }
 
     final currentMove = state.currentMove;
-    final isBrilliant =
-        currentMove?.classification == MoveQuality.brilliant;
+    final isBrilliant = currentMove?.classification == MoveQuality.brilliant;
 
     return Scaffold(
       appBar: _buildAppBar(
@@ -84,12 +88,9 @@ class ReviewScreen extends ConsumerWidget {
       bottomNavigationBar: _ReviewBottomBar(
         currentPly: state.currentPly,
         totalPlies: state.totalPlies,
-        onStart: () =>
-            ref.read(reviewControllerProvider.notifier).goToStart(),
-        onBack: () =>
-            ref.read(reviewControllerProvider.notifier).prev(),
-        onForward: () =>
-            ref.read(reviewControllerProvider.notifier).next(),
+        onStart: () => ref.read(reviewControllerProvider.notifier).goToStart(),
+        onBack: () => ref.read(reviewControllerProvider.notifier).prev(),
+        onForward: () => ref.read(reviewControllerProvider.notifier).next(),
         onEnd: () => ref.read(reviewControllerProvider.notifier).goToEnd(),
         onScrub: (ply) =>
             ref.read(reviewControllerProvider.notifier).jumpTo(ply),
@@ -103,16 +104,19 @@ class ReviewScreen extends ConsumerWidget {
               // landscape / desktop — previously it consumed full width and
               // pushed the chart + nav controls off-screen (RenderFlex
               // overflow by ~800px on wide windows).
-              final maxBoardWidth =
-                  (constraints.maxHeight * 0.55).clamp(240.0, 560.0);
-              final boardSize =
-                  (constraints.maxWidth - 24).clamp(240.0, maxBoardWidth);
+              final maxBoardWidth = (constraints.maxHeight * 0.55).clamp(
+                240.0,
+                560.0,
+              );
+              final boardSize = (constraints.maxWidth - 24).clamp(
+                240.0,
+                maxBoardWidth,
+              );
 
               return SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
                 child: ConstrainedBox(
-                  constraints:
-                      BoxConstraints(minHeight: constraints.maxHeight),
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
                   child: Column(
                     children: [
                       ApexEvalBar(
@@ -134,7 +138,8 @@ class ReviewScreen extends ConsumerWidget {
                               lastMoveQuality: currentMove?.classification,
                               betterMove: _shouldShowArrow(currentMove)
                                   ? _arrowFromUci(
-                                      currentMove?.engineBestMoveUci)
+                                      currentMove?.engineBestMoveUci,
+                                    )
                                   : null,
                             ),
                           ),
@@ -143,8 +148,9 @@ class ReviewScreen extends ConsumerWidget {
                       const SizedBox(height: 10),
                       EvaluationChart(
                         winPercentages: timeline.winPercentages,
-                        selectedPly:
-                            state.currentPly >= 0 ? state.currentPly : null,
+                        selectedPly: state.currentPly >= 0
+                            ? state.currentPly
+                            : null,
                         onPlySelected: (ply) {
                           ref
                               .read(reviewControllerProvider.notifier)
@@ -189,6 +195,7 @@ class ReviewScreen extends ConsumerWidget {
   static bool _shouldShowArrow(MoveAnalysis? m) {
     if (m == null) return false;
     if (m.engineBestMoveUci == null) return false;
+    if (_playedEqualsBest(m) || m.playedEqualsPv1) return false;
     switch (m.classification) {
       case MoveQuality.brilliant:
       case MoveQuality.great:
@@ -220,8 +227,6 @@ class ReviewScreen extends ConsumerWidget {
     return (norm.substring(0, 2), norm.substring(2, 4));
   }
 
-
-
   PreferredSizeWidget _buildAppBar(
     BuildContext context, [
     Map<String, String>? headers,
@@ -236,8 +241,10 @@ class ReviewScreen extends ConsumerWidget {
       backgroundColor: ApexColors.darkSurface,
       elevation: 0,
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back_rounded,
-            color: ApexColors.textSecondary),
+        icon: const Icon(
+          Icons.arrow_back_rounded,
+          color: ApexColors.textSecondary,
+        ),
         onPressed: () => Navigator.of(context).pop(),
       ),
       title: Column(
@@ -267,8 +274,10 @@ class ReviewScreen extends ConsumerWidget {
             tooltip: flipped
                 ? 'Flip board (currently Black-at-bottom)'
                 : 'Flip board (currently White-at-bottom)',
-            icon: const Icon(Icons.flip_camera_android_rounded,
-                color: ApexColors.textSecondary),
+            icon: const Icon(
+              Icons.flip_camera_android_rounded,
+              color: ApexColors.textSecondary,
+            ),
             onPressed: onFlip,
           ),
       ],
@@ -339,12 +348,14 @@ class _CoachCard extends StatelessWidget {
     // reads "Checkmate.", Quick-mode "Needs Deep Scan") are enforced
     // authoritatively by [CoachExplanationService].
     const svc = CoachExplanationService();
-    final explanation = svc.explain(CoachExplanationInput(
-      move: m,
-      mode: mode,
-      userIsWhite: userIsWhite,
-      previousUserMove: _previousUserMove(m),
-    ));
+    final explanation = svc.explain(
+      CoachExplanationInput(
+        move: m,
+        mode: mode,
+        userIsWhite: userIsWhite,
+        previousUserMove: _previousUserMove(m),
+      ),
+    );
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -361,7 +372,9 @@ class _CoachCard extends StatelessWidget {
             color: m.classification.color.withAlpha(25),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-                color: m.classification.color.withAlpha(60), width: 0.5),
+              color: m.classification.color.withAlpha(60),
+              width: 0.5,
+            ),
             boxShadow: [
               BoxShadow(
                 color: m.classification.color.withAlpha(60),
@@ -394,7 +407,9 @@ class _CoachCard extends StatelessWidget {
               Text(
                 explanation.subline,
                 style: ApexTypography.bodyMedium.copyWith(
-                    color: ApexColors.textTertiary, fontSize: 12),
+                  color: ApexColors.textTertiary,
+                  fontSize: 12,
+                ),
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -454,13 +469,17 @@ class _CoachCard extends StatelessWidget {
   Widget _emptyContent() {
     return Row(
       children: [
-        Icon(Icons.psychology_rounded,
-            color: ApexColors.electricBlue.withAlpha(120), size: 24),
+        Icon(
+          Icons.psychology_rounded,
+          color: ApexColors.electricBlue.withAlpha(120),
+          size: 24,
+        ),
         const SizedBox(width: 12),
         Text(
           'Navigate to see analysis',
           style: ApexTypography.bodyMedium.copyWith(
-              color: ApexColors.textTertiary),
+            color: ApexColors.textTertiary,
+          ),
         ),
       ],
     );
@@ -564,7 +583,9 @@ class _NavControls extends StatelessWidget {
             child: Center(
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 6),
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: ApexColors.cardSurface,
                   borderRadius: BorderRadius.circular(8),
@@ -668,10 +689,9 @@ class _ReviewBottomBar extends StatelessWidget {
                   label: currentPly < 0
                       ? 'Start'
                       : 'Move ${(currentPly ~/ 2) + 1}'
-                          '${currentPly.isEven ? '' : '…'}',
+                            '${currentPly.isEven ? '' : '…'}',
                   activeColor: ApexColors.electricBlue,
-                  inactiveColor:
-                      ApexColors.subtleBorder.withValues(alpha: 0.6),
+                  inactiveColor: ApexColors.subtleBorder.withValues(alpha: 0.6),
                   onChanged: (v) => onScrub(v.round() - 1),
                 ),
               ),
@@ -714,8 +734,7 @@ class _CollapsibleMoveReport extends StatefulWidget {
   final ValueChanged<int> onTapPly;
 
   @override
-  State<_CollapsibleMoveReport> createState() =>
-      _CollapsibleMoveReportState();
+  State<_CollapsibleMoveReport> createState() => _CollapsibleMoveReportState();
 }
 
 class _CollapsibleMoveReportState extends State<_CollapsibleMoveReport> {
@@ -729,8 +748,7 @@ class _CollapsibleMoveReportState extends State<_CollapsibleMoveReport> {
         decoration: BoxDecoration(
           color: ApexColors.elevatedSurface,
           borderRadius: BorderRadius.circular(12),
-          border:
-              Border.all(color: ApexColors.subtleBorder, width: 0.5),
+          border: Border.all(color: ApexColors.subtleBorder, width: 0.5),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -740,7 +758,9 @@ class _CollapsibleMoveReportState extends State<_CollapsibleMoveReport> {
               borderRadius: BorderRadius.circular(12),
               child: Padding(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 12),
+                  horizontal: 14,
+                  vertical: 12,
+                ),
                 child: Row(
                   children: [
                     Icon(
@@ -922,17 +942,12 @@ class _MoveRow extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
         child: Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: isCurrent
-                ? cls.color.withAlpha(28)
-                : Colors.transparent,
+            color: isCurrent ? cls.color.withAlpha(28) : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: isCurrent
-                  ? cls.color.withAlpha(120)
-                  : Colors.transparent,
+              color: isCurrent ? cls.color.withAlpha(120) : Colors.transparent,
               width: 0.7,
             ),
           ),
@@ -994,8 +1009,7 @@ class _MoveRow extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: ApexTypography.bodyMedium.copyWith(
-                          color:
-                              ApexColors.electricBlue.withAlpha(150),
+                          color: ApexColors.electricBlue.withAlpha(150),
                           fontSize: 10,
                           fontStyle: FontStyle.italic,
                         ),
