@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:apex_chess/app/di/providers.dart';
+import 'package:apex_chess/features/account/domain/apex_account.dart';
+import 'package:apex_chess/features/account/presentation/controllers/account_controller.dart';
 import 'package:apex_chess/features/user_validation/presentation/username_validation_controller.dart';
 import 'package:apex_chess/features/user_validation/presentation/widgets/username_validation_pill.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
@@ -35,6 +37,10 @@ class _ProfileScannerScreenState extends ConsumerState<ProfileScannerScreen> {
   void initState() {
     super.initState();
     _controller.addListener(_onTextChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final account = ref.read(accountControllerProvider).valueOrNull;
+      if (account != null) _applyConnectedAccount(account);
+    });
   }
 
   @override
@@ -64,6 +70,25 @@ class _ProfileScannerScreenState extends ConsumerState<ProfileScannerScreen> {
     _ensureValidation().updateInput(source: source, username: _controller.text);
   }
 
+  void _applyConnectedAccount(ApexAccount account, {ApexAccount? previous}) {
+    if (!mounted) return;
+    final current = _controller.text.trim();
+    final previousName = previous?.username.trim().toLowerCase();
+    final canOverwrite =
+        current.isEmpty ||
+        (previousName != null && current.toLowerCase() == previousName);
+    if (!canOverwrite) return;
+    setState(() => _source = account.source.wire);
+    _controller.text = account.username;
+    _controller.selection = TextSelection.collapsed(
+      offset: account.username.length,
+    );
+    _ensureValidation().updateInput(
+      source: account.source.wire,
+      username: account.username,
+    );
+  }
+
   Future<void> _scan() async {
     final name = _controller.text.trim();
     if (name.isEmpty) return;
@@ -75,6 +100,11 @@ class _ProfileScannerScreenState extends ConsumerState<ProfileScannerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(accountControllerProvider, (previous, next) {
+      final account = next.valueOrNull;
+      if (account == null) return;
+      _applyConnectedAccount(account, previous: previous?.valueOrNull);
+    });
     final state = ref.watch(profileScannerControllerProvider);
 
     return Scaffold(

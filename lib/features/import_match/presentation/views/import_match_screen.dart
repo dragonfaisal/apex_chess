@@ -60,6 +60,7 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
   //     toggle, and on dispose.
   Timer? _autoFetchDebounce;
   String? _lastAutoKey;
+  bool _hadConnectionIssue = false;
   static const Duration _autoFetchWindow = Duration(milliseconds: 600);
 
   @override
@@ -81,7 +82,16 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
     if (!mounted) return;
     final account = ref.read(accountControllerProvider).valueOrNull;
     if (account == null) return;
-    if (_controller.text.isNotEmpty) return;
+    _applyConnectedAccount(account);
+  }
+
+  void _applyConnectedAccount(ApexAccount account, {ApexAccount? previous}) {
+    final current = _controller.text.trim();
+    final previousName = previous?.username.trim().toLowerCase();
+    final canOverwrite =
+        current.isEmpty ||
+        (previousName != null && current.toLowerCase() == previousName);
+    if (!canOverwrite) return;
     final notifier = ref.read(importControllerProvider.notifier);
     final desiredSource = account.source == AccountSource.chessCom
         ? GameSource.chessCom
@@ -97,6 +107,46 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
     // Seed the dedupe key so the debounce timer doesn't instantly
     // fire on the prefill — user hasn't asked for a fetch yet.
     _lastAutoKey = '${desiredSource.name}:${account.username}';
+  }
+
+  void _onImportStateChanged(ImportState? previous, ImportState next) {
+    if (!mounted) return;
+    final error = next.errorMessage;
+    if (error != null && error != previous?.errorMessage) {
+      _hadConnectionIssue = true;
+      _showApexSnack(
+        next.games.isEmpty
+            ? 'Connection issue — try again when online'
+            : 'Offline — showing loaded games',
+        color: ApexColors.inaccuracy,
+      );
+      return;
+    }
+    final finishedFetch =
+        previous?.isLoading == true &&
+        !next.isLoading &&
+        next.errorMessage == null &&
+        next.hasFetched &&
+        next.games.isNotEmpty;
+    if (_hadConnectionIssue && finishedFetch) {
+      _hadConnectionIssue = false;
+      _showApexSnack('Synced', color: ApexColors.best);
+    }
+  }
+
+  void _showApexSnack(String message, {required Color color}) {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: color.withValues(alpha: 0.94),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
   }
 
   @override
@@ -162,6 +212,12 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<ImportState>(importControllerProvider, _onImportStateChanged);
+    ref.listen(accountControllerProvider, (previous, next) {
+      final account = next.valueOrNull;
+      if (account == null) return;
+      _applyConnectedAccount(account, previous: previous?.valueOrNull);
+    });
     final state = ref.watch(importControllerProvider);
     final notifier = ref.read(importControllerProvider.notifier);
 

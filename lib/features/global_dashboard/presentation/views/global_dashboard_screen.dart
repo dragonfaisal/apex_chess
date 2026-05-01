@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/core/domain/services/move_quality_display.dart';
+import 'package:apex_chess/features/account/presentation/controllers/account_controller.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/profile_stats/data/profile_stats_service.dart';
 import 'package:apex_chess/features/profile_stats/presentation/controllers/profile_stats_controller.dart';
@@ -29,6 +30,7 @@ class GlobalDashboardScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final stats = ref.watch(dashboardStatsProvider);
+    final allStats = ref.watch(dashboardAllStatsProvider);
 
     return Scaffold(
       body: Container(
@@ -38,7 +40,7 @@ class GlobalDashboardScreen extends ConsumerWidget {
             children: [
               _AppBar(showBackButton: showBackButton),
               Expanded(
-                child: stats.hasData
+                child: allStats.hasData
                     ? _DashboardBody(stats: stats)
                     : const _EmptyState(),
               ),
@@ -154,6 +156,9 @@ class _DashboardBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final activeFilter = ref.watch(dashboardColorFilterProvider);
+    final filterOnlyEmpty =
+        !stats.hasData && activeFilter != ColorPerspective.all;
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
       child: Column(
@@ -173,19 +178,76 @@ class _DashboardBody extends ConsumerWidget {
           const SizedBox(height: 14),
           const _ColorFilterBar(),
           const SizedBox(height: 12),
-          _AnalyzedSectionLabel(stats: stats),
-          const SizedBox(height: 10),
-          _KpiRow(stats: stats),
-          const SizedBox(height: 18),
-          _AccuracyTrendCard(stats: stats),
-          const SizedBox(height: 14),
-          _QualityPieCard(stats: stats),
-          const SizedBox(height: 14),
-          _ResultSplitCard(stats: stats),
-          const SizedBox(height: 14),
-          const _OpeningStatsCard(),
-          const SizedBox(height: 18),
-          const _RecentGamesTable(),
+          if (filterOnlyEmpty)
+            _FilterEmptyNotice(filter: activeFilter)
+          else ...[
+            _AnalyzedSectionLabel(stats: stats),
+            const SizedBox(height: 10),
+            _KpiRow(stats: stats),
+            const SizedBox(height: 18),
+            _AccuracyTrendCard(stats: stats),
+            const SizedBox(height: 14),
+            _QualityPieCard(stats: stats),
+            const SizedBox(height: 14),
+            _ResultSplitCard(stats: stats),
+            const SizedBox(height: 14),
+            const _OpeningStatsCard(),
+            const SizedBox(height: 18),
+            const _RecentGamesTable(),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _FilterEmptyNotice extends StatelessWidget {
+  const _FilterEmptyNotice({required this.filter});
+
+  final ColorPerspective filter;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = switch (filter) {
+      ColorPerspective.white => 'White',
+      ColorPerspective.black => 'Black',
+      ColorPerspective.all => 'All',
+    };
+    return GlassPanel(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      accentColor: ApexColors.sapphireBright,
+      accentAlpha: 0.16,
+      child: Row(
+        children: [
+          Icon(
+            Icons.filter_alt_off_rounded,
+            color: ApexColors.sapphireBright.withValues(alpha: 0.78),
+            size: 18,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'No $label reviews yet.',
+                  style: ApexTypography.bodyMedium.copyWith(
+                    color: ApexColors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Switch to All to view your analyzed games.',
+                  style: ApexTypography.bodyMedium.copyWith(
+                    color: ApexColors.textTertiary,
+                    fontSize: 11.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -252,6 +314,7 @@ class _ProfileStatsCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(liveProfileStatsProvider);
+    final account = ref.watch(accountControllerProvider).valueOrNull;
     return GlassPanel(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
       accentColor: ApexColors.aurora,
@@ -270,9 +333,15 @@ class _ProfileStatsCard extends ConsumerWidget {
               'Could not reach profile service. Retry in a moment.',
             ),
             data: (stats) {
-              if (stats == null || !stats.hasData) {
+              if (stats == null) {
                 return _profileFallback(
                   'Connect an account to stream live rating snapshots.',
+                );
+              }
+              if (!stats.hasData) {
+                return _profileFallback(
+                  '@${account?.username ?? stats.displayName}\n'
+                  'Connection issue — showing saved data.',
                 );
               }
               return _profileBody(stats);

@@ -118,6 +118,15 @@ final dashboardStatsProvider = Provider<DashboardStats>((ref) {
   return _buildStats(archive.games, account?.username, filter);
 });
 
+/// Baseline stats with no color filter. The view uses this to separate
+/// "no analyzed games anywhere" from "this specific color filter is
+/// empty".
+final dashboardAllStatsProvider = Provider<DashboardStats>((ref) {
+  final archive = ref.watch(archiveControllerProvider);
+  final account = ref.watch(accountControllerProvider).valueOrNull;
+  return _buildStats(archive.games, account?.username, ColorPerspective.all);
+});
+
 /// Top openings for the active perspective. Sorted desc by total
 /// games played so the most-seen lines live at the top — the Apex
 /// Academy's review queue pulls from here, prioritising entries
@@ -333,9 +342,16 @@ final dashboardPageProvider = NotifierProvider<DashboardPageController, int>(
 
 final dashboardVisibleGamesProvider = Provider<List<ArchivedGame>>((ref) {
   final games = ref.watch(archiveControllerProvider).games;
+  final account = ref.watch(accountControllerProvider).valueOrNull;
+  final filter = ref.watch(dashboardColorFilterProvider);
   final page = ref.watch(dashboardPageProvider);
   // Newest first for the table — the trend chart uses oldest-first.
-  final sorted = [...games]
+  final me = account?.username.toLowerCase();
+  final filtered = games.where((g) {
+    final match = _gameMatchesColor(g: g, me: me, filter: filter);
+    return match == true;
+  }).toList();
+  final sorted = [...filtered]
     ..sort((a, b) => b.analyzedAt.compareTo(a.analyzedAt));
   final start = page * dashboardPageSize;
   if (start >= sorted.length) return const [];

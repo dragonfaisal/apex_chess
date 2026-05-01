@@ -26,6 +26,11 @@ void main() {
     );
   });
 
+  test('connected handle matching trims spaces and ignores case', () {
+    final id = service.parsePgn(pgn, userHandle: '  AlFaIsAlPrO  ');
+    expect(id.userIsWhite, isFalse);
+  });
+
   test('PGN White handle auto-detects userColor white', () {
     final id = service.parsePgn(pgn, userHandle: 'dreplayernz');
     expect(id.userIsWhite, isTrue);
