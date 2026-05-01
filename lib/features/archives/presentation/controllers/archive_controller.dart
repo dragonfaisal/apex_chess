@@ -34,23 +34,29 @@ enum ArchiveResultFilter { any, wins, losses, draws }
 enum ArchiveColorFilter { any, white, black }
 
 /// Mode filter for the Quick/Deep split. `any` disables.
-enum ArchiveModeFilter { any, quick, deep }
+enum ArchiveModeFilter { any, quick, deep, offline }
 
 class ArchiveFilters {
   final ArchiveSort sort;
   final ArchiveResultFilter result;
+
   /// "me" player name used to interpret wins/losses. `null` disables
   /// the `result` filter (treated as `any`).
   final String? perspective;
+
   /// Only show games with at least this many brilliant moves.
   final int minBrilliants;
+
   /// When non-null, only games from this source are shown.
   final ArchiveSource? source;
+
   /// Only show games where the user (per [perspective]) played this
   /// colour. Requires `perspective != null` to have any effect.
   final ArchiveColorFilter color;
+
   /// Only show Quick / Deep scans (or both).
   final ArchiveModeFilter mode;
+
   /// Free-text filter applied to opponent name + opening name + ECO.
   /// Empty string disables the filter.
   final String search;
@@ -77,18 +83,16 @@ class ArchiveFilters {
     ArchiveColorFilter? color,
     ArchiveModeFilter? mode,
     String? search,
-  }) =>
-      ArchiveFilters(
-        sort: sort ?? this.sort,
-        result: result ?? this.result,
-        perspective:
-            clearPerspective ? null : (perspective ?? this.perspective),
-        minBrilliants: minBrilliants ?? this.minBrilliants,
-        source: clearSource ? null : (source ?? this.source),
-        color: color ?? this.color,
-        mode: mode ?? this.mode,
-        search: search ?? this.search,
-      );
+  }) => ArchiveFilters(
+    sort: sort ?? this.sort,
+    result: result ?? this.result,
+    perspective: clearPerspective ? null : (perspective ?? this.perspective),
+    minBrilliants: minBrilliants ?? this.minBrilliants,
+    source: clearSource ? null : (source ?? this.source),
+    color: color ?? this.color,
+    mode: mode ?? this.mode,
+    search: search ?? this.search,
+  );
 }
 
 // ─── State ───────────────────────────────────────────────────────────
@@ -112,13 +116,12 @@ class ArchiveState {
     bool? isLoading,
     String? error,
     bool clearError = false,
-  }) =>
-      ArchiveState(
-        games: games ?? this.games,
-        filters: filters ?? this.filters,
-        isLoading: isLoading ?? this.isLoading,
-        error: clearError ? null : (error ?? this.error),
-      );
+  }) => ArchiveState(
+    games: games ?? this.games,
+    filters: filters ?? this.filters,
+    isLoading: isLoading ?? this.isLoading,
+    error: clearError ? null : (error ?? this.error),
+  );
 
   /// Filtered + sorted view of [games]. Computed on every read —
   /// cheap for the expected scale and removes the cache-invalidation
@@ -131,9 +134,19 @@ class ArchiveState {
       if (g.brilliantCount < filters.minBrilliants) continue;
       if (filters.source != null && g.source != filters.source) continue;
       if (filters.mode != ArchiveModeFilter.any) {
-        final isQuick = g.analysisMode == AnalysisMode.quick;
-        if (filters.mode == ArchiveModeFilter.quick && !isQuick) continue;
-        if (filters.mode == ArchiveModeFilter.deep && isQuick) continue;
+        final profileId = g.analysisProfileId;
+        final isFast =
+            profileId == 'fast_review' ||
+            (profileId.isEmpty && g.analysisMode == AnalysisMode.quick);
+        final isDeep =
+            profileId == 'deep_review' ||
+            (profileId.isEmpty && g.analysisMode == AnalysisMode.deep);
+        final isOffline = profileId == 'offline_review';
+        if (filters.mode == ArchiveModeFilter.quick && !isFast) continue;
+        if (filters.mode == ArchiveModeFilter.deep && !isDeep) continue;
+        if (filters.mode == ArchiveModeFilter.offline && !isOffline) {
+          continue;
+        }
       }
       if (filters.color != ArchiveColorFilter.any && me != null) {
         final whiteIsMe = g.white.toLowerCase() == me;
@@ -160,10 +173,8 @@ class ArchiveState {
         final blackIsMe = g.black.toLowerCase() == me;
         if (!whiteIsMe && !blackIsMe) continue;
         final r = g.result;
-        final won = (whiteIsMe && r == '1-0') ||
-            (blackIsMe && r == '0-1');
-        final lost = (whiteIsMe && r == '0-1') ||
-            (blackIsMe && r == '1-0');
+        final won = (whiteIsMe && r == '1-0') || (blackIsMe && r == '0-1');
+        final lost = (whiteIsMe && r == '0-1') || (blackIsMe && r == '1-0');
         final drew = r == '1/2-1/2';
         switch (filters.result) {
           case ArchiveResultFilter.wins:
@@ -189,31 +200,27 @@ class ArchiveState {
         out.sort((a, b) => a.analyzedAt.compareTo(b.analyzedAt));
         break;
       case ArchiveSort.mostBrilliants:
-        out.sort((a, b) =>
-            b.brilliantCount.compareTo(a.brilliantCount));
+        out.sort((a, b) => b.brilliantCount.compareTo(a.brilliantCount));
         break;
       case ArchiveSort.mostBlunders:
-        out.sort(
-            (a, b) => b.blunderCount.compareTo(a.blunderCount));
+        out.sort((a, b) => b.blunderCount.compareTo(a.blunderCount));
         break;
       case ArchiveSort.highestAccuracy:
-        out.sort(
-            (a, b) => a.averageCpLoss.compareTo(b.averageCpLoss));
+        out.sort((a, b) => a.averageCpLoss.compareTo(b.averageCpLoss));
         break;
     }
     return out;
   }
 
-  int get totalBrilliants =>
-      games.fold(0, (s, g) => s + g.brilliantCount);
-  int get totalBlunders =>
-      games.fold(0, (s, g) => s + g.blunderCount);
+  int get totalBrilliants => games.fold(0, (s, g) => s + g.brilliantCount);
+  int get totalBlunders => games.fold(0, (s, g) => s + g.blunderCount);
 }
 
 // ─── Providers ───────────────────────────────────────────────────────
 
-final archiveRepositoryProvider =
-    FutureProvider<ArchiveRepository>((ref) => ArchiveRepository.open());
+final archiveRepositoryProvider = FutureProvider<ArchiveRepository>(
+  (ref) => ArchiveRepository.open(),
+);
 
 class ArchiveController extends Notifier<ArchiveState> {
   @override
@@ -226,11 +233,7 @@ class ArchiveController extends Notifier<ArchiveState> {
     try {
       final repo = await ref.read(archiveRepositoryProvider.future);
       final all = repo.loadAll();
-      state = state.copyWith(
-        games: all,
-        isLoading: false,
-        clearError: true,
-      );
+      state = state.copyWith(games: all, isLoading: false, clearError: true);
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
@@ -293,6 +296,14 @@ class ArchiveController extends Notifier<ArchiveState> {
       cachedTimeline: timeline,
       classifierVersion: kClassifierVersion,
       analysisMode: existing.analysisMode,
+      analysisProfileId: timeline.analysisProfileId,
+      providerId: timeline.providerId,
+      pgnHash: timeline.pgnHash ?? existing.pgnHash,
+      cacheKey: timeline.cacheKey ?? existing.cacheKey,
+      tacticalVerifierVersion: timeline.tacticalVerifierVersion,
+      openingBookVersion: timeline.openingBookVersion,
+      analysisSchemaVersion: timeline.analysisSchemaVersion,
+      timeControl: existing.timeControl,
     );
     await repo.save(updated);
     await _reload();
@@ -302,8 +313,7 @@ class ArchiveController extends Notifier<ArchiveState> {
     state = state.copyWith(filters: state.filters.copyWith(sort: sort));
   }
 
-  void setResultFilter(
-      ArchiveResultFilter result, String? perspective) {
+  void setResultFilter(ArchiveResultFilter result, String? perspective) {
     state = state.copyWith(
       filters: state.filters.copyWith(
         result: result,
@@ -340,9 +350,7 @@ class ArchiveController extends Notifier<ArchiveState> {
   }
 
   void setModeFilter(ArchiveModeFilter mode) {
-    state = state.copyWith(
-      filters: state.filters.copyWith(mode: mode),
-    );
+    state = state.copyWith(filters: state.filters.copyWith(mode: mode));
   }
 
   void setSearch(String query) {
@@ -365,5 +373,4 @@ class ArchiveController extends Notifier<ArchiveState> {
 }
 
 final archiveControllerProvider =
-    NotifierProvider<ArchiveController, ArchiveState>(
-        ArchiveController.new);
+    NotifierProvider<ArchiveController, ArchiveState>(ArchiveController.new);

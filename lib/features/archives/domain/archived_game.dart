@@ -8,8 +8,10 @@
 library;
 
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
+import 'package:apex_chess/core/domain/entities/analysis_profile.dart';
 import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
+import 'package:apex_chess/core/domain/services/move_quality_display.dart';
 
 /// Bumped on every classifier-behaviour change so cached timelines
 /// produced by an older brain are recomputed instead of silently
@@ -88,6 +90,16 @@ class ArchivedGame {
   /// / Forced gating since they require deep verification + MultiPV.
   final AnalysisMode analysisMode;
 
+  /// Product-level profile/provider provenance.
+  final String analysisProfileId;
+  final String providerId;
+  final String? pgnHash;
+  final String? cacheKey;
+  final int tacticalVerifierVersion;
+  final int openingBookVersion;
+  final int analysisSchemaVersion;
+  final String? timeControl;
+
   /// Per-classification counts. **Derived from the cached timeline**
   /// (when present) via [qualityCountsLive] so the counts can never
   /// drift from the actual classifications on disk — the
@@ -131,15 +143,35 @@ class ArchivedGame {
     this.cachedTimeline,
     this.classifierVersion = kClassifierVersion,
     this.analysisMode = AnalysisMode.deep,
-  });
+    String? analysisProfileId,
+    this.providerId = 'local_offline',
+    this.pgnHash,
+    this.cacheKey,
+    this.tacticalVerifierVersion = kApexTacticalVerifierVersion,
+    this.openingBookVersion = kApexOpeningBookVersion,
+    this.analysisSchemaVersion = kApexAnalysisSchemaVersion,
+    this.timeControl,
+  }) : analysisProfileId =
+           analysisProfileId ??
+           (analysisMode == AnalysisMode.quick ? 'fast_review' : 'deep_review');
 
   /// True when the cached timeline was produced under the *current*
   /// classifier brain. The archive list uses this to decide whether
   /// re-opening can use the cache or must trigger a re-scan.
   bool get isCacheCurrent =>
       classifierVersion == kClassifierVersion &&
+      tacticalVerifierVersion == kApexTacticalVerifierVersion &&
+      openingBookVersion == kApexOpeningBookVersion &&
+      analysisSchemaVersion == kApexAnalysisSchemaVersion &&
       cachedTimeline != null &&
-      cachedTimeline!.classifierVersion == kClassifierVersion;
+      cachedTimeline!.classifierVersion == kClassifierVersion &&
+      cachedTimeline!.tacticalVerifierVersion == kApexTacticalVerifierVersion &&
+      cachedTimeline!.openingBookVersion == kApexOpeningBookVersion &&
+      cachedTimeline!.analysisSchemaVersion == kApexAnalysisSchemaVersion &&
+      (cacheKey == null || cachedTimeline!.cacheKey == cacheKey);
+
+  AnalysisProfile get analysisProfile =>
+      AnalysisProfile.fromWire(analysisProfileId);
 
   /// Live quality counts — derived from the cached timeline when
   /// present, falling back to the persisted `qualityCounts` map for
@@ -155,10 +187,33 @@ class ArchivedGame {
   // [qualityCounts] map is still persisted for backward compatibility
   // with records that pre-date the cached-timeline schema.
   int get brilliantCount => qualityCountsLive[MoveQuality.brilliant] ?? 0;
+  int get greatCount => displayCount(ReviewMoveLabel.great);
   int get blunderCount => qualityCountsLive[MoveQuality.blunder] ?? 0;
   int get mistakeCount => qualityCountsLive[MoveQuality.mistake] ?? 0;
   int get inaccuracyCount => qualityCountsLive[MoveQuality.inaccuracy] ?? 0;
   int get missedWinCount => qualityCountsLive[MoveQuality.missedWin] ?? 0;
+  int get missCount => displayCount(ReviewMoveLabel.miss);
+
+  Map<ReviewMoveLabel, int> get displayQualityCountsLive {
+    final tl = cachedTimeline;
+    if (tl != null) {
+      final out = <ReviewMoveLabel, int>{};
+      for (final move in tl.moves) {
+        final bucket = MoveQualityDisplay.countBucketForMove(move);
+        out[bucket] = (out[bucket] ?? 0) + 1;
+      }
+      return out;
+    }
+    final out = <ReviewMoveLabel, int>{};
+    for (final entry in qualityCounts.entries) {
+      final bucket = MoveQualityDisplay.labelForQuality(entry.key);
+      out[bucket] = (out[bucket] ?? 0) + entry.value;
+    }
+    return out;
+  }
+
+  int displayCount(ReviewMoveLabel label) =>
+      displayQualityCountsLive[label] ?? 0;
 
   // ── Serialisation ──────────────────────────────────────────────
   // Hive can persist `Map<String, dynamic>` directly via its default
@@ -186,6 +241,14 @@ class ArchivedGame {
     'ecoCode': ecoCode,
     'classifierVersion': classifierVersion,
     'analysisMode': analysisMode.wire,
+    'analysisProfileId': analysisProfileId,
+    'providerId': providerId,
+    'pgnHash': pgnHash,
+    'cacheKey': cacheKey,
+    'tacticalVerifierVersion': tacticalVerifierVersion,
+    'openingBookVersion': openingBookVersion,
+    'analysisSchemaVersion': analysisSchemaVersion,
+    'timeControl': timeControl,
     if (cachedTimeline != null) 'cachedTimeline': cachedTimeline!.toJson(),
   };
 
@@ -222,6 +285,15 @@ class ArchivedGame {
       // ran the full ladder.
       classifierVersion: (j['classifierVersion'] as num?)?.toInt() ?? 1,
       analysisMode: AnalysisMode.fromWire(j['analysisMode'] as String?),
+      analysisProfileId: j['analysisProfileId'] as String?,
+      providerId: j['providerId'] as String? ?? 'local_offline',
+      pgnHash: j['pgnHash'] as String?,
+      cacheKey: j['cacheKey'] as String?,
+      tacticalVerifierVersion:
+          (j['tacticalVerifierVersion'] as num?)?.toInt() ?? 1,
+      openingBookVersion: (j['openingBookVersion'] as num?)?.toInt() ?? 1,
+      analysisSchemaVersion: (j['analysisSchemaVersion'] as num?)?.toInt() ?? 1,
+      timeControl: j['timeControl'] as String?,
     );
   }
 
@@ -257,6 +329,14 @@ class ArchivedGame {
       cachedTimeline: timeline,
       classifierVersion: kClassifierVersion,
       analysisMode: analysisMode,
+      analysisProfileId: timeline.analysisProfileId,
+      providerId: timeline.providerId,
+      pgnHash: timeline.pgnHash,
+      cacheKey: timeline.cacheKey,
+      tacticalVerifierVersion: timeline.tacticalVerifierVersion,
+      openingBookVersion: timeline.openingBookVersion,
+      analysisSchemaVersion: timeline.analysisSchemaVersion,
+      timeControl: h['TimeControl'],
     );
   }
 

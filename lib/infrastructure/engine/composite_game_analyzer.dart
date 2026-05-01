@@ -16,8 +16,8 @@ class CompositeGameAnalyzer {
   CompositeGameAnalyzer({
     required CloudGameAnalyzer cloud,
     required LocalGameAnalyzer local,
-  })  : _cloud = cloud,
-        _local = local;
+  }) : _cloud = cloud,
+       _local = local;
 
   final CloudGameAnalyzer _cloud;
   final LocalGameAnalyzer _local;
@@ -30,6 +30,8 @@ class CompositeGameAnalyzer {
   /// Public accessor for the cloud analyser — exposed so unit tests can
   /// reach it directly.
   CloudGameAnalyzer get cloud => _cloud;
+
+  String get localEngineVersion => _local.engineVersion;
 
   Future<AnalysisTimeline> analyzeFromPgn(
     String pgn, {

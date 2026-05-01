@@ -16,6 +16,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:apex_chess/app/di/providers.dart';
+import 'package:apex_chess/core/domain/entities/analysis_profile.dart';
+import 'package:apex_chess/core/domain/services/game_identity_service.dart';
 import 'package:apex_chess/features/account/domain/apex_account.dart';
 import 'package:apex_chess/features/account/presentation/controllers/account_controller.dart';
 import 'package:apex_chess/features/account/presentation/views/connect_account_screen.dart';
@@ -28,6 +30,7 @@ import 'package:apex_chess/features/import_match/presentation/views/import_match
 import 'package:apex_chess/features/live_play/presentation/views/live_play_screen.dart';
 import 'package:apex_chess/features/mistake_vault/data/mistake_vault_save_hook.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
+import 'package:apex_chess/features/pgn_review/domain/review_analysis_provider.dart';
 import 'package:apex_chess/features/pgn_review/presentation/views/review_summary_screen.dart';
 import 'package:apex_chess/features/profile/presentation/views/profile_screen.dart';
 import 'package:apex_chess/features/profile_scanner/presentation/views/profile_scanner_screen.dart';
@@ -54,11 +57,9 @@ class HomeScreen extends ConsumerWidget {
               return SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
                 child: ConstrainedBox(
-                  constraints:
-                      BoxConstraints(minHeight: constraints.maxHeight),
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
                   child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 24),
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -78,8 +79,9 @@ class HomeScreen extends ConsumerWidget {
                           ApexCopy.tagline,
                           textAlign: TextAlign.center,
                           style: ApexTypography.bodyMedium.copyWith(
-                            color: ApexColors.sapphireBright
-                                .withValues(alpha: 0.72),
+                            color: ApexColors.sapphireBright.withValues(
+                              alpha: 0.72,
+                            ),
                             letterSpacing: 2,
                             fontSize: 11,
                           ),
@@ -88,7 +90,8 @@ class HomeScreen extends ConsumerWidget {
                         _HeroPlayCard(
                           onTap: () => Navigator.of(context).push(
                             MaterialPageRoute(
-                                builder: (_) => const LivePlayScreen()),
+                              builder: (_) => const LivePlayScreen(),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 14),
@@ -101,17 +104,20 @@ class HomeScreen extends ConsumerWidget {
                               accent: ApexColors.sapphire,
                               onTap: () => Navigator.of(context).push(
                                 MaterialPageRoute(
-                                  builder: (_) =>
-                                      const ImportMatchScreen(),
+                                  builder: (_) => const ImportMatchScreen(),
                                 ),
                               ),
                             ),
                             _TileCard(
                               title: ApexCopy.analyzeGame,
-                              subtitle: 'Paste PGN · instant scan',
+                              subtitle: 'Paste PGN · review',
                               icon: Icons.auto_graph_rounded,
                               accent: ApexColors.aurora,
-                              onTap: () => _showPgnDialog(context, ref),
+                              onTap: () => _showPgnDialog(
+                                context,
+                                ref,
+                                account?.username,
+                              ),
                             ),
                             _TileCard(
                               title: ApexCopy.dashboardTitle,
@@ -120,20 +126,18 @@ class HomeScreen extends ConsumerWidget {
                               accent: ApexColors.emerald,
                               onTap: () => Navigator.of(context).push(
                                 MaterialPageRoute(
-                                  builder: (_) =>
-                                      const GlobalDashboardScreen(),
+                                  builder: (_) => const GlobalDashboardScreen(),
                                 ),
                               ),
                             ),
                             _TileCard(
                               title: ApexCopy.scannerTitle,
-                              subtitle: 'Fair-play radar',
+                              subtitle: 'Opponent review',
                               icon: Icons.radar_rounded,
                               accent: ApexColors.ruby,
                               onTap: () => Navigator.of(context).push(
                                 MaterialPageRoute(
-                                  builder: (_) =>
-                                      const ProfileScannerScreen(),
+                                  builder: (_) => const ProfileScannerScreen(),
                                 ),
                               ),
                             ),
@@ -144,14 +148,13 @@ class HomeScreen extends ConsumerWidget {
                               accent: ApexColors.emeraldBright,
                               onTap: () => Navigator.of(context).push(
                                 MaterialPageRoute(
-                                  builder: (_) =>
-                                      const ApexAcademyScreen(),
+                                  builder: (_) => const ApexAcademyScreen(),
                                 ),
                               ),
                             ),
                             _TileCard(
                               title: ApexCopy.archivesTitle,
-                              subtitle: 'Quantum scan vault',
+                              subtitle: 'Saved reviews',
                               icon: Icons.inventory_2_outlined,
                               accent: ApexColors.sapphireBright,
                               onTap: () => Navigator.of(context).push(
@@ -185,11 +188,15 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  void _showPgnDialog(BuildContext context, WidgetRef ref) async {
+  void _showPgnDialog(
+    BuildContext context,
+    WidgetRef ref,
+    String? connectedHandle,
+  ) async {
     final result = await showDialog<_PgnPasteResult>(
       context: context,
       barrierColor: ApexColors.spaceVoid.withValues(alpha: 0.72),
-      builder: (_) => const _PgnPasteDialog(),
+      builder: (_) => _PgnPasteDialog(connectedHandle: connectedHandle),
     );
     if (result == null) return;
     if (!context.mounted) return;
@@ -197,14 +204,17 @@ class HomeScreen extends ConsumerWidget {
   }
 
   void _startLocalAnalysis(
-      BuildContext context, WidgetRef ref, _PgnPasteResult result) {
+    BuildContext context,
+    WidgetRef ref,
+    _PgnPasteResult result,
+  ) {
     showDialog(
       context: context,
       barrierDismissible: false,
       barrierColor: ApexColors.spaceVoid.withValues(alpha: 0.72),
       builder: (_) => _LocalAnalysisProgressDialog(
         pgn: result.pgn,
-        mode: result.mode,
+        profile: result.profile,
         userIsWhite: result.userIsWhite,
         userHandle: result.userHandle,
       ),
@@ -225,12 +235,12 @@ class HomeScreen extends ConsumerWidget {
 class _PgnPasteResult {
   const _PgnPasteResult({
     required this.pgn,
-    required this.mode,
+    required this.profile,
     required this.userIsWhite,
     required this.userHandle,
   });
   final String pgn;
-  final AnalysisMode mode;
+  final AnalysisProfile profile;
 
   /// `true` → user played White, `false` → Black, `null` → unknown
   /// (ingest both sides' mistakes into the Vault; no board auto-flip).
@@ -246,18 +256,22 @@ class _PgnPasteResult {
 /// Quick / Deep analyse buttons. See [_PgnPasteResult] for why each
 /// field is needed.
 class _PgnPasteDialog extends StatefulWidget {
-  const _PgnPasteDialog();
+  const _PgnPasteDialog({this.connectedHandle});
+
+  final String? connectedHandle;
 
   @override
   State<_PgnPasteDialog> createState() => _PgnPasteDialogState();
 }
 
 class _PgnPasteDialogState extends State<_PgnPasteDialog> {
+  static const _identity = GameIdentityService();
   final _pgnController = TextEditingController();
   final _handleController = TextEditingController();
   // `null` == "unknown" — the default preserves the legacy PGN-paste
   // behaviour (both sides' mistakes ingested, no board flip).
   bool? _userIsWhite;
+  bool _sideTouched = false;
 
   @override
   void dispose() {
@@ -266,23 +280,40 @@ class _PgnPasteDialogState extends State<_PgnPasteDialog> {
     super.dispose();
   }
 
-  void _pop(AnalysisMode mode) {
+  void _pop(AnalysisProfile profile) {
     final pgn = _pgnController.text.trim();
     if (pgn.isEmpty) return;
     final handle = _handleController.text.trim();
-    Navigator.of(context).pop(_PgnPasteResult(
-      pgn: pgn,
-      mode: mode,
-      userIsWhite: _userIsWhite,
-      userHandle: handle.isEmpty ? null : handle,
-    ));
+    Navigator.of(context).pop(
+      _PgnPasteResult(
+        pgn: pgn,
+        profile: profile,
+        userIsWhite: _effectiveUserIsWhite,
+        userHandle: handle.isEmpty ? null : handle,
+      ),
+    );
+  }
+
+  bool? get _effectiveUserIsWhite {
+    if (_sideTouched) return _userIsWhite;
+    return _currentPreview.userIsWhite;
+  }
+
+  PgnGameIdentity get _currentPreview {
+    final handle = _handleController.text.trim().isEmpty
+        ? widget.connectedHandle
+        : _handleController.text.trim();
+    return _identity.parsePgn(
+      _pgnController.text,
+      userHandle: handle,
+      selectedUserIsWhite: _userIsWhite,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      insetPadding:
-          const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
       child: GlassPanel.dialog(
         accentColor: ApexColors.sapphire,
         child: SingleChildScrollView(
@@ -292,8 +323,11 @@ class _PgnPasteDialogState extends State<_PgnPasteDialog> {
             children: [
               Row(
                 children: [
-                  Icon(Icons.auto_graph_rounded,
-                      color: ApexColors.sapphire, size: 22),
+                  Icon(
+                    Icons.auto_graph_rounded,
+                    color: ApexColors.sapphire,
+                    size: 22,
+                  ),
                   const SizedBox(width: 10),
                   Text(
                     ApexCopy.pgnDialogTitle,
@@ -318,9 +352,8 @@ class _PgnPasteDialogState extends State<_PgnPasteDialog> {
                   fontSize: 12,
                   color: ApexColors.textPrimary,
                 ),
-                decoration: _dialogField(
-                  hint: ApexCopy.pgnDialogHint,
-                ),
+                decoration: _dialogField(hint: ApexCopy.pgnDialogHint),
+                onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -333,10 +366,11 @@ class _PgnPasteDialogState extends State<_PgnPasteDialog> {
                   fontSize: 12,
                   color: ApexColors.textPrimary,
                 ),
-                decoration: _dialogField(
-                  hint: 'Your handle (optional)',
-                ),
+                decoration: _dialogField(hint: 'Your handle (optional)'),
+                onChanged: (_) => setState(() {}),
               ),
+              const SizedBox(height: 12),
+              _PgnPreview(identity: _currentPreview),
               const SizedBox(height: 14),
               Text(
                 'You played as',
@@ -348,36 +382,38 @@ class _PgnPasteDialogState extends State<_PgnPasteDialog> {
               ),
               const SizedBox(height: 6),
               _SideSelector(
-                value: _userIsWhite,
-                onChanged: (v) => setState(() => _userIsWhite = v),
+                value: _sideTouched
+                    ? _userIsWhite
+                    : _currentPreview.userIsWhite,
+                onChanged: (v) => setState(() {
+                  _sideTouched = true;
+                  _userIsWhite = v;
+                }),
               ),
               const SizedBox(height: 18),
-              Row(
-                children: [
-                  Expanded(
-                    child: _DialogPrimaryAction(
-                      label: 'QUICK (D14)',
-                      icon: Icons.flash_on_rounded,
-                      onTap: () => _pop(AnalysisMode.quick),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _DialogPrimaryAction(
-                      label: 'DEEP (D22)',
-                      icon: Icons.auto_awesome_rounded,
-                      onTap: () => _pop(AnalysisMode.deep),
-                    ),
-                  ),
-                ],
+              _DialogPrimaryAction(
+                label: 'Fast Review',
+                icon: Icons.flash_on_rounded,
+                onTap: () => _pop(AnalysisProfile.fastReview),
+              ),
+              const SizedBox(height: 10),
+              _DialogPrimaryAction(
+                label: 'Deep Review',
+                icon: Icons.auto_awesome_rounded,
+                onTap: () => _pop(AnalysisProfile.deepReview),
+              ),
+              const SizedBox(height: 10),
+              _DialogPrimaryAction(
+                label: 'Offline Review',
+                icon: Icons.offline_bolt_rounded,
+                onTap: () => _pop(AnalysisProfile.offlineReview),
               ),
               const SizedBox(height: 8),
               // Phase 20.1 § 1: reinforce that Quick is preview-only
               // before the user commits to a mode. Deep is the
               // recommended path for trustworthy tactical badges.
               Text(
-                'Quick is a preview (≤D14, single PV). Deep (D22 + MultiPV) is '
-                'recommended for trustworthy Brilliant / Great / Forced verdicts.',
+                'Offline Review runs on this device and may be slower.',
                 style: ApexTypography.bodyMedium.copyWith(
                   color: ApexColors.textTertiary,
                   fontSize: 10,
@@ -393,25 +429,79 @@ class _PgnPasteDialogState extends State<_PgnPasteDialog> {
   }
 
   InputDecoration _dialogField({required String hint}) => InputDecoration(
-        hintText: hint,
-        hintStyle: ApexTypography.bodyMedium
-            .copyWith(color: ApexColors.textTertiary),
-        filled: true,
-        fillColor: ApexColors.deepSpace.withValues(alpha: 0.55),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: ApexColors.subtleBorder),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: ApexColors.subtleBorder),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-              color: ApexColors.sapphire.withValues(alpha: 0.55)),
-        ),
-      );
+    hintText: hint,
+    hintStyle: ApexTypography.bodyMedium.copyWith(
+      color: ApexColors.textTertiary,
+    ),
+    filled: true,
+    fillColor: ApexColors.deepSpace.withValues(alpha: 0.55),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: ApexColors.subtleBorder),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: ApexColors.subtleBorder),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(
+        color: ApexColors.sapphire.withValues(alpha: 0.55),
+      ),
+    ),
+  );
+}
+
+class _PgnPreview extends StatelessWidget {
+  const _PgnPreview({required this.identity});
+
+  final PgnGameIdentity identity;
+
+  @override
+  Widget build(BuildContext context) {
+    final opening = identity.opening ?? identity.eco ?? 'Opening not tagged';
+    final result = const GameIdentityService().resultLabel(
+      identity.result,
+      userIsWhite: identity.userIsWhite,
+    );
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: ApexColors.nebula.withValues(alpha: 0.48),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: ApexColors.subtleBorder, width: 0.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            identity.matchup,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: ApexTypography.titleMedium.copyWith(fontSize: 13),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '$result · ${identity.moveCount} moves',
+            style: ApexTypography.bodyMedium.copyWith(
+              color: ApexColors.textSecondary,
+              fontSize: 11,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            opening,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: ApexTypography.bodyMedium.copyWith(
+              color: ApexColors.sapphireBright,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Three-way segmented selector: White / Black / Unknown. Used by the
@@ -593,7 +683,7 @@ class _HeroPlayCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'LIVE ENGINE ROOM',
+                      'LIVE',
                       style: ApexTypography.bodyMedium.copyWith(
                         color: Colors.white.withValues(alpha: 0.8),
                         fontSize: 10,
@@ -612,7 +702,7 @@ class _HeroPlayCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Duel the engine · live eval · instant verdict',
+                      'Play · feedback · review',
                       style: ApexTypography.bodyMedium.copyWith(
                         color: Colors.white.withValues(alpha: 0.78),
                         fontSize: 11,
@@ -659,11 +749,7 @@ class _HomeTileGrid extends StatelessWidget {
           runSpacing: spacing,
           children: [
             for (final child in children)
-              SizedBox(
-                width: tileWidth,
-                height: 132,
-                child: child,
-              ),
+              SizedBox(width: tileWidth, height: 132, child: child),
           ],
         );
       },
@@ -759,12 +845,12 @@ class _TileCard extends StatelessWidget {
 class _LocalAnalysisProgressDialog extends ConsumerStatefulWidget {
   const _LocalAnalysisProgressDialog({
     required this.pgn,
-    this.mode = AnalysisMode.quick,
+    required this.profile,
     this.userIsWhite,
     this.userHandle,
   });
   final String pgn;
-  final AnalysisMode mode;
+  final AnalysisProfile profile;
 
   /// `true` → user played White, `false` → Black, `null` → unknown.
   /// When non-null the review board auto-flips for Black users and the
@@ -801,22 +887,32 @@ class _LocalAnalysisProgressDialogState
 
   Future<void> _runAnalysis() async {
     try {
-      final analyzer = ref.read(gameAnalyzerProvider);
-      // Phase A audit § 3: PGN paste now carries an explicit Quick/Deep
-      // choice and a user-side preference. Depth is derived from the
-      // mode (14 vs 22); the mode flag is what actually gates trophy
-      // tiers in the classifier.
-      final depth = widget.mode == AnalysisMode.quick ? 14 : 22;
-      final timeline = await analyzer.analyzeFromPgn(
-        widget.pgn,
-        depth: depth,
-        mode: widget.mode,
-        onProgress: (c, t) {
-          if (mounted) setState(() { _completed = c; _total = t; });
-        },
+      final pipeline = await ref.read(reviewAnalysisPipelineProvider.future);
+      final result = await pipeline.analyzeGame(
+        GameReviewRequest(
+          pgn: widget.pgn,
+          profile: widget.profile,
+          userIsWhite: widget.userIsWhite,
+          userHandle: widget.userHandle,
+          onProgress: (c, t) {
+            if (mounted) {
+              setState(() {
+                _completed = c;
+                _total = t;
+              });
+            }
+          },
+        ),
       );
+      final timeline = result.timeline;
+      final mode = widget.profile.id == AnalysisProfileId.fastReview
+          ? AnalysisMode.quick
+          : AnalysisMode.deep;
+      final depth = result.metadata.depth;
       if (mounted) {
-        ref.read(reviewControllerProvider.notifier).loadTimeline(
+        ref
+            .read(reviewControllerProvider.notifier)
+            .loadTimeline(
               timeline,
               // Auto-flip the board if the user told us they played
               // Black. Unknown-side PGNs keep White at the bottom.
@@ -825,7 +921,7 @@ class _LocalAnalysisProgressDialogState
               // colour so the coach card can attribute "Allowed
               // forced mate" correctly and surface the "Needs Deep
               // Scan" chip on Quick-mode ambiguous plies.
-              mode: widget.mode,
+              mode: mode,
               userIsWhite: widget.userIsWhite,
             );
         // Archive save is awaited so we have the id to hand the
@@ -837,18 +933,20 @@ class _LocalAnalysisProgressDialogState
           pgn: widget.pgn,
           depth: depth,
           source: ArchiveSource.pgn,
-          analysisMode: widget.mode,
+          analysisMode: mode,
         );
         if (archiveId != null) {
-          unawaited(saveMistakeDrillsFromTimeline(
-            ref: ref,
-            timeline: timeline,
-            archiveId: archiveId,
-            // When the user specified a colour on the paste dialog, only
-            // that side's mistakes flow into the Vault. Unknown-side
-            // paste keeps the legacy both-sides behaviour.
-            userIsWhite: widget.userIsWhite,
-          ));
+          unawaited(
+            saveMistakeDrillsFromTimeline(
+              ref: ref,
+              timeline: timeline,
+              archiveId: archiveId,
+              // When the user specified a colour on the paste dialog, only
+              // that side's mistakes flow into the Vault. Unknown-side
+              // paste keeps the legacy both-sides behaviour.
+              userIsWhite: widget.userIsWhite,
+            ),
+          );
         }
         if (!mounted) return;
         setState(() => _done = true);
@@ -871,18 +969,16 @@ class _LocalAnalysisProgressDialogState
         // user gets accuracy + counts + phase breakdown + CTAs before
         // jumping into move-by-move review. The summary screen's
         // "Review Moves" CTA pushes ReviewScreen itself.
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const ReviewSummaryScreen()),
-        );
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const ReviewSummaryScreen()));
       });
     }
 
     return Dialog(
-      insetPadding:
-          const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
       child: GlassPanel.dialog(
-        accentColor:
-            _error == null ? ApexColors.sapphire : ApexColors.ruby,
+        accentColor: _error == null ? ApexColors.sapphire : ApexColors.ruby,
         child: _error != null ? _errorContent() : _progressContent(),
       ),
     );
@@ -896,11 +992,13 @@ class _LocalAnalysisProgressDialogState
       children: [
         Row(
           children: [
-            Icon(Icons.flash_on_rounded,
-                color: ApexColors.sapphireBright, size: 20),
+            Icon(
+              Icons.flash_on_rounded,
+              color: ApexColors.sapphireBright,
+              size: 20,
+            ),
             const SizedBox(width: 10),
-            Text(ApexCopy.scanHeader(14),
-                style: ApexTypography.titleMedium),
+            Text(widget.profile.label, style: ApexTypography.titleMedium),
           ],
         ),
         const SizedBox(height: 18),
@@ -923,7 +1021,7 @@ class _LocalAnalysisProgressDialogState
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'QUANTUM SCAN',
+                    widget.profile.label.toUpperCase(),
                     style: ApexTypography.bodyMedium.copyWith(
                       color: ApexColors.textTertiary,
                       fontSize: 10,
@@ -942,15 +1040,16 @@ class _LocalAnalysisProgressDialogState
             value: progress,
             minHeight: 6,
             backgroundColor: ApexColors.subtleBorder,
-            valueColor:
-                const AlwaysStoppedAnimation(ApexColors.sapphireBright),
+            valueColor: const AlwaysStoppedAnimation(ApexColors.sapphireBright),
           ),
         ),
         const SizedBox(height: 12),
         Text(
-          '$_completed / $_total plies analysed',
-          style: ApexTypography.bodyMedium
-              .copyWith(color: ApexColors.textTertiary, fontSize: 12),
+          '$_completed / $_total plies analyzed',
+          style: ApexTypography.bodyMedium.copyWith(
+            color: ApexColors.textTertiary,
+            fontSize: 12,
+          ),
         ),
       ],
     );
@@ -963,12 +1062,14 @@ class _LocalAnalysisProgressDialogState
       children: [
         Row(
           children: [
-            Icon(Icons.error_outline_rounded,
-                color: ApexColors.ruby, size: 22),
+            Icon(Icons.error_outline_rounded, color: ApexColors.ruby, size: 22),
             const SizedBox(width: 10),
-            Text('Quantum Scan Error',
-                style: ApexTypography.titleMedium
-                    .copyWith(color: ApexColors.ruby)),
+            Text(
+              'Review Error',
+              style: ApexTypography.titleMedium.copyWith(
+                color: ApexColors.ruby,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 12),
@@ -978,8 +1079,7 @@ class _LocalAnalysisProgressDialogState
           alignment: Alignment.centerRight,
           child: TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text('OK',
-                style: TextStyle(color: ApexColors.sapphire)),
+            child: Text('OK', style: TextStyle(color: ApexColors.sapphire)),
           ),
         ),
       ],
@@ -1007,18 +1107,22 @@ class _AccountStrip extends ConsumerWidget {
           style: OutlinedButton.styleFrom(
             foregroundColor: ApexColors.emerald,
             side: BorderSide(
-                color: ApexColors.emerald.withValues(alpha: 0.55), width: 1),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              color: ApexColors.emerald.withValues(alpha: 0.55),
+              width: 1,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           ),
           // Pop back to home once the connect / skip resolves so the
           // user doesn't get stuck on the connect screen with no
           // forward navigation. ConnectAccountScreen.onComplete is the
           // sole signal it watches before doing anything navigation-y.
-          onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(
               builder: (innerCtx) => ConnectAccountScreen(
-                    onComplete: () => Navigator.of(innerCtx).pop(),
-                  ))),
+                onComplete: () => Navigator.of(innerCtx).pop(),
+              ),
+            ),
+          ),
           icon: const Icon(Icons.link_rounded, size: 16),
           label: const Text('CONNECT ACCOUNT'),
         ),
@@ -1032,23 +1136,27 @@ class _AccountStrip extends ConsumerWidget {
           color: Colors.transparent,
           child: InkWell(
             borderRadius: BorderRadius.circular(10),
-            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                builder: (_) => const ProfileScreen())),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const ProfileScreen()),
+            ),
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(10),
                 color: ApexColors.emerald.withValues(alpha: 0.12),
                 border: Border.all(
-                    color: ApexColors.emerald.withValues(alpha: 0.4),
-                    width: 0.8),
+                  color: ApexColors.emerald.withValues(alpha: 0.4),
+                  width: 0.8,
+                ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.verified_rounded,
-                      size: 14, color: ApexColors.emeraldBright),
+                  const Icon(
+                    Icons.verified_rounded,
+                    size: 14,
+                    color: ApexColors.emeraldBright,
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     '${account!.source.wire.toUpperCase()} · ${account!.username}',
@@ -1067,10 +1175,14 @@ class _AccountStrip extends ConsumerWidget {
         const Spacer(),
         IconButton(
           tooltip: 'Profile',
-          onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => const ProfileScreen())),
-          icon: const Icon(Icons.account_circle_outlined,
-              size: 22, color: ApexColors.sapphireBright),
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const ProfileScreen()),
+          ),
+          icon: const Icon(
+            Icons.account_circle_outlined,
+            size: 22,
+            color: ApexColors.sapphireBright,
+          ),
         ),
       ],
     );

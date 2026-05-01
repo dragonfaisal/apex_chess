@@ -19,8 +19,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
+import 'package:apex_chess/core/domain/services/game_identity_service.dart';
+import 'package:apex_chess/core/domain/services/move_quality_display.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/pgn_review/domain/review_summary.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
@@ -90,6 +93,7 @@ class ReviewSummaryScreen extends ConsumerWidget {
               ),
             )
           : _SummaryBody(
+              timeline: timeline,
               summary: const ReviewSummaryService().compute(
                 timeline: timeline,
                 userIsWhite: state.userIsWhite,
@@ -105,6 +109,7 @@ class ReviewSummaryScreen extends ConsumerWidget {
 
 class _SummaryBody extends StatelessWidget {
   const _SummaryBody({
+    required this.timeline,
     required this.summary,
     required this.mode,
     this.onReanalyzeDeep,
@@ -112,6 +117,7 @@ class _SummaryBody extends StatelessWidget {
     this.onAddMistakesToAcademy,
   });
 
+  final AnalysisTimeline timeline;
   final ReviewSummary summary;
   final AnalysisMode mode;
   final OnReanalyzeDeep? onReanalyzeDeep;
@@ -126,23 +132,18 @@ class _SummaryBody extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
           children: [
-            _ResultHeader(summary: summary, mode: mode),
+            _ResultHeader(summary: summary, timeline: timeline),
             if (mode == AnalysisMode.quick) ...[
               const SizedBox(height: 10),
-              const _QuickScanBanner(),
+              const _FastReviewBanner(),
             ] else ...[
               const SizedBox(height: 10),
-              const _DeepMultiPvNotice(),
+              const _DeepReviewNotice(),
             ],
             const SizedBox(height: 16),
-            _AccuracyRow(summary: summary),
+            _PlayerCardsRow(summary: summary, timeline: timeline),
             const SizedBox(height: 16),
-            // Phase 20.1 device feedback § 4: per-player split is the
-            // primary counts view when we know the user's colour.
-            if (summary.userIsWhite != null)
-              _PerPlayerCounts(counts: summary.counts)
-            else
-              _CountsStrip(counts: summary.counts),
+            _MoveQualityTable(counts: summary.counts),
             const SizedBox(height: 16),
             _HighlightsBlock(summary: summary),
             const SizedBox(height: 16),
@@ -164,15 +165,18 @@ class _SummaryBody extends StatelessWidget {
 // ── Result / opening header ────────────────────────────────────────
 
 class _ResultHeader extends StatelessWidget {
-  const _ResultHeader({required this.summary, required this.mode});
+  const _ResultHeader({required this.summary, required this.timeline});
 
   final ReviewSummary summary;
-  final AnalysisMode mode;
+  final AnalysisTimeline timeline;
 
   @override
   Widget build(BuildContext context) {
-    final resultLabel = _resultLabel(summary.result, summary.userIsWhite);
-    final modeLabel = mode == AnalysisMode.quick ? 'QUICK' : 'DEEP';
+    final resultLabel = const GameIdentityService().resultLabel(
+      summary.result ?? '*',
+      userIsWhite: summary.userIsWhite,
+    );
+    final modeLabel = _profileLabel(timeline);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -220,30 +224,15 @@ class _ResultHeader extends StatelessWidget {
     );
   }
 
-  static String _resultLabel(String? result, bool? userIsWhite) {
-    if (result == null || result.isEmpty || result == '*') {
-      return 'Game unfinished';
+  static String _profileLabel(AnalysisTimeline timeline) {
+    switch (timeline.analysisProfileId) {
+      case 'fast_review':
+        return 'FAST';
+      case 'offline_review':
+        return 'OFFLINE';
+      default:
+        return 'DEEP';
     }
-    if (userIsWhite == null) {
-      switch (result) {
-        case '1-0':
-          return 'White won';
-        case '0-1':
-          return 'Black won';
-        case '1/2-1/2':
-          return 'Draw';
-        default:
-          return result;
-      }
-    }
-    final userWon =
-        (userIsWhite && result == '1-0') || (!userIsWhite && result == '0-1');
-    final userLost =
-        (userIsWhite && result == '0-1') || (!userIsWhite && result == '1-0');
-    if (result == '1/2-1/2') return 'Draw';
-    if (userWon) return 'You won';
-    if (userLost) return 'You lost';
-    return result;
   }
 }
 
@@ -254,7 +243,7 @@ class _ModePill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isQuick = label == 'QUICK';
+    final isQuick = label == 'FAST';
     final color = isQuick ? ApexColors.inaccuracy : ApexColors.electricBlue;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -275,8 +264,158 @@ class _ModePill extends StatelessWidget {
   }
 }
 
+// ── Player cards ───────────────────────────────────────────────────
+
+class _PlayerCardsRow extends StatelessWidget {
+  const _PlayerCardsRow({required this.summary, required this.timeline});
+
+  final ReviewSummary summary;
+  final AnalysisTimeline timeline;
+
+  @override
+  Widget build(BuildContext context) {
+    final h = timeline.headers;
+    return Row(
+      children: [
+        Expanded(
+          child: _PlayerCard(
+            name: h['White'] ?? 'White',
+            rating: h['WhiteElo'],
+            colorLabel: 'White',
+            result: _sideResult('1-0'),
+            accuracy: summary.userIsWhite == true
+                ? summary.userAccuracyPct
+                : summary.opponentAccuracyPct,
+            acpl: summary.userIsWhite == true
+                ? summary.userAverageCpLoss
+                : summary.opponentAverageCpLoss,
+            isUser: summary.userIsWhite == true,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _PlayerCard(
+            name: h['Black'] ?? 'Black',
+            rating: h['BlackElo'],
+            colorLabel: 'Black',
+            result: _sideResult('0-1'),
+            accuracy: summary.userIsWhite == false
+                ? summary.userAccuracyPct
+                : summary.opponentAccuracyPct,
+            acpl: summary.userIsWhite == false
+                ? summary.userAverageCpLoss
+                : summary.opponentAverageCpLoss,
+            isUser: summary.userIsWhite == false,
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _sideResult(String winningResult) {
+    final result = summary.result;
+    if (result == winningResult) return 'Won';
+    if (result == '1/2-1/2') return 'Draw';
+    if (result == '*' || result == null) return 'Open';
+    return 'Lost';
+  }
+}
+
+class _PlayerCard extends StatelessWidget {
+  const _PlayerCard({
+    required this.name,
+    required this.colorLabel,
+    required this.result,
+    required this.accuracy,
+    required this.acpl,
+    required this.isUser,
+    this.rating,
+  });
+
+  final String name;
+  final String? rating;
+  final String colorLabel;
+  final String result;
+  final double accuracy;
+  final double acpl;
+  final bool isUser;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = isUser ? ApexColors.sapphireBright : ApexColors.textTertiary;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: ApexColors.cardSurface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: ApexColors.subtleBorder, width: 0.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: ApexTypography.titleMedium.copyWith(
+                    color: ApexColors.textPrimary,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              if (isUser)
+                Text(
+                  'YOU',
+                  style: ApexTypography.labelLarge.copyWith(
+                    color: ApexColors.sapphireBright,
+                    fontSize: 10,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            [
+              colorLabel,
+              if (rating != null && rating!.isNotEmpty) rating!,
+              result,
+            ].join(' · '),
+            style: ApexTypography.bodyMedium.copyWith(
+              color: accent,
+              fontSize: 11,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            '${accuracy.toStringAsFixed(1)}%',
+            style: ApexTypography.headlineMedium.copyWith(
+              fontSize: 24,
+              color: ApexColors.textPrimary,
+              fontFamily: 'JetBrains Mono',
+            ),
+          ),
+          Text(
+            'ACPL ${acpl.toStringAsFixed(1)}',
+            style: ApexTypography.bodyMedium.copyWith(
+              color: ApexColors.textSecondary,
+              fontSize: 11,
+              fontFamily: 'JetBrains Mono',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // ── Accuracy row ───────────────────────────────────────────────────
 
+// ignore: unused_element
 class _AccuracyRow extends StatelessWidget {
   const _AccuracyRow({required this.summary});
 
@@ -383,8 +522,8 @@ class _AccuracyCard extends StatelessWidget {
 
 /// Deep-mode notice: local Stockfish runs PV1-PV3 and the classifier uses
 /// the alternate lines to verify Brilliant / Great / Forced reads.
-class _DeepMultiPvNotice extends StatelessWidget {
-  const _DeepMultiPvNotice();
+class _DeepReviewNotice extends StatelessWidget {
+  const _DeepReviewNotice();
 
   @override
   Widget build(BuildContext context) {
@@ -406,7 +545,7 @@ class _DeepMultiPvNotice extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Deep Review - MultiPV',
+                  'Deep Review',
                   style: ApexTypography.labelLarge.copyWith(
                     color: color,
                     fontSize: 11,
@@ -415,8 +554,7 @@ class _DeepMultiPvNotice extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'PV1-PV3 are checked before final Brilliant / Great / '
-                  'Forced verdicts. Quick Scan remains preview-only.',
+                  'Stronger tactical verification is active for final review.',
                   style: ApexTypography.bodyMedium.copyWith(
                     color: ApexColors.textSecondary,
                     fontSize: 11,
@@ -432,8 +570,8 @@ class _DeepMultiPvNotice extends StatelessWidget {
   }
 }
 
-class _QuickScanBanner extends StatelessWidget {
-  const _QuickScanBanner();
+class _FastReviewBanner extends StatelessWidget {
+  const _FastReviewBanner();
 
   @override
   Widget build(BuildContext context) {
@@ -455,7 +593,7 @@ class _QuickScanBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Quick Scan — preview only',
+                  'Fast Review',
                   style: ApexTypography.labelLarge.copyWith(
                     color: color.withAlpha(240),
                     fontSize: 11,
@@ -464,9 +602,8 @@ class _QuickScanBanner extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Brilliant / Great / Forced badges and final tactical '
-                  'verdicts require a Deep Review (D20+ with MultiPV). '
-                  'Tap "Re-analyze Deep" below for the trustworthy version.',
+                  'Fast local fallback is preview-only on this device. Use '
+                  'Deep Review for final tactical badges.',
                   style: ApexTypography.bodyMedium.copyWith(
                     color: ApexColors.textSecondary,
                     fontSize: 11,
@@ -482,8 +619,150 @@ class _QuickScanBanner extends StatelessWidget {
   }
 }
 
+// ── Move quality table ─────────────────────────────────────────────
+
+class _MoveQualityTable extends StatelessWidget {
+  const _MoveQualityTable({required this.counts});
+
+  final ReviewCounts counts;
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = MoveQualityDisplay.countOrder
+        .where(
+          (label) =>
+              (counts.whiteDisplayCounts[label] ?? 0) > 0 ||
+              (counts.blackDisplayCounts[label] ?? 0) > 0,
+        )
+        .toList(growable: false);
+    final visibleRows = rows.isEmpty ? MoveQualityDisplay.countOrder : rows;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: ApexColors.cardSurface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: ApexColors.subtleBorder, width: 0.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'MOVE QUALITY',
+            style: ApexTypography.labelLarge.copyWith(
+              fontSize: 10,
+              letterSpacing: 1.6,
+              color: ApexColors.textTertiary,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Label',
+                  style: ApexTypography.bodyMedium.copyWith(
+                    color: ApexColors.textTertiary,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+              const _CountHeader('White'),
+              const _CountHeader('Black'),
+            ],
+          ),
+          const SizedBox(height: 6),
+          for (final label in visibleRows)
+            _MoveQualityRow(
+              label: label,
+              white: counts.whiteDisplayCounts[label] ?? 0,
+              black: counts.blackDisplayCounts[label] ?? 0,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CountHeader extends StatelessWidget {
+  const _CountHeader(this.label);
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 56,
+      child: Text(
+        label,
+        textAlign: TextAlign.right,
+        style: ApexTypography.bodyMedium.copyWith(
+          color: ApexColors.textTertiary,
+          fontSize: 11,
+        ),
+      ),
+    );
+  }
+}
+
+class _MoveQualityRow extends StatelessWidget {
+  const _MoveQualityRow({
+    required this.label,
+    required this.white,
+    required this.black,
+  });
+
+  final ReviewMoveLabel label;
+  final int white;
+  final int black;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label.label,
+              style: ApexTypography.bodyMedium.copyWith(
+                color: label.color,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          _CountCell(white),
+          _CountCell(black),
+        ],
+      ),
+    );
+  }
+}
+
+class _CountCell extends StatelessWidget {
+  const _CountCell(this.value);
+  final int value;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 56,
+      child: Text(
+        '$value',
+        textAlign: TextAlign.right,
+        style: ApexTypography.bodyMedium.copyWith(
+          color: value == 0 ? ApexColors.textTertiary : ApexColors.textPrimary,
+          fontSize: 12,
+          fontFamily: 'JetBrains Mono',
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
 // ── Per-player counts ──────────────────────────────────────────────
 
+// ignore: unused_element
 class _PerPlayerCounts extends StatelessWidget {
   const _PerPlayerCounts({required this.counts});
 
@@ -642,6 +921,7 @@ class _PerTierRow extends StatelessWidget {
 
 // ── Counts strip ───────────────────────────────────────────────────
 
+// ignore: unused_element
 class _CountsStrip extends StatelessWidget {
   const _CountsStrip({required this.counts});
 
@@ -821,6 +1101,7 @@ class _HighlightRow extends StatelessWidget {
     }
     final m = move!;
     final moveNum = '${(m.ply ~/ 2) + 1}${m.ply.isEven ? '.' : '…'}';
+    final visibleLabel = MoveQualityDisplay.labelForMove(m);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -848,9 +1129,9 @@ class _HighlightRow extends StatelessWidget {
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      '$moveNum ${m.san} — ${m.classification.label}',
+                      '$moveNum ${m.san} — ${visibleLabel.label}',
                       style: ApexTypography.bodyMedium.copyWith(
-                        color: m.classification.color,
+                        color: visibleLabel.color,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
@@ -1041,7 +1322,7 @@ class _CtaRow extends StatelessWidget {
           OutlinedButton.icon(
             onPressed: () => onReanalyzeDeep!.call(),
             icon: const Icon(Icons.radar_rounded),
-            label: const Text('Re-analyze Deep'),
+            label: const Text('Re-analyze'),
             style: OutlinedButton.styleFrom(
               foregroundColor: ApexColors.inaccuracy,
               side: BorderSide(

@@ -11,3 +11,14 @@ const int kApexClassifierVersion = 4;
 
 /// Human-readable classifier profile written into debug metadata.
 const String kApexClassifierProfile = 'apex_tactical_v4';
+
+/// Bump when the tactical verifier output contract changes. This lets
+/// Phase 21 invalidate pre-product-architecture cached reviews without
+/// pretending the classifier thresholds changed.
+const int kApexTacticalVerifierVersion = 2;
+
+/// Bump when the persisted analysis result/cache schema changes.
+const int kApexAnalysisSchemaVersion = 2;
+
+/// Embedded ECO/opening-book data contract version.
+const int kApexOpeningBookVersion = 1;

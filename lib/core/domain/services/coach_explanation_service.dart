@@ -40,6 +40,7 @@ library;
 
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
+import 'package:apex_chess/core/domain/services/move_quality_display.dart';
 import 'package:apex_chess/core/utils/move_explanation.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 
@@ -204,11 +205,9 @@ class CoachExplanationService {
     final playedEqualsBest = _playedEqualsBest(m);
     if (playedEqualsBest) {
       final moveNum = _moveNumberLabel(m.ply);
-      final tier = _tierHeadline(m.classification);
+      final tier = MoveQualityDisplay.labelTextForMove(m);
       return CoachExplanation(
-        headline: tier == null
-            ? '$moveNum ${m.san} — Top engine choice'
-            : '$moveNum ${m.san} — $tier',
+        headline: '$moveNum ${m.san} — $tier',
         subline: _humanBestSubline(m),
       );
     }
@@ -226,7 +225,7 @@ class CoachExplanationService {
     // ── Rule 6: General coach copy — tier headline + classifier
     // message + optional better line.
     final moveNum = _moveNumberLabel(m.ply);
-    final tier = _tierHeadline(m.classification) ?? m.classification.label;
+    final tier = MoveQualityDisplay.labelTextForMove(m);
     final headline = '$moveNum ${m.san} — $tier';
 
     String subline = m.message.isNotEmpty
@@ -357,33 +356,6 @@ class CoachExplanationService {
   /// Short tier headline (without SAN prefix). `null` for tiers that
   /// don't need a badge-style headline beyond the classification's
   /// own [MoveQuality.label].
-  static String? _tierHeadline(MoveQuality q) {
-    switch (q) {
-      case MoveQuality.brilliant:
-        return 'Brilliant';
-      case MoveQuality.great:
-        return 'Great find';
-      case MoveQuality.best:
-        return 'Best';
-      case MoveQuality.excellent:
-        return 'Excellent';
-      case MoveQuality.good:
-        return 'Solid';
-      case MoveQuality.inaccuracy:
-        return 'Inaccuracy';
-      case MoveQuality.mistake:
-        return 'Mistake';
-      case MoveQuality.blunder:
-        return 'Blunder';
-      case MoveQuality.forced:
-        return 'Forced';
-      case MoveQuality.missedWin:
-        return 'Missed win';
-      case MoveQuality.book:
-        return null;
-    }
-  }
-
   /// When the classifier didn't write a `message` we still want a
   /// humane subline. Keeps parity with the previous inline fallbacks.
   static String _fallbackMessage(MoveQuality q) {
@@ -397,19 +369,19 @@ class CoachExplanationService {
       case MoveQuality.excellent:
         return 'Strong and accurate.';
       case MoveQuality.good:
-        return 'Solid - keeps the position under control.';
+        return 'Good - keeps the position under control.';
       case MoveQuality.inaccuracy:
         return 'Slight drift from the best continuation.';
       case MoveQuality.mistake:
         return 'A stronger plan was available.';
       case MoveQuality.missedWin:
-        return 'You were winning; this gave up the advantage.';
+        return 'A win was available here.';
       case MoveQuality.blunder:
         return 'Gives the opponent a decisive chance.';
       case MoveQuality.forced:
-        return 'Only move — any other loses.';
+        return 'Only move - any other loses.';
       case MoveQuality.book:
-        return 'Opening theory.';
+        return 'Opening book.';
     }
   }
 

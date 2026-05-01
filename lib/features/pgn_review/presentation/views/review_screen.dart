@@ -21,6 +21,7 @@ import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
 import 'package:apex_chess/core/domain/services/coach_explanation_service.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
+import 'package:apex_chess/core/domain/services/move_quality_display.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_chess_board.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_eval_bar.dart';
@@ -935,6 +936,8 @@ class _MoveRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final moveNum = '${(move.ply ~/ 2) + 1}${move.ply % 2 == 0 ? "." : "..."}';
     final cls = move.classification;
+    final visibleLabel = MoveQualityDisplay.labelForMove(move);
+    final visibleIcon = MoveQualityDisplay.iconQualityForMove(move);
     final evalText = _evalString(move);
     return Material(
       color: Colors.transparent,
@@ -944,10 +947,14 @@ class _MoveRow extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: isCurrent ? cls.color.withAlpha(28) : Colors.transparent,
+            color: isCurrent
+                ? visibleLabel.color.withAlpha(28)
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: isCurrent ? cls.color.withAlpha(120) : Colors.transparent,
+              color: isCurrent
+                  ? visibleLabel.color.withAlpha(120)
+                  : Colors.transparent,
               width: 0.7,
             ),
           ),
@@ -969,7 +976,7 @@ class _MoveRow extends StatelessWidget {
                 width: 22,
                 alignment: Alignment.center,
                 child: SvgPicture.asset(
-                  cls.svgAssetPath,
+                  visibleIcon.svgAssetPath,
                   width: 16,
                   height: 16,
                   fit: BoxFit.contain,
@@ -986,7 +993,7 @@ class _MoveRow extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: ApexTypography.bodyMedium.copyWith(
-                        color: cls.color,
+                        color: visibleLabel.color,
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),

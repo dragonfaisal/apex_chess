@@ -11,6 +11,8 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
+import 'package:apex_chess/core/domain/entities/analysis_profile.dart';
+import 'package:apex_chess/core/domain/services/analysis_cache_key.dart';
 
 import '../domain/archived_game.dart';
 import '../presentation/controllers/archive_controller.dart';
@@ -20,11 +22,7 @@ import '../presentation/controllers/archive_controller.dart';
 /// dependency for what is effectively a de-dup key (collisions are
 /// benign — latest analysis wins).
 String archiveIdForPgn(String pgn) {
-  // Mask to an unsigned 64-bit hex string so the box keys read cleanly
-  // in inspector tools and survive a JSON round-trip without scientific
-  // notation. `hashCode` is already 64-bit-ish on the VM, but on web
-  // targets it clamps to 32 bits; both are fine here.
-  return pgn.hashCode.toUnsigned(64).toRadixString(16);
+  return stablePgnHash(pgn);
 }
 
 /// Fire-and-forget save. Returns the resulting id so callers can log it.
@@ -43,7 +41,19 @@ Future<String?> saveAnalysisToArchive({
   AnalysisMode analysisMode = AnalysisMode.deep,
 }) async {
   try {
-    final id = archiveIdForPgn(pgn);
+    final profileId = AnalysisProfileId.fromWire(timeline.analysisProfileId);
+    final pgnHash = timeline.pgnHash ?? stablePgnHash(pgn);
+    final id =
+        timeline.cacheKey ??
+        buildAnalysisCacheKey(
+          pgnHash: pgnHash,
+          analysisProfileId: profileId,
+          providerId: timeline.providerId,
+          engineVersion: timeline.engineVersion,
+          classifierVersion: timeline.classifierVersion,
+          tacticalVerifierVersion: timeline.tacticalVerifierVersion,
+          openingBookVersion: timeline.openingBookVersion,
+        );
     final game = ArchivedGame.fromTimeline(
       timeline: timeline,
       id: id,

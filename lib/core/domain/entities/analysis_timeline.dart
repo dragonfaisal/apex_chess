@@ -28,6 +28,19 @@ class AnalysisTimeline {
   final String analysisMode;
   final int classifierVersion;
   final String engineVersion;
+  final String analysisProfileId;
+  final String providerId;
+  final int tacticalVerifierVersion;
+  final int openingBookVersion;
+  final int analysisSchemaVersion;
+  final int? depth;
+  final int? movetimeMs;
+  final int? multipv;
+  final bool candidateVerificationEnabled;
+  final DateTime? completedAt;
+  final String? pgnHash;
+  final String? cacheKey;
+  final bool cacheHit;
 
   const AnalysisTimeline({
     required this.moves,
@@ -37,7 +50,22 @@ class AnalysisTimeline {
     this.analysisMode = 'deep',
     this.classifierVersion = kApexClassifierVersion,
     this.engineVersion = 'unknown',
-  });
+    String? analysisProfileId,
+    this.providerId = 'local_offline',
+    this.tacticalVerifierVersion = kApexTacticalVerifierVersion,
+    this.openingBookVersion = kApexOpeningBookVersion,
+    this.analysisSchemaVersion = kApexAnalysisSchemaVersion,
+    this.depth,
+    this.movetimeMs,
+    this.multipv,
+    this.candidateVerificationEnabled = false,
+    this.completedAt,
+    this.pgnHash,
+    this.cacheKey,
+    this.cacheHit = false,
+  }) : analysisProfileId =
+           analysisProfileId ??
+           (analysisMode == 'quick' ? 'fast_review' : 'deep_review');
 
   /// Total number of plies.
   int get totalPlies => moves.length;
@@ -106,8 +134,70 @@ class AnalysisTimeline {
     'analysisMode': analysisMode,
     'classifierVersion': classifierVersion,
     'engineVersion': engineVersion,
+    'analysisProfileId': analysisProfileId,
+    'providerId': providerId,
+    'tacticalVerifierVersion': tacticalVerifierVersion,
+    'openingBookVersion': openingBookVersion,
+    'analysisSchemaVersion': analysisSchemaVersion,
+    'depth': depth,
+    'movetimeMs': movetimeMs,
+    'multipv': multipv,
+    'candidateVerificationEnabled': candidateVerificationEnabled,
+    'completedAt': completedAt?.toIso8601String(),
+    'pgnHash': pgnHash,
+    'cacheKey': cacheKey,
+    'cacheHit': cacheHit,
     'moves': moves.map((m) => m.toJson()).toList(growable: false),
   };
+
+  AnalysisTimeline copyWith({
+    List<MoveAnalysis>? moves,
+    String? startingFen,
+    Map<String, String>? headers,
+    List<double>? winPercentages,
+    String? analysisMode,
+    int? classifierVersion,
+    String? engineVersion,
+    String? analysisProfileId,
+    String? providerId,
+    int? tacticalVerifierVersion,
+    int? openingBookVersion,
+    int? analysisSchemaVersion,
+    int? depth,
+    int? movetimeMs,
+    int? multipv,
+    bool? candidateVerificationEnabled,
+    DateTime? completedAt,
+    String? pgnHash,
+    String? cacheKey,
+    bool? cacheHit,
+  }) {
+    return AnalysisTimeline(
+      moves: moves ?? this.moves,
+      startingFen: startingFen ?? this.startingFen,
+      headers: headers ?? this.headers,
+      winPercentages: winPercentages ?? this.winPercentages,
+      analysisMode: analysisMode ?? this.analysisMode,
+      classifierVersion: classifierVersion ?? this.classifierVersion,
+      engineVersion: engineVersion ?? this.engineVersion,
+      analysisProfileId: analysisProfileId ?? this.analysisProfileId,
+      providerId: providerId ?? this.providerId,
+      tacticalVerifierVersion:
+          tacticalVerifierVersion ?? this.tacticalVerifierVersion,
+      openingBookVersion: openingBookVersion ?? this.openingBookVersion,
+      analysisSchemaVersion:
+          analysisSchemaVersion ?? this.analysisSchemaVersion,
+      depth: depth ?? this.depth,
+      movetimeMs: movetimeMs ?? this.movetimeMs,
+      multipv: multipv ?? this.multipv,
+      candidateVerificationEnabled:
+          candidateVerificationEnabled ?? this.candidateVerificationEnabled,
+      completedAt: completedAt ?? this.completedAt,
+      pgnHash: pgnHash ?? this.pgnHash,
+      cacheKey: cacheKey ?? this.cacheKey,
+      cacheHit: cacheHit ?? this.cacheHit,
+    );
+  }
 
   factory AnalysisTimeline.fromJson(Map<dynamic, dynamic> j) {
     final headersRaw = (j['headers'] as Map?) ?? const {};
@@ -123,6 +213,23 @@ class AnalysisTimeline {
       analysisMode: j['analysisMode'] as String? ?? 'deep',
       classifierVersion: (j['classifierVersion'] as num?)?.toInt() ?? 1,
       engineVersion: j['engineVersion'] as String? ?? 'unknown',
+      analysisProfileId: j['analysisProfileId'] as String?,
+      providerId: j['providerId'] as String? ?? 'local_offline',
+      tacticalVerifierVersion:
+          (j['tacticalVerifierVersion'] as num?)?.toInt() ?? 1,
+      openingBookVersion: (j['openingBookVersion'] as num?)?.toInt() ?? 1,
+      analysisSchemaVersion: (j['analysisSchemaVersion'] as num?)?.toInt() ?? 1,
+      depth: (j['depth'] as num?)?.toInt(),
+      movetimeMs: (j['movetimeMs'] as num?)?.toInt(),
+      multipv: (j['multipv'] as num?)?.toInt(),
+      candidateVerificationEnabled:
+          j['candidateVerificationEnabled'] as bool? ?? false,
+      completedAt: j['completedAt'] == null
+          ? null
+          : DateTime.tryParse(j['completedAt'] as String),
+      pgnHash: j['pgnHash'] as String?,
+      cacheKey: j['cacheKey'] as String?,
+      cacheHit: j['cacheHit'] as bool? ?? false,
       moves: [for (final m in movesRaw) MoveAnalysis.fromJson(m as Map)],
     );
   }

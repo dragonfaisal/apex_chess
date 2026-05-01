@@ -13,6 +13,8 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:apex_chess/core/infrastructure/engine/engine.dart';
+import 'package:apex_chess/features/archives/data/archive_repository.dart';
+import 'package:apex_chess/features/pgn_review/domain/review_analysis_provider.dart';
 import 'package:apex_chess/features/user_validation/data/username_validator.dart';
 import 'package:apex_chess/infrastructure/api/cloud_eval_service.dart';
 import 'package:apex_chess/infrastructure/api/cloud_game_analyzer.dart';
@@ -116,6 +118,21 @@ final gameAnalyzerProvider = Provider<CompositeGameAnalyzer>((ref) {
   );
   final local = ref.watch(localGameAnalyzerProvider);
   return CompositeGameAnalyzer(cloud: cloud, local: local);
+});
+
+/// Shared review pipeline. All analysis entry points should call this instead
+/// of directly invoking a screen-local analyzer.
+final reviewAnalysisPipelineProvider = FutureProvider<GameReviewPipeline>((
+  ref,
+) async {
+  final analyzer = ref.watch(gameAnalyzerProvider);
+  final cache = await ArchiveRepository.open();
+  return GameReviewPipeline(
+    fastProvider: const OnlineFastReviewProvider(),
+    deepProvider: const OnlineDeepReviewProvider(),
+    offlineProvider: LocalOfflineReviewProvider(analyzer),
+    cacheRepository: cache,
+  );
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

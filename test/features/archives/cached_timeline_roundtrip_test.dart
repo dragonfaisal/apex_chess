@@ -9,6 +9,7 @@ import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/engine_line.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
+import 'package:apex_chess/core/domain/services/move_quality_display.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 
 void main() {
@@ -99,6 +100,8 @@ void main() {
     expect(round.cachedTimeline!.moves.last.engineLines.single.moveSan, 'c5');
     expect(round.cachedTimeline!.winPercentages, hasLength(2));
     expect(round.cachedTimeline!.startingFen, timeline.startingFen);
+    expect(round.analysisProfileId, 'deep_review');
+    expect(round.providerId, 'local_offline');
   });
 
   test('legacy record without cachedTimeline still parses', () {
@@ -151,6 +154,32 @@ void main() {
     );
     expect(game.classifierVersion, kClassifierVersion);
     expect(game.isCacheCurrent, isTrue);
+  });
+
+  test('cache invalidates when tactical verifier version is stale', () {
+    final timeline = AnalysisTimeline(
+      startingFen: 'start',
+      moves: const [],
+      winPercentages: const [],
+      headers: const {'White': 'A', 'Black': 'B', 'Result': '*'},
+      tacticalVerifierVersion: 1,
+    );
+    final game = ArchivedGame(
+      id: 'stale',
+      source: ArchiveSource.pgn,
+      white: 'A',
+      black: 'B',
+      result: '*',
+      analyzedAt: DateTime.now(),
+      depth: 14,
+      pgn: '*',
+      qualityCounts: const {},
+      averageCpLoss: 0,
+      totalPlies: 0,
+      cachedTimeline: timeline,
+      tacticalVerifierVersion: 1,
+    );
+    expect(game.isCacheCurrent, isFalse);
   });
 
   test(
@@ -213,4 +242,65 @@ void main() {
       expect(game.qualityCountsLive[MoveQuality.best], 1);
     },
   );
+
+  test('archive display counts use clean public buckets', () {
+    final timeline = AnalysisTimeline(
+      startingFen: 'start',
+      moves: [
+        MoveAnalysis(
+          ply: 0,
+          san: 'Nf3',
+          uci: 'g1f3',
+          fenBefore: 'start',
+          fenAfter: 'after',
+          winPercentBefore: 50,
+          winPercentAfter: 50,
+          deltaW: 0,
+          isWhiteMove: true,
+          classification: MoveQuality.forced,
+          reasonCode: 'ordinary_pv1',
+          message: '',
+        ),
+        MoveAnalysis(
+          ply: 1,
+          san: 'Qh4#',
+          uci: 'd8h4',
+          fenBefore: 'start',
+          fenAfter: 'mate',
+          winPercentBefore: 50,
+          winPercentAfter: 0,
+          deltaW: 0,
+          isWhiteMove: false,
+          classification: MoveQuality.best,
+          mateInAfter: -1,
+          message: '',
+        ),
+        MoveAnalysis(
+          ply: 2,
+          san: 'Re1',
+          uci: 'e1e2',
+          fenBefore: 'start',
+          fenAfter: 'after',
+          winPercentBefore: 80,
+          winPercentAfter: 75,
+          deltaW: -5,
+          isWhiteMove: true,
+          classification: MoveQuality.missedWin,
+          message: '',
+        ),
+      ],
+      winPercentages: const [50, 0, 75],
+      headers: const {'White': 'A', 'Black': 'B', 'Result': '0-1'},
+    );
+    final game = ArchivedGame.fromTimeline(
+      timeline: timeline,
+      id: 'display',
+      source: ArchiveSource.pgn,
+      depth: 14,
+      pgn: '*',
+    );
+    expect(game.displayCount(ReviewMoveLabel.best), 2);
+    expect(game.displayCount(ReviewMoveLabel.miss), 1);
+    expect(game.displayCount(ReviewMoveLabel.great), 0);
+  });
 }

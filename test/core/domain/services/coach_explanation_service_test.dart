@@ -451,7 +451,7 @@ void main() {
           mode: AnalysisMode.deep,
         ),
       );
-      expect(cls.headline.contains('Solid'), isTrue);
+      expect(cls.headline.contains('Good'), isTrue);
       expect(
         cls.subline.toLowerCase(),
         contains('opening phase'),

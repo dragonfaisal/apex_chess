@@ -13,6 +13,7 @@ import 'dart:math' as math;
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
+import 'package:apex_chess/core/domain/services/move_quality_display.dart';
 
 /// Which third of the game a ply belongs to. Boundaries match the
 /// rest-of-app convention (archive card, phase-perf widget):
@@ -42,6 +43,9 @@ class ReviewCounts {
     required this.brilliant,
     required this.great,
     required this.forced,
+    this.displayCounts = const <ReviewMoveLabel, int>{},
+    this.whiteDisplayCounts = const <ReviewMoveLabel, int>{},
+    this.blackDisplayCounts = const <ReviewMoveLabel, int>{},
     this.user = const ReviewCountsByTier.empty(),
     this.opponent = const ReviewCountsByTier.empty(),
   });
@@ -57,6 +61,9 @@ class ReviewCounts {
   final int brilliant;
   final int great;
   final int forced;
+  final Map<ReviewMoveLabel, int> displayCounts;
+  final Map<ReviewMoveLabel, int> whiteDisplayCounts;
+  final Map<ReviewMoveLabel, int> blackDisplayCounts;
 
   /// User-side counts (rendered in the YOU column on the summary).
   /// Empty when [ReviewSummary.userIsWhite] is `null`.
@@ -96,20 +103,22 @@ class ReviewCountsByTier {
     required this.brilliant,
     required this.great,
     required this.forced,
+    this.displayCounts = const <ReviewMoveLabel, int>{},
   });
 
   const ReviewCountsByTier.empty()
-      : best = 0,
-        excellent = 0,
-        good = 0,
-        book = 0,
-        inaccuracy = 0,
-        mistake = 0,
-        blunder = 0,
-        missedWin = 0,
-        brilliant = 0,
-        great = 0,
-        forced = 0;
+    : best = 0,
+      excellent = 0,
+      good = 0,
+      book = 0,
+      inaccuracy = 0,
+      mistake = 0,
+      blunder = 0,
+      missedWin = 0,
+      brilliant = 0,
+      great = 0,
+      forced = 0,
+      displayCounts = const <ReviewMoveLabel, int>{};
 
   final int best;
   final int excellent;
@@ -122,6 +131,7 @@ class ReviewCountsByTier {
   final int brilliant;
   final int great;
   final int forced;
+  final Map<ReviewMoveLabel, int> displayCounts;
 
   int forTier(MoveQuality q) {
     switch (q) {
@@ -149,6 +159,8 @@ class ReviewCountsByTier {
         return forced;
     }
   }
+
+  int forDisplayLabel(ReviewMoveLabel label) => displayCounts[label] ?? 0;
 
   int get total =>
       best +
@@ -297,8 +309,10 @@ class ReviewSummaryService {
     // Accuracy uses per-move Win% loss, Lichess-style. See
     // [_moveAccuracyPct] for the formula.
     final userAccuracy = _gameAccuracy(moves, userIsWhite: userIsWhite);
-    final oppAccuracy = _gameAccuracy(moves,
-        userIsWhite: userIsWhite == null ? null : !userIsWhite);
+    final oppAccuracy = _gameAccuracy(
+      moves,
+      userIsWhite: userIsWhite == null ? null : !userIsWhite,
+    );
 
     final phases = _phaseBreakdown(moves, userIsWhite: userIsWhite);
     final highlights = _highlights(moves, userIsWhite: userIsWhite);
@@ -325,16 +339,23 @@ class ReviewSummaryService {
     required bool? userIsWhite,
   }) {
     final tot = _MutableTier();
+    final white = _MutableTier();
+    final black = _MutableTier();
     final user = _MutableTier();
     final opp = _MutableTier();
 
     for (final m in moves) {
-      tot.bump(m.classification);
+      tot.bumpMove(m);
+      if (m.isWhiteMove) {
+        white.bumpMove(m);
+      } else {
+        black.bumpMove(m);
+      }
       if (userIsWhite == null) continue;
       if (m.isWhiteMove == userIsWhite) {
-        user.bump(m.classification);
+        user.bumpMove(m);
       } else {
-        opp.bump(m.classification);
+        opp.bumpMove(m);
       }
     }
 
@@ -350,6 +371,9 @@ class ReviewSummaryService {
       brilliant: tot.brilliant,
       great: tot.great,
       forced: tot.forced,
+      displayCounts: tot.displayCounts,
+      whiteDisplayCounts: white.displayCounts,
+      blackDisplayCounts: black.displayCounts,
       user: user.toCounts(),
       opponent: opp.toCounts(),
     );
@@ -538,6 +562,16 @@ class _MutableTier {
   int brilliant = 0;
   int great = 0;
   int forced = 0;
+  final Map<ReviewMoveLabel, int> _displayCounts = <ReviewMoveLabel, int>{};
+
+  Map<ReviewMoveLabel, int> get displayCounts =>
+      Map<ReviewMoveLabel, int>.unmodifiable(_displayCounts);
+
+  void bumpMove(MoveAnalysis move) {
+    bump(move.classification);
+    final bucket = MoveQualityDisplay.countBucketForMove(move);
+    _displayCounts[bucket] = (_displayCounts[bucket] ?? 0) + 1;
+  }
 
   void bump(MoveQuality q) {
     switch (q) {
@@ -567,16 +601,17 @@ class _MutableTier {
   }
 
   ReviewCountsByTier toCounts() => ReviewCountsByTier(
-        best: best,
-        excellent: excellent,
-        good: good,
-        book: book,
-        inaccuracy: inaccuracy,
-        mistake: mistake,
-        blunder: blunder,
-        missedWin: missedWin,
-        brilliant: brilliant,
-        great: great,
-        forced: forced,
-      );
+    best: best,
+    excellent: excellent,
+    good: good,
+    book: book,
+    inaccuracy: inaccuracy,
+    mistake: mistake,
+    blunder: blunder,
+    missedWin: missedWin,
+    brilliant: brilliant,
+    great: great,
+    forced: forced,
+    displayCounts: displayCounts,
+  );
 }

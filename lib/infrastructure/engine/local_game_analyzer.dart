@@ -99,6 +99,8 @@ class LocalGameAnalyzer {
   final int _depth;
   final Duration? _movetimeOverride;
 
+  String get engineVersion => _eval.engineVersion;
+
   Future<AnalysisTimeline> analyzeFromPgn(
     String pgn, {
     void Function(int completed, int total)? onProgress,
@@ -557,6 +559,15 @@ class LocalGameAnalyzer {
       analysisMode: mode.wire,
       classifierVersion: kApexClassifierVersion,
       engineVersion: _eval.engineVersion,
+      providerId: 'local_offline',
+      tacticalVerifierVersion: kApexTacticalVerifierVersion,
+      openingBookVersion: kApexOpeningBookVersion,
+      analysisSchemaVersion: kApexAnalysisSchemaVersion,
+      depth: searchDepth,
+      movetimeMs: searchMovetime.inMilliseconds,
+      multipv: analysisMultiPv,
+      candidateVerificationEnabled: mode == AnalysisMode.deep,
+      completedAt: DateTime.now().toUtc(),
     );
     // Phase A integration audit, step A: structured per-ply log so future
     // regressions can be triaged from a single device-log dump. No-op in

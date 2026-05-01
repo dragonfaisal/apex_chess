@@ -17,6 +17,7 @@ import 'package:apex_chess/features/account/presentation/controllers/account_con
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/archives/presentation/controllers/archive_controller.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
+import 'package:apex_chess/features/pgn_review/domain/review_analysis_provider.dart';
 import 'package:apex_chess/features/pgn_review/presentation/views/review_summary_screen.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
@@ -81,8 +82,7 @@ class ArchiveScreen extends ConsumerWidget {
     if (state.games.isEmpty) {
       return const _EmptyState(
         icon: Icons.inventory_2_outlined,
-        label:
-            'No archived intel yet. Run a Quantum Scan — results land here automatically.',
+        label: 'No saved reviews yet. Run a review and it will appear here.',
       );
     }
     if (visible.isEmpty) {
@@ -101,9 +101,8 @@ class ArchiveScreen extends ConsumerWidget {
         // "White vs Black" layout without a user perspective.
         userHandle: handle,
         onTap: () => _openArchivedGame(context, ref, visible[i]),
-        onDelete: () => ref
-            .read(archiveControllerProvider.notifier)
-            .remove(visible[i].id),
+        onDelete: () =>
+            ref.read(archiveControllerProvider.notifier).remove(visible[i].id),
       ),
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemCount: visible.length,
@@ -128,10 +127,12 @@ class ArchiveScreen extends ConsumerWidget {
     // unknown-side phrasing.
     final bool? userIsWhite = _userColorKnown(ref, game) ? !userIsBlack : null;
     if (game.isCacheCurrent && cached != null && cached.moves.isNotEmpty) {
-      ref.read(reviewControllerProvider.notifier).loadTimeline(
+      ref
+          .read(reviewControllerProvider.notifier)
+          .loadTimeline(
             cached,
             userIsBlack: userIsBlack,
-            mode: game.analysisMode,
+            mode: _modeForProfile(game.analysisProfileId),
             userIsWhite: userIsWhite,
           );
       Navigator.of(context).push(
@@ -148,19 +149,22 @@ class ArchiveScreen extends ConsumerWidget {
       builder: (_) => const _ReanalysisDialog(),
     );
     try {
-      final analyzer = ref.read(gameAnalyzerProvider);
-      final timeline = await analyzer.analyzeFromPgn(
-        game.pgn,
-        depth: game.depth,
-        // Re-analysis must honour the original Quick/Deep choice so a
-        // Quick archive doesn't silently re-run as Deep (and acquire
-        // Brilliant / Great / Forced tags it never had).
-        mode: game.analysisMode,
+      final pipeline = await ref.read(reviewAnalysisPipelineProvider.future);
+      final result = await pipeline.analyzeGame(
+        GameReviewRequest(
+          pgn: game.pgn,
+          profile: game.analysisProfile,
+          userIsWhite: userIsWhite,
+        ),
       );
-      ref.read(reviewControllerProvider.notifier).loadTimeline(
+      final timeline = result.timeline;
+      final mode = _modeForProfile(game.analysisProfileId);
+      ref
+          .read(reviewControllerProvider.notifier)
+          .loadTimeline(
             timeline,
             userIsBlack: userIsBlack,
-            mode: game.analysisMode,
+            mode: mode,
             userIsWhite: userIsWhite,
           );
       // Persist the freshly-computed timeline back onto the archive
@@ -171,7 +175,9 @@ class ArchiveScreen extends ConsumerWidget {
         await ref
             .read(archiveControllerProvider.notifier)
             .updateCachedTimeline(game.id, timeline);
-      } catch (_) {/* persistence is best-effort */}
+      } catch (_) {
+        /* persistence is best-effort */
+      }
       if (!navigator.mounted) return;
       navigator.pop();
       navigator.push(
@@ -180,10 +186,12 @@ class ArchiveScreen extends ConsumerWidget {
     } catch (e) {
       if (!navigator.mounted) return;
       navigator.pop();
-      messenger.showSnackBar(SnackBar(
-        content: Text('Re-analysis failed: $e'),
-        backgroundColor: ApexColors.rubyDeep,
-      ));
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Re-analysis failed: $e'),
+          backgroundColor: ApexColors.rubyDeep,
+        ),
+      );
     }
   }
 
@@ -209,6 +217,10 @@ class ArchiveScreen extends ConsumerWidget {
     return game.white.trim().toLowerCase() == me ||
         game.black.trim().toLowerCase() == me;
   }
+
+  static AnalysisMode _modeForProfile(String profileId) {
+    return profileId == 'fast_review' ? AnalysisMode.quick : AnalysisMode.deep;
+  }
 }
 
 // ── Header ────────────────────────────────────────────────────────────
@@ -232,17 +244,22 @@ class _Header extends StatelessWidget {
         children: [
           IconButton(
             onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                color: ApexColors.textPrimary, size: 18),
+            icon: const Icon(
+              Icons.arrow_back_ios_new_rounded,
+              color: ApexColors.textPrimary,
+              size: 18,
+            ),
           ),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(ApexCopy.archivesTitle,
-                    style: ApexTypography.headlineMedium.copyWith(
-                      letterSpacing: 3,
-                    )),
+                Text(
+                  ApexCopy.archivesTitle,
+                  style: ApexTypography.headlineMedium.copyWith(
+                    letterSpacing: 3,
+                  ),
+                ),
                 const SizedBox(height: 2),
                 Text(
                   '$gamesCount games · $brilliants brilliants · $blunders blunders',
@@ -326,45 +343,55 @@ class _FilterBar extends ConsumerWidget {
   }
 
   String _sourceLabel(ArchiveSource? s) => switch (s) {
-        null => 'All sources',
-        ArchiveSource.chessCom => 'Chess.com',
-        ArchiveSource.lichess => 'Lichess',
-        ArchiveSource.pgn => 'PGN paste',
-      };
+    null => 'All sources',
+    ArchiveSource.chessCom => 'Chess.com',
+    ArchiveSource.lichess => 'Lichess',
+    ArchiveSource.pgn => 'PGN paste',
+  };
 
   String _modeLabel(ArchiveModeFilter m) => switch (m) {
-        ArchiveModeFilter.any => 'Any mode',
-        ArchiveModeFilter.quick => 'Quick only',
-        ArchiveModeFilter.deep => 'Deep only',
-      };
+    ArchiveModeFilter.any => 'Any mode',
+    ArchiveModeFilter.quick => 'Fast only',
+    ArchiveModeFilter.deep => 'Deep only',
+    ArchiveModeFilter.offline => 'Offline only',
+  };
 
   String _colorLabel(ArchiveColorFilter c) => switch (c) {
-        ArchiveColorFilter.any => 'Any colour',
-        ArchiveColorFilter.white => 'You: White',
-        ArchiveColorFilter.black => 'You: Black',
-      };
+    ArchiveColorFilter.any => 'Any colour',
+    ArchiveColorFilter.white => 'You: White',
+    ArchiveColorFilter.black => 'You: Black',
+  };
 
   void _showSourceSheet(BuildContext context, WidgetRef ref) {
     _showSheet(context, 'Source', [
-      ('All sources', () {
-        ref.read(archiveControllerProvider.notifier).setSource(null);
-        Navigator.of(context).pop();
-      }),
-      for (final s in ArchiveSource.values)
-        (_sourceLabel(s), () {
-          ref.read(archiveControllerProvider.notifier).setSource(s);
+      (
+        'All sources',
+        () {
+          ref.read(archiveControllerProvider.notifier).setSource(null);
           Navigator.of(context).pop();
-        }),
+        },
+      ),
+      for (final s in ArchiveSource.values)
+        (
+          _sourceLabel(s),
+          () {
+            ref.read(archiveControllerProvider.notifier).setSource(s);
+            Navigator.of(context).pop();
+          },
+        ),
     ]);
   }
 
   void _showModeSheet(BuildContext context, WidgetRef ref) {
     _showSheet(context, 'Analysis mode', [
       for (final m in ArchiveModeFilter.values)
-        (_modeLabel(m), () {
-          ref.read(archiveControllerProvider.notifier).setModeFilter(m);
-          Navigator.of(context).pop();
-        }),
+        (
+          _modeLabel(m),
+          () {
+            ref.read(archiveControllerProvider.notifier).setModeFilter(m);
+            Navigator.of(context).pop();
+          },
+        ),
     ]);
   }
 
@@ -377,38 +404,44 @@ class _FilterBar extends ConsumerWidget {
           : 'Filter by your colour ($current)',
       [
         for (final c in ArchiveColorFilter.values)
-          (_colorLabel(c), () {
-            ref
-                .read(archiveControllerProvider.notifier)
-                .setColorFilter(c, perspective: current);
-            Navigator.of(context).pop();
-          }),
+          (
+            _colorLabel(c),
+            () {
+              ref
+                  .read(archiveControllerProvider.notifier)
+                  .setColorFilter(c, perspective: current);
+              Navigator.of(context).pop();
+            },
+          ),
       ],
     );
   }
 
   String _sortLabel(ArchiveSort s) => switch (s) {
-        ArchiveSort.newest => 'Newest',
-        ArchiveSort.oldest => 'Oldest',
-        ArchiveSort.mostBrilliants => 'Most brilliants',
-        ArchiveSort.mostBlunders => 'Most blunders',
-        ArchiveSort.highestAccuracy => 'Highest accuracy',
-      };
+    ArchiveSort.newest => 'Newest',
+    ArchiveSort.oldest => 'Oldest',
+    ArchiveSort.mostBrilliants => 'Most brilliants',
+    ArchiveSort.mostBlunders => 'Most blunders',
+    ArchiveSort.highestAccuracy => 'Highest accuracy',
+  };
 
   String _resultLabel(ArchiveResultFilter r) => switch (r) {
-        ArchiveResultFilter.any => 'All results',
-        ArchiveResultFilter.wins => 'Wins',
-        ArchiveResultFilter.losses => 'Losses',
-        ArchiveResultFilter.draws => 'Draws',
-      };
+    ArchiveResultFilter.any => 'All results',
+    ArchiveResultFilter.wins => 'Wins',
+    ArchiveResultFilter.losses => 'Losses',
+    ArchiveResultFilter.draws => 'Draws',
+  };
 
   void _showSortSheet(BuildContext context, WidgetRef ref) {
     _showSheet(context, 'Sort by', [
       for (final s in ArchiveSort.values)
-        (_sortLabel(s), () {
-          ref.read(archiveControllerProvider.notifier).setSort(s);
-          Navigator.of(context).pop();
-        }),
+        (
+          _sortLabel(s),
+          () {
+            ref.read(archiveControllerProvider.notifier).setSort(s);
+            Navigator.of(context).pop();
+          },
+        ),
     ]);
   }
 
@@ -421,12 +454,15 @@ class _FilterBar extends ConsumerWidget {
           : 'Result for $current',
       [
         for (final r in ArchiveResultFilter.values)
-          (_resultLabel(r), () {
-            ref
-                .read(archiveControllerProvider.notifier)
-                .setResultFilter(r, current);
-            Navigator.of(context).pop();
-          }),
+          (
+            _resultLabel(r),
+            () {
+              ref
+                  .read(archiveControllerProvider.notifier)
+                  .setResultFilter(r, current);
+              Navigator.of(context).pop();
+            },
+          ),
       ],
     );
   }
@@ -434,12 +470,13 @@ class _FilterBar extends ConsumerWidget {
   void _showBrilliantsSheet(BuildContext context, WidgetRef ref) {
     _showSheet(context, 'Minimum brilliants', [
       for (final n in const [0, 1, 2, 3, 5])
-        (n == 0 ? 'Any' : '≥ $n', () {
-          ref
-              .read(archiveControllerProvider.notifier)
-              .setMinBrilliants(n);
-          Navigator.of(context).pop();
-        }),
+        (
+          n == 0 ? 'Any' : '≥ $n',
+          () {
+            ref.read(archiveControllerProvider.notifier).setMinBrilliants(n);
+            Navigator.of(context).pop();
+          },
+        ),
     ]);
   }
 
@@ -470,9 +507,12 @@ class _FilterBar extends ConsumerWidget {
             for (final (label, cb) in items)
               ListTile(
                 onTap: cb,
-                title: Text(label,
-                    style: ApexTypography.bodyLarge
-                        .copyWith(color: ApexColors.textPrimary)),
+                title: Text(
+                  label,
+                  style: ApexTypography.bodyLarge.copyWith(
+                    color: ApexColors.textPrimary,
+                  ),
+                ),
               ),
             const SizedBox(height: 12),
           ],
@@ -525,29 +565,36 @@ class _ArchiveSearchFieldState extends ConsumerState<_ArchiveSearchField> {
       ),
       decoration: InputDecoration(
         isDense: true,
-        prefixIcon: const Icon(Icons.search_rounded,
-            size: 16, color: ApexColors.textTertiary),
+        prefixIcon: const Icon(
+          Icons.search_rounded,
+          size: 16,
+          color: ApexColors.textTertiary,
+        ),
         hintText: 'Search opponent, opening, ECO…',
-        hintStyle: ApexTypography.bodyMedium
-            .copyWith(color: ApexColors.textTertiary, fontSize: 12),
+        hintStyle: ApexTypography.bodyMedium.copyWith(
+          color: ApexColors.textTertiary,
+          fontSize: 12,
+        ),
         filled: true,
         fillColor: ApexColors.nebula.withValues(alpha: 0.6),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(
-              color: ApexColors.stardustLine.withValues(alpha: 0.4)),
+            color: ApexColors.stardustLine.withValues(alpha: 0.4),
+          ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(
-              color: ApexColors.stardustLine.withValues(alpha: 0.4)),
+            color: ApexColors.stardustLine.withValues(alpha: 0.4),
+          ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(
-              color: ApexColors.sapphire.withValues(alpha: 0.55)),
+            color: ApexColors.sapphire.withValues(alpha: 0.55),
+          ),
         ),
       ),
       onChanged: (v) =>
@@ -557,8 +604,11 @@ class _ArchiveSearchFieldState extends ConsumerState<_ArchiveSearchField> {
 }
 
 class _FilterChip extends StatelessWidget {
-  const _FilterChip(
-      {required this.label, required this.icon, required this.onTap});
+  const _FilterChip({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
   final String label;
   final IconData icon;
   final VoidCallback onTap;
@@ -588,12 +638,14 @@ class _FilterChip extends StatelessWidget {
             children: [
               Icon(icon, size: 14, color: ApexColors.sapphireBright),
               const SizedBox(width: 6),
-              Text(label,
-                  style: ApexTypography.bodyMedium.copyWith(
-                    color: ApexColors.textPrimary,
-                    fontSize: 12,
-                    letterSpacing: 0.5,
-                  )),
+              Text(
+                label,
+                style: ApexTypography.bodyMedium.copyWith(
+                  color: ApexColors.textPrimary,
+                  fontSize: 12,
+                  letterSpacing: 0.5,
+                ),
+              ),
             ],
           ),
         ),
@@ -635,9 +687,7 @@ class _ArchiveCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final accent = game.brilliantCount > 0
         ? ApexColors.aurora
-        : (game.blunderCount >= 3
-            ? ApexColors.ruby
-            : ApexColors.sapphire);
+        : (game.blunderCount >= 3 ? ApexColors.ruby : ApexColors.sapphire);
     final userIsBlack = _userIsBlack;
     final matchupText = _matchupText(userIsBlack);
     final acplText = _acplText(userIsBlack);
@@ -663,9 +713,12 @@ class _ArchiveCard extends StatelessWidget {
                     runSpacing: 4,
                     children: [
                       _SourcePill(source: game.source),
-                      _ResultPill(result: game.result),
+                      _ResultPill(
+                        label: _resultText(userIsBlack),
+                        result: game.result,
+                      ),
                       _DepthPill(depth: game.depth),
-                      _ModePill(mode: game.analysisMode),
+                      _ModePill(game: game),
                       if (userIsBlack != null)
                         _UserSidePill(isBlack: userIsBlack),
                     ],
@@ -673,8 +726,10 @@ class _ArchiveCard extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     matchupText,
-                    style: ApexTypography.titleMedium
-                        .copyWith(fontSize: 14, letterSpacing: 0.2),
+                    style: ApexTypography.titleMedium.copyWith(
+                      fontSize: 14,
+                      letterSpacing: 0.2,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -684,7 +739,7 @@ class _ArchiveCard extends StatelessWidget {
                   // per-side ACPL gets a dedicated row in monospace so
                   // the user can compare YOU vs OPPONENT at a glance.
                   Text(
-                    '${game.openingName ?? '—'}  ·  ${game.totalPlies} plies',
+                    _metaLine,
                     style: ApexTypography.bodyMedium.copyWith(
                       color: ApexColors.textTertiary,
                       fontSize: 11,
@@ -720,15 +775,21 @@ class _ArchiveCard extends StatelessWidget {
                           quality: MoveQuality.brilliant,
                           count: game.brilliantCount,
                         ),
+                      if (game.greatCount > 0)
+                        _SvgCountPill(
+                          quality: MoveQuality.great,
+                          count: game.greatCount,
+                        ),
+                      if (game.missCount > 0)
+                        _SvgCountPill(
+                          quality: MoveQuality.missedWin,
+                          count: game.missCount,
+                          labelOverride: 'Miss',
+                        ),
                       if (game.blunderCount > 0)
                         _SvgCountPill(
                           quality: MoveQuality.blunder,
                           count: game.blunderCount,
-                        ),
-                      if (game.mistakeCount > 0)
-                        _SvgCountPill(
-                          quality: MoveQuality.mistake,
-                          count: game.mistakeCount,
                         ),
                     ],
                   ),
@@ -737,8 +798,11 @@ class _ArchiveCard extends StatelessWidget {
             ),
             IconButton(
               onPressed: onDelete,
-              icon: const Icon(Icons.close_rounded,
-                  size: 18, color: ApexColors.textTertiary),
+              icon: const Icon(
+                Icons.close_rounded,
+                size: 18,
+                color: ApexColors.textTertiary,
+              ),
               tooltip: 'Remove from archive',
             ),
           ],
@@ -766,6 +830,39 @@ class _ArchiveCard extends StatelessWidget {
     return '$me  vs  ${_nameOf(oppName, oppRating)}';
   }
 
+  String get _metaLine {
+    final date = game.playedAt == null
+        ? null
+        : '${game.playedAt!.year}-${game.playedAt!.month.toString().padLeft(2, '0')}-${game.playedAt!.day.toString().padLeft(2, '0')}';
+    return [
+      game.openingName ?? 'Opening not tagged',
+      if (date != null) date,
+      if (game.timeControl != null && game.timeControl!.isNotEmpty)
+        game.timeControl!,
+    ].join(' · ');
+  }
+
+  String _resultText(bool? userIsBlack) {
+    if (userIsBlack == null) {
+      return switch (game.result) {
+        '1-0' => 'White won',
+        '0-1' => 'Black won',
+        '1/2-1/2' => 'Draw',
+        _ => game.result,
+      };
+    }
+    final won =
+        (!userIsBlack && game.result == '1-0') ||
+        (userIsBlack && game.result == '0-1');
+    final lost =
+        (!userIsBlack && game.result == '0-1') ||
+        (userIsBlack && game.result == '1-0');
+    if (game.result == '1/2-1/2') return 'Draw';
+    if (won) return 'Won';
+    if (lost) return 'Lost';
+    return game.result;
+  }
+
   /// ACPL line — per-side when we know the user, aggregate otherwise.
   /// Only the cached timeline can yield per-side ACPL; pre-cache records
   /// fall back to the single persisted figure.
@@ -781,15 +878,21 @@ class _ArchiveCard extends StatelessWidget {
 }
 
 class _ModePill extends StatelessWidget {
-  const _ModePill({required this.mode});
-  final AnalysisMode mode;
+  const _ModePill({required this.game});
+  final ArchivedGame game;
 
   @override
   Widget build(BuildContext context) {
-    final label = mode == AnalysisMode.quick ? 'QUICK' : 'DEEP';
-    final color = mode == AnalysisMode.quick
-        ? ApexColors.electricBlue
-        : ApexColors.sapphireBright;
+    final label = switch (game.analysisProfileId) {
+      'fast_review' => 'Fast',
+      'offline_review' => 'Offline',
+      _ => 'Deep',
+    };
+    final color = switch (game.analysisProfileId) {
+      'offline_review' => ApexColors.aurora,
+      'fast_review' => ApexColors.electricBlue,
+      _ => ApexColors.sapphireBright,
+    };
     return _Pill(label: label, color: color);
   }
 }
@@ -821,7 +924,8 @@ class _SourcePill extends StatelessWidget {
 }
 
 class _ResultPill extends StatelessWidget {
-  const _ResultPill({required this.result});
+  const _ResultPill({required this.label, required this.result});
+  final String label;
   final String result;
 
   @override
@@ -832,7 +936,7 @@ class _ResultPill extends StatelessWidget {
       '1/2-1/2' => ApexColors.textTertiary,
       _ => ApexColors.textTertiary,
     };
-    return _Pill(label: result, color: color);
+    return _Pill(label: label, color: color);
   }
 }
 
@@ -851,10 +955,15 @@ class _DepthPill extends StatelessWidget {
 /// old text-symbol pill so the archive list matches the Review board's
 /// premium asset language.
 class _SvgCountPill extends StatelessWidget {
-  const _SvgCountPill({required this.quality, required this.count});
+  const _SvgCountPill({
+    required this.quality,
+    required this.count,
+    this.labelOverride,
+  });
 
   final MoveQuality quality;
   final int count;
+  final String? labelOverride;
 
   @override
   Widget build(BuildContext context) {
@@ -863,7 +972,9 @@ class _SvgCountPill extends StatelessWidget {
       decoration: BoxDecoration(
         color: quality.color.withValues(alpha: 0.12),
         border: Border.all(
-            color: quality.color.withValues(alpha: 0.4), width: 0.6),
+          color: quality.color.withValues(alpha: 0.4),
+          width: 0.6,
+        ),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
@@ -872,14 +983,11 @@ class _SvgCountPill extends StatelessWidget {
           SizedBox(
             width: 12,
             height: 12,
-            child: SvgPicture.asset(
-              quality.svgAssetPath,
-              fit: BoxFit.contain,
-            ),
+            child: SvgPicture.asset(quality.svgAssetPath, fit: BoxFit.contain),
           ),
           const SizedBox(width: 4),
           Text(
-            '$count',
+            labelOverride == null ? '$count' : '${labelOverride!} $count',
             style: ApexTypography.bodyMedium.copyWith(
               color: quality.color,
               fontSize: 10,
@@ -923,11 +1031,7 @@ class _Pill extends StatelessWidget {
 // ── Empty state ──────────────────────────────────────────────────────
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState({
-    required this.icon,
-    required this.label,
-    this.accent,
-  });
+  const _EmptyState({required this.icon, required this.label, this.accent});
 
   final IconData icon;
   final String label;

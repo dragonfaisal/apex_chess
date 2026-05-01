@@ -20,6 +20,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:apex_chess/app/di/providers.dart';
+import 'package:apex_chess/core/domain/entities/analysis_profile.dart';
 import 'package:apex_chess/features/account/domain/apex_account.dart';
 import 'package:apex_chess/features/account/presentation/controllers/account_controller.dart';
 import 'package:apex_chess/features/archives/data/archive_save_hook.dart';
@@ -29,6 +30,7 @@ import 'package:apex_chess/features/import_match/presentation/controllers/import
 import 'package:apex_chess/features/mistake_vault/data/mistake_vault_save_hook.dart';
 import 'package:apex_chess/features/import_match/presentation/controllers/recent_searches_controller.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
+import 'package:apex_chess/features/pgn_review/domain/review_analysis_provider.dart';
 import 'package:apex_chess/features/user_validation/presentation/username_validation_controller.dart';
 import 'package:apex_chess/features/user_validation/presentation/widgets/username_validation_pill.dart';
 import 'package:apex_chess/features/pgn_review/presentation/views/review_summary_screen.dart';
@@ -42,8 +44,7 @@ class ImportMatchScreen extends ConsumerStatefulWidget {
   const ImportMatchScreen({super.key});
 
   @override
-  ConsumerState<ImportMatchScreen> createState() =>
-      _ImportMatchScreenState();
+  ConsumerState<ImportMatchScreen> createState() => _ImportMatchScreenState();
 }
 
 class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
@@ -91,7 +92,8 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
     }
     _controller.text = account.username;
     _controller.selection = TextSelection.collapsed(
-        offset: account.username.length);
+      offset: account.username.length,
+    );
     notifier.setUsername(account.username);
     // Seed the dedupe key so the debounce timer doesn't instantly
     // fire on the prefill — user hasn't asked for a fetch yet.
@@ -217,7 +219,8 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
                   onRecentTapped: (username) {
                     _controller.text = username;
                     _controller.selection = TextSelection.collapsed(
-                        offset: username.length);
+                      offset: username.length,
+                    );
                     notifier.setUsername(username);
                     _usernameFocus.unfocus();
                     _cancelAutoFetch();
@@ -243,8 +246,10 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
       child: Row(
         children: [
           IconButton(
-            icon: const Icon(Icons.arrow_back_rounded,
-                color: ApexColors.textSecondary),
+            icon: const Icon(
+              Icons.arrow_back_rounded,
+              color: ApexColors.textSecondary,
+            ),
             onPressed: () => Navigator.of(context).pop(),
           ),
           Expanded(
@@ -287,10 +292,7 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
             const SizedBox(height: 6),
             const Text(
               'Streaming directly from your provider — no cached data.',
-              style: TextStyle(
-                color: ApexColors.textSecondary,
-                fontSize: 12.5,
-              ),
+              style: TextStyle(color: ApexColors.textSecondary, fontSize: 12.5),
               textAlign: TextAlign.center,
             ),
           ],
@@ -332,9 +334,8 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
             isLoading: state.isLoadingMore,
             hasMore: state.hasMore,
             errorMessage: state.errorMessage,
-            onRetry: () => ref
-                .read(importControllerProvider.notifier)
-                .fetchMore(),
+            onRetry: () =>
+                ref.read(importControllerProvider.notifier).fetchMore(),
           );
         }
         return _GameCard(game: state.games[i]);
@@ -524,9 +525,7 @@ class _SourceChip extends StatelessWidget {
                 style: ApexTypography.labelLarge.copyWith(
                   letterSpacing: 1.5,
                   fontSize: 12,
-                  color: active
-                      ? Colors.white
-                      : ApexColors.textTertiary,
+                  color: active ? Colors.white : ApexColors.textTertiary,
                 ),
               ),
             ),
@@ -556,6 +555,7 @@ class _UsernameField extends ConsumerStatefulWidget {
   final FocusNode focusNode;
   final ValueChanged<String> onChanged;
   final ValueChanged<String> onSubmitted;
+
   /// Fires when the validation pill confirms the handle exists on the
   /// current provider. Parent uses this to schedule the auto-fetch.
   final ValueChanged<String> onVerified;
@@ -601,8 +601,9 @@ class _UsernameFieldState extends ConsumerState<_UsernameField> {
   UsernameValidationController _ensureValidation() {
     final existing = _validation;
     if (existing != null) return existing;
-    final created =
-        UsernameValidationController(ref.read(usernameValidatorProvider));
+    final created = UsernameValidationController(
+      ref.read(usernameValidatorProvider),
+    );
     created.addListener(_onValidationChange);
     _validation = created;
     return created;
@@ -621,9 +622,9 @@ class _UsernameFieldState extends ConsumerState<_UsernameField> {
   }
 
   String get _sourceKey => switch (widget.source) {
-        GameSource.chessCom => 'chess.com',
-        GameSource.lichess => 'lichess',
-      };
+    GameSource.chessCom => 'chess.com',
+    GameSource.lichess => 'lichess',
+  };
 
   void _pushValidationInput() {
     _ensureValidation().updateInput(
@@ -683,12 +684,16 @@ class _UsernameFieldState extends ConsumerState<_UsernameField> {
             fontFamily: 'JetBrains Mono',
           ),
           decoration: InputDecoration(
-            prefixIcon: const Icon(Icons.person_outline_rounded,
-                color: ApexColors.sapphireBright, size: 20),
-            suffixIcon:
-                UsernameValidationPill(controller: _ensureValidation()),
-            suffixIconConstraints:
-                const BoxConstraints(minHeight: 32, minWidth: 0),
+            prefixIcon: const Icon(
+              Icons.person_outline_rounded,
+              color: ApexColors.sapphireBright,
+              size: 20,
+            ),
+            suffixIcon: UsernameValidationPill(controller: _ensureValidation()),
+            suffixIconConstraints: const BoxConstraints(
+              minHeight: 32,
+              minWidth: 0,
+            ),
             hintText: placeholder,
             hintStyle: ApexTypography.bodyMedium.copyWith(
               color: ApexColors.textTertiary,
@@ -707,7 +712,8 @@ class _UsernameFieldState extends ConsumerState<_UsernameField> {
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
               borderSide: BorderSide(
-                  color: ApexColors.sapphire.withValues(alpha: 0.55)),
+                color: ApexColors.sapphire.withValues(alpha: 0.55),
+              ),
             ),
           ),
         ),
@@ -715,9 +721,8 @@ class _UsernameFieldState extends ConsumerState<_UsernameField> {
           _RecentSearchesDropdown(
             entries: recents,
             onTap: widget.onRecentTapped,
-            onClear: () => ref
-                .read(recentSearchesProvider.notifier)
-                .clear(widget.source),
+            onClear: () =>
+                ref.read(recentSearchesProvider.notifier).clear(widget.source),
             onRemove: (u) => ref
                 .read(recentSearchesProvider.notifier)
                 .remove(widget.source, u),
@@ -762,10 +767,11 @@ class _RecentSearchesDropdown extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(14, 6, 8, 4),
               child: Row(
                 children: [
-                  Icon(Icons.history_rounded,
-                      size: 14,
-                      color: ApexColors.sapphireBright
-                          .withValues(alpha: 0.75)),
+                  Icon(
+                    Icons.history_rounded,
+                    size: 14,
+                    color: ApexColors.sapphireBright.withValues(alpha: 0.75),
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     'RECENT SEARCHES',
@@ -800,12 +806,16 @@ class _RecentSearchesDropdown extends StatelessWidget {
                 onTap: () => onTap(entry),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 8),
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
                   child: Row(
                     children: [
-                      Icon(Icons.person_search_rounded,
-                          size: 16,
-                          color: ApexColors.textTertiary),
+                      Icon(
+                        Icons.person_search_rounded,
+                        size: 16,
+                        color: ApexColors.textTertiary,
+                      ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
@@ -823,10 +833,13 @@ class _RecentSearchesDropdown extends StatelessWidget {
                         iconSize: 14,
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(
-                            minWidth: 28, minHeight: 28),
-                        icon: Icon(Icons.close_rounded,
-                            color: ApexColors.textTertiary
-                                .withValues(alpha: 0.7)),
+                          minWidth: 28,
+                          minHeight: 28,
+                        ),
+                        icon: Icon(
+                          Icons.close_rounded,
+                          color: ApexColors.textTertiary.withValues(alpha: 0.7),
+                        ),
                       ),
                     ],
                   ),
@@ -859,16 +872,19 @@ class _AutoFetchStatus extends StatelessWidget {
             height: 14,
             child: isLoading
                 ? const CircularProgressIndicator(
-                    strokeWidth: 2, color: ApexColors.sapphireBright)
-                : const Icon(Icons.bolt_rounded,
-                    size: 14, color: ApexColors.sapphireBright),
+                    strokeWidth: 2,
+                    color: ApexColors.sapphireBright,
+                  )
+                : const Icon(
+                    Icons.bolt_rounded,
+                    size: 14,
+                    color: ApexColors.sapphireBright,
+                  ),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              isLoading
-                  ? 'Streaming live matches…'
-                  : ApexCopy.importAutoFetch,
+              isLoading ? 'Streaming live matches…' : ApexCopy.importAutoFetch,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: ApexTypography.bodyMedium.copyWith(
@@ -946,14 +962,20 @@ class _GameCard extends ConsumerWidget {
                       const SizedBox(height: 8),
                       Row(
                         children: [
-                          _MetaPill(icon: Icons.timer_outlined,
-                              label: game.timeControl ?? '—'),
+                          _MetaPill(
+                            icon: Icons.timer_outlined,
+                            label: game.timeControl ?? '—',
+                          ),
                           const SizedBox(width: 6),
-                          _MetaPill(icon: Icons.history_rounded,
-                              label: '${game.moveCount} moves'),
+                          _MetaPill(
+                            icon: Icons.history_rounded,
+                            label: '${game.moveCount} moves',
+                          ),
                           const SizedBox(width: 6),
-                          _MetaPill(icon: Icons.calendar_today_outlined,
-                              label: game.relativeTime),
+                          _MetaPill(
+                            icon: Icons.calendar_today_outlined,
+                            label: game.relativeTime,
+                          ),
                         ],
                       ),
                       if (game.openingName != null) ...[
@@ -1006,12 +1028,12 @@ class _GameCard extends ConsumerWidget {
   }
 
   Future<void> _openDepthPicker(BuildContext context, WidgetRef ref) async {
-    final depth = await showDialog<int>(
+    final profile = await showDialog<AnalysisProfile>(
       context: context,
       barrierColor: ApexColors.spaceVoid.withValues(alpha: 0.72),
       builder: (_) => const DepthPickerDialog(),
     );
-    if (depth == null) return;
+    if (profile == null) return;
     if (!context.mounted) return;
     showDialog(
       context: context,
@@ -1019,7 +1041,7 @@ class _GameCard extends ConsumerWidget {
       barrierColor: ApexColors.spaceVoid.withValues(alpha: 0.72),
       builder: (_) => _ImportAnalysisDialog(
         pgn: game.pgn,
-        depth: depth,
+        profile: profile,
         source: game.source == GameSource.chessCom
             ? ArchiveSource.chessCom
             : ArchiveSource.lichess,
@@ -1058,7 +1080,9 @@ class _SourceBadge extends StatelessWidget {
       child: Text(
         label,
         style: ApexTypography.monoEval.copyWith(
-          color: color, fontSize: 14, fontWeight: FontWeight.w700,
+          color: color,
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
@@ -1102,7 +1126,9 @@ class _PlayerRow extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: ApexTypography.bodyMedium.copyWith(
-              color: isUser ? ApexColors.sapphireBright : ApexColors.textPrimary,
+              color: isUser
+                  ? ApexColors.sapphireBright
+                  : ApexColors.textPrimary,
               fontSize: 13,
               fontWeight: isUser ? FontWeight.w700 : FontWeight.w500,
               letterSpacing: 0.3,
@@ -1192,7 +1218,7 @@ class _EmptyState extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Depth picker dialog — returns the selected depth (14 or 22) via pop.
+// Review profile picker.
 // ─────────────────────────────────────────────────────────────────────────────
 
 class DepthPickerDialog extends StatelessWidget {
@@ -1210,8 +1236,11 @@ class DepthPickerDialog extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.tune_rounded,
-                    color: ApexColors.sapphireBright, size: 22),
+                Icon(
+                  Icons.tune_rounded,
+                  color: ApexColors.sapphireBright,
+                  size: 22,
+                ),
                 const SizedBox(width: 10),
                 Text(
                   ApexCopy.depthPickerTitle,
@@ -1226,7 +1255,8 @@ class DepthPickerDialog extends StatelessWidget {
               blurb: ApexCopy.depthFastBlurb,
               icon: Icons.flash_on_rounded,
               accent: ApexColors.electricBlue,
-              onTap: () => Navigator.of(context).pop(14),
+              onTap: () =>
+                  Navigator.of(context).pop(AnalysisProfile.fastReview),
             ),
             const SizedBox(height: 12),
             _DepthOption(
@@ -1235,7 +1265,18 @@ class DepthPickerDialog extends StatelessWidget {
               blurb: ApexCopy.depthDeepBlurb,
               icon: Icons.auto_awesome_rounded,
               accent: ApexColors.sapphire,
-              onTap: () => Navigator.of(context).pop(22),
+              onTap: () =>
+                  Navigator.of(context).pop(AnalysisProfile.deepReview),
+            ),
+            const SizedBox(height: 12),
+            _DepthOption(
+              label: 'Offline Review',
+              tag: 'Local',
+              blurb: 'Runs on this device and may be slower.',
+              icon: Icons.offline_bolt_rounded,
+              accent: ApexColors.aurora,
+              onTap: () =>
+                  Navigator.of(context).pop(AnalysisProfile.offlineReview),
             ),
           ],
         ),
@@ -1274,7 +1315,8 @@ class _DepthOption extends StatelessWidget {
             color: ApexColors.elevatedSurface.withValues(alpha: 0.6),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: accent.withValues(alpha: 0.35), width: 0.6,
+              color: accent.withValues(alpha: 0.35),
+              width: 0.6,
             ),
           ),
           child: Row(
@@ -1316,7 +1358,9 @@ class _DepthOption extends StatelessWidget {
                         const SizedBox(width: 6),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: accent.withValues(alpha: 0.14),
                             borderRadius: BorderRadius.circular(6),
@@ -1324,7 +1368,8 @@ class _DepthOption extends StatelessWidget {
                           child: Text(
                             tag,
                             style: ApexTypography.monoEval.copyWith(
-                              color: accent, fontSize: 10,
+                              color: accent,
+                              fontSize: 10,
                             ),
                           ),
                         ),
@@ -1344,8 +1389,10 @@ class _DepthOption extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 6),
-              Icon(Icons.chevron_right_rounded,
-                  color: accent.withValues(alpha: 0.8)),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: accent.withValues(alpha: 0.8),
+              ),
             ],
           ),
         ),
@@ -1361,15 +1408,16 @@ class _DepthOption extends StatelessWidget {
 class _ImportAnalysisDialog extends ConsumerStatefulWidget {
   const _ImportAnalysisDialog({
     required this.pgn,
-    required this.depth,
+    required this.profile,
     required this.source,
     this.playedAt,
     this.userIsWhite,
   });
   final String pgn;
-  final int depth;
+  final AnalysisProfile profile;
   final ArchiveSource source;
   final DateTime? playedAt;
+
   /// Null when we don't know which colour the user played (PGN
   /// uploads). The Mistake Vault hook uses this to skip opponent plies.
   final bool? userIsWhite;
@@ -1379,8 +1427,7 @@ class _ImportAnalysisDialog extends ConsumerStatefulWidget {
       _ImportAnalysisDialogState();
 }
 
-class _ImportAnalysisDialogState
-    extends ConsumerState<_ImportAnalysisDialog> {
+class _ImportAnalysisDialogState extends ConsumerState<_ImportAnalysisDialog> {
   int _completed = 0;
   int _total = 1;
   bool _done = false;
@@ -1399,32 +1446,35 @@ class _ImportAnalysisDialogState
 
   Future<void> _run() async {
     try {
-      final analyzer = ref.read(gameAnalyzerProvider);
-      // Phase A audit § 3: depth alone decides Quick vs Deep for imported
-      // games. D14 is Quick (no Brilliant / Great / Forced claims), D22
-      // is Deep (full ladder). The flag is forwarded end-to-end: analyzer
-      // → classifier → archive record.
-      final mode =
-          widget.depth <= 14 ? AnalysisMode.quick : AnalysisMode.deep;
-      final timeline = await analyzer.analyzeFromPgn(
-        widget.pgn,
-        depth: widget.depth,
-        mode: mode,
-        onProgress: (c, t) {
-          if (!mounted) return;
-          setState(() {
-            _completed = c;
-            _total = t;
-          });
-        },
+      final pipeline = await ref.read(reviewAnalysisPipelineProvider.future);
+      final result = await pipeline.analyzeGame(
+        GameReviewRequest(
+          pgn: widget.pgn,
+          profile: widget.profile,
+          userIsWhite: widget.userIsWhite,
+          onProgress: (c, t) {
+            if (!mounted) return;
+            setState(() {
+              _completed = c;
+              _total = t;
+            });
+          },
+        ),
       );
+      final timeline = result.timeline;
+      final mode = widget.profile.id == AnalysisProfileId.fastReview
+          ? AnalysisMode.quick
+          : AnalysisMode.deep;
+      final depth = result.metadata.depth;
       if (!mounted) return;
       // Phase A integration audit: if the imported user played as Black,
       // flip the board automatically so they appear at the bottom of the
       // review screen. `userIsWhite == false` means the imported game's
       // user is the Black side; `null` falls back to White-at-bottom for
       // raw PGN imports where user colour is unknowable.
-      ref.read(reviewControllerProvider.notifier).loadTimeline(
+      ref
+          .read(reviewControllerProvider.notifier)
+          .loadTimeline(
             timeline,
             userIsBlack: widget.userIsWhite == false,
             mode: mode,
@@ -1435,18 +1485,20 @@ class _ImportAnalysisDialogState
         ref: ref,
         timeline: timeline,
         pgn: widget.pgn,
-        depth: widget.depth,
+        depth: depth,
         source: widget.source,
         playedAt: widget.playedAt,
         analysisMode: mode,
       );
       if (archiveId != null) {
-        unawaited(saveMistakeDrillsFromTimeline(
-          ref: ref,
-          timeline: timeline,
-          archiveId: archiveId,
-          userIsWhite: widget.userIsWhite,
-        ));
+        unawaited(
+          saveMistakeDrillsFromTimeline(
+            ref: ref,
+            timeline: timeline,
+            archiveId: archiveId,
+            userIsWhite: widget.userIsWhite,
+          ),
+        );
       }
       if (!mounted) return;
       setState(() => _done = true);
@@ -1464,9 +1516,9 @@ class _ImportAnalysisDialogState
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         Navigator.of(context).pop();
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const ReviewSummaryScreen()),
-        );
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const ReviewSummaryScreen()));
       });
     }
 
@@ -1492,9 +1544,7 @@ class _ImportAnalysisDialogState
                 ),
                 const SizedBox(width: 10),
                 Text(
-                  _error == null
-                      ? '${ApexCopy.scanHeader(widget.depth)} · D${widget.depth}'
-                      : 'Scan failed',
+                  _error == null ? widget.profile.label : 'Scan failed',
                   style: ApexTypography.titleMedium,
                 ),
               ],
@@ -1548,7 +1598,7 @@ class _ImportAnalysisDialogState
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'QUANTUM SCAN',
+                          widget.profile.label.toUpperCase(),
                           style: ApexTypography.bodyMedium.copyWith(
                             color: ApexColors.textTertiary,
                             fontSize: 10,
@@ -1566,10 +1616,10 @@ class _ImportAnalysisDialogState
                 child: LinearProgressIndicator(
                   value: progress,
                   minHeight: 6,
-                  backgroundColor:
-                      ApexColors.deepSpace.withValues(alpha: 0.65),
+                  backgroundColor: ApexColors.deepSpace.withValues(alpha: 0.65),
                   valueColor: const AlwaysStoppedAnimation<Color>(
-                      ApexColors.sapphireBright),
+                    ApexColors.sapphireBright,
+                  ),
                 ),
               ),
               const SizedBox(height: 10),
