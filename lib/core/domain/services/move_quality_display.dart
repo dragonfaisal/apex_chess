@@ -14,14 +14,14 @@ enum ReviewMoveLabel {
   brilliant('Brilliant', ApexColors.brilliant),
   great('Great', ApexColors.great),
   best('Best', ApexColors.best),
-  excellent('Excellent', ApexColors.great),
-  good('Good', ApexColors.textSecondary),
+  excellent('Excellent', ApexColors.excellent),
+  good('Good', ApexColors.good),
   book('Book', ApexColors.book),
   inaccuracy('Inaccuracy', ApexColors.inaccuracy),
   mistake('Mistake', ApexColors.mistake),
-  miss('Miss', ApexColors.mistake),
+  miss('Miss', ApexColors.miss),
   blunder('Blunder', ApexColors.blunder),
-  checkmate('Checkmate', ApexColors.brilliant);
+  checkmate('Checkmate', ApexColors.checkmate);
 
   const ReviewMoveLabel(this.label, this.color);
   final String label;

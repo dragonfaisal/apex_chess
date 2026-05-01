@@ -1,5 +1,5 @@
 /// Helper that persists a freshly-completed [AnalysisTimeline] into the
-/// Archived Intel store.
+/// Archive store.
 ///
 /// Called by the analysis dialogs right after the timeline is handed to
 /// the `reviewController`. Failures here MUST NOT block the review flow
@@ -27,10 +27,9 @@ String archiveIdForPgn(String pgn) {
 
 /// Fire-and-forget save. Returns the resulting id so callers can log it.
 ///
-/// [analysisMode] is persisted on the [ArchivedGame] so Quick and Deep
-/// scans can be filtered / surfaced separately in the archive — see
-/// Phase A audit § 3. Defaults to Deep for backwards compatibility
-/// with callers that pre-date the split.
+/// [analysisMode] is persisted on the [ArchivedGame] so Fast and Deep
+/// reviews can be filtered separately in the archive. Defaults to Deep
+/// for backwards compatibility with callers that pre-date the split.
 Future<String?> saveAnalysisToArchive({
   required WidgetRef ref,
   required AnalysisTimeline timeline,

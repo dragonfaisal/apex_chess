@@ -1,15 +1,11 @@
-/// Premium "Live Match Intel" screen — Apex Chess Deep Space Cinematic.
+/// Import Games screen.
 ///
-/// Inspired by chessplus.pages.dev, rebuilt on top of the Apex design
-/// language (`GlassPanel`, Sapphire/Ruby accents, Sora typography).
-///
-/// Flow (Phase 5):
+/// Flow:
 ///   1. User picks a source (Chess.com or Lichess) and types a handle.
 ///   2. The username-validation controller pings the public profile
 ///      endpoint; the pill turns green the instant the handle resolves.
-///   3. **Auto-fetch** then fires 600 ms after verification — no button.
-///   4. Tapping any row opens [DepthPickerDialog] (Fast D14 or Quantum
-///      Deep D22, both backed by the local Apex AI Grandmaster).
+///   3. Auto-fetch then fires after verification.
+///   4. Tapping any row opens [DepthPickerDialog] (Fast, Deep, or Offline).
 ///   5. On selection, the PGN runs through `LocalGameAnalyzer` and we
 ///      push the ReviewScreen on the navigator.
 library;
@@ -37,8 +33,8 @@ import 'package:apex_chess/features/pgn_review/presentation/views/review_summary
 import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
-import 'package:apex_chess/shared_ui/widgets/quantum_shatter_loader.dart';
 
 class ImportMatchScreen extends ConsumerStatefulWidget {
   const ImportMatchScreen({super.key});
@@ -159,80 +155,83 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
     final state = ref.watch(importControllerProvider);
     final notifier = ref.read(importControllerProvider.notifier);
 
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       body: Container(
         decoration: const BoxDecoration(gradient: ApexGradients.spaceCanvas),
         child: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildAppBar(context),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 6, 24, 8),
-                child: Text(
-                  ApexCopy.importSubtitle,
-                  textAlign: TextAlign.center,
-                  style: ApexTypography.bodyMedium.copyWith(
-                    color: ApexColors.textTertiary,
-                    fontSize: 12,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-              ),
-              _SourceToggle(
-                source: state.source,
-                onChanged: (src) {
-                  notifier.setSource(src);
-                  // Source change forgets the last-verified tuple so a
-                  // successful re-validation on the other provider will
-                  // re-fire the auto-fetch for the same handle.
-                  _cancelAutoFetch();
-                  _lastAutoKey = null;
-                },
-              ),
-              const SizedBox(height: 16),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: _UsernameField(
-                  controller: _controller,
-                  focusNode: _usernameFocus,
-                  onChanged: (v) {
-                    notifier.setUsername(v);
-                    _cancelAutoFetch();
-                  },
-                  onSubmitted: (v) {
-                    // Explicit Enter: fire immediately and cancel the
-                    // pending auto-fetch so we don't double-hit the API.
-                    _cancelAutoFetch();
-                    _lastAutoKey = '${state.source.name}:${v.trim()}';
-                    notifier.fetch();
-                  },
-                  onVerified: (v) {
-                    // Validation pill just flipped green — the handle
-                    // exists. Queue the auto-fetch 600 ms out.
-                    _scheduleAutoFetchAfterVerification(
+          child: CustomScrollView(
+            controller: _scrollController,
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            slivers: [
+              SliverToBoxAdapter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildAppBar(context),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 6, 24, 8),
+                      child: Text(
+                        ApexCopy.importSubtitle,
+                        textAlign: TextAlign.center,
+                        style: ApexTypography.bodyMedium.copyWith(
+                          color: ApexColors.textTertiary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    _SourceToggle(
                       source: state.source,
-                      username: v,
-                    );
-                  },
-                  source: state.source,
-                  onRecentTapped: (username) {
-                    _controller.text = username;
-                    _controller.selection = TextSelection.collapsed(
-                      offset: username.length,
-                    );
-                    notifier.setUsername(username);
-                    _usernameFocus.unfocus();
-                    _cancelAutoFetch();
-                    _lastAutoKey = '${state.source.name}:$username';
-                    notifier.fetch();
-                  },
+                      onChanged: (src) {
+                        notifier.setSource(src);
+                        _cancelAutoFetch();
+                        _lastAutoKey = null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: _UsernameField(
+                        controller: _controller,
+                        focusNode: _usernameFocus,
+                        onChanged: (v) {
+                          notifier.setUsername(v);
+                          _cancelAutoFetch();
+                        },
+                        onSubmitted: (v) {
+                          _cancelAutoFetch();
+                          _lastAutoKey = '${state.source.name}:${v.trim()}';
+                          notifier.fetch();
+                        },
+                        onVerified: (v) {
+                          _scheduleAutoFetchAfterVerification(
+                            source: state.source,
+                            username: v,
+                          );
+                        },
+                        source: state.source,
+                        onRecentTapped: (username) {
+                          _controller.text = username;
+                          _controller.selection = TextSelection.collapsed(
+                            offset: username.length,
+                          );
+                          notifier.setUsername(username);
+                          _usernameFocus.unfocus();
+                          _cancelAutoFetch();
+                          _lastAutoKey = '${state.source.name}:$username';
+                          notifier.fetch();
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    _AutoFetchStatus(state: state),
+                    const SizedBox(height: 14),
+                  ],
                 ),
               ),
-              const SizedBox(height: 10),
-              _AutoFetchStatus(state: state),
-              const SizedBox(height: 14),
-              Expanded(child: _buildBody(state)),
+              ..._buildBodySlivers(state),
+              SliverToBoxAdapter(child: SizedBox(height: bottomInset + 24)),
             ],
           ),
         ),
@@ -269,80 +268,81 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
     );
   }
 
-  Widget _buildBody(ImportState state) {
+  List<Widget> _buildBodySlivers(ImportState state) {
     if (state.isLoading) {
-      // Shatter loader + caption — gives the user a deliberate signal
-      // that we're streaming archives over HTTP, not just a generic
-      // spinner. Matches the analyser's full-screen busy state.
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const QuantumShatterLoader(size: 160),
-            const SizedBox(height: 18),
-            const Text(
-              'Downloading recent matches…',
-              style: TextStyle(
-                color: ApexColors.textPrimary,
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.4,
-              ),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Streaming directly from your provider — no cached data.',
-              style: TextStyle(color: ApexColors.textSecondary, fontSize: 12.5),
-              textAlign: TextAlign.center,
-            ),
-          ],
+      return const [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: ApexLoadingScaffold(
+            title: 'Fetching recent games',
+            messages: ['Fetching recent games...', 'Loading game list...'],
+            compact: true,
+          ),
         ),
-      );
+      ];
     }
     // Full-screen error is only appropriate when we have nothing to show
     // yet — if a pagination fetch fails *after* a successful first page,
     // we keep the already-loaded games visible and let the footer surface
     // the error inline.
     if (state.errorMessage != null && state.games.isEmpty) {
-      return _EmptyState(
-        icon: Icons.cloud_off_rounded,
-        label: state.errorMessage!,
-        accent: ApexColors.ruby,
-      );
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: _EmptyState(
+            icon: Icons.cloud_off_rounded,
+            label: state.errorMessage!,
+            accent: ApexColors.ruby,
+          ),
+        ),
+      ];
     }
     if (!state.hasFetched) {
-      return const _EmptyState(
-        icon: Icons.search_rounded,
-        label: 'Pick a source, enter a username, tap Fetch.',
-      );
+      return const [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: _EmptyState(
+            icon: Icons.search_rounded,
+            label: 'Search a player to show recent games.',
+          ),
+        ),
+      ];
     }
     if (state.games.isEmpty) {
-      return const _EmptyState(
-        icon: Icons.inbox_rounded,
-        label: ApexCopy.importEmpty,
-      );
+      return const [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: _EmptyState(
+            icon: Icons.inbox_rounded,
+            label: ApexCopy.importEmpty,
+          ),
+        ),
+      ];
     }
     // +1 row reserved for the footer (loader, inline error, or
     // "end of feed" marker).
     final itemCount = state.games.length + 1;
-    return ListView.separated(
-      controller: _scrollController,
-      padding: const EdgeInsets.fromLTRB(18, 4, 18, 28),
-      itemBuilder: (_, i) {
-        if (i == state.games.length) {
-          return _PaginationFooter(
-            isLoading: state.isLoadingMore,
-            hasMore: state.hasMore,
-            errorMessage: state.errorMessage,
-            onRetry: () =>
-                ref.read(importControllerProvider.notifier).fetchMore(),
-          );
-        }
-        return _GameCard(game: state.games[i]);
-      },
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemCount: itemCount,
-    );
+    return [
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(18, 4, 18, 28),
+        sliver: SliverList.separated(
+          itemBuilder: (_, i) {
+            if (i == state.games.length) {
+              return _PaginationFooter(
+                isLoading: state.isLoadingMore,
+                hasMore: state.hasMore,
+                errorMessage: state.errorMessage,
+                onRetry: () =>
+                    ref.read(importControllerProvider.notifier).fetchMore(),
+              );
+            }
+            return _GameCard(game: state.games[i]);
+          },
+          separatorBuilder: (_, __) => const SizedBox(height: 12),
+          itemCount: itemCount,
+        ),
+      ),
+    ];
   }
 }
 
@@ -647,19 +647,17 @@ class _UsernameFieldState extends ConsumerState<_UsernameField> {
     // Hide the dropdown once the user starts typing a fresh username —
     // the suggestions become noisy mid-typing.
     final empty = widget.controller.text.trim().isEmpty;
-    if (_showDropdown != (widget.focusNode.hasFocus && empty)) {
-      setState(() {
-        _showDropdown = widget.focusNode.hasFocus && empty;
-      });
-    }
+    setState(() {
+      _showDropdown = widget.focusNode.hasFocus && empty;
+    });
     _pushValidationInput();
   }
 
   @override
   Widget build(BuildContext context) {
     final placeholder = switch (widget.source) {
-      GameSource.chessCom => 'e.g. hikaru',
-      GameSource.lichess => 'e.g. DrNykterstein',
+      GameSource.chessCom => 'Search Chess.com username',
+      GameSource.lichess => 'Search Lichess username',
     };
 
     final recents = ref
@@ -678,6 +676,10 @@ class _UsernameFieldState extends ConsumerState<_UsernameField> {
           onChanged: widget.onChanged,
           onSubmitted: widget.onSubmitted,
           textInputAction: TextInputAction.search,
+          cursorColor: ApexColors.sapphireBright,
+          autofillHints: const [],
+          enableSuggestions: false,
+          autocorrect: false,
           style: ApexTypography.bodyMedium.copyWith(
             color: ApexColors.textPrimary,
             fontSize: 14,
@@ -689,7 +691,26 @@ class _UsernameFieldState extends ConsumerState<_UsernameField> {
               color: ApexColors.sapphireBright,
               size: 20,
             ),
-            suffixIcon: UsernameValidationPill(controller: _ensureValidation()),
+            suffixIcon: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                UsernameValidationPill(controller: _ensureValidation()),
+                if (widget.controller.text.isNotEmpty)
+                  IconButton(
+                    tooltip: 'Clear',
+                    onPressed: () {
+                      widget.controller.clear();
+                      widget.onChanged('');
+                      _lastVerifiedQuery = null;
+                    },
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      color: ApexColors.textTertiary,
+                      size: 18,
+                    ),
+                  ),
+              ],
+            ),
             suffixIconConstraints: const BoxConstraints(
               minHeight: 32,
               minWidth: 0,
@@ -871,12 +892,9 @@ class _AutoFetchStatus extends StatelessWidget {
             width: 14,
             height: 14,
             child: isLoading
-                ? const CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: ApexColors.sapphireBright,
-                  )
+                ? const ApexPulseLoader(size: 14)
                 : const Icon(
-                    Icons.bolt_rounded,
+                    Icons.search_rounded,
                     size: 14,
                     color: ApexColors.sapphireBright,
                   ),
@@ -884,7 +902,7 @@ class _AutoFetchStatus extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              isLoading ? 'Streaming live matches…' : ApexCopy.importAutoFetch,
+              isLoading ? 'Fetching recent games...' : ApexCopy.importAutoFetch,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: ApexTypography.bodyMedium.copyWith(
@@ -911,19 +929,28 @@ class _GameCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final accentColor = switch (game.result) {
-      GameResult.whiteWon => ApexColors.brilliant,
-      GameResult.blackWon => ApexColors.ruby,
-      GameResult.draw => ApexColors.textTertiary,
-      GameResult.unknown => ApexColors.subtleBorder,
-    };
+    final headline = game.perspectiveHeadline;
     final outcome = game.userOutcomeLabel;
     final outcomeColor = switch (outcome) {
       'Won' => ApexColors.brilliant,
       'Lost' => ApexColors.ruby,
-      'Drew' => ApexColors.textSecondary,
+      'Draw' => ApexColors.inaccuracy,
       _ => ApexColors.textTertiary,
     };
+    final accentColor = switch (outcome) {
+      'Won' => ApexColors.best,
+      'Lost' => ApexColors.blunder,
+      'Draw' => ApexColors.inaccuracy,
+      _ => switch (game.result) {
+        GameResult.whiteWon => ApexColors.best,
+        GameResult.blackWon => ApexColors.blunder,
+        GameResult.draw => ApexColors.inaccuracy,
+        GameResult.unknown => ApexColors.subtleBorder,
+      },
+    };
+    final opening = game.openingName == null
+        ? null
+        : '${game.eco != null ? '${game.eco} ' : ''}${game.openingName}';
 
     return GlassPanel(
       padding: EdgeInsets.zero,
@@ -937,86 +964,112 @@ class _GameCard extends ConsumerWidget {
           onTap: () => _openDepthPicker(context, ref),
           borderRadius: BorderRadius.circular(16),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Row(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _SourceBadge(source: game.source),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _PlayerRow(
+                Row(
+                  children: [
+                    _SourceBadge(source: game.source),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            headline,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: ApexTypography.titleMedium.copyWith(
+                              color: ApexColors.textPrimary,
+                              fontSize: 15,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            '${game.sourceLabel} • ${game.timeControl ?? 'Time control unavailable'} • ${game.relativeTime}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: ApexTypography.bodyMedium.copyWith(
+                              color: ApexColors.textTertiary,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      game.resultLabel,
+                      style: ApexTypography.monoEval.copyWith(
+                        color: accentColor,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _PlayerRow(
                         name: game.whiteName,
                         rating: game.whiteRating,
                         light: true,
                         isUser: game.userColor == PlayerColor.white,
                       ),
-                      const SizedBox(height: 4),
-                      _PlayerRow(
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _PlayerRow(
                         name: game.blackName,
                         rating: game.blackRating,
                         light: false,
                         isUser: game.userColor == PlayerColor.black,
                       ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          _MetaPill(
-                            icon: Icons.timer_outlined,
-                            label: game.timeControl ?? '—',
-                          ),
-                          const SizedBox(width: 6),
-                          _MetaPill(
-                            icon: Icons.history_rounded,
-                            label: '${game.moveCount} moves',
-                          ),
-                          const SizedBox(width: 6),
-                          _MetaPill(
-                            icon: Icons.calendar_today_outlined,
-                            label: game.relativeTime,
-                          ),
-                        ],
-                      ),
-                      if (game.openingName != null) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          '${game.eco != null ? '${game.eco} • ' : ''}${game.openingName}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: ApexTypography.bodyMedium.copyWith(
-                            color: ApexColors.book,
-                            fontSize: 11,
-                            fontFamily: 'JetBrains Mono',
-                          ),
-                        ),
-                      ],
-                    ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  [
+                    game.secondaryResultText,
+                    '${game.moveCount} moves',
+                    if (opening != null) opening,
+                  ].join(' • '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: ApexTypography.bodyMedium.copyWith(
+                    color: outcomeColor,
+                    fontSize: 11,
                   ),
                 ),
-                const SizedBox(width: 10),
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                const SizedBox(height: 12),
+                Row(
                   children: [
-                    Text(
-                      game.resultLabel,
-                      style: ApexTypography.monoEval.copyWith(
-                        color: accentColor,
-                        fontSize: 17,
-                      ),
-                    ),
-                    if (outcome != null) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        outcome,
-                        style: ApexTypography.bodyMedium.copyWith(
-                          color: outcomeColor,
-                          fontSize: 10,
-                          letterSpacing: 1.4,
-                          fontWeight: FontWeight.w600,
+                    Expanded(
+                      child: _ReviewModeAction(
+                        label: 'Fast',
+                        icon: Icons.flash_on_rounded,
+                        onTap: () => _startAnalysis(
+                          context,
+                          ref,
+                          AnalysisProfile.fastReview,
                         ),
                       ),
-                    ],
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _ReviewModeAction(
+                        label: 'Deep',
+                        icon: Icons.auto_awesome_rounded,
+                        onTap: () => _startAnalysis(
+                          context,
+                          ref,
+                          AnalysisProfile.deepReview,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -1035,6 +1088,14 @@ class _GameCard extends ConsumerWidget {
     );
     if (profile == null) return;
     if (!context.mounted) return;
+    _startAnalysis(context, ref, profile);
+  }
+
+  void _startAnalysis(
+    BuildContext context,
+    WidgetRef ref,
+    AnalysisProfile profile,
+  ) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -1049,6 +1110,35 @@ class _GameCard extends ConsumerWidget {
         userIsWhite: game.userColor == null
             ? null
             : game.userColor == PlayerColor.white,
+      ),
+    );
+  }
+}
+
+class _ReviewModeAction extends StatelessWidget {
+  const _ReviewModeAction({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: onTap,
+      icon: Icon(icon, size: 16),
+      label: Text(label),
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        foregroundColor: ApexColors.sapphireBright,
+        side: BorderSide(
+          color: ApexColors.sapphire.withValues(alpha: 0.45),
+          width: 0.7,
+        ),
       ),
     );
   }
@@ -1150,39 +1240,6 @@ class _PlayerRow extends StatelessWidget {
   }
 }
 
-class _MetaPill extends StatelessWidget {
-  const _MetaPill({required this.icon, required this.label});
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: ApexColors.elevatedSurface.withValues(alpha: 0.65),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: ApexColors.subtleBorder, width: 0.5),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: ApexColors.textTertiary, size: 11),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: ApexTypography.bodyMedium.copyWith(
-              color: ApexColors.textTertiary,
-              fontSize: 10,
-              fontFamily: 'JetBrains Mono',
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _EmptyState extends StatelessWidget {
   const _EmptyState({
     required this.icon,
@@ -1271,7 +1328,7 @@ class DepthPickerDialog extends StatelessWidget {
             const SizedBox(height: 12),
             _DepthOption(
               label: 'Offline Review',
-              tag: 'Local',
+              tag: 'Offline',
               blurb: 'Runs on this device and may be slower.',
               icon: Icons.offline_bolt_rounded,
               accent: ApexColors.aurora,
@@ -1574,64 +1631,20 @@ class _ImportAnalysisDialogState extends ConsumerState<_ImportAnalysisDialog> {
                   ),
                 ),
               ),
-            ] else ...[
-              // Radar sweep behind the progress readout gives the user an
-              // immediate visual signal that the engine is *actually
-              // working* — the sweep rotates independently of the
-              // progress ticks, so a frozen engine is obvious.
-              SizedBox(
-                height: 220,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    const QuantumShatterLoader(size: 220),
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          '${(progress * 100).toStringAsFixed(0)}%',
-                          style: ApexTypography.displayLarge.copyWith(
-                            fontSize: 38,
-                            color: ApexColors.sapphireBright,
-                            letterSpacing: 3,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          widget.profile.label.toUpperCase(),
-                          style: ApexTypography.bodyMedium.copyWith(
-                            color: ApexColors.textTertiary,
-                            fontSize: 10,
-                            letterSpacing: 3.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+            ] else
+              ApexLoadingScaffold(
+                title: widget.profile.label,
+                messages: const [
+                  'Reading PGN...',
+                  'Checking opening...',
+                  'Building review...',
+                  'Analyzing tactics...',
+                  'Saving review...',
+                ],
+                progress: progress,
+                progressMessage: '$_completed / $_total plies analyzed',
+                compact: true,
               ),
-              const SizedBox(height: 14),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: LinearProgressIndicator(
-                  value: progress,
-                  minHeight: 6,
-                  backgroundColor: ApexColors.deepSpace.withValues(alpha: 0.65),
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                    ApexColors.sapphireBright,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                '$_completed / $_total plies',
-                style: ApexTypography.bodyMedium.copyWith(
-                  color: ApexColors.textTertiary,
-                  fontFamily: 'JetBrains Mono',
-                  fontSize: 11,
-                ),
-              ),
-            ],
           ],
         ),
       ),

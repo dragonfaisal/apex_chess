@@ -109,9 +109,51 @@ void main() {
       expect(phasePerf, findsOneWidget);
       // Primary CTA — scroll into view first, the summary is a long
       // ListView.
-      final reviewCta = find.text('Review Moves');
+      final reviewCta = find.text('Start Review');
       await tester.scrollUntilVisible(reviewCta, 200);
       expect(reviewCta, findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'Move quality table always shows all public rows with Miss separate',
+    (tester) async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      container
+          .read(reviewControllerProvider.notifier)
+          .loadTimeline(
+            _timeline(),
+            userIsBlack: false,
+            mode: AnalysisMode.deep,
+            userIsWhite: true,
+          );
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: ReviewSummaryScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      for (final label in const [
+        'Brilliant',
+        'Great',
+        'Best',
+        'Excellent',
+        'Good',
+        'Book',
+        'Inaccuracy',
+        'Mistake',
+        'Miss',
+        'Blunder',
+      ]) {
+        expect(find.text(label), findsWidgets);
+      }
+      expect(find.text('Forced'), findsNothing);
+      expect(find.text('Solid'), findsNothing);
+      expect(find.text('Theory'), findsNothing);
     },
   );
 

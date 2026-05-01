@@ -76,7 +76,7 @@ class ReviewSummaryScreen extends ConsumerWidget {
           onPressed: () => Navigator.of(context).maybePop(),
         ),
         title: Text(
-          'GAME SUMMARY',
+          'Game Summary',
           style: ApexTypography.titleMedium.copyWith(
             letterSpacing: 3,
             fontSize: 13,
@@ -177,6 +177,7 @@ class _ResultHeader extends StatelessWidget {
       userIsWhite: summary.userIsWhite,
     );
     final modeLabel = _profileLabel(timeline);
+    final sourceLabel = _sourceLabel(timeline);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -198,7 +199,13 @@ class _ResultHeader extends StatelessWidget {
                   ),
                 ),
               ),
-              _ModePill(label: modeLabel),
+              Wrap(
+                spacing: 6,
+                children: [
+                  _ModePill(label: modeLabel),
+                  _ModePill(label: sourceLabel),
+                ],
+              ),
             ],
           ),
           if (summary.openingLabel != null) ...[
@@ -227,12 +234,19 @@ class _ResultHeader extends StatelessWidget {
   static String _profileLabel(AnalysisTimeline timeline) {
     switch (timeline.analysisProfileId) {
       case 'fast_review':
-        return 'FAST';
+        return 'Fast';
       case 'offline_review':
-        return 'OFFLINE';
+        return 'Offline';
       default:
-        return 'DEEP';
+        return 'Deep';
     }
+  }
+
+  static String _sourceLabel(AnalysisTimeline timeline) {
+    final site = timeline.headers['Site']?.toLowerCase() ?? '';
+    if (site.contains('chess.com')) return 'Chess.com';
+    if (site.contains('lichess')) return 'Lichess';
+    return 'PGN';
   }
 }
 
@@ -243,7 +257,7 @@ class _ModePill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isQuick = label == 'FAST';
+    final isQuick = label == 'Fast';
     final color = isQuick ? ApexColors.inaccuracy : ApexColors.electricBlue;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -275,40 +289,45 @@ class _PlayerCardsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final h = timeline.headers;
-    return Row(
-      children: [
-        Expanded(
-          child: _PlayerCard(
-            name: h['White'] ?? 'White',
-            rating: h['WhiteElo'],
-            colorLabel: 'White',
-            result: _sideResult('1-0'),
-            accuracy: summary.userIsWhite == true
-                ? summary.userAccuracyPct
-                : summary.opponentAccuracyPct,
-            acpl: summary.userIsWhite == true
-                ? summary.userAverageCpLoss
-                : summary.opponentAverageCpLoss,
-            isUser: summary.userIsWhite == true,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _PlayerCard(
-            name: h['Black'] ?? 'Black',
-            rating: h['BlackElo'],
-            colorLabel: 'Black',
-            result: _sideResult('0-1'),
-            accuracy: summary.userIsWhite == false
-                ? summary.userAccuracyPct
-                : summary.opponentAccuracyPct,
-            acpl: summary.userIsWhite == false
-                ? summary.userAverageCpLoss
-                : summary.opponentAverageCpLoss,
-            isUser: summary.userIsWhite == false,
-          ),
-        ),
-      ],
+    final white = _PlayerCard(
+      name: h['White'] ?? 'White',
+      rating: h['WhiteElo'],
+      colorLabel: 'White',
+      result: _sideResult('1-0'),
+      accuracy: summary.userIsWhite == true
+          ? summary.userAccuracyPct
+          : summary.opponentAccuracyPct,
+      acpl: summary.userIsWhite == true
+          ? summary.userAverageCpLoss
+          : summary.opponentAverageCpLoss,
+      isUser: summary.userIsWhite == true,
+    );
+    final black = _PlayerCard(
+      name: h['Black'] ?? 'Black',
+      rating: h['BlackElo'],
+      colorLabel: 'Black',
+      result: _sideResult('0-1'),
+      accuracy: summary.userIsWhite == false
+          ? summary.userAccuracyPct
+          : summary.opponentAccuracyPct,
+      acpl: summary.userIsWhite == false
+          ? summary.userAverageCpLoss
+          : summary.opponentAverageCpLoss,
+      isUser: summary.userIsWhite == false,
+    );
+    return LayoutBuilder(
+      builder: (context, box) {
+        if (box.maxWidth < 380) {
+          return Column(children: [white, const SizedBox(height: 10), black]);
+        }
+        return Row(
+          children: [
+            Expanded(child: white),
+            const SizedBox(width: 10),
+            Expanded(child: black),
+          ],
+        );
+      },
     );
   }
 
@@ -628,14 +647,7 @@ class _MoveQualityTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final rows = MoveQualityDisplay.countOrder
-        .where(
-          (label) =>
-              (counts.whiteDisplayCounts[label] ?? 0) > 0 ||
-              (counts.blackDisplayCounts[label] ?? 0) > 0,
-        )
-        .toList(growable: false);
-    final visibleRows = rows.isEmpty ? MoveQualityDisplay.countOrder : rows;
+    const visibleRows = MoveQualityDisplay.countOrder;
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
@@ -716,6 +728,7 @@ class _MoveQualityRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dim = white == 0 && black == 0;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
@@ -724,7 +737,7 @@ class _MoveQualityRow extends StatelessWidget {
             child: Text(
               label.label,
               style: ApexTypography.bodyMedium.copyWith(
-                color: label.color,
+                color: dim ? ApexColors.textTertiary : label.color,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
@@ -1039,15 +1052,9 @@ class _HighlightsBlock extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           _HighlightRow(
-            label: 'Turning point',
-            move: h.keyTurningPoint,
-            emptyCopy: 'No decisive swing — balanced game.',
-          ),
-          const SizedBox(height: 8),
-          _HighlightRow(
-            label: 'Biggest mistake',
-            move: h.biggestMistake,
-            emptyCopy: 'No mistakes from your side.',
+            label: 'Brilliant moment',
+            move: h.brilliantMoment,
+            emptyCopy: 'No Brilliant move in this game.',
           ),
           const SizedBox(height: 8),
           _HighlightRow(
@@ -1055,6 +1062,22 @@ class _HighlightsBlock extends StatelessWidget {
             move: h.bestUserMove,
             emptyCopy: 'No standout best move — steady play.',
           ),
+          const SizedBox(height: 8),
+          _HighlightRow(
+            label: 'Biggest mistake',
+            move: h.biggestMistake,
+            emptyCopy: 'No major mistake found.',
+          ),
+          const SizedBox(height: 8),
+          _HighlightRow(
+            label: 'Turning point',
+            move: h.keyTurningPoint,
+            emptyCopy: 'No decisive swing — balanced game.',
+          ),
+          if (h.checkmate != null) ...[
+            const SizedBox(height: 8),
+            _HighlightRow(label: 'Checkmate', move: h.checkmate, emptyCopy: ''),
+          ],
         ],
       ),
     );
@@ -1141,19 +1164,6 @@ class _HighlightRow extends StatelessWidget {
                   ),
                 ],
               ),
-              if (m.message.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Text(
-                    m.message,
-                    style: ApexTypography.bodyMedium.copyWith(
-                      color: ApexColors.textSecondary,
-                      fontSize: 11,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
             ],
           ),
         ),
@@ -1310,7 +1320,7 @@ class _CtaRow extends StatelessWidget {
             ).push(MaterialPageRoute(builder: (_) => const ReviewScreen()));
           },
           icon: const Icon(Icons.play_arrow_rounded),
-          label: const Text('Review Moves'),
+          label: const Text('Start Review'),
           style: ElevatedButton.styleFrom(
             backgroundColor: ApexColors.electricBlue,
             foregroundColor: ApexColors.darkSurface,

@@ -57,21 +57,76 @@ class ImportedGame {
   }
 
   String get resultLabel => switch (result) {
-        GameResult.whiteWon => '1–0',
-        GameResult.blackWon => '0–1',
-        GameResult.draw => '½–½',
-        GameResult.unknown => '—',
-      };
+    GameResult.whiteWon => '1–0',
+    GameResult.blackWon => '0–1',
+    GameResult.draw => '½–½',
+    GameResult.unknown => '—',
+  };
+
+  String get sourceLabel => switch (source) {
+    GameSource.chessCom => 'Chess.com',
+    GameSource.lichess => 'Lichess',
+  };
+
+  String get secondaryResultText => switch (result) {
+    GameResult.whiteWon => 'White won 1-0',
+    GameResult.blackWon => 'Black won 0-1',
+    GameResult.draw => 'Draw 1/2-1/2',
+    GameResult.unknown => 'Result unavailable',
+  };
+
+  String get whiteResultText => switch (result) {
+    GameResult.whiteWon => 'White won',
+    GameResult.blackWon => 'Black won',
+    GameResult.draw => 'Draw',
+    GameResult.unknown => 'Result unavailable',
+  };
+
+  String? get opponentName {
+    return switch (userColor) {
+      PlayerColor.white => blackName,
+      PlayerColor.black => whiteName,
+      null => null,
+    };
+  }
+
+  int? get userRating {
+    return switch (userColor) {
+      PlayerColor.white => whiteRating,
+      PlayerColor.black => blackRating,
+      null => null,
+    };
+  }
+
+  int? get opponentRating {
+    return switch (userColor) {
+      PlayerColor.white => blackRating,
+      PlayerColor.black => whiteRating,
+      null => null,
+    };
+  }
+
+  String get perspectiveHeadline {
+    final opponent = opponentName;
+    if (opponent == null || result == GameResult.unknown) {
+      return whiteResultText;
+    }
+    if (result == GameResult.draw) return 'Draw vs $opponent';
+    final won =
+        (userColor == PlayerColor.white && result == GameResult.whiteWon) ||
+        (userColor == PlayerColor.black && result == GameResult.blackWon);
+    return won ? 'You won vs $opponent' : 'You lost vs $opponent';
+  }
 
   /// Resolves the user's outcome given [userColor]; returns null when we
   /// don't know which side the user played.
   String? get userOutcomeLabel {
     if (userColor == null || result == GameResult.unknown) return null;
-    final won = (userColor == PlayerColor.white &&
-            result == GameResult.whiteWon) ||
+    final won =
+        (userColor == PlayerColor.white && result == GameResult.whiteWon) ||
         (userColor == PlayerColor.black && result == GameResult.blackWon);
     final drew = result == GameResult.draw;
-    if (drew) return 'Drew';
+    if (drew) return 'Draw';
     return won ? 'Won' : 'Lost';
   }
 }

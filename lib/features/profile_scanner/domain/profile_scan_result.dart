@@ -1,4 +1,4 @@
-/// Domain model for the Apex Cheat Detection Radar.
+/// Domain model for Opponent Insights.
 ///
 /// The suspicion score is a composite of three independent signals
 /// (see `ProfileScannerService`):
@@ -13,17 +13,19 @@ library;
 enum SuspicionLevel {
   /// Clean — signal within human-plausible range for the stated ELO.
   clean,
+
   /// Moderately above expected — worth a human look but not damning.
   moderate,
+
   /// Highly suspicious — multiple signals outside human band for
   /// this rating.
   suspicious;
 
   String get label => switch (this) {
-        clean => 'Clean',
-        moderate => 'Moderate',
-        suspicious => 'Suspicious',
-      };
+    clean => 'Clean',
+    moderate => 'Moderate',
+    suspicious => 'Suspicious',
+  };
 }
 
 /// Per-game breakdown used by the details list inside the scanner.
@@ -68,16 +70,21 @@ class ProfileScanResult {
   final String username;
   final String source; // 'chess.com' | 'lichess'
   final int sampleSize;
+
   /// Mean accuracy across analysed games (0–100).
   final double averageAccuracy;
+
   /// Mean engine-match rate across games (0..1).
   final double averageEngineMatchRate;
+
   /// Mean rating from game headers (null if unavailable).
   final int? averageRating;
+
   /// Composite 0..100 suspicion score — 0 = definitely human, 100 =
   /// engine-parity across every signal.
   final double suspicionScore;
   final SuspicionLevel suspicion;
+
   /// Human-readable justification for the suspicion bucket.
   final String verdict;
   final List<GameAccuracy> games;

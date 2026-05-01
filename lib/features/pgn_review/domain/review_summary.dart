@@ -201,6 +201,8 @@ class ReviewHighlights {
     this.keyTurningPoint,
     this.biggestMistake,
     this.bestUserMove,
+    this.brilliantMoment,
+    this.checkmate,
   });
 
   /// Ply where the user-perspective Win% swing was largest in
@@ -214,6 +216,10 @@ class ReviewHighlights {
   /// The user's best ply (most positive deltaW from user POV). When
   /// a Brilliant / Great exists, prefer that over raw deltaW.
   final MoveAnalysis? bestUserMove;
+
+  final MoveAnalysis? brilliantMoment;
+
+  final MoveAnalysis? checkmate;
 }
 
 /// The full summary payload. Cheap to compute (≤ O(N) over the
@@ -495,6 +501,8 @@ class ReviewSummaryService {
     MoveAnalysis? best;
     double bestGain = -double.infinity;
     MoveAnalysis? brilliantOrGreat;
+    MoveAnalysis? brilliantMoment;
+    MoveAnalysis? checkmate;
 
     for (final m in moves) {
       if (userIsWhite != null && m.isWhiteMove != userIsWhite) continue;
@@ -520,6 +528,12 @@ class ReviewSummaryService {
           m.classification == MoveQuality.great) {
         brilliantOrGreat ??= m;
       }
+      if (m.classification == MoveQuality.brilliant) {
+        brilliantMoment ??= m;
+      }
+      if (m.san.contains('#')) {
+        checkmate ??= m;
+      }
     }
 
     return ReviewHighlights(
@@ -528,6 +542,8 @@ class ReviewSummaryService {
       // Prefer a Brilliant/Great when one exists — the spec calls this
       // out as "Best move by user".
       bestUserMove: brilliantOrGreat ?? best,
+      brilliantMoment: brilliantMoment,
+      checkmate: checkmate,
     );
   }
 

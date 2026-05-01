@@ -14,8 +14,8 @@ import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/archives/presentation/controllers/archive_controller.dart';
 
 /// Which side the user wants to inspect. Drives every derived stat on
-/// the Grandmaster Analytics dashboard so the pie, trend, and opening
-/// table all respect the same filter toggle.
+/// the Stats dashboard so the pie, trend, and opening table all respect
+/// the same filter toggle.
 enum ColorPerspective { all, white, black }
 
 /// Single row in the opening-performance table. Sorted desc by
@@ -44,8 +44,9 @@ class OpeningStats {
 
 /// Active color filter for the dashboard. Persisted across the session
 /// only — a fresh app launch starts on [ColorPerspective.all].
-final dashboardColorFilterProvider =
-    StateProvider<ColorPerspective>((_) => ColorPerspective.all);
+final dashboardColorFilterProvider = StateProvider<ColorPerspective>(
+  (_) => ColorPerspective.all,
+);
 
 class DashboardStats {
   const DashboardStats({
@@ -66,21 +67,21 @@ class DashboardStats {
   });
 
   factory DashboardStats.empty() => const DashboardStats(
-        gamesAnalyzed: 0,
-        wins: 0,
-        losses: 0,
-        draws: 0,
-        unknownResult: 0,
-        totalBrilliants: 0,
-        totalBlunders: 0,
-        totalMistakes: 0,
-        totalInaccuracies: 0,
-        qualityDistribution: {},
-        accuracyTrend: [],
-        winRate: 0,
-        averageAccuracy: 0,
-        perspective: null,
-      );
+    gamesAnalyzed: 0,
+    wins: 0,
+    losses: 0,
+    draws: 0,
+    unknownResult: 0,
+    totalBrilliants: 0,
+    totalBlunders: 0,
+    totalMistakes: 0,
+    totalInaccuracies: 0,
+    qualityDistribution: {},
+    accuracyTrend: [],
+    winRate: 0,
+    averageAccuracy: 0,
+    perspective: null,
+  );
 
   final int gamesAnalyzed;
   final int wins;
@@ -130,8 +131,7 @@ final openingStatsProvider = Provider<List<OpeningStats>>((ref) {
 
 /// Revisit queue — the openings the Academy spaced-repetition loop
 /// nudges first. Worst win rate + reasonable sample, capped at 5.
-final academyRevisitQueueProvider =
-    Provider<List<OpeningStats>>((ref) {
+final academyRevisitQueueProvider = Provider<List<OpeningStats>>((ref) {
   final list = ref.watch(openingStatsProvider);
   final filtered = list.where((o) => o.total >= 3).toList()
     ..sort((a, b) {
@@ -192,8 +192,7 @@ DashboardStats _buildStats(
     mistakes += g.mistakeCount;
     inaccuracies += g.inaccuracyCount;
     for (final entry in g.qualityCountsLive.entries) {
-      qualityTotals[entry.key] =
-          (qualityTotals[entry.key] ?? 0) + entry.value;
+      qualityTotals[entry.key] = (qualityTotals[entry.key] ?? 0) + entry.value;
     }
     // Accuracy clamps to a sensible band — a bad game doesn't have
     // negative accuracy, and a flawless one caps at 100.
@@ -292,16 +291,19 @@ List<OpeningStats> _buildOpeningStats(
         bucket.draws++;
     }
   }
-  final out = buckets.values
-      .map((b) => OpeningStats(
-            name: b.name,
-            eco: b.eco,
-            wins: b.wins,
-            losses: b.losses,
-            draws: b.draws,
-          ))
-      .toList()
-    ..sort((a, b) => b.total.compareTo(a.total));
+  final out =
+      buckets.values
+          .map(
+            (b) => OpeningStats(
+              name: b.name,
+              eco: b.eco,
+              wins: b.wins,
+              losses: b.losses,
+              draws: b.draws,
+            ),
+          )
+          .toList()
+        ..sort((a, b) => b.total.compareTo(a.total));
   return out;
 }
 
@@ -325,9 +327,9 @@ class DashboardPageController extends Notifier<int> {
   void reset() => state = 0;
 }
 
-final dashboardPageProvider =
-    NotifierProvider<DashboardPageController, int>(
-        DashboardPageController.new);
+final dashboardPageProvider = NotifierProvider<DashboardPageController, int>(
+  DashboardPageController.new,
+);
 
 final dashboardVisibleGamesProvider = Provider<List<ArchivedGame>>((ref) {
   final games = ref.watch(archiveControllerProvider).games;

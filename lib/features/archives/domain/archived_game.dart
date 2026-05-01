@@ -1,8 +1,8 @@
-/// Archived game — the persistent record of a completed Quantum Scan.
+/// Archived game — the persistent record of a completed review.
 ///
 /// Designed to be cheap to store (single JSON document per game,
-/// <5 KB) and rich enough to drive the Archived Intel list view and
-/// filters without re-hitting the original Chess.com / Lichess PGN
+/// <5 KB) and rich enough to drive the Archive list view and filters
+/// without re-hitting the original Chess.com / Lichess PGN
 /// endpoint. Re-opening an archived game loads the raw PGN from this
 /// record and re-plays the analysis pipeline locally.
 library;
@@ -29,9 +29,8 @@ import 'package:apex_chess/core/domain/services/move_quality_display.dart';
 ///            PV1 invariant.
 const int kClassifierVersion = kApexClassifierVersion;
 
-/// Analysis mode used when the timeline was produced. Stored so a
-/// Quick scan does not masquerade as a Deep one when listed alongside
-/// it; the archive UI can also surface this as a pill.
+/// Analysis mode used when the timeline was produced. Stored so a Fast
+/// Review does not masquerade as a Deep Review when listed alongside it.
 enum AnalysisMode {
   quick('quick'),
   deep('deep');
@@ -74,7 +73,7 @@ class ArchivedGame {
   final DateTime? playedAt;
   final DateTime analyzedAt;
 
-  /// 14 (Fast) or 22 (Quantum). Surfaced in the list as a pill.
+  /// 14 (Fast Review) or 22 (Deep Review). Surfaced in the list as a tag.
   final int depth;
 
   /// Raw PGN — required to rebuild the board on re-open.
@@ -114,9 +113,8 @@ class ArchivedGame {
   final String? ecoCode;
 
   /// Optional cached full timeline. When present, re-opening the game
-  /// from the Archived Intel screen skips the engine entirely and
-  /// rebuilds the review state from this snapshot — that's how Phase 6
-  /// "open saved report instantly" works in practice.
+  /// from the Archive screen rebuilds the review state from this
+  /// snapshot instead of running analysis again.
   ///
   /// Older records persisted before this field existed simply leave it
   /// `null` and fall through to the legacy re-analysis path; the schema
@@ -214,6 +212,87 @@ class ArchivedGame {
 
   int displayCount(ReviewMoveLabel label) =>
       displayQualityCountsLive[label] ?? 0;
+
+  String get sourceLabel => switch (source) {
+    ArchiveSource.chessCom => 'Chess.com',
+    ArchiveSource.lichess => 'Lichess',
+    ArchiveSource.pgn => 'PGN',
+  };
+
+  String get reviewModeLabel => switch (analysisProfileId) {
+    'fast_review' => 'Fast',
+    'offline_review' => 'Offline',
+    _ => 'Deep',
+  };
+
+  bool? userIsBlackFor(String? userHandle) {
+    final me = userHandle?.trim().toLowerCase();
+    if (me == null || me.isEmpty) return null;
+    if (black.trim().toLowerCase() == me) return true;
+    if (white.trim().toLowerCase() == me) return false;
+    return null;
+  }
+
+  String? opponentFor(String? userHandle) {
+    final userIsBlack = userIsBlackFor(userHandle);
+    if (userIsBlack == null) return null;
+    return userIsBlack ? white : black;
+  }
+
+  String resultHeadline({String? userHandle}) {
+    final userIsBlack = userIsBlackFor(userHandle);
+    if (userIsBlack == null) {
+      return switch (result) {
+        '1-0' => 'White won',
+        '0-1' => 'Black won',
+        '1/2-1/2' => 'Draw',
+        _ => result,
+      };
+    }
+    final opponent = opponentFor(userHandle) ?? (userIsBlack ? white : black);
+    if (result == '1/2-1/2') return 'Draw vs $opponent';
+    final won =
+        (!userIsBlack && result == '1-0') || (userIsBlack && result == '0-1');
+    return won ? 'You won vs $opponent' : 'You lost vs $opponent';
+  }
+
+  String get secondaryResultText {
+    return switch (result) {
+      '1-0' => 'White won 1-0',
+      '0-1' => 'Black won 0-1',
+      '1/2-1/2' => 'Draw 1/2-1/2',
+      _ => 'Result unavailable',
+    };
+  }
+
+  String get relativePlayedAt {
+    final date = playedAt ?? analyzedAt;
+    final diff = DateTime.now().difference(date);
+    if (diff.inMinutes < 1) return 'just now';
+    if (diff.inHours < 1) return '${diff.inMinutes}m ago';
+    if (diff.inDays < 1) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    if (diff.inDays < 30) return '${(diff.inDays / 7).floor()}w ago';
+    if (diff.inDays < 365) return '${(diff.inDays / 30).floor()}mo ago';
+    return '${(diff.inDays / 365).floor()}y ago';
+  }
+
+  String get openingLine {
+    final parts = <String>[
+      if (ecoCode != null && ecoCode!.isNotEmpty) ecoCode!,
+      openingName ?? 'Opening not tagged',
+    ];
+    return parts.join(' ');
+  }
+
+  String get compactQualityLine {
+    return [
+      'Brilliant $brilliantCount',
+      'Great $greatCount',
+      'Miss $missCount',
+      'Blunder $blunderCount',
+    ].join(' • ');
+  }
 
   // ── Serialisation ──────────────────────────────────────────────
   // Hive can persist `Map<String, dynamic>` directly via its default

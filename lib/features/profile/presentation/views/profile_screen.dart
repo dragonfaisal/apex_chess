@@ -18,6 +18,7 @@ import 'package:apex_chess/features/account/presentation/views/connect_account_s
 import 'package:apex_chess/features/profile_stats/data/profile_stats_service.dart';
 import 'package:apex_chess/features/profile_stats/presentation/controllers/profile_stats_controller.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
 
 class ProfileScreen extends ConsumerWidget {
@@ -81,8 +82,8 @@ class _IdentityCard extends StatelessWidget {
     final connected = account != null;
     final accent = connected
         ? (account!.source == AccountSource.chessCom
-            ? ApexColors.emerald
-            : ApexColors.sapphireBright)
+              ? ApexColors.emerald
+              : ApexColors.sapphireBright)
         : ApexColors.textTertiary;
     return GlassPanel(
       padding: const EdgeInsets.all(20),
@@ -91,10 +92,7 @@ class _IdentityCard extends StatelessWidget {
       showGlow: connected,
       child: Row(
         children: [
-          _Avatar(
-            seed: connected ? account!.username : '?',
-            accent: accent,
-          ),
+          _Avatar(seed: connected ? account!.username : '?', accent: accent),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
@@ -112,12 +110,16 @@ class _IdentityCard extends StatelessWidget {
                 const SizedBox(height: 6),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(8),
                     color: accent.withValues(alpha: 0.15),
                     border: Border.all(
-                        color: accent.withValues(alpha: 0.45), width: 0.8),
+                      color: accent.withValues(alpha: 0.45),
+                      width: 0.8,
+                    ),
                   ),
                   child: Text(
                     connected
@@ -208,22 +210,15 @@ class _StatsCard extends StatelessWidget {
       accentColor: ApexColors.sapphireBright,
       accentAlpha: 0.35,
       child: statsAsync.when(
-        loading: () => const Padding(
-          padding: EdgeInsets.symmetric(vertical: 24),
-          child: Center(
-            child: SizedBox(
-              width: 22, height: 22,
-              child: CircularProgressIndicator(
-                  strokeWidth: 2, color: ApexColors.sapphireBright),
-            ),
-          ),
-        ),
-        error: (_, __) => const _StatsEmpty(
-            message: 'Couldn\'t reach the rating service.'),
+        loading: () =>
+            const ApexSkeletonCard(height: 90, margin: EdgeInsets.zero),
+        error: (_, __) =>
+            const _StatsEmpty(message: 'Couldn\'t reach the rating service.'),
         data: (stats) {
           if (stats == null || !stats.hasData) {
             return const _StatsEmpty(
-                message: 'No live ratings yet — play a few games to populate.');
+              message: 'No live ratings yet — play a few games to populate.',
+            );
           }
           return _StatsBody(stats: stats);
         },
@@ -238,15 +233,17 @@ class _StatsBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ratingBuckets =
-        stats.buckets.where((b) => b.rating != null).toList();
+    final ratingBuckets = stats.buckets.where((b) => b.rating != null).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            const Icon(Icons.bar_chart_rounded,
-                color: ApexColors.sapphireBright, size: 18),
+            const Icon(
+              Icons.bar_chart_rounded,
+              color: ApexColors.sapphireBright,
+              size: 18,
+            ),
             const SizedBox(width: 8),
             Text(
               'LIVE RATINGS',
@@ -272,22 +269,22 @@ class _StatsBody extends StatelessWidget {
           Wrap(
             spacing: 10,
             runSpacing: 10,
-            children: ratingBuckets
-                .map((b) => _RatingChip(bucket: b))
-                .toList(),
+            children: ratingBuckets.map((b) => _RatingChip(bucket: b)).toList(),
           ),
         const SizedBox(height: 18),
         Row(
           children: [
             Expanded(
-                child: _StatCell(
-                    label: 'GAMES', value: '${stats.totalGames}')),
+              child: _StatCell(label: 'GAMES', value: '${stats.totalGames}'),
+            ),
             const SizedBox(width: 10),
             Expanded(
-                child: _StatCell(
-                    label: 'WIN %',
-                    value: '${stats.winRate.toStringAsFixed(1)}%',
-                    accent: ApexColors.emerald)),
+              child: _StatCell(
+                label: 'WIN %',
+                value: '${stats.winRate.toStringAsFixed(1)}%',
+                accent: ApexColors.emerald,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 10),
@@ -295,23 +292,26 @@ class _StatsBody extends StatelessWidget {
           children: [
             Expanded(
               child: _StatCell(
-                  label: 'WINS',
-                  value: '${stats.totalWins}',
-                  accent: ApexColors.emerald),
+                label: 'WINS',
+                value: '${stats.totalWins}',
+                accent: ApexColors.emerald,
+              ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: _StatCell(
-                  label: 'DRAWS',
-                  value: '${stats.totalDraws}',
-                  accent: ApexColors.textSecondary),
+                label: 'DRAWS',
+                value: '${stats.totalDraws}',
+                accent: ApexColors.textSecondary,
+              ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: _StatCell(
-                  label: 'LOSSES',
-                  value: '${stats.totalLosses}',
-                  accent: ApexColors.ruby),
+                label: 'LOSSES',
+                value: '${stats.totalLosses}',
+                accent: ApexColors.ruby,
+              ),
             ),
           ],
         ),
@@ -332,8 +332,9 @@ class _RatingChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         color: ApexColors.sapphireBright.withValues(alpha: 0.10),
         border: Border.all(
-            color: ApexColors.sapphireBright.withValues(alpha: 0.35),
-            width: 0.8),
+          color: ApexColors.sapphireBright.withValues(alpha: 0.35),
+          width: 0.8,
+        ),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -363,11 +364,7 @@ class _RatingChip extends StatelessWidget {
 }
 
 class _StatCell extends StatelessWidget {
-  const _StatCell({
-    required this.label,
-    required this.value,
-    this.accent,
-  });
+  const _StatCell({required this.label, required this.value, this.accent});
 
   final String label;
   final String value;
@@ -381,8 +378,7 @@ class _StatCell extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
         color: ApexColors.nebula.withValues(alpha: 0.4),
-        border: Border.all(
-            color: color.withValues(alpha: 0.25), width: 0.8),
+        border: Border.all(color: color.withValues(alpha: 0.25), width: 0.8),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -486,13 +482,15 @@ class _ActionsCard extends ConsumerWidget {
                 ),
               ),
               icon: const Icon(Icons.swap_horiz_rounded, size: 18),
-              label: Text(account == null ? 'CONNECT ACCOUNT' : 'SWITCH ACCOUNT'),
+              label: Text(
+                account == null ? 'CONNECT ACCOUNT' : 'SWITCH ACCOUNT',
+              ),
               style: OutlinedButton.styleFrom(
                 foregroundColor: ApexColors.sapphireBright,
                 side: BorderSide(
-                    color:
-                        ApexColors.sapphireBright.withValues(alpha: 0.55),
-                    width: 1),
+                  color: ApexColors.sapphireBright.withValues(alpha: 0.55),
+                  width: 1,
+                ),
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 textStyle: ApexTypography.bodyMedium.copyWith(
                   letterSpacing: 1.4,
@@ -512,8 +510,9 @@ class _ActionsCard extends ConsumerWidget {
                 style: OutlinedButton.styleFrom(
                   foregroundColor: ApexColors.ruby,
                   side: BorderSide(
-                      color: ApexColors.ruby.withValues(alpha: 0.55),
-                      width: 1),
+                    color: ApexColors.ruby.withValues(alpha: 0.55),
+                    width: 1,
+                  ),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   textStyle: ApexTypography.bodyMedium.copyWith(
                     letterSpacing: 1.4,
@@ -543,8 +542,7 @@ class _ActionsCard extends ConsumerWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: ApexColors.nebula,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Logout?'),
         content: const Text(
           'This wipes archived games, mistake vault, ratings cache, and the connected handle from this device.',

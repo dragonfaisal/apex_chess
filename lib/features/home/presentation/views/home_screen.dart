@@ -37,153 +37,61 @@ import 'package:apex_chess/features/profile_scanner/presentation/views/profile_s
 import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
-import 'package:apex_chess/shared_ui/widgets/quantum_shatter_loader.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  int _tabIndex = 0;
+
+  @override
+  Widget build(BuildContext context) {
     final account = ref.watch(accountControllerProvider).valueOrNull;
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(gradient: ApexGradients.spaceCanvas),
-        child: SafeArea(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              // Guarantee the column can scroll when it doesn't fit — this
-              // is the fix for the RenderFlex overflow on small devices.
-              return SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const SizedBox(height: 24),
-                        _AccountStrip(account: account),
-                        const SizedBox(height: 22),
-                        Text(
-                          ApexCopy.appTitle,
-                          textAlign: TextAlign.center,
-                          style: ApexTypography.displayLarge.copyWith(
-                            letterSpacing: 6,
-                            fontSize: 32,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          ApexCopy.tagline,
-                          textAlign: TextAlign.center,
-                          style: ApexTypography.bodyMedium.copyWith(
-                            color: ApexColors.sapphireBright.withValues(
-                              alpha: 0.72,
-                            ),
-                            letterSpacing: 2,
-                            fontSize: 11,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        _HeroPlayCard(
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const LivePlayScreen(),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        _HomeTileGrid(
-                          children: [
-                            _TileCard(
-                              title: ApexCopy.importMatch,
-                              subtitle: 'Chess.com · Lichess',
-                              icon: Icons.cloud_download_rounded,
-                              accent: ApexColors.sapphire,
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const ImportMatchScreen(),
-                                ),
-                              ),
-                            ),
-                            _TileCard(
-                              title: ApexCopy.analyzeGame,
-                              subtitle: 'Paste PGN · review',
-                              icon: Icons.auto_graph_rounded,
-                              accent: ApexColors.aurora,
-                              onTap: () => _showPgnDialog(
-                                context,
-                                ref,
-                                account?.username,
-                              ),
-                            ),
-                            _TileCard(
-                              title: ApexCopy.dashboardTitle,
-                              subtitle: 'Ratings · trend · openings',
-                              icon: Icons.insights_rounded,
-                              accent: ApexColors.emerald,
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const GlobalDashboardScreen(),
-                                ),
-                              ),
-                            ),
-                            _TileCard(
-                              title: ApexCopy.scannerTitle,
-                              subtitle: 'Opponent review',
-                              icon: Icons.radar_rounded,
-                              accent: ApexColors.ruby,
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const ProfileScannerScreen(),
-                                ),
-                              ),
-                            ),
-                            _TileCard(
-                              title: ApexCopy.academyTitle,
-                              subtitle: 'Weakness drills',
-                              icon: Icons.school_rounded,
-                              accent: ApexColors.emeraldBright,
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const ApexAcademyScreen(),
-                                ),
-                              ),
-                            ),
-                            _TileCard(
-                              title: ApexCopy.archivesTitle,
-                              subtitle: 'Saved reviews',
-                              icon: Icons.inventory_2_outlined,
-                              accent: ApexColors.sapphireBright,
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const ArchiveScreen(),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 28),
-                        Text(
-                          ApexCopy.liveEngineFooter,
-                          textAlign: TextAlign.center,
-                          style: ApexTypography.bodyMedium.copyWith(
-                            color: ApexColors.textTertiary,
-                            fontSize: 11,
-                            letterSpacing: 1.4,
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            },
+      resizeToAvoidBottomInset: true,
+      body: IndexedStack(
+        index: _tabIndex,
+        children: [
+          _AnalyzeTab(
+            account: account,
+            onPastePgn: () => _showPgnDialog(context, ref, account?.username),
           ),
-        ),
+          const ArchiveScreen(showBackButton: false),
+          const GlobalDashboardScreen(showBackButton: false),
+          const ApexAcademyScreen(showBackButton: false),
+        ],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _tabIndex,
+        onDestinationSelected: (index) => setState(() => _tabIndex = index),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.auto_graph_outlined),
+            selectedIcon: Icon(Icons.auto_graph_rounded),
+            label: 'Analyze',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.inventory_2_outlined),
+            selectedIcon: Icon(Icons.inventory_2_rounded),
+            label: 'Archive',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.insights_outlined),
+            selectedIcon: Icon(Icons.insights_rounded),
+            label: 'Stats',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.school_outlined),
+            selectedIcon: Icon(Icons.school_rounded),
+            label: 'Academy',
+          ),
+        ],
       ),
     );
   }
@@ -217,6 +125,127 @@ class HomeScreen extends ConsumerWidget {
         profile: result.profile,
         userIsWhite: result.userIsWhite,
         userHandle: result.userHandle,
+      ),
+    );
+  }
+}
+
+class _AnalyzeTab extends StatelessWidget {
+  const _AnalyzeTab({required this.account, required this.onPastePgn});
+
+  final ApexAccount? account;
+  final VoidCallback onPastePgn;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(gradient: ApexGradients.spaceCanvas),
+      child: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.viewInsetsOf(context).bottom + 16,
+              ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SizedBox(height: 24),
+                      _AccountStrip(account: account),
+                      const SizedBox(height: 22),
+                      Text(
+                        ApexCopy.appTitle,
+                        textAlign: TextAlign.center,
+                        style: ApexTypography.displayLarge.copyWith(
+                          fontSize: 32,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        ApexCopy.tagline,
+                        textAlign: TextAlign.center,
+                        style: ApexTypography.bodyMedium.copyWith(
+                          color: ApexColors.sapphireBright.withValues(
+                            alpha: 0.72,
+                          ),
+                          fontSize: 11,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      _HeroPlayCard(
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const LivePlayScreen(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      _HomeTileGrid(
+                        children: [
+                          _TileCard(
+                            title: 'Import Games',
+                            subtitle: 'Chess.com · Lichess',
+                            icon: Icons.cloud_download_rounded,
+                            accent: ApexColors.sapphire,
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const ImportMatchScreen(),
+                              ),
+                            ),
+                          ),
+                          _TileCard(
+                            title: 'Paste PGN',
+                            subtitle: 'Detected preview · review',
+                            icon: Icons.auto_graph_rounded,
+                            accent: ApexColors.aurora,
+                            onTap: onPastePgn,
+                          ),
+                          _TileCard(
+                            title: 'Opponent Insights',
+                            subtitle: 'Profile review',
+                            icon: Icons.person_search_rounded,
+                            accent: ApexColors.ruby,
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const ProfileScannerScreen(),
+                              ),
+                            ),
+                          ),
+                          _TileCard(
+                            title: 'Live',
+                            subtitle: 'Play · feedback · review',
+                            icon: Icons.play_arrow_rounded,
+                            accent: ApexColors.emerald,
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const LivePlayScreen(),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 28),
+                      Text(
+                        ApexCopy.liveEngineFooter,
+                        textAlign: TextAlign.center,
+                        style: ApexTypography.bodyMedium.copyWith(
+                          color: ApexColors.textTertiary,
+                          fontSize: 11,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -283,13 +312,14 @@ class _PgnPasteDialogState extends State<_PgnPasteDialog> {
   void _pop(AnalysisProfile profile) {
     final pgn = _pgnController.text.trim();
     if (pgn.isEmpty) return;
-    final handle = _handleController.text.trim();
+    final typedHandle = _handleController.text.trim();
+    final handle = typedHandle.isEmpty ? widget.connectedHandle : typedHandle;
     Navigator.of(context).pop(
       _PgnPasteResult(
         pgn: pgn,
         profile: profile,
         userIsWhite: _effectiveUserIsWhite,
-        userHandle: handle.isEmpty ? null : handle,
+        userHandle: (handle?.trim().isEmpty ?? true) ? null : handle,
       ),
     );
   }
@@ -312,116 +342,113 @@ class _PgnPasteDialogState extends State<_PgnPasteDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-      child: GlassPanel.dialog(
-        accentColor: ApexColors.sapphire,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
+    final viewInsets = MediaQuery.viewInsetsOf(context);
+    final screen = MediaQuery.sizeOf(context);
+    final preview = _currentPreview;
+    final selectedSide = _sideTouched ? _userIsWhite : preview.userIsWhite;
+    return AnimatedPadding(
+      duration: ApexMotion.normal,
+      curve: ApexMotion.standard,
+      padding: EdgeInsets.only(bottom: viewInsets.bottom),
+      child: Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: screen.height - viewInsets.bottom - 48,
+          ),
+          child: GlassPanel.dialog(
+            accentColor: ApexColors.sapphire,
+            child: SingleChildScrollView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.only(bottom: ApexSpacing.sm),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Icon(
-                    Icons.auto_graph_rounded,
-                    color: ApexColors.sapphire,
-                    size: 22,
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.auto_graph_rounded,
+                        color: ApexColors.sapphire,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        ApexCopy.pgnDialogTitle,
+                        style: ApexTypography.titleMedium,
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: _pgnController,
+                    minLines: 4,
+                    maxLines: 7,
+                    keyboardType: TextInputType.multiline,
+                    textInputAction: TextInputAction.newline,
+                    cursorColor: ApexColors.sapphireBright,
+                    autofillHints: const [],
+                    enableSuggestions: false,
+                    autocorrect: false,
+                    style: ApexTypography.bodyMedium.copyWith(
+                      fontFamily: 'JetBrainsMono',
+                      fontSize: 12,
+                      color: ApexColors.textPrimary,
+                    ),
+                    decoration: _dialogField(hint: ApexCopy.pgnDialogHint),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                  if (widget.connectedHandle == null) ...[
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _handleController,
+                      cursorColor: ApexColors.sapphireBright,
+                      autofillHints: const [],
+                      enableSuggestions: false,
+                      autocorrect: false,
+                      textInputAction: TextInputAction.done,
+                      style: ApexTypography.bodyMedium.copyWith(
+                        fontSize: 12,
+                        color: ApexColors.textPrimary,
+                      ),
+                      decoration: _dialogField(
+                        hint: 'Player name for side detection',
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  _PgnPreview(identity: preview),
+                  const SizedBox(height: 12),
+                  _PerspectiveSelector(
+                    value: selectedSide,
+                    autoDetected: !_sideTouched && preview.userIsWhite != null,
+                    onChanged: (v) => setState(() {
+                      _sideTouched = true;
+                      _userIsWhite = v;
+                    }),
+                    onSwitch: selectedSide == null
+                        ? null
+                        : () => setState(() {
+                            _sideTouched = true;
+                            _userIsWhite = !selectedSide;
+                          }),
+                  ),
+                  const SizedBox(height: 16),
+                  _ReviewModeButtons(onSelected: _pop),
+                  const SizedBox(height: 8),
                   Text(
-                    ApexCopy.pgnDialogTitle,
-                    style: ApexTypography.titleMedium,
+                    'Offline Review runs on this device and may be slower.',
+                    style: ApexTypography.bodyMedium.copyWith(
+                      color: ApexColors.textTertiary,
+                      fontSize: 10,
+                      height: 1.35,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
                 ],
               ),
-              const SizedBox(height: 14),
-              // Phase 20.1 device feedback § 7: explicit cursor colour
-              // and disabled autofill suppress Android's yellow autofill
-              // bar / default cyan cursor that previously leaked through
-              // the dark theme.
-              TextField(
-                controller: _pgnController,
-                maxLines: 6,
-                cursorColor: ApexColors.sapphireBright,
-                autofillHints: const [],
-                enableSuggestions: false,
-                autocorrect: false,
-                style: ApexTypography.bodyMedium.copyWith(
-                  fontFamily: 'JetBrainsMono',
-                  fontSize: 12,
-                  color: ApexColors.textPrimary,
-                ),
-                decoration: _dialogField(hint: ApexCopy.pgnDialogHint),
-                onChanged: (_) => setState(() {}),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _handleController,
-                cursorColor: ApexColors.sapphireBright,
-                autofillHints: const [],
-                enableSuggestions: false,
-                autocorrect: false,
-                style: ApexTypography.bodyMedium.copyWith(
-                  fontSize: 12,
-                  color: ApexColors.textPrimary,
-                ),
-                decoration: _dialogField(hint: 'Your handle (optional)'),
-                onChanged: (_) => setState(() {}),
-              ),
-              const SizedBox(height: 12),
-              _PgnPreview(identity: _currentPreview),
-              const SizedBox(height: 14),
-              Text(
-                'You played as',
-                style: ApexTypography.bodyMedium.copyWith(
-                  color: ApexColors.textTertiary,
-                  fontSize: 11,
-                  letterSpacing: 1.3,
-                ),
-              ),
-              const SizedBox(height: 6),
-              _SideSelector(
-                value: _sideTouched
-                    ? _userIsWhite
-                    : _currentPreview.userIsWhite,
-                onChanged: (v) => setState(() {
-                  _sideTouched = true;
-                  _userIsWhite = v;
-                }),
-              ),
-              const SizedBox(height: 18),
-              _DialogPrimaryAction(
-                label: 'Fast Review',
-                icon: Icons.flash_on_rounded,
-                onTap: () => _pop(AnalysisProfile.fastReview),
-              ),
-              const SizedBox(height: 10),
-              _DialogPrimaryAction(
-                label: 'Deep Review',
-                icon: Icons.auto_awesome_rounded,
-                onTap: () => _pop(AnalysisProfile.deepReview),
-              ),
-              const SizedBox(height: 10),
-              _DialogPrimaryAction(
-                label: 'Offline Review',
-                icon: Icons.offline_bolt_rounded,
-                onTap: () => _pop(AnalysisProfile.offlineReview),
-              ),
-              const SizedBox(height: 8),
-              // Phase 20.1 § 1: reinforce that Quick is preview-only
-              // before the user commits to a mode. Deep is the
-              // recommended path for trustworthy tactical badges.
-              Text(
-                'Offline Review runs on this device and may be slower.',
-                style: ApexTypography.bodyMedium.copyWith(
-                  color: ApexColors.textTertiary,
-                  fontSize: 10,
-                  height: 1.35,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -465,80 +492,323 @@ class _PgnPreview extends StatelessWidget {
       userIsWhite: identity.userIsWhite,
     );
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: ApexColors.nebula.withValues(alpha: 0.48),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: ApexColors.subtleBorder, width: 0.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            identity.matchup,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: ApexTypography.titleMedium.copyWith(fontSize: 13),
+          Row(
+            children: [
+              Expanded(
+                child: _PreviewPlayerCard(
+                  label: 'White',
+                  name: identity.white,
+                  rating: identity.whiteRating,
+                  isUser: identity.userIsWhite == true,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _PreviewPlayerCard(
+                  label: 'Black',
+                  name: identity.black,
+                  rating: identity.blackRating,
+                  isUser: identity.userIsWhite == false,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            '$result · ${identity.moveCount} moves',
-            style: ApexTypography.bodyMedium.copyWith(
-              color: ApexColors.textSecondary,
-              fontSize: 11,
+          const SizedBox(height: 12),
+          _PreviewMetaRow(
+            icon: Icons.flag_rounded,
+            label: result,
+            color: identity.userIsWhite == null
+                ? ApexColors.textSecondary
+                : ApexColors.sapphireBright,
+          ),
+          const SizedBox(height: 6),
+          _PreviewMetaRow(
+            icon: Icons.menu_book_rounded,
+            label: opening,
+            color: ApexColors.book,
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 10,
+            runSpacing: 6,
+            children: [
+              _SmallPreviewFact(
+                icon: Icons.format_list_numbered_rounded,
+                label: '${identity.moveCount} moves',
+              ),
+              if (identity.date != null)
+                _SmallPreviewFact(
+                  icon: Icons.calendar_today_rounded,
+                  label: identity.date!,
+                ),
+              if (identity.timeControl != null)
+                _SmallPreviewFact(
+                  icon: Icons.timer_outlined,
+                  label: identity.timeControl!,
+                ),
+            ],
+          ),
+          if (identity.userIsWhite != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Detected perspective: You: ${identity.userIsWhite! ? 'White' : 'Black'}',
+              style: ApexTypography.bodyMedium.copyWith(
+                color: ApexColors.sapphireBright,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            opening,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: ApexTypography.bodyMedium.copyWith(
-              color: ApexColors.sapphireBright,
-              fontSize: 11,
-            ),
-          ),
+          ],
         ],
       ),
     );
   }
 }
 
-/// Three-way segmented selector: White / Black / Unknown. Used by the
-/// PGN paste dialog to capture which colour the user played; the value
-/// is threaded through to the analyzer (board auto-flip) and the
-/// Mistake Vault hook (colour-filtered ingest).
-class _SideSelector extends StatelessWidget {
-  const _SideSelector({required this.value, required this.onChanged});
-  final bool? value;
-  final ValueChanged<bool?> onChanged;
+class _PreviewPlayerCard extends StatelessWidget {
+  const _PreviewPlayerCard({
+    required this.label,
+    required this.name,
+    required this.rating,
+    required this.isUser,
+  });
+
+  final String label;
+  final String name;
+  final String? rating;
+  final bool isUser;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: isUser
+            ? ApexColors.sapphire.withValues(alpha: 0.16)
+            : ApexColors.deepSpace.withValues(alpha: 0.40),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isUser
+              ? ApexColors.sapphire.withValues(alpha: 0.46)
+              : ApexColors.subtleBorder,
+          width: 0.6,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                label,
+                style: ApexTypography.bodyMedium.copyWith(
+                  color: ApexColors.textTertiary,
+                  fontSize: 10,
+                ),
+              ),
+              if (isUser) ...[
+                const Spacer(),
+                Text(
+                  'YOU',
+                  style: ApexTypography.labelLarge.copyWith(
+                    color: ApexColors.sapphireBright,
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: ApexTypography.titleMedium.copyWith(
+              color: ApexColors.textPrimary,
+              fontSize: 13,
+            ),
+          ),
+          if (rating != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              rating!,
+              style: ApexTypography.monoEval.copyWith(
+                color: ApexColors.textSecondary,
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PreviewMetaRow extends StatelessWidget {
+  const _PreviewMetaRow({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Expanded(
-          child: _SideChip(
-            label: 'White',
-            selected: value == true,
-            onTap: () => onChanged(true),
-          ),
-        ),
+        Icon(icon, size: 15, color: color),
         const SizedBox(width: 8),
         Expanded(
-          child: _SideChip(
-            label: 'Black',
-            selected: value == false,
-            onTap: () => onChanged(false),
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: ApexTypography.bodyMedium.copyWith(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _SideChip(
-            label: 'Unknown',
-            selected: value == null,
-            onTap: () => onChanged(null),
+      ],
+    );
+  }
+}
+
+class _SmallPreviewFact extends StatelessWidget {
+  const _SmallPreviewFact({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: ApexColors.textTertiary),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: ApexTypography.bodyMedium.copyWith(
+            color: ApexColors.textTertiary,
+            fontSize: 11,
           ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PerspectiveSelector extends StatelessWidget {
+  const _PerspectiveSelector({
+    required this.value,
+    required this.autoDetected,
+    required this.onChanged,
+    this.onSwitch,
+  });
+
+  final bool? value;
+  final bool autoDetected;
+  final ValueChanged<bool?> onChanged;
+  final VoidCallback? onSwitch;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = value == null
+        ? 'Choose your side'
+        : autoDetected
+        ? 'Side detected'
+        : 'You: ${value! ? 'White' : 'Black'}';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                title,
+                style: ApexTypography.bodyMedium.copyWith(
+                  color: ApexColors.textTertiary,
+                  fontSize: 11,
+                ),
+              ),
+            ),
+            if (onSwitch != null)
+              TextButton.icon(
+                onPressed: onSwitch,
+                icon: const Icon(Icons.swap_horiz_rounded, size: 16),
+                label: const Text('Switch Side'),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            Expanded(
+              child: _SideChip(
+                label: 'White',
+                selected: value == true,
+                onTap: () => onChanged(true),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _SideChip(
+                label: 'Black',
+                selected: value == false,
+                onTap: () => onChanged(false),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _ReviewModeButtons extends StatelessWidget {
+  const _ReviewModeButtons({required this.onSelected});
+
+  final ValueChanged<AnalysisProfile> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _DialogPrimaryAction(
+          label: 'Fast Review',
+          icon: Icons.flash_on_rounded,
+          onTap: () => onSelected(AnalysisProfile.fastReview),
+        ),
+        const SizedBox(height: 10),
+        _DialogPrimaryAction(
+          label: 'Deep Review',
+          icon: Icons.auto_awesome_rounded,
+          onTap: () => onSelected(AnalysisProfile.deepReview),
+        ),
+        const SizedBox(height: 10),
+        _DialogPrimaryAction(
+          label: 'Offline Review',
+          icon: Icons.offline_bolt_rounded,
+          onTap: () => onSelected(AnalysisProfile.offlineReview),
         ),
       ],
     );
@@ -839,7 +1109,7 @@ class _TileCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Quantum Depth Scan progress dialog — backed by LocalGameAnalyzer.
+// PGN review progress dialog — backed by LocalGameAnalyzer.
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _LocalAnalysisProgressDialog extends ConsumerStatefulWidget {
@@ -986,72 +1256,18 @@ class _LocalAnalysisProgressDialogState
 
   Widget _progressContent() {
     final progress = _total > 0 ? _completed / _total : 0.0;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Icon(
-              Icons.flash_on_rounded,
-              color: ApexColors.sapphireBright,
-              size: 20,
-            ),
-            const SizedBox(width: 10),
-            Text(widget.profile.label, style: ApexTypography.titleMedium),
-          ],
-        ),
-        const SizedBox(height: 18),
-        SizedBox(
-          height: 220,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              const QuantumShatterLoader(size: 220),
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '${(progress * 100).toStringAsFixed(0)}%',
-                    style: ApexTypography.displayLarge.copyWith(
-                      fontSize: 38,
-                      color: ApexColors.sapphireBright,
-                      letterSpacing: 3,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    widget.profile.label.toUpperCase(),
-                    style: ApexTypography.bodyMedium.copyWith(
-                      color: ApexColors.textTertiary,
-                      fontSize: 10,
-                      letterSpacing: 3.5,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: LinearProgressIndicator(
-            value: progress,
-            minHeight: 6,
-            backgroundColor: ApexColors.subtleBorder,
-            valueColor: const AlwaysStoppedAnimation(ApexColors.sapphireBright),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          '$_completed / $_total plies analyzed',
-          style: ApexTypography.bodyMedium.copyWith(
-            color: ApexColors.textTertiary,
-            fontSize: 12,
-          ),
-        ),
+    return ApexLoadingScaffold(
+      title: widget.profile.label,
+      messages: const [
+        'Reading PGN...',
+        'Checking opening...',
+        'Building review...',
+        'Analyzing tactics...',
+        'Saving review...',
       ],
+      progress: progress,
+      progressMessage: '$_completed / $_total plies analyzed',
+      compact: true,
     );
   }
 

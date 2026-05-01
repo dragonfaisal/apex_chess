@@ -1,31 +1,30 @@
-/// Archived Intel — saved game list with filters.
+/// Archive — saved review list with filters.
 ///
-/// Reads from [archiveControllerProvider] and renders a glassmorphism
-/// list of previously analyzed games. The filter sheet lives in the
-/// app bar; each row taps into [ReviewScreen] against a freshly
-/// re-analysed timeline (cheap — the PGN is persisted and the
-/// Quantum Scan runs again locally).
+/// Reads from [archiveControllerProvider] and renders a compact list of
+/// previously analyzed games. Each row opens [ReviewScreen] from the
+/// cached timeline when available, or replays the persisted PGN locally.
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 import 'package:apex_chess/app/di/providers.dart';
-import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/features/account/presentation/controllers/account_controller.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/archives/presentation/controllers/archive_controller.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
 import 'package:apex_chess/features/pgn_review/domain/review_analysis_provider.dart';
+import 'package:apex_chess/features/pgn_review/domain/review_summary.dart';
 import 'package:apex_chess/features/pgn_review/presentation/views/review_summary_screen.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
-import 'package:apex_chess/shared_ui/widgets/quantum_shatter_loader.dart';
 
 class ArchiveScreen extends ConsumerWidget {
-  const ArchiveScreen({super.key});
+  const ArchiveScreen({super.key, this.showBackButton = true});
+
+  final bool showBackButton;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -33,6 +32,7 @@ class ArchiveScreen extends ConsumerWidget {
     final visible = state.visible;
 
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       body: Container(
         decoration: const BoxDecoration(gradient: ApexGradients.spaceCanvas),
         child: SafeArea(
@@ -43,6 +43,7 @@ class ArchiveScreen extends ConsumerWidget {
                 gamesCount: state.games.length,
                 brilliants: state.totalBrilliants,
                 blunders: state.totalBlunders,
+                showBackButton: showBackButton,
               ),
               _FilterBar(filters: state.filters),
               const SizedBox(height: 4),
@@ -62,13 +63,10 @@ class ArchiveScreen extends ConsumerWidget {
   ) {
     if (state.isLoading) {
       return const Center(
-        child: SizedBox(
-          width: 36,
-          height: 36,
-          child: CircularProgressIndicator(
-            strokeWidth: 2.6,
-            color: ApexColors.sapphireBright,
-          ),
+        child: ApexLoadingScaffold(
+          title: 'Loading archive',
+          messages: ['Loading saved reviews...'],
+          compact: true,
         ),
       );
     }
@@ -230,11 +228,13 @@ class _Header extends StatelessWidget {
     required this.gamesCount,
     required this.brilliants,
     required this.blunders,
+    required this.showBackButton,
   });
 
   final int gamesCount;
   final int brilliants;
   final int blunders;
+  final bool showBackButton;
 
   @override
   Widget build(BuildContext context) {
@@ -242,14 +242,17 @@ class _Header extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(18, 8, 18, 10),
       child: Row(
         children: [
-          IconButton(
-            onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(
-              Icons.arrow_back_ios_new_rounded,
-              color: ApexColors.textPrimary,
-              size: 18,
-            ),
-          ),
+          if (showBackButton)
+            IconButton(
+              onPressed: () => Navigator.of(context).pop(),
+              icon: const Icon(
+                Icons.arrow_back_ios_new_rounded,
+                color: ApexColors.textPrimary,
+                size: 18,
+              ),
+            )
+          else
+            const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -262,7 +265,7 @@ class _Header extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '$gamesCount games · $brilliants brilliants · $blunders blunders',
+                  '$gamesCount saved reviews · $brilliants Brilliant · $blunders Blunder',
                   style: ApexTypography.bodyMedium.copyWith(
                     color: ApexColors.textTertiary,
                     letterSpacing: 1,
@@ -559,6 +562,7 @@ class _ArchiveSearchFieldState extends ConsumerState<_ArchiveSearchField> {
       autofillHints: const [],
       enableSuggestions: false,
       autocorrect: false,
+      textInputAction: TextInputAction.search,
       style: ApexTypography.bodyMedium.copyWith(
         color: ApexColors.textPrimary,
         fontSize: 12,
@@ -570,6 +574,21 @@ class _ArchiveSearchFieldState extends ConsumerState<_ArchiveSearchField> {
           size: 16,
           color: ApexColors.textTertiary,
         ),
+        suffixIcon: _controller.text.isEmpty
+            ? null
+            : IconButton(
+                tooltip: 'Clear',
+                icon: const Icon(
+                  Icons.close_rounded,
+                  size: 16,
+                  color: ApexColors.textTertiary,
+                ),
+                onPressed: () {
+                  _controller.clear();
+                  ref.read(archiveControllerProvider.notifier).setSearch('');
+                  setState(() {});
+                },
+              ),
         hintText: 'Search opponent, opening, ECO…',
         hintStyle: ApexTypography.bodyMedium.copyWith(
           color: ApexColors.textTertiary,
@@ -597,8 +616,10 @@ class _ArchiveSearchFieldState extends ConsumerState<_ArchiveSearchField> {
           ),
         ),
       ),
-      onChanged: (v) =>
-          ref.read(archiveControllerProvider.notifier).setSearch(v),
+      onChanged: (v) {
+        ref.read(archiveControllerProvider.notifier).setSearch(v);
+        setState(() {});
+      },
     );
   }
 }
@@ -672,138 +693,118 @@ class _ArchiveCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onDelete;
 
-  /// `true` if the user played Black in this game, `false` for White,
-  /// `null` when we can't tell (raw PGN or handle doesn't match either
-  /// side).
-  bool? get _userIsBlack {
-    final me = userHandle;
-    if (me == null || me.isEmpty) return null;
-    if (game.black.trim().toLowerCase() == me) return true;
-    if (game.white.trim().toLowerCase() == me) return false;
-    return null;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final accent = game.brilliantCount > 0
-        ? ApexColors.aurora
-        : (game.blunderCount >= 3 ? ApexColors.ruby : ApexColors.sapphire);
-    final userIsBlack = _userIsBlack;
-    final matchupText = _matchupText(userIsBlack);
-    final acplText = _acplText(userIsBlack);
+    final userIsBlack = game.userIsBlackFor(userHandle);
+    final headline = game.resultHeadline(userHandle: userHandle);
+    final isWin = headline.startsWith('You won') || headline == 'White won';
+    final isLoss = headline.startsWith('You lost') || headline == 'Black won';
+    final accent = headline.startsWith('Draw')
+        ? ApexColors.inaccuracy
+        : isWin
+        ? ApexColors.best
+        : isLoss
+        ? ApexColors.blunder
+        : ApexColors.sapphire;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(18),
       child: GlassPanel(
-        padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+        padding: const EdgeInsets.fromLTRB(16, 14, 10, 14),
         accentColor: accent,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+        accentAlpha: 0.22,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Phase A audit § 4: top pill strip may now include
-                  // Source / Result / Depth / Mode / User-side. Wrap so
-                  // it line-breaks on narrow phones instead of forcing
-                  // the card into overflow.
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _SourcePill(source: game.source),
-                      _ResultPill(
-                        label: _resultText(userIsBlack),
-                        result: game.result,
+                      Text(
+                        headline,
+                        style: ApexTypography.titleMedium.copyWith(
+                          fontSize: 15,
+                          color: ApexColors.textPrimary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      _DepthPill(depth: game.depth),
-                      _ModePill(game: game),
-                      if (userIsBlack != null)
-                        _UserSidePill(isBlack: userIsBlack),
+                      const SizedBox(height: 3),
+                      Text(
+                        _metaLine,
+                        style: ApexTypography.bodyMedium.copyWith(
+                          color: ApexColors.textTertiary,
+                          fontSize: 11,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    matchupText,
-                    style: ApexTypography.titleMedium.copyWith(
-                      fontSize: 14,
-                      letterSpacing: 0.2,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                ),
+                IconButton(
+                  onPressed: onDelete,
+                  icon: const Icon(
+                    Icons.close_rounded,
+                    size: 18,
+                    color: ApexColors.textTertiary,
                   ),
-                  const SizedBox(height: 2),
-                  // Phase 20.1 device feedback § 6: tighter vertical
-                  // rhythm — opening + plies live on one quiet line, and
-                  // per-side ACPL gets a dedicated row in monospace so
-                  // the user can compare YOU vs OPPONENT at a glance.
-                  Text(
-                    _metaLine,
-                    style: ApexTypography.bodyMedium.copyWith(
-                      color: ApexColors.textTertiary,
-                      fontSize: 11,
-                      letterSpacing: 0.5,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    acplText,
-                    style: ApexTypography.bodyMedium.copyWith(
-                      color: ApexColors.textSecondary,
-                      fontSize: 11,
-                      fontFamily: 'JetBrains Mono',
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.3,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 8),
-                  // Premium SVG badges — one glyph per quality tier, count
-                  // rendered to the right of the icon. The Wrap guards
-                  // against squeeze on narrow rows where three pills
-                  // would otherwise overflow.
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    children: [
-                      if (game.brilliantCount > 0)
-                        _SvgCountPill(
-                          quality: MoveQuality.brilliant,
-                          count: game.brilliantCount,
-                        ),
-                      if (game.greatCount > 0)
-                        _SvgCountPill(
-                          quality: MoveQuality.great,
-                          count: game.greatCount,
-                        ),
-                      if (game.missCount > 0)
-                        _SvgCountPill(
-                          quality: MoveQuality.missedWin,
-                          count: game.missCount,
-                          labelOverride: 'Miss',
-                        ),
-                      if (game.blunderCount > 0)
-                        _SvgCountPill(
-                          quality: MoveQuality.blunder,
-                          count: game.blunderCount,
-                        ),
-                    ],
+                  tooltip: 'Remove from archive',
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              game.openingLine,
+              style: ApexTypography.bodyMedium.copyWith(
+                color: ApexColors.book,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              _accuracyText(userIsBlack),
+              style: ApexTypography.bodyMedium.copyWith(
+                color: ApexColors.textSecondary,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              game.compactQualityLine,
+              style: ApexTypography.bodyMedium.copyWith(
+                color: ApexColors.textTertiary,
+                fontSize: 11,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                _CompactTag(
+                  label: game.reviewModeLabel,
+                  color: ApexColors.sapphireBright,
+                ),
+                const SizedBox(width: 8),
+                _CompactTag(label: game.secondaryResultText, color: accent),
+                if (userIsBlack != null) ...[
+                  const SizedBox(width: 8),
+                  _CompactTag(
+                    label: userIsBlack ? 'You: Black' : 'You: White',
+                    color: ApexColors.aurora,
                   ),
                 ],
-              ),
-            ),
-            IconButton(
-              onPressed: onDelete,
-              icon: const Icon(
-                Icons.close_rounded,
-                size: 18,
-                color: ApexColors.textTertiary,
-              ),
-              tooltip: 'Remove from archive',
+              ],
             ),
           ],
         ),
@@ -811,217 +812,53 @@ class _ArchiveCard extends StatelessWidget {
     );
   }
 
-  static String _nameOf(String name, String? rating) =>
-      rating == null || rating.isEmpty ? name : '$name ($rating)';
-
-  /// Headline line on the card. When we know the user's side we render
-  /// "You (rating) vs Opponent (rating)" so the archive reads from the
-  /// user's perspective; otherwise we fall back to the legacy "White
-  /// vs Black" format.
-  String _matchupText(bool? userIsBlack) {
-    if (userIsBlack == null) {
-      return '${_nameOf(game.white, game.whiteRating)}  vs  '
-          '${_nameOf(game.black, game.blackRating)}';
-    }
-    final myRating = userIsBlack ? game.blackRating : game.whiteRating;
-    final oppName = userIsBlack ? game.white : game.black;
-    final oppRating = userIsBlack ? game.whiteRating : game.blackRating;
-    final me = myRating == null || myRating.isEmpty ? 'You' : 'You ($myRating)';
-    return '$me  vs  ${_nameOf(oppName, oppRating)}';
-  }
-
   String get _metaLine {
-    final date = game.playedAt == null
-        ? null
-        : '${game.playedAt!.year}-${game.playedAt!.month.toString().padLeft(2, '0')}-${game.playedAt!.day.toString().padLeft(2, '0')}';
     return [
-      game.openingName ?? 'Opening not tagged',
-      if (date != null) date,
+      game.sourceLabel,
       if (game.timeControl != null && game.timeControl!.isNotEmpty)
         game.timeControl!,
-    ].join(' · ');
+      game.relativePlayedAt,
+    ].join(' • ');
   }
 
-  String _resultText(bool? userIsBlack) {
-    if (userIsBlack == null) {
-      return switch (game.result) {
-        '1-0' => 'White won',
-        '0-1' => 'Black won',
-        '1/2-1/2' => 'Draw',
-        _ => game.result,
-      };
-    }
-    final won =
-        (!userIsBlack && game.result == '1-0') ||
-        (userIsBlack && game.result == '0-1');
-    final lost =
-        (!userIsBlack && game.result == '0-1') ||
-        (userIsBlack && game.result == '1-0');
-    if (game.result == '1/2-1/2') return 'Draw';
-    if (won) return 'Won';
-    if (lost) return 'Lost';
-    return game.result;
-  }
-
-  /// ACPL line — per-side when we know the user, aggregate otherwise.
-  /// Only the cached timeline can yield per-side ACPL; pre-cache records
-  /// fall back to the single persisted figure.
-  String _acplText(bool? userIsBlack) {
+  String _accuracyText(bool? userIsBlack) {
     final tl = game.cachedTimeline;
-    if (userIsBlack == null || tl == null) {
-      return '${game.averageCpLoss.toStringAsFixed(1)} ACPL';
+    if (userIsBlack != null && tl != null) {
+      final summary = const ReviewSummaryService().compute(
+        timeline: tl,
+        userIsWhite: !userIsBlack,
+      );
+      return 'You ${summary.userAccuracyPct.toStringAsFixed(0)}% • Opp ${summary.opponentAccuracyPct.toStringAsFixed(0)}%';
     }
-    final you = userIsBlack ? tl.averageCpLossBlack : tl.averageCpLossWhite;
-    final opp = userIsBlack ? tl.averageCpLossWhite : tl.averageCpLossBlack;
-    return 'You ${you.toStringAsFixed(1)} · Opp ${opp.toStringAsFixed(1)} ACPL';
+    return 'ACPL ${game.averageCpLoss.toStringAsFixed(1)}';
   }
 }
 
-class _ModePill extends StatelessWidget {
-  const _ModePill({required this.game});
-  final ArchivedGame game;
+class _CompactTag extends StatelessWidget {
+  const _CompactTag({required this.label, required this.color});
 
-  @override
-  Widget build(BuildContext context) {
-    final label = switch (game.analysisProfileId) {
-      'fast_review' => 'Fast',
-      'offline_review' => 'Offline',
-      _ => 'Deep',
-    };
-    final color = switch (game.analysisProfileId) {
-      'offline_review' => ApexColors.aurora,
-      'fast_review' => ApexColors.electricBlue,
-      _ => ApexColors.sapphireBright,
-    };
-    return _Pill(label: label, color: color);
-  }
-}
-
-class _UserSidePill extends StatelessWidget {
-  const _UserSidePill({required this.isBlack});
-  final bool isBlack;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = isBlack ? 'YOU ◼' : 'YOU ◻';
-    return _Pill(label: label, color: ApexColors.aurora);
-  }
-}
-
-class _SourcePill extends StatelessWidget {
-  const _SourcePill({required this.source});
-  final ArchiveSource source;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = switch (source) {
-      ArchiveSource.chessCom => 'Chess.com',
-      ArchiveSource.lichess => 'Lichess',
-      ArchiveSource.pgn => 'PGN',
-    };
-    return _Pill(label: label, color: ApexColors.sapphireBright);
-  }
-}
-
-class _ResultPill extends StatelessWidget {
-  const _ResultPill({required this.label, required this.result});
-  final String label;
-  final String result;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = switch (result) {
-      '1-0' => ApexColors.sapphireBright,
-      '0-1' => ApexColors.ruby,
-      '1/2-1/2' => ApexColors.textTertiary,
-      _ => ApexColors.textTertiary,
-    };
-    return _Pill(label: label, color: color);
-  }
-}
-
-class _DepthPill extends StatelessWidget {
-  const _DepthPill({required this.depth});
-  final int depth;
-
-  @override
-  Widget build(BuildContext context) {
-    return _Pill(label: 'D$depth', color: ApexColors.aurora);
-  }
-}
-
-/// SVG-backed count badge — used in the archive row to show how many
-/// brilliants/blunders/mistakes a scanned game contains. Replaces the
-/// old text-symbol pill so the archive list matches the Review board's
-/// premium asset language.
-class _SvgCountPill extends StatelessWidget {
-  const _SvgCountPill({
-    required this.quality,
-    required this.count,
-    this.labelOverride,
-  });
-
-  final MoveQuality quality;
-  final int count;
-  final String? labelOverride;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(
-        color: quality.color.withValues(alpha: 0.12),
-        border: Border.all(
-          color: quality.color.withValues(alpha: 0.4),
-          width: 0.6,
-        ),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: 12,
-            height: 12,
-            child: SvgPicture.asset(quality.svgAssetPath, fit: BoxFit.contain),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            labelOverride == null ? '$count' : '${labelOverride!} $count',
-            style: ApexTypography.bodyMedium.copyWith(
-              color: quality.color,
-              fontSize: 10,
-              letterSpacing: 0.8,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Pill extends StatelessWidget {
-  const _Pill({required this.label, required this.color});
   final String label;
   final Color color;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        border: Border.all(color: color.withValues(alpha: 0.4), width: 0.6),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        label,
-        style: ApexTypography.bodyMedium.copyWith(
-          color: color,
-          fontSize: 10,
-          letterSpacing: 0.8,
-          fontWeight: FontWeight.w600,
+    return Flexible(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: color.withValues(alpha: 0.35), width: 0.6),
+        ),
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: ApexTypography.bodyMedium.copyWith(
+            color: color,
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
     );
@@ -1075,23 +912,10 @@ class _ReanalysisDialog extends StatelessWidget {
       insetPadding: const EdgeInsets.symmetric(horizontal: 32),
       child: GlassPanel.dialog(
         accentColor: ApexColors.aurora,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(
-              height: 120,
-              child: Center(child: QuantumShatterLoader(size: 120)),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              ApexCopy.reanalysisPending,
-              textAlign: TextAlign.center,
-              style: ApexTypography.titleMedium.copyWith(
-                letterSpacing: 2,
-                fontSize: 13,
-              ),
-            ),
-          ],
+        child: ApexLoadingScaffold(
+          title: ApexCopy.reanalysisPending,
+          messages: const ['Loading saved review...', 'Building review...'],
+          compact: true,
         ),
       ),
     );

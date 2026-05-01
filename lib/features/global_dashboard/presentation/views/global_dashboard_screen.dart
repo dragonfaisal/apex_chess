@@ -10,17 +10,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
+import 'package:apex_chess/core/domain/services/move_quality_display.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/profile_stats/data/profile_stats_service.dart';
 import 'package:apex_chess/features/profile_stats/presentation/controllers/profile_stats_controller.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
 
 import '../controllers/dashboard_controller.dart';
 
 class GlobalDashboardScreen extends ConsumerWidget {
-  const GlobalDashboardScreen({super.key});
+  const GlobalDashboardScreen({super.key, this.showBackButton = true});
+
+  final bool showBackButton;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -32,7 +36,7 @@ class GlobalDashboardScreen extends ConsumerWidget {
         child: SafeArea(
           child: Column(
             children: [
-              _AppBar(),
+              _AppBar(showBackButton: showBackButton),
               Expanded(
                 child: stats.hasData
                     ? _DashboardBody(stats: stats)
@@ -47,17 +51,26 @@ class GlobalDashboardScreen extends ConsumerWidget {
 }
 
 class _AppBar extends StatelessWidget {
+  const _AppBar({required this.showBackButton});
+
+  final bool showBackButton;
+
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 8, 16, 0),
       child: Row(
         children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back_rounded,
-                color: ApexColors.textSecondary),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
+          if (showBackButton)
+            IconButton(
+              icon: const Icon(
+                Icons.arrow_back_rounded,
+                color: ApexColors.textSecondary,
+              ),
+              onPressed: () => Navigator.of(context).pop(),
+            )
+          else
+            const SizedBox(width: 48),
           Expanded(
             child: Text(
               ApexCopy.dashboardTitle,
@@ -87,8 +100,11 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.insights_rounded,
-                size: 72, color: ApexColors.sapphire.withValues(alpha: 0.6)),
+            Icon(
+              Icons.insights_rounded,
+              size: 72,
+              color: ApexColors.sapphire.withValues(alpha: 0.6),
+            ),
             const SizedBox(height: 16),
             Text(
               ApexCopy.dashboardEmpty,
@@ -130,6 +146,8 @@ class _DashboardBody extends ConsumerWidget {
           const SizedBox(height: 14),
           const _ColorFilterBar(),
           const SizedBox(height: 12),
+          _AnalyzedSectionLabel(stats: stats),
+          const SizedBox(height: 10),
           _KpiRow(stats: stats),
           const SizedBox(height: 18),
           _AccuracyTrendCard(stats: stats),
@@ -168,15 +186,10 @@ class _ColorFilterBar extends ConsumerWidget {
                 },
                 child: Container(
                   margin: const EdgeInsets.all(2),
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 10),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
                   decoration: BoxDecoration(
-                    gradient: active == p
-                        ? ApexGradients.sapphire
-                        : null,
-                    color: active == p
-                        ? null
-                        : Colors.transparent,
+                    gradient: active == p ? ApexGradients.sapphire : null,
+                    color: active == p ? null : Colors.transparent,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   alignment: Alignment.center,
@@ -219,20 +232,21 @@ class _ProfileStatsCard extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _CardHeader(
-            title: 'LIVE PROFILE',
-            subtitle:
-                'Synced from Chess.com / Lichess — updates every refresh.',
+            title: 'PUBLIC ACCOUNT STATS',
+            subtitle: 'Chess.com / Lichess public ratings when available.',
             accent: ApexColors.aurora,
           ),
           const SizedBox(height: 12),
           async.when(
             loading: () => _profileLoading(),
             error: (_, __) => _profileFallback(
-                'Could not reach profile service. Retry in a moment.'),
+              'Could not reach profile service. Retry in a moment.',
+            ),
             data: (stats) {
               if (stats == null || !stats.hasData) {
                 return _profileFallback(
-                    'Connect an account to stream live rating snapshots.');
+                  'Connect an account to stream live rating snapshots.',
+                );
               }
               return _profileBody(stats);
             },
@@ -242,30 +256,19 @@ class _ProfileStatsCard extends ConsumerWidget {
     );
   }
 
-  Widget _profileLoading() => SizedBox(
-        height: 60,
-        child: Center(
-          child: SizedBox(
-            width: 18,
-            height: 18,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: ApexColors.aurora.withValues(alpha: 0.7),
-            ),
-          ),
-        ),
-      );
+  Widget _profileLoading() =>
+      const ApexSkeletonCard(height: 76, margin: EdgeInsets.zero);
 
   Widget _profileFallback(String msg) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Text(
-          msg,
-          style: ApexTypography.bodyMedium.copyWith(
-            color: ApexColors.textTertiary,
-            fontSize: 12,
-          ),
-        ),
-      );
+    padding: const EdgeInsets.symmetric(vertical: 6),
+    child: Text(
+      msg,
+      style: ApexTypography.bodyMedium.copyWith(
+        color: ApexColors.textTertiary,
+        fontSize: 12,
+      ),
+    ),
+  );
 
   Widget _profileBody(ProfileStats stats) {
     return Column(
@@ -284,10 +287,7 @@ class _ProfileStatsCard extends ConsumerWidget {
           children: [
             for (final b in stats.buckets)
               Expanded(
-                child: _RatingTile(
-                  label: b.label,
-                  rating: b.rating,
-                ),
+                child: _RatingTile(label: b.label, rating: b.rating),
               ),
           ],
         ),
@@ -343,8 +343,7 @@ class _RatingTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: ApexColors.cardSurface.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-            color: ApexColors.subtleBorder, width: 0.6),
+        border: Border.all(color: ApexColors.subtleBorder, width: 0.6),
       ),
       child: Column(
         children: [
@@ -442,8 +441,7 @@ class _OpeningStatsCard extends ConsumerWidget {
               ),
             )
           else ...[
-            for (final o in openings.take(6))
-              _OpeningRow(stats: o),
+            for (final o in openings.take(6)) _OpeningRow(stats: o),
             if (revisit.isNotEmpty) ...[
               const SizedBox(height: 12),
               Container(
@@ -452,8 +450,9 @@ class _OpeningStatsCard extends ConsumerWidget {
                   color: ApexColors.sapphireBright.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                      color: ApexColors.sapphireBright.withValues(alpha: 0.35),
-                      width: 0.5),
+                    color: ApexColors.sapphireBright.withValues(alpha: 0.35),
+                    width: 0.5,
+                  ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -702,10 +701,7 @@ class _AccuracyTrendCard extends StatelessWidget {
             accent: ApexColors.emerald,
           ),
           const SizedBox(height: 10),
-          SizedBox(
-            height: 160,
-            child: LineChart(_data(stats.accuracyTrend)),
-          ),
+          SizedBox(height: 160, child: LineChart(_data(stats.accuracyTrend))),
         ],
       ),
     );
@@ -740,13 +736,15 @@ class _AccuracyTrendCard extends StatelessWidget {
         touchTooltipData: LineTouchTooltipData(
           getTooltipColor: (_) => ApexColors.cosmicDust,
           getTooltipItems: (items) => items
-              .map((s) => LineTooltipItem(
-                    '${s.y.toStringAsFixed(1)}%',
-                    ApexTypography.bodyMedium.copyWith(
-                      color: ApexColors.textPrimary,
-                      fontSize: 11,
-                    ),
-                  ))
+              .map(
+                (s) => LineTooltipItem(
+                  '${s.y.toStringAsFixed(1)}%',
+                  ApexTypography.bodyMedium.copyWith(
+                    color: ApexColors.textPrimary,
+                    fontSize: 11,
+                  ),
+                ),
+              )
               .toList(),
         ),
       ),
@@ -783,19 +781,22 @@ class _QualityPieCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final entries = stats.qualityDistribution.entries
-        .where((e) => e.value > 0 && e.key != MoveQuality.book)
-        .toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+    final entries =
+        stats.qualityDistribution.entries
+            .where((e) => e.value > 0 && e.key != MoveQuality.book)
+            .toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
     final total = entries.fold<int>(0, (s, e) => s + e.value);
 
     final legendItems = entries
-        .map((e) => _LegendChip(
-              color: _qualityColor(e.key),
-              label: _qualityLabel(e.key),
-              count: e.value,
-              percent: total == 0 ? 0 : e.value / total,
-            ))
+        .map(
+          (e) => _LegendChip(
+            color: _qualityColor(e.key),
+            label: _qualityLabel(e.key),
+            count: e.value,
+            percent: total == 0 ? 0 : e.value / total,
+          ),
+        )
         .toList();
 
     return GlassPanel(
@@ -815,54 +816,55 @@ class _QualityPieCard extends StatelessWidget {
           // phones. The old fixed-height Row with `flex: 6` on the
           // legend overflowed both vertically (7 chips / 170 dp) and
           // horizontally (label + count cramped into ~100 dp).
-          LayoutBuilder(builder: (context, box) {
-            final wide = box.maxWidth >= 420;
-            if (wide) {
-              return SizedBox(
-                height: 200,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      flex: 5,
-                      child: _buildPie(entries),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      flex: 7,
-                      child: SingleChildScrollView(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: legendItems,
+          LayoutBuilder(
+            builder: (context, box) {
+              final wide = box.maxWidth >= 420;
+              if (wide) {
+                return SizedBox(
+                  height: 200,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(flex: 5, child: _buildPie(entries)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 7,
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: legendItems,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              );
-            }
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(height: 170, child: _buildPie(entries)),
-                const SizedBox(height: 10),
-                // Two-column wrap keeps every chip inside the card even
-                // on 320 dp widths, and each chip is its own Intrinsic
-                // so the "· %" trailing figure never collides with the
-                // label.
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 2,
-                  children: legendItems
-                      .map((chip) => SizedBox(
+                    ],
+                  ),
+                );
+              }
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(height: 170, child: _buildPie(entries)),
+                  const SizedBox(height: 10),
+                  // Two-column wrap keeps every chip inside the card even
+                  // on 320 dp widths, and each chip is its own Intrinsic
+                  // so the "· %" trailing figure never collides with the
+                  // label.
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 2,
+                    children: legendItems
+                        .map(
+                          (chip) => SizedBox(
                             width: (box.maxWidth - 8) / 2,
                             child: chip,
-                          ))
-                      .toList(),
-                ),
-              ],
-            );
-          }),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ],
+              );
+            },
+          ),
         ],
       ),
     );
@@ -877,44 +879,73 @@ class _QualityPieCard extends StatelessWidget {
         sections: entries.isEmpty
             ? []
             : entries
-                .map((e) => PieChartSectionData(
+                  .map(
+                    (e) => PieChartSectionData(
                       value: e.value.toDouble(),
                       color: _qualityColor(e.key),
                       radius: 42,
                       title: '',
-                    ))
-                .toList(),
+                    ),
+                  )
+                  .toList(),
       ),
     );
   }
 
   Color _qualityColor(MoveQuality q) => switch (q) {
-        MoveQuality.brilliant => ApexColors.brilliant,
-        MoveQuality.great => ApexColors.brilliant,
-        MoveQuality.best => ApexColors.best,
-        MoveQuality.excellent => ApexColors.great,
-        MoveQuality.good => ApexColors.sapphireDeep,
-        MoveQuality.forced => ApexColors.textSecondary,
-        MoveQuality.inaccuracy => ApexColors.inaccuracy,
-        MoveQuality.missedWin => ApexColors.mistake,
-        MoveQuality.mistake => ApexColors.mistake,
-        MoveQuality.blunder => ApexColors.blunder,
-        MoveQuality.book => ApexColors.book,
-      };
+    MoveQuality.brilliant => ApexColors.brilliant,
+    MoveQuality.great => ApexColors.brilliant,
+    MoveQuality.best => ApexColors.best,
+    MoveQuality.excellent => ApexColors.great,
+    MoveQuality.good => ApexColors.sapphireDeep,
+    MoveQuality.forced => ApexColors.textSecondary,
+    MoveQuality.inaccuracy => ApexColors.inaccuracy,
+    MoveQuality.missedWin => ApexColors.mistake,
+    MoveQuality.mistake => ApexColors.mistake,
+    MoveQuality.blunder => ApexColors.blunder,
+    MoveQuality.book => ApexColors.book,
+  };
 
   String _qualityLabel(MoveQuality q) => switch (q) {
-        MoveQuality.brilliant => 'Brilliant',
-        MoveQuality.great => 'Great',
-        MoveQuality.best => 'Best',
-        MoveQuality.excellent => 'Excellent',
-        MoveQuality.good => 'Solid',
-        MoveQuality.forced => 'Forced',
-        MoveQuality.inaccuracy => 'Inaccuracy',
-        MoveQuality.missedWin => 'Missed Win',
-        MoveQuality.mistake => 'Mistake',
-        MoveQuality.blunder => 'Blunder',
-        MoveQuality.book => 'Theory',
-      };
+    MoveQuality.forced => 'Best',
+    _ => MoveQualityDisplay.labelTextForQuality(q),
+  };
+}
+
+class _AnalyzedSectionLabel extends StatelessWidget {
+  const _AnalyzedSectionLabel({required this.stats});
+
+  final DashboardStats stats;
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassPanel(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      accentColor: ApexColors.sapphireBright,
+      child: Row(
+        children: [
+          const Icon(
+            Icons.analytics_outlined,
+            color: ApexColors.sapphireBright,
+            size: 18,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              stats.gamesAnalyzed < 5
+                  ? 'APEX ANALYZED STATS • Preliminary stats'
+                  : 'APEX ANALYZED STATS',
+              style: ApexTypography.bodyMedium.copyWith(
+                color: ApexColors.textPrimary,
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _LegendChip extends StatelessWidget {
@@ -943,8 +974,7 @@ class _LegendChip extends StatelessWidget {
               color: color,
               borderRadius: BorderRadius.circular(2),
               boxShadow: [
-                BoxShadow(
-                    color: color.withValues(alpha: 0.55), blurRadius: 8),
+                BoxShadow(color: color.withValues(alpha: 0.55), blurRadius: 8),
               ],
             ),
           ),
@@ -1020,11 +1050,14 @@ class _ResultSplitCard extends StatelessWidget {
                   borderData: FlBorderData(show: false),
                   titlesData: FlTitlesData(
                     leftTitles: const AxisTitles(
-                        sideTitles: SideTitles(showTitles: false)),
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
                     rightTitles: const AxisTitles(
-                        sideTitles: SideTitles(showTitles: false)),
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
                     topTitles: const AxisTitles(
-                        sideTitles: SideTitles(showTitles: false)),
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
                     bottomTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
@@ -1065,20 +1098,20 @@ class _ResultSplitCard extends StatelessWidget {
   }
 
   BarChartGroupData _bar(int x, double y, Color color) => BarChartGroupData(
-        x: x,
-        barRods: [
-          BarChartRodData(
-            toY: y,
-            width: 28,
-            borderRadius: BorderRadius.circular(6),
-            gradient: LinearGradient(
-              begin: Alignment.bottomCenter,
-              end: Alignment.topCenter,
-              colors: [color.withValues(alpha: 0.55), color],
-            ),
-          ),
-        ],
-      );
+    x: x,
+    barRods: [
+      BarChartRodData(
+        toY: y,
+        width: 28,
+        borderRadius: BorderRadius.circular(6),
+        gradient: LinearGradient(
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+          colors: [color.withValues(alpha: 0.55), color],
+        ),
+      ),
+    ],
+  );
 }
 
 // ── Recent games table ─────────────────────────────────────────────────
@@ -1102,8 +1135,7 @@ class _RecentGamesTable extends ConsumerWidget {
         children: [
           _CardHeader(
             title: 'RECENT SCANS',
-            subtitle:
-                'Page ${page + 1} • ${slice.length}/$total shown.',
+            subtitle: 'Page ${page + 1} • ${slice.length}/$total shown.',
             accent: ApexColors.sapphire,
           ),
           const SizedBox(height: 8),
@@ -1114,25 +1146,19 @@ class _RecentGamesTable extends ConsumerWidget {
             children: [
               IconButton(
                 onPressed: hasPrev
-                    ? () => ref
-                        .read(dashboardPageProvider.notifier)
-                        .prev()
+                    ? () => ref.read(dashboardPageProvider.notifier).prev()
                     : null,
                 icon: const Icon(Icons.chevron_left_rounded),
                 color: ApexColors.textSecondary,
-                disabledColor: ApexColors.textTertiary
-                    .withValues(alpha: 0.35),
+                disabledColor: ApexColors.textTertiary.withValues(alpha: 0.35),
               ),
               IconButton(
                 onPressed: hasNext
-                    ? () => ref
-                        .read(dashboardPageProvider.notifier)
-                        .next()
+                    ? () => ref.read(dashboardPageProvider.notifier).next()
                     : null,
                 icon: const Icon(Icons.chevron_right_rounded),
                 color: ApexColors.textSecondary,
-                disabledColor: ApexColors.textTertiary
-                    .withValues(alpha: 0.35),
+                disabledColor: ApexColors.textTertiary.withValues(alpha: 0.35),
               ),
             ],
           ),

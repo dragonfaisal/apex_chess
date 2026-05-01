@@ -1,8 +1,8 @@
 /// Live profile-stats client for Chess.com and Lichess.
 ///
 /// Hits each provider's **public, unauthenticated** profile endpoints and
-/// collapses the three time-control buckets the Grandmaster Analytics
-/// dashboard cares about: Blitz, Rapid, Bullet. Also returns total-game
+/// collapses the three time-control buckets the Stats dashboard cares
+/// about: Blitz, Rapid, Bullet. Also returns total-game
 /// counts and W/D/L when the provider surfaces them (Chess.com exposes
 /// them per category; Lichess exposes per-perf aggregates via
 /// `api/user/{u}` plus a separate `api/user/{u}/perf/{perf}`).
@@ -56,13 +56,12 @@ class ProfileStats {
   factory ProfileStats.unknown({
     required ProfileStatsSource source,
     required String username,
-  }) =>
-      ProfileStats(
-        source: source,
-        username: username,
-        displayName: username,
-        buckets: const [],
-      );
+  }) => ProfileStats(
+    source: source,
+    username: username,
+    displayName: username,
+    buckets: const [],
+  );
 
   final ProfileStatsSource source;
   final String username;
@@ -71,22 +70,17 @@ class ProfileStats {
 
   bool get hasData => buckets.any((b) => b.rating != null || b.total > 0);
 
-  int get totalGames =>
-      buckets.fold<int>(0, (sum, b) => sum + b.total);
-  int get totalWins =>
-      buckets.fold<int>(0, (sum, b) => sum + b.wins);
-  int get totalLosses =>
-      buckets.fold<int>(0, (sum, b) => sum + b.losses);
-  int get totalDraws =>
-      buckets.fold<int>(0, (sum, b) => sum + b.draws);
+  int get totalGames => buckets.fold<int>(0, (sum, b) => sum + b.total);
+  int get totalWins => buckets.fold<int>(0, (sum, b) => sum + b.wins);
+  int get totalLosses => buckets.fold<int>(0, (sum, b) => sum + b.losses);
+  int get totalDraws => buckets.fold<int>(0, (sum, b) => sum + b.draws);
 
-  double get winRate =>
-      totalGames == 0 ? 0 : (totalWins / totalGames) * 100;
+  double get winRate => totalGames == 0 ? 0 : (totalWins / totalGames) * 100;
 }
 
 class ProfileStatsService {
   ProfileStatsService({http.Client? client})
-      : _client = client ?? http.Client();
+    : _client = client ?? http.Client();
 
   final http.Client _client;
   static const _timeout = Duration(seconds: 8);
@@ -120,21 +114,27 @@ class ProfileStatsService {
   Future<ProfileStats> _fetchChessCom(String u) async {
     // `player/{u}/stats` returns `chess_blitz/chess_rapid/chess_bullet`
     // each carrying `{last: {rating}, record: {win, loss, draw}}`.
-    final statsUri =
-        Uri.parse('https://api.chess.com/pub/player/$u/stats');
+    final statsUri = Uri.parse('https://api.chess.com/pub/player/$u/stats');
     final res = await _client
         .get(statsUri, headers: apexJsonHeaders)
         .timeout(_timeout);
     if (res.statusCode != 200) {
       return ProfileStats.unknown(
-          source: ProfileStatsSource.chessCom, username: u);
+        source: ProfileStatsSource.chessCom,
+        username: u,
+      );
     }
     final body = json.decode(res.body) as Map<String, dynamic>;
     RatingBucket parse(String key, String label) {
       final b = body[key];
       if (b is! Map<String, dynamic>) {
         return RatingBucket(
-            label: label, rating: null, wins: 0, losses: 0, draws: 0);
+          label: label,
+          rating: null,
+          wins: 0,
+          losses: 0,
+          draws: 0,
+        );
       }
       final rating = (b['last'] is Map<String, dynamic>)
           ? (b['last']['rating'] as num?)?.toInt()
@@ -175,12 +175,16 @@ class ProfileStatsService {
         .timeout(_timeout);
     if (res.statusCode != 200) {
       return ProfileStats.unknown(
-          source: ProfileStatsSource.lichess, username: u);
+        source: ProfileStatsSource.lichess,
+        username: u,
+      );
     }
     final body = json.decode(res.body) as Map<String, dynamic>;
     if (body['closed'] == true) {
       return ProfileStats.unknown(
-          source: ProfileStatsSource.lichess, username: u);
+        source: ProfileStatsSource.lichess,
+        username: u,
+      );
     }
     final perfs = (body['perfs'] is Map<String, dynamic>)
         ? body['perfs'] as Map<String, dynamic>

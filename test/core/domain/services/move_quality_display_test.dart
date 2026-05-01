@@ -62,4 +62,18 @@ void main() {
       ReviewMoveLabel.great,
     );
   });
+
+  test('public labels hide internal forced solid theory names', () {
+    final labels = MoveQualityDisplay.countOrder.map((e) => e.label).toList();
+    expect(labels, containsAll(['Miss', 'Mistake']));
+    expect(labels, isNot(contains('Forced')));
+    expect(labels, isNot(contains('Solid')));
+    expect(labels, isNot(contains('Theory')));
+    expect(MoveQualityDisplay.labelTextForQuality(MoveQuality.good), 'Good');
+    expect(MoveQualityDisplay.labelTextForQuality(MoveQuality.book), 'Book');
+    expect(
+      MoveQualityDisplay.labelTextForQuality(MoveQuality.missedWin),
+      'Miss',
+    );
+  });
 }

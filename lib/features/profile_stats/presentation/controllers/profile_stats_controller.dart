@@ -1,10 +1,9 @@
 /// Reactive provider layer for [ProfileStatsService].
 ///
-/// The Grandmaster Analytics dashboard reads
-/// [liveProfileStatsProvider] to paint the Profile Stats card; it
-/// resolves automatically once the active [AccountController] has a
-/// verified handle + source, and re-fires whenever the user switches
-/// account.
+/// The Stats dashboard reads [liveProfileStatsProvider] to paint the
+/// Profile Stats card; it resolves automatically once the active
+/// [AccountController] has a verified handle + source, and re-fires
+/// whenever the user switches account.
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,8 +13,7 @@ import 'package:apex_chess/features/account/presentation/controllers/account_con
 import 'package:apex_chess/features/profile_stats/data/profile_stats_service.dart';
 
 /// Singleton [ProfileStatsService] — cheap HTTP client we keep warm.
-final profileStatsServiceProvider =
-    Provider<ProfileStatsService>((ref) {
+final profileStatsServiceProvider = Provider<ProfileStatsService>((ref) {
   final service = ProfileStatsService();
   ref.onDispose(service.dispose);
   return service;

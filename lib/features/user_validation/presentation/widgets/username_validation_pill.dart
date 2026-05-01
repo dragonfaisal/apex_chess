@@ -1,7 +1,7 @@
 /// Inline pill rendered at the trailing edge of a username text field.
 ///
 /// States:
-///   * idle (field empty / < 2 chars) — nothing rendered
+///   * idle (field empty / < 3 chars) — nothing rendered
 ///   * debouncing / loading — 14px amber spinner
 ///   * exists — green check pill
 ///   * missing — red X pill
@@ -61,11 +61,7 @@ class UsernameValidationPill extends StatelessWidget {
 }
 
 class _Chip extends StatelessWidget {
-  const _Chip({
-    required this.color,
-    required this.icon,
-    required this.label,
-  });
+  const _Chip({required this.color, required this.icon, required this.label});
 
   final Color color;
   final IconData icon;

@@ -11,7 +11,7 @@ import 'features/account/presentation/views/connect_account_screen.dart';
 import 'features/archives/data/archive_repository.dart';
 import 'features/home/presentation/views/home_screen.dart';
 import 'shared_ui/themes/apex_theme.dart';
-import 'shared_ui/widgets/quantum_shatter_loader.dart';
+import 'shared_ui/widgets/apex_loading.dart';
 
 /// Boot sequence — defensive by design. A failure inside Hive init or
 /// the blocking archive-box open used to abort before `runApp`, which
@@ -36,18 +36,21 @@ Future<void> main() async {
     );
   };
 
-  await runZonedGuarded<Future<void>>(() async {
-    WidgetsFlutterBinding.ensureInitialized();
-    await _bootstrapHive();
-    runApp(const ProviderScope(child: ApexChessApp()));
-  }, (error, stack) {
-    developer.log(
-      'Uncaught zone error',
-      name: 'apex_chess.boot',
-      error: error,
-      stackTrace: stack,
-    );
-  });
+  await runZonedGuarded<Future<void>>(
+    () async {
+      WidgetsFlutterBinding.ensureInitialized();
+      await _bootstrapHive();
+      runApp(const ProviderScope(child: ApexChessApp()));
+    },
+    (error, stack) {
+      developer.log(
+        'Uncaught zone error',
+        name: 'apex_chess.boot',
+        error: error,
+        stackTrace: stack,
+      );
+    },
+  );
 }
 
 /// Initialise Hive and open the archive box. Either step may fail on a
@@ -58,8 +61,12 @@ Future<void> _bootstrapHive() async {
   try {
     await Hive.initFlutter();
   } catch (e, s) {
-    developer.log('Hive.initFlutter failed',
-        name: 'apex_chess.boot', error: e, stackTrace: s);
+    developer.log(
+      'Hive.initFlutter failed',
+      name: 'apex_chess.boot',
+      error: e,
+      stackTrace: s,
+    );
     return;
   }
 
@@ -70,8 +77,12 @@ Future<void> _bootstrapHive() async {
     // want for the fresh "connect account" flow.
     await Hive.openBox<String>(ArchiveRepository.boxName);
   } catch (e, s) {
-    developer.log('Archive box open failed — archive feature will retry lazily',
-        name: 'apex_chess.boot', error: e, stackTrace: s);
+    developer.log(
+      'Archive box open failed — archive feature will retry lazily',
+      name: 'apex_chess.boot',
+      error: e,
+      stackTrace: s,
+    );
   }
 }
 
@@ -109,8 +120,12 @@ class _RootGate extends ConsumerWidget {
       // Phase 5.2 fix for the "blank themed screen after logout" bug.
       error: (error, stack) {
         if (kDebugMode) {
-          developer.log('onboardingSeenProvider error; falling back to Connect',
-              name: 'apex_chess.boot', error: error, stackTrace: stack);
+          developer.log(
+            'onboardingSeenProvider error; falling back to Connect',
+            name: 'apex_chess.boot',
+            error: error,
+            stackTrace: stack,
+          );
         }
         return _ConnectRoot(onComplete: () => _goHome(context));
       },
@@ -146,7 +161,13 @@ class _Splash extends StatelessWidget {
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(gradient: ApexGradients.spaceCanvas),
-        child: const Center(child: QuantumShatterLoader(size: 180)),
+        child: const Center(
+          child: ApexLoadingScaffold(
+            title: 'Starting Apex Chess',
+            messages: ['Loading app...'],
+            compact: true,
+          ),
+        ),
       ),
     );
   }

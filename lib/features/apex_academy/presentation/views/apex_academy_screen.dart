@@ -16,12 +16,15 @@ import 'package:apex_chess/features/mistake_vault/domain/mistake_drill.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_chess_board.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
 
 import '../controllers/academy_controller.dart';
 
 class ApexAcademyScreen extends ConsumerWidget {
-  const ApexAcademyScreen({super.key});
+  const ApexAcademyScreen({super.key, this.showBackButton = true});
+
+  final bool showBackButton;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -32,7 +35,7 @@ class ApexAcademyScreen extends ConsumerWidget {
         child: SafeArea(
           child: Column(
             children: [
-              _AppBar(),
+              _AppBar(showBackButton: showBackButton),
               _StatsHeader(stats: state.stats),
               Expanded(
                 child: state.current == null
@@ -48,17 +51,26 @@ class ApexAcademyScreen extends ConsumerWidget {
 }
 
 class _AppBar extends StatelessWidget {
+  const _AppBar({required this.showBackButton});
+
+  final bool showBackButton;
+
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 8, 16, 0),
       child: Row(
         children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back_rounded,
-                color: ApexColors.textSecondary),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
+          if (showBackButton)
+            IconButton(
+              icon: const Icon(
+                Icons.arrow_back_rounded,
+                color: ApexColors.textSecondary,
+              ),
+              onPressed: () => Navigator.of(context).pop(),
+            )
+          else
+            const SizedBox(width: 48),
           Expanded(
             child: Text(
               ApexCopy.academyTitle,
@@ -83,9 +95,8 @@ class _StatsHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final progress =
-        (stats.drillsToday / AcademyStatsRepository.dailyDrillGoal)
-            .clamp(0.0, 1.0);
+    final progress = (stats.drillsToday / AcademyStatsRepository.dailyDrillGoal)
+        .clamp(0.0, 1.0);
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 8, 18, 10),
       child: GlassPanel(
@@ -96,7 +107,9 @@ class _StatsHeader extends StatelessWidget {
           children: [
             _StreakPill(streak: stats.streakDays),
             const SizedBox(width: 14),
-            Expanded(child: _DailyGoal(progress: progress, stats: stats)),
+            Expanded(
+              child: _DailyGoal(progress: progress, stats: stats),
+            ),
             const SizedBox(width: 14),
             _XpBadge(xp: stats.totalXp),
           ],
@@ -135,9 +148,7 @@ class _StreakPill extends StatelessWidget {
                 ? Icons.local_fire_department_rounded
                 : Icons.local_fire_department_outlined,
             size: 18,
-            color: active
-                ? ApexColors.ruby
-                : ApexColors.textTertiary,
+            color: active ? ApexColors.ruby : ApexColors.textTertiary,
           ),
           const SizedBox(width: 6),
           Text(
@@ -184,7 +195,8 @@ class _DailyGoal extends StatelessWidget {
                   minHeight: 7,
                   backgroundColor: ApexColors.cosmicDust,
                   valueColor: const AlwaysStoppedAnimation(
-                      ApexColors.emeraldBright),
+                    ApexColors.emeraldBright,
+                  ),
                 ),
               ),
             ),
@@ -221,13 +233,18 @@ class _XpBadge extends StatelessWidget {
           ],
         ),
         border: Border.all(
-            color: ApexColors.emerald.withValues(alpha: 0.45), width: 1),
+          color: ApexColors.emerald.withValues(alpha: 0.45),
+          width: 1,
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.bolt_rounded,
-              size: 18, color: ApexColors.emeraldBright),
+          const Icon(
+            Icons.bolt_rounded,
+            size: 18,
+            color: ApexColors.emeraldBright,
+          ),
           const SizedBox(width: 4),
           Text(
             '$xp XP',
@@ -250,23 +267,76 @@ class _DoneState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+    final empty = stats.drillsToday == 0;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(24, 34, 24, 24),
+      child: Column(
+        children: [
+          ApexEmptyStateCard(
+            icon: Icons.school_rounded,
+            title: empty ? ApexCopy.academyEmpty : ApexCopy.academyDone,
+            message: empty
+                ? 'Blunders, missed wins, tactics, and openings will appear here after reviews.'
+                : null,
+            accent: ApexColors.emerald,
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: const [
+              _AcademyPlaceholder(
+                label: 'Blunders',
+                icon: Icons.error_outline_rounded,
+              ),
+              _AcademyPlaceholder(
+                label: 'Missed wins',
+                icon: Icons.flag_rounded,
+              ),
+              _AcademyPlaceholder(label: 'Tactics', icon: Icons.bolt_rounded),
+              _AcademyPlaceholder(
+                label: 'Openings',
+                icon: Icons.menu_book_rounded,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AcademyPlaceholder extends StatelessWidget {
+  const _AcademyPlaceholder({required this.label, required this.icon});
+
+  final String label;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 140,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: ApexColors.nebula.withValues(alpha: 0.52),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: ApexColors.subtleBorder, width: 0.6),
+        ),
+        child: Row(
           children: [
-            Icon(Icons.school_rounded,
-                size: 72, color: ApexColors.emerald.withValues(alpha: 0.75)),
-            const SizedBox(height: 16),
-            Text(
-              stats.drillsToday == 0
-                  ? ApexCopy.academyEmpty
-                  : ApexCopy.academyDone,
-              textAlign: TextAlign.center,
-              style: ApexTypography.bodyMedium.copyWith(
-                color: ApexColors.textSecondary,
-                height: 1.55,
+            Icon(icon, color: ApexColors.sapphireBright, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: ApexTypography.bodyMedium.copyWith(
+                  color: ApexColors.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],
@@ -326,8 +396,7 @@ class _DrillView extends ConsumerWidget {
             _ResultPanel(
               correct: state.lastResultCorrect!,
               bestSan: options[correctIndex].san,
-              onNext: () =>
-                  ref.read(academyControllerProvider.notifier).next(),
+              onNext: () => ref.read(academyControllerProvider.notifier).next(),
             ),
           ],
         ],
@@ -376,8 +445,9 @@ class _DrillHeader extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
             color: ApexColors.sapphire.withValues(alpha: 0.15),
             border: Border.all(
-                color: ApexColors.sapphire.withValues(alpha: 0.45),
-                width: 0.9),
+              color: ApexColors.sapphire.withValues(alpha: 0.45),
+              width: 0.9,
+            ),
           ),
           child: Text(
             '$remaining left',
@@ -523,18 +593,21 @@ class _ResultPanel extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-              correct
-                  ? Icons.check_circle_outline_rounded
-                  : Icons.highlight_off_rounded,
-              color: accent,
-              size: 30),
+            correct
+                ? Icons.check_circle_outline_rounded
+                : Icons.highlight_off_rounded,
+            color: accent,
+            size: 30,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  correct ? ApexCopy.academyCorrect : ApexCopy.academyWrongHeader,
+                  correct
+                      ? ApexCopy.academyCorrect
+                      : ApexCopy.academyWrongHeader,
                   style: ApexTypography.titleMedium.copyWith(
                     color: ApexColors.textPrimary,
                     fontWeight: FontWeight.w700,
@@ -559,10 +632,8 @@ class _ResultPanel extends StatelessWidget {
           TextButton(
             style: TextButton.styleFrom(
               foregroundColor: accent,
-              side: BorderSide(
-                  color: accent.withValues(alpha: 0.55), width: 1),
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 8),
+              side: BorderSide(color: accent.withValues(alpha: 0.55), width: 1),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             ),
             onPressed: onNext,
             child: const Text('NEXT'),

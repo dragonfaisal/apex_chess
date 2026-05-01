@@ -1,4 +1,4 @@
-/// Riverpod controller for the Archived Intel feature.
+/// Riverpod controller for the Archive feature.
 ///
 /// Exposes:
 ///   * [archiveRepositoryProvider]  — async handle to the Hive-backed
@@ -33,7 +33,7 @@ enum ArchiveResultFilter { any, wins, losses, draws }
 /// user. `any` disables the filter.
 enum ArchiveColorFilter { any, white, black }
 
-/// Mode filter for the Quick/Deep split. `any` disables.
+/// Mode filter for the Fast/Deep split. `any` disables.
 enum ArchiveModeFilter { any, quick, deep, offline }
 
 class ArchiveFilters {

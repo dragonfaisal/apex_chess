@@ -517,7 +517,7 @@ class _NeedsDeepScanChip extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           Text(
-            'Needs Deep Scan',
+            'Deep Review suggested',
             style: ApexTypography.labelLarge.copyWith(
               color: ApexColors.inaccuracy.withAlpha(220),
               fontSize: 10,
