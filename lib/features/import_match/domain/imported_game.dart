@@ -57,9 +57,9 @@ class ImportedGame {
   }
 
   String get resultLabel => switch (result) {
-    GameResult.whiteWon => '1–0',
-    GameResult.blackWon => '0–1',
-    GameResult.draw => '½–½',
+    GameResult.whiteWon => '1-0',
+    GameResult.blackWon => '0-1',
+    GameResult.draw => '1/2-1/2',
     GameResult.unknown => '—',
   };
 
@@ -69,9 +69,9 @@ class ImportedGame {
   };
 
   String get secondaryResultText => switch (result) {
-    GameResult.whiteWon => 'White won 1-0',
-    GameResult.blackWon => 'Black won 0-1',
-    GameResult.draw => 'Draw 1/2-1/2',
+    GameResult.whiteWon => 'White won · 1-0',
+    GameResult.blackWon => 'Black won · 0-1',
+    GameResult.draw => 'Draw · 1/2-1/2',
     GameResult.unknown => 'Result unavailable',
   };
 
@@ -116,6 +116,28 @@ class ImportedGame {
         (userColor == PlayerColor.white && result == GameResult.whiteWon) ||
         (userColor == PlayerColor.black && result == GameResult.blackWon);
     return won ? 'You won vs $opponent' : 'You lost vs $opponent';
+  }
+
+  String get filterIndex {
+    return [
+      sourceLabel,
+      whiteName,
+      blackName,
+      opponentName,
+      openingName,
+      eco,
+      timeControl,
+      perspectiveHeadline,
+      userOutcomeLabel,
+      secondaryResultText,
+      '$moveCount moves',
+    ].whereType<String>().join(' ').toLowerCase();
+  }
+
+  bool matchesLocalFilter(String query) {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return true;
+    return filterIndex.contains(q);
   }
 
   /// Resolves the user's outcome given [userColor]; returns null when we

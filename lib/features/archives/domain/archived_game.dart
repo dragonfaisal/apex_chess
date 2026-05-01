@@ -258,9 +258,9 @@ class ArchivedGame {
 
   String get secondaryResultText {
     return switch (result) {
-      '1-0' => 'White won 1-0',
-      '0-1' => 'Black won 0-1',
-      '1/2-1/2' => 'Draw 1/2-1/2',
+      '1-0' => 'White won · 1-0',
+      '0-1' => 'Black won · 0-1',
+      '1/2-1/2' => 'Draw · 1/2-1/2',
       _ => 'Result unavailable',
     };
   }
@@ -280,7 +280,7 @@ class ArchivedGame {
   String get openingLine {
     final parts = <String>[
       if (ecoCode != null && ecoCode!.isNotEmpty) ecoCode!,
-      openingName ?? 'Opening not tagged',
+      openingName ?? 'Opening not detected',
     ];
     return parts.join(' ');
   }

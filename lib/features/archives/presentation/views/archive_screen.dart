@@ -710,7 +710,7 @@ class _ArchiveCard extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(18),
       child: GlassPanel(
-        padding: const EdgeInsets.fromLTRB(16, 14, 10, 14),
+        padding: const EdgeInsets.fromLTRB(16, 15, 10, 15),
         accentColor: accent,
         accentAlpha: 0.22,
         child: Column(
@@ -760,9 +760,13 @@ class _ArchiveCard extends StatelessWidget {
             Text(
               game.openingLine,
               style: ApexTypography.bodyMedium.copyWith(
-                color: ApexColors.book,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+                color: game.openingName == null
+                    ? ApexColors.textTertiary
+                    : ApexColors.book,
+                fontSize: 11.5,
+                fontWeight: game.openingName == null
+                    ? FontWeight.w500
+                    : FontWeight.w600,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -788,15 +792,21 @@ class _ArchiveCard extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 9),
             Row(
               children: [
-                _CompactTag(
-                  label: game.reviewModeLabel,
-                  color: ApexColors.sapphireBright,
+                Flexible(
+                  child: Text(
+                    game.secondaryResultText,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: ApexTypography.bodyMedium.copyWith(
+                      color: accent,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
-                const SizedBox(width: 8),
-                _CompactTag(label: game.secondaryResultText, color: accent),
                 if (userIsBlack != null) ...[
                   const SizedBox(width: 8),
                   _CompactTag(
@@ -815,8 +825,10 @@ class _ArchiveCard extends StatelessWidget {
   String get _metaLine {
     return [
       game.sourceLabel,
+      game.reviewModeLabel,
       if (game.timeControl != null && game.timeControl!.isNotEmpty)
         game.timeControl!,
+      '${game.totalPlies} plies',
       game.relativePlayedAt,
     ].join(' • ');
   }

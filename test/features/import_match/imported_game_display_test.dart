@@ -6,6 +6,9 @@ void main() {
   ImportedGame game({
     required GameResult result,
     required PlayerColor? userColor,
+    String? openingName,
+    String? eco,
+    String? timeControl,
   }) {
     return ImportedGame(
       id: 'g1',
@@ -16,9 +19,11 @@ void main() {
       blackRating: 1510,
       result: result,
       playedAt: DateTime(2026, 4, 20),
-      timeControl: '180',
+      timeControl: timeControl ?? '180',
       moveCount: 42,
       pgn: '1. e4 *',
+      openingName: openingName,
+      eco: eco,
       userColor: userColor,
     );
   }
@@ -55,5 +60,48 @@ void main() {
     expect(text, 'Black won');
     expect(text, isNot(contains('You won')));
     expect(text, isNot(contains('You lost')));
+  });
+
+  test('loaded-games filter matches opponent name', () {
+    final imported = game(
+      result: GameResult.whiteWon,
+      userColor: PlayerColor.white,
+    );
+
+    expect(imported.matchesLocalFilter('RojoHijo'), isTrue);
+    expect(imported.matchesLocalFilter('someone else'), isFalse);
+  });
+
+  test(
+    'loaded-games filter matches opening, ECO, result, and time control',
+    () {
+      final imported = game(
+        result: GameResult.blackWon,
+        userColor: PlayerColor.white,
+        openingName: 'Philidor Defense',
+        eco: 'C41',
+        timeControl: '3 min',
+      );
+
+      expect(imported.matchesLocalFilter('Philidor'), isTrue);
+      expect(imported.matchesLocalFilter('C41'), isTrue);
+      expect(imported.matchesLocalFilter('lost'), isTrue);
+      expect(imported.matchesLocalFilter('3 min'), isTrue);
+    },
+  );
+
+  test('import card title stays perspective-first without score noise', () {
+    final imported = game(
+      result: GameResult.blackWon,
+      userColor: PlayerColor.white,
+    );
+
+    expect(imported.perspectiveHeadline, 'You lost vs RojoHijo');
+    expect(imported.perspectiveHeadline, isNot(contains('1-0')));
+    expect(imported.perspectiveHeadline, isNot(contains('0-1')));
+    expect(
+      '${imported.resultLabel} Lost',
+      isNot(equals(imported.perspectiveHeadline)),
+    );
   });
 }

@@ -41,6 +41,6 @@ void main() {
 
   test('archive unknown perspective uses side result text', () {
     expect(game(result: '0-1').resultHeadline(userHandle: null), 'Black won');
-    expect(game(result: '1-0').secondaryResultText, 'White won 1-0');
+    expect(game(result: '1-0').secondaryResultText, 'White won · 1-0');
   });
 }

@@ -1,9 +1,6 @@
 /// Home Screen — Apex Chess "Deep Space Cinematic" edition.
 ///
-/// Three entry points driven by the on-device Apex AI Analyst:
-///   * ENTER LIVE MATCH     — opens the interactive board with live eval.
-///   * IMPORT LIVE MATCH    — pulls Chess.com / Lichess games over HTTP.
-///   * QUANTUM DEPTH SCAN   — imports a raw PGN and analyses every ply.
+/// Main Apex shell with Analyze / Archive / Stats / Academy navigation.
 ///
 /// Layout is wrapped in a [SingleChildScrollView] so the content never
 /// overflows on compact screens (previously caused the
@@ -29,6 +26,7 @@ import 'package:apex_chess/features/global_dashboard/presentation/views/global_d
 import 'package:apex_chess/features/import_match/presentation/views/import_match_screen.dart';
 import 'package:apex_chess/features/live_play/presentation/views/live_play_screen.dart';
 import 'package:apex_chess/features/mistake_vault/data/mistake_vault_save_hook.dart';
+import 'package:apex_chess/features/home/presentation/pgn_paste_display_state.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
 import 'package:apex_chess/features/pgn_review/domain/review_analysis_provider.dart';
 import 'package:apex_chess/features/pgn_review/presentation/views/review_summary_screen.dart';
@@ -297,13 +295,18 @@ class _PgnPasteDialogState extends State<_PgnPasteDialog> {
   static const _identity = GameIdentityService();
   final _pgnController = TextEditingController();
   final _handleController = TextEditingController();
+  final _pgnFocusNode = FocusNode();
+  Timer? _pgnParseDebounce;
   // `null` == "unknown" — the default preserves the legacy PGN-paste
   // behaviour (both sides' mistakes ingested, no board flip).
   bool? _userIsWhite;
   bool _sideTouched = false;
+  bool _pgnCollapsed = false;
 
   @override
   void dispose() {
+    _pgnParseDebounce?.cancel();
+    _pgnFocusNode.dispose();
     _pgnController.dispose();
     _handleController.dispose();
     super.dispose();
@@ -338,6 +341,34 @@ class _PgnPasteDialogState extends State<_PgnPasteDialog> {
       userHandle: handle,
       selectedUserIsWhite: _userIsWhite,
     );
+  }
+
+  bool get _hasDetectedGame => PgnPasteDisplayState.shouldCollapseInput(
+    pgn: _pgnController.text,
+    identity: _currentPreview,
+  );
+
+  void _onPgnChanged(String value) {
+    _pgnParseDebounce?.cancel();
+    if (value.trim().isEmpty) {
+      setState(() => _pgnCollapsed = false);
+      return;
+    }
+    setState(() {});
+    _pgnParseDebounce = Timer(PgnPasteDisplayState.parseDebounce, () {
+      if (!mounted) return;
+      final shouldCollapse = PgnPasteDisplayState.shouldCollapseInput(
+        pgn: _pgnController.text,
+        identity: _currentPreview,
+      );
+      if (_pgnCollapsed == shouldCollapse) return;
+      setState(() => _pgnCollapsed = shouldCollapse);
+    });
+  }
+
+  void _expandPgnInput() {
+    if (!_pgnCollapsed) return;
+    setState(() => _pgnCollapsed = false);
   }
 
   @override
@@ -380,23 +411,35 @@ class _PgnPasteDialogState extends State<_PgnPasteDialog> {
                     ],
                   ),
                   const SizedBox(height: 14),
-                  TextField(
-                    controller: _pgnController,
-                    minLines: 4,
-                    maxLines: 7,
-                    keyboardType: TextInputType.multiline,
-                    textInputAction: TextInputAction.newline,
-                    cursorColor: ApexColors.sapphireBright,
-                    autofillHints: const [],
-                    enableSuggestions: false,
-                    autocorrect: false,
-                    style: ApexTypography.bodyMedium.copyWith(
-                      fontFamily: 'JetBrainsMono',
-                      fontSize: 12,
-                      color: ApexColors.textPrimary,
+                  AnimatedSize(
+                    duration: ApexMotion.normal,
+                    curve: ApexMotion.standard,
+                    alignment: Alignment.topCenter,
+                    child: TextField(
+                      key: ValueKey(_pgnCollapsed),
+                      controller: _pgnController,
+                      focusNode: _pgnFocusNode,
+                      minLines: _pgnCollapsed ? 3 : 5,
+                      maxLines: _pgnCollapsed ? 4 : 8,
+                      keyboardType: TextInputType.multiline,
+                      textInputAction: TextInputAction.newline,
+                      cursorColor: ApexColors.sapphireBright,
+                      autofillHints: const [],
+                      enableSuggestions: false,
+                      autocorrect: false,
+                      onTap: _expandPgnInput,
+                      style: ApexTypography.bodyMedium.copyWith(
+                        fontFamily: 'JetBrainsMono',
+                        fontSize: 12,
+                        color: ApexColors.textPrimary,
+                      ),
+                      decoration: _dialogField(
+                        hint: _pgnCollapsed
+                            ? 'PGN detected. Tap to edit.'
+                            : ApexCopy.pgnDialogHint,
+                      ),
+                      onChanged: _onPgnChanged,
                     ),
-                    decoration: _dialogField(hint: ApexCopy.pgnDialogHint),
-                    onChanged: (_) => setState(() {}),
                   ),
                   if (widget.connectedHandle == null) ...[
                     const SizedBox(height: 10),
@@ -418,7 +461,7 @@ class _PgnPasteDialogState extends State<_PgnPasteDialog> {
                     ),
                   ],
                   const SizedBox(height: 12),
-                  _PgnPreview(identity: preview),
+                  _PgnPreview(identity: preview, detected: _hasDetectedGame),
                   const SizedBox(height: 12),
                   _PerspectiveSelector(
                     value: selectedSide,
@@ -480,13 +523,14 @@ class _PgnPasteDialogState extends State<_PgnPasteDialog> {
 }
 
 class _PgnPreview extends StatelessWidget {
-  const _PgnPreview({required this.identity});
+  const _PgnPreview({required this.identity, required this.detected});
 
   final PgnGameIdentity identity;
+  final bool detected;
 
   @override
   Widget build(BuildContext context) {
-    final opening = identity.opening ?? identity.eco ?? 'Opening not tagged';
+    final opening = identity.opening ?? identity.eco ?? 'Opening not detected';
     final result = const GameIdentityService().resultLabel(
       identity.result,
       userIsWhite: identity.userIsWhite,
@@ -501,6 +545,27 @@ class _PgnPreview extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            children: [
+              Icon(
+                detected
+                    ? Icons.check_circle_rounded
+                    : Icons.manage_search_rounded,
+                size: 15,
+                color: detected ? ApexColors.best : ApexColors.textTertiary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                detected ? 'Detected Game Preview' : 'Paste a PGN to preview',
+                style: ApexTypography.labelLarge.copyWith(
+                  color: detected ? ApexColors.best : ApexColors.textTertiary,
+                  fontSize: 10,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
           Row(
             children: [
               Expanded(

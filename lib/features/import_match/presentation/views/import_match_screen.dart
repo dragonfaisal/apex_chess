@@ -45,8 +45,10 @@ class ImportMatchScreen extends ConsumerStatefulWidget {
 
 class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
   final _controller = TextEditingController();
+  final _gameFilterController = TextEditingController();
   final _usernameFocus = FocusNode();
   final _scrollController = ScrollController();
+  String _gameFilter = '';
 
   // Live-Fetch debounce — 600 ms after the username-validation pill
   // confirms the handle exists we auto-invoke Fetch. Guards:
@@ -67,6 +69,7 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
     // listener — Flutter de-duplicates notifications to each scroll
     // position update, and `fetchMore` itself guards on already-loading.
     _scrollController.addListener(_maybeFetchMore);
+    _gameFilterController.addListener(_onGameFilterChanged);
     // Prefill from the connected Apex account so returning users don't
     // retype their handle every session. We do this in a post-frame
     // callback so the ref.read happens after widget mount and we can
@@ -102,8 +105,14 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
     _scrollController.removeListener(_maybeFetchMore);
     _scrollController.dispose();
     _usernameFocus.dispose();
+    _gameFilterController.removeListener(_onGameFilterChanged);
+    _gameFilterController.dispose();
     _controller.dispose();
     super.dispose();
+  }
+
+  void _onGameFilterChanged() {
+    setState(() => _gameFilter = _gameFilterController.text);
   }
 
   /// Schedules an auto-fetch 600 ms *after the username-validation
@@ -130,6 +139,7 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
       if (state.source != source) return;
       if (state.isLoading) return;
       _lastAutoKey = key;
+      _gameFilterController.clear();
       ref.read(importControllerProvider.notifier).fetch();
     });
   }
@@ -187,6 +197,7 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
                         notifier.setSource(src);
                         _cancelAutoFetch();
                         _lastAutoKey = null;
+                        _gameFilterController.clear();
                       },
                     ),
                     const SizedBox(height: 16),
@@ -202,6 +213,7 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
                         onSubmitted: (v) {
                           _cancelAutoFetch();
                           _lastAutoKey = '${state.source.name}:${v.trim()}';
+                          _gameFilterController.clear();
                           notifier.fetch();
                         },
                         onVerified: (v) {
@@ -220,6 +232,7 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
                           _usernameFocus.unfocus();
                           _cancelAutoFetch();
                           _lastAutoKey = '${state.source.name}:$username';
+                          _gameFilterController.clear();
                           notifier.fetch();
                         },
                       ),
@@ -230,7 +243,7 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
                   ],
                 ),
               ),
-              ..._buildBodySlivers(state),
+              ..._buildBodySlivers(state, _gameFilter),
               SliverToBoxAdapter(child: SizedBox(height: bottomInset + 24)),
             ],
           ),
@@ -268,7 +281,7 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
     );
   }
 
-  List<Widget> _buildBodySlivers(ImportState state) {
+  List<Widget> _buildBodySlivers(ImportState state, String filterQuery) {
     if (state.isLoading) {
       return const [
         SliverFillRemaining(
@@ -319,29 +332,45 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
         ),
       ];
     }
-    // +1 row reserved for the footer (loader, inline error, or
-    // "end of feed" marker).
-    final itemCount = state.games.length + 1;
+    final visibleGames = state.games
+        .where((game) => game.matchesLocalFilter(filterQuery))
+        .toList(growable: false);
+    final isFiltering = filterQuery.trim().isNotEmpty;
     return [
-      SliverPadding(
-        padding: const EdgeInsets.fromLTRB(18, 4, 18, 28),
-        sliver: SliverList.separated(
-          itemBuilder: (_, i) {
-            if (i == state.games.length) {
-              return _PaginationFooter(
-                isLoading: state.isLoadingMore,
-                hasMore: state.hasMore,
-                errorMessage: state.errorMessage,
-                onRetry: () =>
-                    ref.read(importControllerProvider.notifier).fetchMore(),
-              );
-            }
-            return _GameCard(game: state.games[i]);
-          },
-          separatorBuilder: (_, __) => const SizedBox(height: 12),
-          itemCount: itemCount,
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 0, 18, 10),
+          child: _LoadedGamesFilterField(controller: _gameFilterController),
         ),
       ),
+      if (visibleGames.isEmpty)
+        const SliverFillRemaining(
+          hasScrollBody: false,
+          child: _EmptyState(
+            icon: Icons.manage_search_rounded,
+            label: 'No matching games.',
+          ),
+        )
+      else
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(18, 4, 18, 28),
+          sliver: SliverList.separated(
+            itemBuilder: (_, i) {
+              if (!isFiltering && i == visibleGames.length) {
+                return _PaginationFooter(
+                  isLoading: state.isLoadingMore,
+                  hasMore: state.hasMore,
+                  errorMessage: state.errorMessage,
+                  onRetry: () =>
+                      ref.read(importControllerProvider.notifier).fetchMore(),
+                );
+              }
+              return _GameCard(game: visibleGames[i]);
+            },
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemCount: visibleGames.length + (isFiltering ? 0 : 1),
+          ),
+        ),
     ];
   }
 }
@@ -918,6 +947,71 @@ class _AutoFetchStatus extends StatelessWidget {
   }
 }
 
+class _LoadedGamesFilterField extends StatelessWidget {
+  const _LoadedGamesFilterField({required this.controller});
+
+  final TextEditingController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: controller,
+      builder: (context, value, _) {
+        return TextField(
+          controller: controller,
+          textInputAction: TextInputAction.search,
+          cursorColor: ApexColors.sapphireBright,
+          autofillHints: const [],
+          enableSuggestions: false,
+          autocorrect: false,
+          style: ApexTypography.bodyMedium.copyWith(
+            color: ApexColors.textPrimary,
+            fontSize: 13,
+          ),
+          decoration: InputDecoration(
+            prefixIcon: const Icon(
+              Icons.manage_search_rounded,
+              color: ApexColors.sapphireBright,
+              size: 19,
+            ),
+            suffixIcon: value.text.isEmpty
+                ? null
+                : IconButton(
+                    tooltip: 'Clear',
+                    onPressed: controller.clear,
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      color: ApexColors.textTertiary,
+                      size: 18,
+                    ),
+                  ),
+            hintText: 'Search opponent or opening',
+            hintStyle: ApexTypography.bodyMedium.copyWith(
+              color: ApexColors.textTertiary,
+            ),
+            filled: true,
+            fillColor: ApexColors.deepSpace.withValues(alpha: 0.48),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: ApexColors.subtleBorder),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: ApexColors.subtleBorder),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide(
+                color: ApexColors.sapphire.withValues(alpha: 0.55),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Game card
 // ─────────────────────────────────────────────────────────────────────────────
@@ -931,12 +1025,6 @@ class _GameCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final headline = game.perspectiveHeadline;
     final outcome = game.userOutcomeLabel;
-    final outcomeColor = switch (outcome) {
-      'Won' => ApexColors.brilliant,
-      'Lost' => ApexColors.ruby,
-      'Draw' => ApexColors.inaccuracy,
-      _ => ApexColors.textTertiary,
-    };
     final accentColor = switch (outcome) {
       'Won' => ApexColors.best,
       'Lost' => ApexColors.blunder,
@@ -949,7 +1037,7 @@ class _GameCard extends ConsumerWidget {
       },
     };
     final opening = game.openingName == null
-        ? null
+        ? 'Opening not detected'
         : '${game.eco != null ? '${game.eco} ' : ''}${game.openingName}';
 
     return GlassPanel(
@@ -998,14 +1086,6 @@ class _GameCard extends ConsumerWidget {
                         ],
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    Text(
-                      game.resultLabel,
-                      style: ApexTypography.monoEval.copyWith(
-                        color: accentColor,
-                        fontSize: 16,
-                      ),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 10),
@@ -1031,18 +1111,25 @@ class _GameCard extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  [
-                    game.secondaryResultText,
-                    '${game.moveCount} moves',
-                    if (opening != null) opening,
-                  ].join(' • '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: ApexTypography.bodyMedium.copyWith(
-                    color: outcomeColor,
-                    fontSize: 11,
-                  ),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    _MetaPill(
+                      label: game.secondaryResultText,
+                      color: accentColor,
+                    ),
+                    _MetaPill(
+                      label: '${game.moveCount} moves',
+                      color: ApexColors.textTertiary,
+                    ),
+                    _MetaPill(
+                      label: opening,
+                      color: game.openingName == null
+                          ? ApexColors.textTertiary
+                          : ApexColors.book,
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -1179,6 +1266,38 @@ class _SourceBadge extends StatelessWidget {
   }
 }
 
+class _MetaPill extends StatelessWidget {
+  const _MetaPill({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.sizeOf(context).width - 64,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.09),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.22), width: 0.5),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: ApexTypography.bodyMedium.copyWith(
+          color: color,
+          fontSize: 10.5,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
 class _PlayerRow extends StatelessWidget {
   const _PlayerRow({
     required this.name,
@@ -1232,6 +1351,24 @@ class _PlayerRow extends StatelessWidget {
             style: ApexTypography.monoEval.copyWith(
               color: ApexColors.textTertiary,
               fontSize: 11,
+            ),
+          ),
+        ],
+        if (isUser) ...[
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+            decoration: BoxDecoration(
+              color: ApexColors.sapphire.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              'YOU',
+              style: ApexTypography.labelLarge.copyWith(
+                color: ApexColors.sapphireBright,
+                fontSize: 9,
+                letterSpacing: 0.7,
+              ),
             ),
           ),
         ],

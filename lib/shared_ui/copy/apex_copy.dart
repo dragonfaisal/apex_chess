@@ -114,8 +114,9 @@ class ApexCopy {
   static const String dashboardTitle = 'STATS';
   static const String dashboardSubtitle =
       'Public account stats and Apex analyzed games in one place.';
-  static const String dashboardEmpty =
-      'Review a game to start building your Apex analyzed stats.';
+  static const String dashboardEmptyTitle = 'No analyzed stats yet.';
+  static const String dashboardEmpty = 'Review games to build your dashboard.';
+  static const String dashboardEmptyHint = 'Use Analyze to review a game.';
   static const String dashboardColorAll = 'ALL';
   static const String dashboardColorWhite = 'WHITE';
   static const String dashboardColorBlack = 'BLACK';
@@ -136,16 +137,16 @@ class ApexCopy {
 
   static const String scannerTitle = 'OPPONENT INSIGHTS';
   static const String scannerSubtitle =
-      'Review an opponent profile against available public game data.';
-  static const String scannerCta = 'SEARCH PLAYER';
-  static const String scannerRunning = 'Checking games…';
-  static const String scannerLoading = 'Loading profile…';
+      'Review public games and performance signals.';
+  static const String scannerCta = 'Build profile';
+  static const String scannerRunning = 'Checking games...';
+  static const String scannerLoading = 'Building profile...';
   static const String scannerVerdictClean =
-      'Within the human band for the stated rating — no red flags.';
+      'Typical for the stated rating sample.';
   static const String scannerVerdictModerate =
-      'Above the expected band — flag for human review.';
+      'Elevated compared with the expected rating sample.';
   static const String scannerVerdictSuspicious =
-      'Well above what a human of this rating produces. Likely engine-assisted.';
+      'High variance compared with the expected rating sample.';
 
   // ── Home tile subtitles ────────────────────────────────────────────────
   static const String tilePlayLiveSub = 'Play with live feedback.';
@@ -154,7 +155,7 @@ class ApexCopy {
   static const String tileArchivesSub =
       'Every match you\'ve ever scanned, one tap away.';
   static const String tileScannerSub =
-      'Benchmark any opponent vs the engine baseline.';
+      'Review public games and performance signals.';
   static const String tileDashboardSub =
       'Ratings, accuracy, openings, and recent reviews.';
   static const String tileAcademySub =

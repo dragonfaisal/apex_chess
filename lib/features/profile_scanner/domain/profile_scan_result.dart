@@ -22,9 +22,9 @@ enum SuspicionLevel {
   suspicious;
 
   String get label => switch (this) {
-    clean => 'Clean',
-    moderate => 'Moderate',
-    suspicious => 'Suspicious',
+    clean => 'Typical',
+    moderate => 'Elevated',
+    suspicious => 'High variance',
   };
 }
 
@@ -44,8 +44,8 @@ class GameAccuracy {
   final double engineMatchRate;
 
   /// Population stdev of the per-ply Win% loss on the user's side.
-  /// A low value at a high [accuracy] is the classic engine-assisted
-  /// signature: consistent, flat, almost never noisy.
+  /// Lower variance at higher [accuracy] means the sample is more
+  /// consistent and less noisy.
   final double cpLossStdDev;
 
   /// ELO the user played at in this game (if known from headers).

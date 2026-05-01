@@ -1,8 +1,4 @@
-/// Apex Opponent Forensics — scaffold screen.
-///
-/// UI + dummy service only. The suspicion dial shape, copy, and
-/// gradient spectrum are locked so that future versions swapping in
-/// real accuracy math just replace the numbers.
+/// Opponent Insights screen.
 library;
 
 import 'dart:math' as math;
@@ -15,8 +11,8 @@ import 'package:apex_chess/features/user_validation/presentation/username_valida
 import 'package:apex_chess/features/user_validation/presentation/widgets/username_validation_pill.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
-import 'package:apex_chess/shared_ui/widgets/quantum_shatter_loader.dart';
 
 import '../../data/profile_scanner_service.dart';
 import '../../domain/profile_scan_result.dart';
@@ -30,8 +26,7 @@ class ProfileScannerScreen extends ConsumerStatefulWidget {
       _ProfileScannerScreenState();
 }
 
-class _ProfileScannerScreenState
-    extends ConsumerState<ProfileScannerScreen> {
+class _ProfileScannerScreenState extends ConsumerState<ProfileScannerScreen> {
   final _controller = TextEditingController();
   String _source = 'chess.com';
   UsernameValidationController? _validation;
@@ -51,8 +46,9 @@ class _ProfileScannerScreenState
   }
 
   UsernameValidationController _ensureValidation() {
-    return _validation ??=
-        UsernameValidationController(ref.read(usernameValidatorProvider));
+    return _validation ??= UsernameValidationController(
+      ref.read(usernameValidatorProvider),
+    );
   }
 
   void _onTextChanged() {
@@ -60,24 +56,21 @@ class _ProfileScannerScreenState
       source: _source,
       username: _controller.text,
     );
+    if (mounted) setState(() {});
   }
 
   void _onSourceChanged(String source) {
     setState(() => _source = source);
-    _ensureValidation().updateInput(
-      source: source,
-      username: _controller.text,
-    );
+    _ensureValidation().updateInput(source: source, username: _controller.text);
   }
 
   Future<void> _scan() async {
     final name = _controller.text.trim();
     if (name.isEmpty) return;
     FocusScope.of(context).unfocus();
-    await ref.read(profileScannerControllerProvider.notifier).scan(
-          username: name,
-          source: _source,
-        );
+    await ref
+        .read(profileScannerControllerProvider.notifier)
+        .scan(username: name, source: _source);
   }
 
   @override
@@ -85,11 +78,18 @@ class _ProfileScannerScreenState
     final state = ref.watch(profileScannerControllerProvider);
 
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       body: Container(
         decoration: const BoxDecoration(gradient: ApexGradients.spaceCanvas),
         child: SafeArea(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(18, 8, 18, 32),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: EdgeInsets.fromLTRB(
+              18,
+              8,
+              18,
+              MediaQuery.viewInsetsOf(context).bottom + 32,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -116,7 +116,9 @@ class _ProfileScannerScreenState
                 else if (state.error != null)
                   _ErrorCard(message: state.error!)
                 else if (state.result != null)
-                  _ResultSection(result: state.result!),
+                  _ResultSection(result: state.result!)
+                else
+                  const _ScannerEmptyState(),
               ],
             ),
           ),
@@ -138,16 +140,20 @@ class _Header extends StatelessWidget {
       children: [
         IconButton(
           onPressed: onBack,
-          icon: const Icon(Icons.arrow_back_ios_new_rounded,
-              color: ApexColors.textPrimary, size: 18),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: ApexColors.textPrimary,
+            size: 18,
+          ),
         ),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(ApexCopy.scannerTitle,
-                  style: ApexTypography.headlineMedium
-                      .copyWith(letterSpacing: 3)),
+              Text(
+                ApexCopy.scannerTitle,
+                style: ApexTypography.headlineMedium.copyWith(letterSpacing: 3),
+              ),
               const SizedBox(height: 2),
               Text(
                 ApexCopy.scannerSubtitle,
@@ -213,6 +219,10 @@ class _InputCard extends StatelessWidget {
             enabled: !isLoading,
             textInputAction: TextInputAction.search,
             onSubmitted: (_) => onSubmit(),
+            cursorColor: ApexColors.sapphireBright,
+            autofillHints: const [],
+            enableSuggestions: false,
+            autocorrect: false,
             style: ApexTypography.bodyMedium.copyWith(
               color: ApexColors.textPrimary,
               fontSize: 14,
@@ -223,11 +233,31 @@ class _InputCard extends StatelessWidget {
               hintStyle: ApexTypography.bodyMedium.copyWith(
                 color: ApexColors.textTertiary,
               ),
-              prefixIcon: const Icon(Icons.person_search_rounded,
-                  color: ApexColors.sapphireBright, size: 18),
-              suffixIcon: UsernameValidationPill(controller: validation),
-              suffixIconConstraints:
-                  const BoxConstraints(minHeight: 30, minWidth: 0),
+              prefixIcon: const Icon(
+                Icons.person_search_rounded,
+                color: ApexColors.sapphireBright,
+                size: 18,
+              ),
+              suffixIcon: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  UsernameValidationPill(controller: validation),
+                  if (controller.text.isNotEmpty)
+                    IconButton(
+                      tooltip: 'Clear',
+                      onPressed: controller.clear,
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        color: ApexColors.textTertiary,
+                        size: 18,
+                      ),
+                    ),
+                ],
+              ),
+              suffixIconConstraints: const BoxConstraints(
+                minHeight: 32,
+                minWidth: 0,
+              ),
               filled: true,
               fillColor: ApexColors.nebula.withValues(alpha: 0.5),
               border: OutlineInputBorder(
@@ -252,24 +282,28 @@ class _InputCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          SizedBox(
-            height: 44,
-            child: ElevatedButton(
+          Align(
+            alignment: Alignment.centerRight,
+            child: OutlinedButton.icon(
               onPressed: isLoading ? null : onSubmit,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: ApexColors.sapphireDeep,
-                foregroundColor: ApexColors.textPrimary,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+              icon: isLoading
+                  ? const ApexPulseLoader(
+                      size: 14,
+                      color: ApexColors.sapphireBright,
+                    )
+                  : const Icon(Icons.insights_rounded, size: 16),
+              label: Text(
+                isLoading ? ApexCopy.scannerRunning : ApexCopy.scannerCta,
               ),
-              child: Text(
-                isLoading
-                    ? ApexCopy.scannerRunning
-                    : ApexCopy.scannerCta,
-                style: ApexTypography.labelLarge.copyWith(
-                  color: ApexColors.textPrimary,
-                  letterSpacing: 2,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: ApexColors.sapphireBright,
+                side: BorderSide(
+                  color: ApexColors.sapphire.withValues(alpha: 0.45),
+                  width: 0.8,
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
                 ),
               ),
             ),
@@ -298,8 +332,7 @@ class _SourceToggle extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(10),
         child: Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
             color: selected
                 ? ApexColors.sapphireDeep.withValues(alpha: 0.35)
@@ -344,39 +377,27 @@ class _LoadingCard extends StatelessWidget {
     final overall = p?.overall ?? 0.0;
     return GlassPanel(
       accentColor: ApexColors.aurora,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
       child: Column(
         children: [
-          const SizedBox(
-            height: 140,
-            child: Center(child: QuantumShatterLoader(size: 140)),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            ApexCopy.scannerLoading,
-            textAlign: TextAlign.center,
-            style: ApexTypography.titleMedium
-                .copyWith(letterSpacing: 2, fontSize: 13),
-          ),
-          const SizedBox(height: 14),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: LinearProgressIndicator(
-              value: overall == 0 ? null : overall,
-              minHeight: 8,
-              backgroundColor: ApexColors.cosmicDust,
-              valueColor:
-                  const AlwaysStoppedAnimation(ApexColors.emeraldBright),
-            ),
+          ApexLoadingScaffold(
+            title: ApexCopy.scannerLoading,
+            messages: const [
+              'Checking games...',
+              'Building profile...',
+              'Reviewing public signals...',
+            ],
+            progress: overall == 0 ? null : overall,
+            compact: true,
           ),
           const SizedBox(height: 8),
           if (p != null)
             Text(
               p.currentGame == null
-                  ? 'Preparing engine…'
+                  ? 'Preparing review...'
                   : 'Game ${p.completed + 1}/${p.total}  ·  '
-                      'ply ${p.currentPly}/${p.currentPlyTotal}\n'
-                      '${p.currentGame}',
+                        'ply ${p.currentPly}/${p.currentPlyTotal}\n'
+                        '${p.currentGame}',
               textAlign: TextAlign.center,
               style: ApexTypography.bodyMedium.copyWith(
                 color: ApexColors.textTertiary,
@@ -389,16 +410,30 @@ class _LoadingCard extends StatelessWidget {
             style: OutlinedButton.styleFrom(
               foregroundColor: ApexColors.ruby,
               side: BorderSide(
-                  color: ApexColors.ruby.withValues(alpha: 0.55), width: 1),
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 16, vertical: 10),
+                color: ApexColors.ruby.withValues(alpha: 0.55),
+                width: 1,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             ),
             onPressed: onCancel,
             icon: const Icon(Icons.close_rounded, size: 16),
-            label: const Text('CANCEL SCAN'),
+            label: const Text('Cancel'),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ScannerEmptyState extends StatelessWidget {
+  const _ScannerEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    return const ApexEmptyStateCard(
+      icon: Icons.query_stats_rounded,
+      title: 'Search an opponent',
+      message: 'Review public games and performance signals.',
     );
   }
 }
@@ -413,14 +448,18 @@ class _CancelledCard extends StatelessWidget {
       padding: const EdgeInsets.all(18),
       child: Row(
         children: [
-          const Icon(Icons.cancel_outlined,
-              color: ApexColors.textTertiary, size: 20),
+          const Icon(
+            Icons.cancel_outlined,
+            color: ApexColors.textTertiary,
+            size: 20,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               'Scan cancelled.',
-              style: ApexTypography.bodyMedium
-                  .copyWith(color: ApexColors.textSecondary),
+              style: ApexTypography.bodyMedium.copyWith(
+                color: ApexColors.textSecondary,
+              ),
             ),
           ),
         ],
@@ -442,14 +481,16 @@ class _ErrorCard extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       child: Row(
         children: [
-          const Icon(Icons.error_outline_rounded,
-              color: ApexColors.ruby, size: 20),
+          const Icon(
+            Icons.error_outline_rounded,
+            color: ApexColors.ruby,
+            size: 20,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               message,
-              style: ApexTypography.bodyMedium
-                  .copyWith(color: ApexColors.ruby),
+              style: ApexTypography.bodyMedium.copyWith(color: ApexColors.ruby),
             ),
           ),
         ],
@@ -513,10 +554,12 @@ class _SuspicionCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            result.verdict,
+            _neutralVerdict(result),
             textAlign: TextAlign.center,
-            style: ApexTypography.bodyLarge
-                .copyWith(color: ApexColors.textSecondary, fontSize: 13),
+            style: ApexTypography.bodyLarge.copyWith(
+              color: ApexColors.textSecondary,
+              fontSize: 13,
+            ),
           ),
         ],
       ),
@@ -524,10 +567,26 @@ class _SuspicionCard extends StatelessWidget {
   }
 
   Color _suspicionColor(SuspicionLevel s) => switch (s) {
-        SuspicionLevel.clean => ApexColors.great,
-        SuspicionLevel.moderate => ApexColors.inaccuracy,
-        SuspicionLevel.suspicious => ApexColors.ruby,
-      };
+    SuspicionLevel.clean => ApexColors.great,
+    SuspicionLevel.moderate => ApexColors.inaccuracy,
+    SuspicionLevel.suspicious => ApexColors.ruby,
+  };
+
+  String _neutralVerdict(ProfileScanResult result) {
+    final rating = result.averageRating ?? 'this rating';
+    final accuracy = result.averageAccuracy.toStringAsFixed(0);
+    final match = (result.averageEngineMatchRate * 100).toStringAsFixed(0);
+    return switch (result.suspicion) {
+      SuspicionLevel.clean =>
+        'Typical profile sample for $rating: $accuracy% accuracy, '
+            '$match% top-line match.',
+      SuspicionLevel.moderate =>
+        'Elevated profile sample for $rating: $accuracy% accuracy, '
+            '$match% top-line match.',
+      SuspicionLevel.suspicious =>
+        'High-variance profile sample for $rating. Review the games manually.',
+    };
+  }
 }
 
 class _SuspicionDial extends StatelessWidget {
@@ -544,10 +603,7 @@ class _SuspicionDial extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
-      painter: _SuspicionDialPainter(
-        accuracy: accuracy,
-        accent: accent,
-      ),
+      painter: _SuspicionDialPainter(accuracy: accuracy, accent: accent),
       child: SizedBox(
         width: 180,
         height: 180,
@@ -624,9 +680,7 @@ class _SuspicionDialPainter extends CustomPainter {
           colors: [accent.withValues(alpha: 0.4), accent],
           startAngle: -math.pi / 2,
           endAngle: -math.pi / 2 + sweep,
-        ).createShader(
-          Rect.fromCircle(center: center, radius: radius),
-        ),
+        ).createShader(Rect.fromCircle(center: center, radius: radius)),
     );
   }
 

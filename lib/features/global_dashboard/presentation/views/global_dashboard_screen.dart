@@ -94,28 +94,55 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.insights_rounded,
-              size: 72,
-              color: ApexColors.sapphire.withValues(alpha: 0.6),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _ProfileStatsCard(),
+          const SizedBox(height: 14),
+          GlassPanel(
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+            accentColor: ApexColors.sapphire,
+            accentAlpha: 0.18,
+            child: Column(
+              children: [
+                Icon(
+                  Icons.insights_rounded,
+                  size: 44,
+                  color: ApexColors.sapphire.withValues(alpha: 0.72),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  ApexCopy.dashboardEmptyTitle,
+                  textAlign: TextAlign.center,
+                  style: ApexTypography.titleMedium.copyWith(
+                    color: ApexColors.textPrimary,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  ApexCopy.dashboardEmpty,
+                  textAlign: TextAlign.center,
+                  style: ApexTypography.bodyMedium.copyWith(
+                    color: ApexColors.textSecondary,
+                    height: 1.45,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  ApexCopy.dashboardEmptyHint,
+                  textAlign: TextAlign.center,
+                  style: ApexTypography.bodyMedium.copyWith(
+                    color: ApexColors.textTertiary,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            Text(
-              ApexCopy.dashboardEmpty,
-              textAlign: TextAlign.center,
-              style: ApexTypography.bodyMedium.copyWith(
-                color: ApexColors.textSecondary,
-                height: 1.5,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
