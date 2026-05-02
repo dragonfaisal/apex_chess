@@ -9,11 +9,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apex_chess/app/di/providers.dart';
 import 'package:apex_chess/features/account/domain/apex_account.dart';
 import 'package:apex_chess/features/account/presentation/controllers/account_controller.dart';
+import 'package:apex_chess/features/import_match/domain/imported_game.dart';
+import 'package:apex_chess/features/import_match/presentation/controllers/recent_searches_controller.dart';
 import 'package:apex_chess/features/user_validation/presentation/username_validation_controller.dart';
 import 'package:apex_chess/features/user_validation/presentation/widgets/username_validation_pill.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_snack.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
 
 import '../../data/profile_scanner_service.dart';
@@ -30,13 +33,16 @@ class ProfileScannerScreen extends ConsumerStatefulWidget {
 
 class _ProfileScannerScreenState extends ConsumerState<ProfileScannerScreen> {
   final _controller = TextEditingController();
+  final _focusNode = FocusNode();
   String _source = 'chess.com';
   UsernameValidationController? _validation;
+  bool _showRecents = false;
 
   @override
   void initState() {
     super.initState();
     _controller.addListener(_onTextChanged);
+    _focusNode.addListener(_updateRecentVisibility);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final account = ref.read(accountControllerProvider).valueOrNull;
       if (account != null) _applyConnectedAccount(account);
@@ -46,6 +52,8 @@ class _ProfileScannerScreenState extends ConsumerState<ProfileScannerScreen> {
   @override
   void dispose() {
     _controller.removeListener(_onTextChanged);
+    _focusNode.removeListener(_updateRecentVisibility);
+    _focusNode.dispose();
     _controller.dispose();
     _validation?.dispose();
     super.dispose();
@@ -63,6 +71,14 @@ class _ProfileScannerScreenState extends ConsumerState<ProfileScannerScreen> {
       username: _controller.text,
     );
     if (mounted) setState(() {});
+    _updateRecentVisibility();
+  }
+
+  void _updateRecentVisibility() {
+    if (!mounted) return;
+    final shouldShow = _focusNode.hasFocus && _controller.text.trim().isEmpty;
+    if (_showRecents == shouldShow) return;
+    setState(() => _showRecents = shouldShow);
   }
 
   void _onSourceChanged(String source) {
@@ -98,6 +114,25 @@ class _ProfileScannerScreenState extends ConsumerState<ProfileScannerScreen> {
         .scan(username: name, source: _source);
   }
 
+  GameSource get _gameSource =>
+      _source == 'lichess' ? GameSource.lichess : GameSource.chessCom;
+
+  void _useRecent(String username) {
+    _controller.text = username;
+    _controller.selection = TextSelection.collapsed(offset: username.length);
+    _focusNode.unfocus();
+    setState(() => _showRecents = false);
+  }
+
+  void _cancelScan() {
+    ref.read(profileScannerControllerProvider.notifier).cancel();
+    showApexSnack(
+      context,
+      message: ApexCopy.scannerCancelled,
+      color: ApexColors.textTertiary,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.listen(accountControllerProvider, (previous, next) {
@@ -106,6 +141,12 @@ class _ProfileScannerScreenState extends ConsumerState<ProfileScannerScreen> {
       _applyConnectedAccount(account, previous: previous?.valueOrNull);
     });
     final state = ref.watch(profileScannerControllerProvider);
+    final recents = ref
+        .watch(recentSearchesProvider)
+        .maybeWhen(
+          data: (s) => s.forSource(_gameSource),
+          orElse: () => const <String>[],
+        );
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
@@ -132,15 +173,20 @@ class _ProfileScannerScreenState extends ConsumerState<ProfileScannerScreen> {
                   onSubmit: _scan,
                   isLoading: state.isLoading,
                   validation: _ensureValidation(),
+                  focusNode: _focusNode,
+                  showRecents: _showRecents && recents.isNotEmpty,
+                  recents: recents,
+                  onRecentTapped: _useRecent,
+                  onClearRecents: () => ref
+                      .read(recentSearchesProvider.notifier)
+                      .clear(_gameSource),
+                  onRemoveRecent: (u) => ref
+                      .read(recentSearchesProvider.notifier)
+                      .remove(_gameSource, u),
                 ),
                 const SizedBox(height: 20),
                 if (state.isLoading)
-                  _LoadingCard(
-                    progress: state.progress,
-                    onCancel: () => ref
-                        .read(profileScannerControllerProvider.notifier)
-                        .cancel(),
-                  )
+                  _LoadingCard(progress: state.progress, onCancel: _cancelScan)
                 else if (state.wasCancelled)
                   const _CancelledCard()
                 else if (state.error != null)
@@ -211,14 +257,26 @@ class _InputCard extends StatelessWidget {
     required this.onSubmit,
     required this.isLoading,
     required this.validation,
+    required this.focusNode,
+    required this.showRecents,
+    required this.recents,
+    required this.onRecentTapped,
+    required this.onClearRecents,
+    required this.onRemoveRecent,
   });
 
   final TextEditingController controller;
+  final FocusNode focusNode;
   final String source;
   final ValueChanged<String> onSourceChanged;
   final VoidCallback onSubmit;
   final bool isLoading;
   final UsernameValidationController validation;
+  final bool showRecents;
+  final List<String> recents;
+  final ValueChanged<String> onRecentTapped;
+  final VoidCallback onClearRecents;
+  final ValueChanged<String> onRemoveRecent;
 
   @override
   Widget build(BuildContext context) {
@@ -246,6 +304,7 @@ class _InputCard extends StatelessWidget {
           const SizedBox(height: 12),
           TextField(
             controller: controller,
+            focusNode: focusNode,
             enabled: !isLoading,
             textInputAction: TextInputAction.search,
             onSubmitted: (_) => onSubmit(),
@@ -274,7 +333,7 @@ class _InputCard extends StatelessWidget {
                   UsernameValidationPill(controller: validation),
                   if (controller.text.isNotEmpty)
                     IconButton(
-                      tooltip: 'Clear',
+                      tooltip: ApexCopy.clear,
                       onPressed: controller.clear,
                       icon: const Icon(
                         Icons.close_rounded,
@@ -311,6 +370,13 @@ class _InputCard extends StatelessWidget {
               ),
             ),
           ),
+          if (showRecents)
+            _RecentSearchesDropdown(
+              entries: recents,
+              onTap: onRecentTapped,
+              onClear: onClearRecents,
+              onRemove: onRemoveRecent,
+            ),
           const SizedBox(height: 12),
           Align(
             alignment: Alignment.centerRight,
@@ -388,6 +454,121 @@ class _SourceToggle extends StatelessWidget {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RecentSearchesDropdown extends StatelessWidget {
+  const _RecentSearchesDropdown({
+    required this.entries,
+    required this.onTap,
+    required this.onClear,
+    required this.onRemove,
+  });
+
+  final List<String> entries;
+  final ValueChanged<String> onTap;
+  final VoidCallback onClear;
+  final ValueChanged<String> onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: GlassPanel(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        margin: null,
+        borderRadius: 12,
+        accentAlpha: 0.18,
+        fillAlpha: 0.55,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 6, 8, 4),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.history_rounded,
+                    size: 14,
+                    color: ApexColors.sapphireBright.withValues(alpha: 0.75),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'RECENT SEARCHES',
+                    style: ApexTypography.bodyMedium.copyWith(
+                      color: ApexColors.textTertiary,
+                      fontSize: 10,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: onClear,
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(0, 28),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    child: Text(
+                      ApexCopy.clear,
+                      style: ApexTypography.bodyMedium.copyWith(
+                        color: ApexColors.ruby.withValues(alpha: 0.85),
+                        fontSize: 10,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            for (final entry in entries)
+              InkWell(
+                onTap: () => onTap(entry),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.person_search_rounded,
+                        size: 16,
+                        color: ApexColors.textTertiary,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          entry,
+                          overflow: TextOverflow.ellipsis,
+                          style: ApexTypography.bodyMedium.copyWith(
+                            color: ApexColors.textPrimary,
+                            fontSize: 13,
+                            fontFamily: 'JetBrains Mono',
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => onRemove(entry),
+                        iconSize: 14,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 28,
+                          minHeight: 28,
+                        ),
+                        icon: Icon(
+                          Icons.close_rounded,
+                          color: ApexColors.textTertiary.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );

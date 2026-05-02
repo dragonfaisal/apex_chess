@@ -38,10 +38,39 @@ class ApexCopy {
   static const String analyzeGame = 'PASTE PGN';
   static const String importMatch = 'IMPORT GAMES';
 
+  // ── Global status / actions ───────────────────────────────────────────
+  static const String checking = 'Checking...';
+  static const String verified = 'Verified';
+  static const String notFound = 'Not found';
+  static const String offline = 'Offline';
+  static const String noConnection = 'No connection';
+  static const String showingSavedData = 'Showing saved data';
+  static const String backOnline = 'Back online';
+  static const String synced = 'Synced';
+  static const String tryAgain = 'Try again';
+  static const String tryAgainOnline = 'Try again when online';
+  static const String clear = 'Clear';
+  static const String clearFilters = 'Clear filters';
+  static const String noMatchingGames = 'No matching games';
+  static const String search = 'Search';
+  static const String searchPlayer = 'Search player';
+  static const String searchOpponent = 'Search opponent';
+  static const String searchOpponentOpening = 'Search opponent or opening';
+
   // ── Dialog copy ────────────────────────────────────────────────────────
   static const String pgnDialogTitle = 'Import PGN';
   static const String pgnDialogCta = 'Start Review';
   static const String pgnDialogHint = '1. e4 e5 2. Nf3 Nc6 …';
+  static const String pgnDetected = 'Game detected';
+  static const String pgnPreviewPrompt = 'Paste PGN to preview';
+  static const String pgnDetectedHint = 'PGN detected. Tap to edit.';
+  static const String pgnPlayerHint = 'Player name';
+  static const String switchSide = 'Switch side';
+  static const String chooseSide = 'Choose your side';
+  static const String openingNotDetected = 'Opening not detected';
+
+  static String youPlayed(bool userIsWhite) =>
+      userIsWhite ? 'You played White' : 'You played Black';
 
   // ── Import feature (Chess.com / Lichess) ───────────────────────────────
   static const String importTitle = 'IMPORT GAMES';
@@ -66,6 +95,10 @@ class ApexCopy {
   static const String depthDeepTag = 'Deep';
   static const String depthDeepBlurb =
       'Stronger tactical verification for important games.';
+  static const String depthOfflineLabel = 'Offline Review';
+  static const String depthOfflineTag = 'Offline';
+  static const String depthOfflineBlurb =
+      'Runs on this device and may be slower.';
 
   static String scanHeader(int depth) =>
       depth <= 16 ? depthFastLabel : depthDeepLabel;
@@ -126,6 +159,15 @@ class ApexCopy {
   static const String dashboardOpeningCard = 'OPENING ARSENAL';
   static const String dashboardOpeningEmpty =
       'Scan a handful of matches to surface your strongest and weakest lines.';
+  static const String dashboardPlayerSearchTitle = 'PLAYER SEARCH';
+  static const String dashboardPlayerSearchHint = 'Search username';
+  static const String dashboardNoPublicData = 'No public data';
+  static const String dashboardNoGamesFound = 'No games found';
+  static const String dashboardAccountOverview = 'Account overview';
+  static const String dashboardRatings = 'Ratings';
+  static const String dashboardRecentForm = 'Recent form';
+  static const String dashboardFutureSections =
+      'Openings · Results · Accuracy · Weak phases';
 
   // ── Apex Academy ───────────────────────────────────────────────────────
   static const String academyTitle = 'ACADEMY';
@@ -141,6 +183,7 @@ class ApexCopy {
   static const String scannerCta = 'Build profile';
   static const String scannerRunning = 'Checking games...';
   static const String scannerLoading = 'Building profile...';
+  static const String scannerCancelled = 'Scan cancelled';
   static const String scannerVerdictClean =
       'Typical for the stated rating sample.';
   static const String scannerVerdictModerate =

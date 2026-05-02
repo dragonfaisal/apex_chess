@@ -26,18 +26,17 @@ class RecentSearchesState {
   final List<String> lichess;
 
   List<String> forSource(GameSource source) => switch (source) {
-        GameSource.chessCom => chessCom,
-        GameSource.lichess => lichess,
-      };
+    GameSource.chessCom => chessCom,
+    GameSource.lichess => lichess,
+  };
 
   RecentSearchesState copyWith({
     List<String>? chessCom,
     List<String>? lichess,
-  }) =>
-      RecentSearchesState(
-        chessCom: chessCom ?? this.chessCom,
-        lichess: lichess ?? this.lichess,
-      );
+  }) => RecentSearchesState(
+    chessCom: chessCom ?? this.chessCom,
+    lichess: lichess ?? this.lichess,
+  );
 }
 
 class RecentSearchesController extends AsyncNotifier<RecentSearchesState> {
@@ -72,6 +71,7 @@ class RecentSearchesController extends AsyncNotifier<RecentSearchesState> {
   /// Push a successful search to the front of the MRU list for [source].
   /// Case-insensitive de-dup so "Hikaru" and "hikaru" collapse.
   Future<void> record(GameSource source, String username) async {
+    _prefs ??= await SharedPreferences.getInstance();
     final trimmed = username.trim();
     if (trimmed.isEmpty) return;
     final current = state.valueOrNull ?? const RecentSearchesState();
@@ -99,8 +99,9 @@ class RecentSearchesController extends AsyncNotifier<RecentSearchesState> {
     final existing = source == GameSource.chessCom
         ? current.chessCom
         : current.lichess;
-    final filtered =
-        existing.where((u) => u.toLowerCase() != username.toLowerCase()).toList();
+    final filtered = existing
+        .where((u) => u.toLowerCase() != username.toLowerCase())
+        .toList();
     final updated = source == GameSource.chessCom
         ? current.copyWith(chessCom: filtered)
         : current.copyWith(lichess: filtered);
@@ -124,5 +125,7 @@ class RecentSearchesController extends AsyncNotifier<RecentSearchesState> {
   }
 }
 
-final recentSearchesProvider = AsyncNotifierProvider<RecentSearchesController,
-    RecentSearchesState>(RecentSearchesController.new);
+final recentSearchesProvider =
+    AsyncNotifierProvider<RecentSearchesController, RecentSearchesState>(
+      RecentSearchesController.new,
+    );

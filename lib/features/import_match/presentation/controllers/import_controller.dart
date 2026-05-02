@@ -12,6 +12,7 @@ import 'package:apex_chess/features/import_match/data/chess_com_repository.dart'
 import 'package:apex_chess/features/import_match/data/lichess_repository.dart';
 import 'package:apex_chess/features/import_match/domain/imported_game.dart';
 import 'package:apex_chess/features/import_match/presentation/controllers/recent_searches_controller.dart';
+import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 
 // Own the HTTP client at the provider layer so its connection pool is
 // closed when the provider is invalidated. Repos take the client via
@@ -52,6 +53,15 @@ class ImportState {
   final String? cursor;
   final bool hasMore;
 
+  String? get emptyErrorMessage {
+    final message = errorMessage;
+    if (message == null) return null;
+    if (_looksLikeConnectionIssue(message)) {
+      return '${ApexCopy.noConnection}\n${ApexCopy.tryAgainOnline}';
+    }
+    return message;
+  }
+
   ImportState copyWith({
     GameSource? source,
     String? username,
@@ -77,6 +87,15 @@ class ImportState {
       hasMore: hasMore ?? this.hasMore,
     );
   }
+}
+
+bool _looksLikeConnectionIssue(String message) {
+  final m = message.toLowerCase();
+  return m.contains('could not reach') ||
+      m.contains('connection') ||
+      m.contains('too long') ||
+      m.contains('timed out') ||
+      m.contains('network');
 }
 
 class ImportController extends Notifier<ImportState> {
@@ -123,12 +142,14 @@ class ImportController extends Notifier<ImportState> {
   Future<ImportPage> _fetchPage({String? cursor}) async {
     final user = state.username.trim();
     return switch (state.source) {
-      GameSource.chessCom => await ref
-          .read(chessComRepositoryProvider)
-          .fetchPage(user, cursor: cursor),
-      GameSource.lichess => await ref
-          .read(lichessRepositoryProvider)
-          .fetchPage(user, cursor: cursor),
+      GameSource.chessCom =>
+        await ref
+            .read(chessComRepositoryProvider)
+            .fetchPage(user, cursor: cursor),
+      GameSource.lichess =>
+        await ref
+            .read(lichessRepositoryProvider)
+            .fetchPage(user, cursor: cursor),
     };
   }
 
@@ -234,10 +255,7 @@ class ImportController extends Notifier<ImportState> {
       );
     } on ImportException catch (e) {
       if (gen != _generation) return;
-      state = state.copyWith(
-        isLoadingMore: false,
-        errorMessage: e.userMessage,
-      );
+      state = state.copyWith(isLoadingMore: false, errorMessage: e.userMessage);
     } catch (_) {
       if (gen != _generation) return;
       state = state.copyWith(

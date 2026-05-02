@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:apex_chess/features/import_match/domain/imported_game.dart';
+import 'package:apex_chess/features/import_match/presentation/controllers/import_controller.dart';
+import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 
 void main() {
   ImportedGame game({
@@ -103,5 +105,18 @@ void main() {
       '${imported.resultLabel} Lost',
       isNot(equals(imported.perspectiveHeadline)),
     );
+  });
+
+  test('import offline empty state copy is calm and single-message', () {
+    const state = ImportState(
+      errorMessage: 'Could not reach Chess.com. Check your connection.',
+      hasFetched: true,
+    );
+
+    expect(
+      state.emptyErrorMessage,
+      '${ApexCopy.noConnection}\n${ApexCopy.tryAgainOnline}',
+    );
+    expect(state.emptyErrorMessage, isNot(contains('Could not reach')));
   });
 }

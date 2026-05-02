@@ -309,6 +309,14 @@ class ArchiveController extends Notifier<ArchiveState> {
     await _reload();
   }
 
+  void setFilters(ArchiveFilters filters) {
+    state = state.copyWith(filters: filters);
+  }
+
+  void clearFilters() {
+    state = state.copyWith(filters: const ArchiveFilters());
+  }
+
   void setSort(ArchiveSort sort) {
     state = state.copyWith(filters: state.filters.copyWith(sort: sort));
   }

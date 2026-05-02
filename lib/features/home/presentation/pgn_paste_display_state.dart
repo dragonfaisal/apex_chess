@@ -2,6 +2,7 @@
 library;
 
 import 'package:apex_chess/core/domain/services/game_identity_service.dart';
+import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 
 class PgnPasteDisplayState {
   const PgnPasteDisplayState._();
@@ -18,4 +19,6 @@ class PgnPasteDisplayState {
     return RegExp(r'\b1\.(\.\.)?').hasMatch(text) ||
         RegExp(r'^\s*\[[A-Za-z0-9_]+\s+"', multiLine: true).hasMatch(text);
   }
+
+  static String sideLabel(bool userIsWhite) => ApexCopy.youPlayed(userIsWhite);
 }

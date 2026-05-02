@@ -31,9 +31,11 @@ import 'package:apex_chess/features/user_validation/presentation/username_valida
 import 'package:apex_chess/features/user_validation/presentation/widgets/username_validation_pill.dart';
 import 'package:apex_chess/features/pgn_review/presentation/views/review_summary_screen.dart';
 import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
+import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_snack.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
 
 class ImportMatchScreen extends ConsumerStatefulWidget {
@@ -114,12 +116,16 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
     final error = next.errorMessage;
     if (error != null && error != previous?.errorMessage) {
       _hadConnectionIssue = true;
-      _showApexSnack(
-        next.games.isEmpty
-            ? 'Connection issue — try again when online'
-            : 'Offline — showing loaded games',
-        color: ApexColors.inaccuracy,
-      );
+      ref
+          .read(connectionPresenceProvider.notifier)
+          .markOffline(ApexCopy.noConnection);
+      if (next.games.isNotEmpty) {
+        _showApexSnack(
+          ApexCopy.offline,
+          detail: ApexCopy.showingSavedData,
+          color: ApexColors.inaccuracy,
+        );
+      }
       return;
     }
     final finishedFetch =
@@ -130,23 +136,15 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
         next.games.isNotEmpty;
     if (_hadConnectionIssue && finishedFetch) {
       _hadConnectionIssue = false;
-      _showApexSnack('Synced', color: ApexColors.best);
+      final shouldNotify = ref
+          .read(connectionPresenceProvider.notifier)
+          .markSynced();
+      if (shouldNotify) _showApexSnack(ApexCopy.synced, color: ApexColors.best);
     }
   }
 
-  void _showApexSnack(String message, {required Color color}) {
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    if (messenger == null) return;
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: color.withValues(alpha: 0.94),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
-        ),
-      );
+  void _showApexSnack(String message, {String? detail, required Color color}) {
+    showApexSnack(context, message: message, detail: detail, color: color);
   }
 
   @override
@@ -360,7 +358,7 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
           hasScrollBody: false,
           child: _EmptyState(
             icon: Icons.cloud_off_rounded,
-            label: state.errorMessage!,
+            label: state.emptyErrorMessage ?? ApexCopy.noConnection,
             accent: ApexColors.ruby,
           ),
         ),
@@ -782,7 +780,7 @@ class _UsernameFieldState extends ConsumerState<_UsernameField> {
                 UsernameValidationPill(controller: _ensureValidation()),
                 if (widget.controller.text.isNotEmpty)
                   IconButton(
-                    tooltip: 'Clear',
+                    tooltip: ApexCopy.clear,
                     onPressed: () {
                       widget.controller.clear();
                       widget.onChanged('');
@@ -1033,7 +1031,7 @@ class _LoadedGamesFilterField extends StatelessWidget {
             suffixIcon: value.text.isEmpty
                 ? null
                 : IconButton(
-                    tooltip: 'Clear',
+                    tooltip: ApexCopy.clear,
                     onPressed: controller.clear,
                     icon: const Icon(
                       Icons.close_rounded,
@@ -1041,7 +1039,7 @@ class _LoadedGamesFilterField extends StatelessWidget {
                       size: 18,
                     ),
                   ),
-            hintText: 'Search opponent or opening',
+            hintText: ApexCopy.searchOpponentOpening,
             hintStyle: ApexTypography.bodyMedium.copyWith(
               color: ApexColors.textTertiary,
             ),
@@ -1520,9 +1518,9 @@ class DepthPickerDialog extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             _DepthOption(
-              label: 'Offline Review',
-              tag: 'Offline',
-              blurb: 'Runs on this device and may be slower.',
+              label: ApexCopy.depthOfflineLabel,
+              tag: ApexCopy.depthOfflineTag,
+              blurb: ApexCopy.depthOfflineBlurb,
               icon: Icons.offline_bolt_rounded,
               accent: ApexColors.aurora,
               onTap: () =>

@@ -5,8 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:apex_chess/app/di/providers.dart';
 import 'package:apex_chess/features/import_match/domain/imported_game.dart'
-    show ImportException;
+    show GameSource, ImportException;
 import 'package:apex_chess/features/import_match/presentation/controllers/import_controller.dart';
+import 'package:apex_chess/features/import_match/presentation/controllers/recent_searches_controller.dart';
 
 import '../../data/profile_scanner_service.dart';
 import '../../domain/profile_scan_result.dart';
@@ -90,6 +91,9 @@ class ProfileScannerController extends Notifier<ProfileScannerState> {
         },
       );
       if (gen != _generation || cancellation.isCancelled) return;
+      await ref
+          .read(recentSearchesProvider.notifier)
+          .record(_gameSourceFor(source), username);
       state = state.copyWith(
         isLoading: false,
         result: result,
@@ -141,6 +145,12 @@ class ProfileScannerController extends Notifier<ProfileScannerState> {
   }
 
   void reset() => state = const ProfileScannerState();
+}
+
+GameSource _gameSourceFor(String source) {
+  return source.trim().toLowerCase() == 'lichess'
+      ? GameSource.lichess
+      : GameSource.chessCom;
 }
 
 final profileScannerControllerProvider =

@@ -10,6 +10,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
 
@@ -33,7 +34,7 @@ class UsernameValidationPill extends StatelessWidget {
     if (state.isSpinning) {
       return const _Chip(
         color: ApexColors.sapphireBright,
-        label: 'Checking',
+        label: ApexCopy.checking,
         loading: true,
       );
     }
@@ -41,14 +42,14 @@ class UsernameValidationPill extends StatelessWidget {
       return const _Chip(
         color: ApexColors.best,
         icon: Icons.check_circle_rounded,
-        label: 'Verified',
+        label: ApexCopy.verified,
       );
     }
     if (state.existence == UsernameExistence.missing) {
       return const _Chip(
         color: ApexColors.mistake,
         icon: Icons.cancel_rounded,
-        label: 'Not found',
+        label: ApexCopy.notFound,
       );
     }
     return const SizedBox.shrink();

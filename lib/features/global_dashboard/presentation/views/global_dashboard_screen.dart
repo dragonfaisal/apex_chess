@@ -13,8 +13,11 @@ import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/core/domain/services/move_quality_display.dart';
 import 'package:apex_chess/features/account/presentation/controllers/account_controller.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
+import 'package:apex_chess/features/archives/presentation/controllers/archive_controller.dart';
+import 'package:apex_chess/features/archives/presentation/views/archive_screen.dart';
 import 'package:apex_chess/features/profile_stats/data/profile_stats_service.dart';
 import 'package:apex_chess/features/profile_stats/presentation/controllers/profile_stats_controller.dart';
+import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
@@ -29,6 +32,20 @@ class GlobalDashboardScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.listen(liveProfileStatsProvider, (previous, next) {
+      final account = ref.read(accountControllerProvider).valueOrNull;
+      if (account == null) return;
+      next.whenData((stats) {
+        if (stats == null) return;
+        if (stats.hasData) {
+          ref.read(connectionPresenceProvider.notifier).markSynced();
+        } else {
+          ref
+              .read(connectionPresenceProvider.notifier)
+              .markOffline(ApexCopy.noConnection);
+        }
+      });
+    });
     final stats = ref.watch(dashboardStatsProvider);
     final allStats = ref.watch(dashboardAllStatsProvider);
 
@@ -103,6 +120,8 @@ class _EmptyState extends StatelessWidget {
         children: [
           const _ProfileStatsCard(),
           const SizedBox(height: 14),
+          const _PlayerSearchCard(),
+          const SizedBox(height: 14),
           GlassPanel(
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
             accentColor: ApexColors.sapphire,
@@ -176,7 +195,11 @@ class _DashboardBody extends ConsumerWidget {
           const SizedBox(height: 16),
           const _ProfileStatsCard(),
           const SizedBox(height: 14),
+          const _PlayerSearchCard(),
+          const SizedBox(height: 14),
           const _ColorFilterBar(),
+          const SizedBox(height: 12),
+          const _DashboardInlineNotice(),
           const SizedBox(height: 12),
           if (filterOnlyEmpty)
             _FilterEmptyNotice(filter: activeFilter)
@@ -421,6 +444,333 @@ class _ProfileStatsCard extends ConsumerWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+class _PlayerSearchCard extends ConsumerStatefulWidget {
+  const _PlayerSearchCard();
+
+  @override
+  ConsumerState<_PlayerSearchCard> createState() => _PlayerSearchCardState();
+}
+
+class _PlayerSearchCardState extends ConsumerState<_PlayerSearchCard> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(
+      text: ref.read(dashboardPlayerSearchProvider).username,
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(dashboardPlayerSearchProvider);
+    final notifier = ref.read(dashboardPlayerSearchProvider.notifier);
+    return GlassPanel(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      accentColor: ApexColors.sapphireBright,
+      accentAlpha: 0.24,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _CardHeader(
+            title: ApexCopy.dashboardPlayerSearchTitle,
+            subtitle: 'Public profile lookup.',
+            accent: ApexColors.sapphireBright,
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _SearchSourceChip(
+                label: ApexCopy.importSourceChessCom,
+                selected: state.source == ProfileStatsSource.chessCom,
+                onTap: () => notifier.setSource(ProfileStatsSource.chessCom),
+              ),
+              const SizedBox(width: 8),
+              _SearchSourceChip(
+                label: ApexCopy.importSourceLichess,
+                selected: state.source == ProfileStatsSource.lichess,
+                onTap: () => notifier.setSource(ProfileStatsSource.lichess),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _controller,
+                  textInputAction: TextInputAction.search,
+                  cursorColor: ApexColors.sapphireBright,
+                  autofillHints: const [],
+                  enableSuggestions: false,
+                  autocorrect: false,
+                  onChanged: (value) {
+                    notifier.setUsername(value);
+                    setState(() {});
+                  },
+                  onSubmitted: (_) => notifier.search(),
+                  style: ApexTypography.bodyMedium.copyWith(
+                    color: ApexColors.textPrimary,
+                    fontSize: 13,
+                  ),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: ApexCopy.dashboardPlayerSearchHint,
+                    prefixIcon: const Icon(
+                      Icons.person_search_rounded,
+                      size: 17,
+                      color: ApexColors.sapphireBright,
+                    ),
+                    suffixIcon: _controller.text.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: ApexCopy.clear,
+                            onPressed: () {
+                              _controller.clear();
+                              notifier.setUsername('');
+                              setState(() {});
+                            },
+                            icon: const Icon(
+                              Icons.close_rounded,
+                              size: 17,
+                              color: ApexColors.textTertiary,
+                            ),
+                          ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton(
+                onPressed: state.isLoading ? null : notifier.search,
+                child: Text(
+                  state.isLoading ? ApexCopy.checking : ApexCopy.search,
+                ),
+              ),
+            ],
+          ),
+          if (state.isLoading) ...[
+            const SizedBox(height: 12),
+            const ApexSkeletonCard(height: 70, margin: EdgeInsets.zero),
+          ] else if (state.result != null) ...[
+            const SizedBox(height: 12),
+            _SearchedPlayerDashboard(stats: state.result!),
+          ] else if (state.hasSearched) ...[
+            const SizedBox(height: 12),
+            _SmallNotice(
+              icon: Icons.info_outline_rounded,
+              title: state.error ?? ApexCopy.dashboardNoPublicData,
+              subtitle: ApexCopy.dashboardNoGamesFound,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SearchSourceChip extends StatelessWidget {
+  const _SearchSourceChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected
+                ? ApexColors.sapphire.withValues(alpha: 0.18)
+                : ApexColors.nebula.withValues(alpha: 0.48),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: selected
+                  ? ApexColors.sapphireBright.withValues(alpha: 0.62)
+                  : ApexColors.stardustLine.withValues(alpha: 0.32),
+              width: 0.7,
+            ),
+          ),
+          child: Text(
+            label,
+            style: ApexTypography.bodyMedium.copyWith(
+              color: selected
+                  ? ApexColors.sapphireBright
+                  : ApexColors.textTertiary,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SearchedPlayerDashboard extends StatelessWidget {
+  const _SearchedPlayerDashboard({required this.stats});
+
+  final ProfileStats stats;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!stats.hasData) {
+      return const _SmallNotice(
+        icon: Icons.info_outline_rounded,
+        title: ApexCopy.dashboardNoPublicData,
+        subtitle: ApexCopy.dashboardNoGamesFound,
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _SmallNotice(
+          icon: Icons.account_circle_outlined,
+          title: '@${stats.displayName}',
+          subtitle: ApexCopy.dashboardAccountOverview,
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            for (final bucket in stats.buckets)
+              Expanded(
+                child: _RatingTile(label: bucket.label, rating: bucket.rating),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _SmallStat(
+                label: 'GAMES',
+                value: '${stats.totalGames}',
+                color: ApexColors.sapphireBright,
+              ),
+            ),
+            Expanded(
+              child: _SmallStat(
+                label: 'WINS',
+                value: '${stats.totalWins}',
+                color: ApexColors.emeraldBright,
+              ),
+            ),
+            Expanded(
+              child: _SmallStat(
+                label: 'LOSSES',
+                value: '${stats.totalLosses}',
+                color: ApexColors.ruby,
+              ),
+            ),
+            Expanded(
+              child: _SmallStat(
+                label: 'DRAWS',
+                value: '${stats.totalDraws}',
+                color: ApexColors.inaccuracy,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          ApexCopy.dashboardFutureSections,
+          textAlign: TextAlign.center,
+          style: ApexTypography.bodyMedium.copyWith(
+            color: ApexColors.textTertiary,
+            fontSize: 11,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DashboardInlineNotice extends ConsumerWidget {
+  const _DashboardInlineNotice();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final notice = ref.watch(dashboardInlineNoticeProvider);
+    if (notice == null) return const SizedBox.shrink();
+    return _SmallNotice(
+      icon: Icons.info_outline_rounded,
+      title: notice,
+      subtitle: null,
+    );
+  }
+}
+
+class _SmallNotice extends StatelessWidget {
+  const _SmallNotice({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: ApexColors.nebula.withValues(alpha: 0.46),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: ApexColors.subtleBorder, width: 0.5),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 17, color: ApexColors.sapphireBright),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: ApexTypography.bodyMedium.copyWith(
+                    color: ApexColors.textPrimary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle!,
+                    style: ApexTypography.bodyMedium.copyWith(
+                      color: ApexColors.textTertiary,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -681,18 +1031,19 @@ class _OpeningBar extends StatelessWidget {
 
 // ── KPI row ────────────────────────────────────────────────────────────
 
-class _KpiRow extends StatelessWidget {
+class _KpiRow extends ConsumerWidget {
   const _KpiRow({required this.stats});
   final DashboardStats stats;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final cards = <Widget>[
       _KpiCard(
         label: 'Games',
         value: '${stats.gamesAnalyzed}',
         accent: ApexColors.sapphire,
         icon: Icons.analytics_rounded,
+        onTap: () => _openArchive(context, ref, const ArchiveFilters()),
       ),
       _KpiCard(
         label: 'Avg Accuracy',
@@ -705,12 +1056,32 @@ class _KpiRow extends StatelessWidget {
         value: '${stats.totalBrilliants}',
         accent: ApexColors.aurora,
         icon: Icons.auto_awesome_rounded,
+        onTap: () {
+          if (stats.totalBrilliants <= 0) {
+            ref.read(dashboardInlineNoticeProvider.notifier).state =
+                'No Brilliant reviews yet';
+            return;
+          }
+          _openArchive(context, ref, const ArchiveFilters(minBrilliants: 1));
+        },
       ),
       _KpiCard(
         label: 'Blunders',
         value: '${stats.totalBlunders}',
         accent: ApexColors.ruby,
         icon: Icons.error_outline_rounded,
+        onTap: () {
+          if (stats.totalBlunders <= 0) {
+            ref.read(dashboardInlineNoticeProvider.notifier).state =
+                'No Blunder reviews yet';
+            return;
+          }
+          _openArchive(
+            context,
+            ref,
+            const ArchiveFilters(sort: ArchiveSort.mostBlunders),
+          );
+        },
       ),
     ];
     return LayoutBuilder(
@@ -729,6 +1100,19 @@ class _KpiRow extends StatelessWidget {
       },
     );
   }
+
+  void _openArchive(
+    BuildContext context,
+    WidgetRef ref,
+    ArchiveFilters filters,
+  ) {
+    ref.read(dashboardInlineNoticeProvider.notifier).state = null;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ArchiveScreen(initialFilters: filters),
+      ),
+    );
+  }
 }
 
 class _KpiCard extends StatelessWidget {
@@ -737,41 +1121,50 @@ class _KpiCard extends StatelessWidget {
     required this.value,
     required this.accent,
     required this.icon,
+    this.onTap,
   });
 
   final String label;
   final String value;
   final Color accent;
   final IconData icon;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return GlassPanel(
-      padding: const EdgeInsets.all(12),
+      padding: EdgeInsets.zero,
       accentColor: accent,
       accentAlpha: 0.45,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 18, color: accent),
-          Text(
-            value,
-            style: ApexTypography.headlineMedium.copyWith(
-              color: ApexColors.textPrimary,
-              fontWeight: FontWeight.w800,
-              fontSize: 22,
-            ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(ApexRadius.card),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, size: 18, color: accent),
+              Text(
+                value,
+                style: ApexTypography.headlineMedium.copyWith(
+                  color: ApexColors.textPrimary,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 22,
+                ),
+              ),
+              Text(
+                label.toUpperCase(),
+                style: ApexTypography.bodyMedium.copyWith(
+                  color: ApexColors.textTertiary,
+                  fontSize: 10,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ],
           ),
-          Text(
-            label.toUpperCase(),
-            style: ApexTypography.bodyMedium.copyWith(
-              color: ApexColors.textTertiary,
-              fontSize: 10,
-              letterSpacing: 1.2,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1101,12 +1494,12 @@ class _LegendChip extends StatelessWidget {
 
 // ── Result split ───────────────────────────────────────────────────────
 
-class _ResultSplitCard extends StatelessWidget {
+class _ResultSplitCard extends ConsumerWidget {
   const _ResultSplitCard({required this.stats});
   final DashboardStats stats;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final hasPerspective =
         stats.perspective != null && stats.perspective!.isNotEmpty;
     return GlassPanel(
@@ -1118,20 +1511,20 @@ class _ResultSplitCard extends StatelessWidget {
           _CardHeader(
             title: 'RESULT SPLIT',
             subtitle: hasPerspective
-                ? 'From the perspective of @${stats.perspective!}.'
-                : 'Connect an account to resolve W/L/D — showing unresolved only.',
+                ? 'From @${stats.perspective!}.'
+                : 'Connect an account to resolve W/L/D.',
             accent: ApexColors.ruby,
           ),
           const SizedBox(height: 14),
           if (!hasPerspective)
             Text(
-              'No perspective set. Connect an account on Home → Connect Account.',
+              'Connect an account to show results.',
               style: ApexTypography.bodyMedium.copyWith(
                 color: ApexColors.textTertiary,
                 fontSize: 11.5,
               ),
             )
-          else
+          else ...[
             SizedBox(
               height: 150,
               child: BarChart(
@@ -1188,6 +1581,50 @@ class _ResultSplitCard extends StatelessWidget {
                 ),
               ),
             ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                _ResultShortcut(
+                  label: 'Wins',
+                  count: stats.wins,
+                  color: ApexColors.emerald,
+                  onTap: () => _openResultArchive(
+                    context,
+                    ref,
+                    ArchiveResultFilter.wins,
+                    stats.wins,
+                    'No wins yet',
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _ResultShortcut(
+                  label: 'Draws',
+                  count: stats.draws,
+                  color: ApexColors.sapphire,
+                  onTap: () => _openResultArchive(
+                    context,
+                    ref,
+                    ArchiveResultFilter.draws,
+                    stats.draws,
+                    'No draws yet',
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _ResultShortcut(
+                  label: 'Losses',
+                  count: stats.losses,
+                  color: ApexColors.ruby,
+                  onTap: () => _openResultArchive(
+                    context,
+                    ref,
+                    ArchiveResultFilter.losses,
+                    stats.losses,
+                    'No losses yet',
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -1208,6 +1645,74 @@ class _ResultSplitCard extends StatelessWidget {
       ),
     ],
   );
+
+  void _openResultArchive(
+    BuildContext context,
+    WidgetRef ref,
+    ArchiveResultFilter result,
+    int count,
+    String emptyNotice,
+  ) {
+    if (count <= 0) {
+      ref.read(dashboardInlineNoticeProvider.notifier).state = emptyNotice;
+      return;
+    }
+    ref.read(dashboardInlineNoticeProvider.notifier).state = null;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ArchiveScreen(
+          initialFilters: ArchiveFilters(
+            result: result,
+            perspective: stats.perspective,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ResultShortcut extends StatelessWidget {
+  const _ResultShortcut({
+    required this.label,
+    required this.count,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String label;
+  final int count;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: color.withValues(alpha: 0.28),
+              width: 0.5,
+            ),
+          ),
+          child: Text(
+            '$label $count',
+            style: ApexTypography.bodyMedium.copyWith(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 // ── Recent games table ─────────────────────────────────────────────────

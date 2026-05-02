@@ -7,6 +7,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 
 import 'package:apex_chess/app/di/providers.dart';
 import 'package:apex_chess/features/account/presentation/controllers/account_controller.dart';
@@ -21,13 +22,34 @@ import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
 
-class ArchiveScreen extends ConsumerWidget {
-  const ArchiveScreen({super.key, this.showBackButton = true});
+class ArchiveScreen extends ConsumerStatefulWidget {
+  const ArchiveScreen({
+    super.key,
+    this.showBackButton = true,
+    this.initialFilters,
+  });
 
   final bool showBackButton;
+  final ArchiveFilters? initialFilters;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ArchiveScreen> createState() => _ArchiveScreenState();
+}
+
+class _ArchiveScreenState extends ConsumerState<ArchiveScreen> {
+  bool _appliedInitialFilters = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_appliedInitialFilters && widget.initialFilters != null) {
+      _appliedInitialFilters = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref
+            .read(archiveControllerProvider.notifier)
+            .setFilters(widget.initialFilters!);
+      });
+    }
     final state = ref.watch(archiveControllerProvider);
     final visible = state.visible;
 
@@ -43,7 +65,7 @@ class ArchiveScreen extends ConsumerWidget {
                 gamesCount: state.games.length,
                 brilliants: state.totalBrilliants,
                 blunders: state.totalBlunders,
-                showBackButton: showBackButton,
+                showBackButton: widget.showBackButton,
               ),
               _FilterBar(filters: state.filters),
               const SizedBox(height: 4),
@@ -84,9 +106,9 @@ class ArchiveScreen extends ConsumerWidget {
       );
     }
     if (visible.isEmpty) {
-      return const _EmptyState(
-        icon: Icons.filter_alt_outlined,
-        label: 'No games match the current filters.',
+      return _FilterEmptyState(
+        onClear: () =>
+            ref.read(archiveControllerProvider.notifier).clearFilters(),
       );
     }
     final account = ref.watch(accountControllerProvider).valueOrNull;
@@ -303,30 +325,35 @@ class _FilterBar extends ConsumerWidget {
                 _FilterChip(
                   label: _sortLabel(filters.sort),
                   icon: Icons.sort_rounded,
+                  selected: filters.sort != ArchiveSort.newest,
                   onTap: () => _showSortSheet(context, ref),
                 ),
                 const SizedBox(width: 8),
                 _FilterChip(
                   label: _sourceLabel(filters.source),
                   icon: Icons.cloud_outlined,
+                  selected: filters.source != null,
                   onTap: () => _showSourceSheet(context, ref),
                 ),
                 const SizedBox(width: 8),
                 _FilterChip(
                   label: _modeLabel(filters.mode),
                   icon: Icons.flash_on_rounded,
+                  selected: filters.mode != ArchiveModeFilter.any,
                   onTap: () => _showModeSheet(context, ref),
                 ),
                 const SizedBox(width: 8),
                 _FilterChip(
                   label: _colorLabel(filters.color),
                   icon: Icons.swap_vert_rounded,
+                  selected: filters.color != ArchiveColorFilter.any,
                   onTap: () => _showColorSheet(context, ref),
                 ),
                 const SizedBox(width: 8),
                 _FilterChip(
                   label: _resultLabel(filters.result),
                   icon: Icons.flag_outlined,
+                  selected: filters.result != ArchiveResultFilter.any,
                   onTap: () => _showResultSheet(context, ref),
                 ),
                 const SizedBox(width: 8),
@@ -335,6 +362,7 @@ class _FilterBar extends ConsumerWidget {
                       ? '≥${filters.minBrilliants} brilliants'
                       : 'Any brilliants',
                   icon: Icons.auto_awesome_rounded,
+                  selected: filters.minBrilliants > 0,
                   onTap: () => _showBrilliantsSheet(context, ref),
                 ),
               ],
@@ -628,10 +656,12 @@ class _FilterChip extends StatelessWidget {
   const _FilterChip({
     required this.label,
     required this.icon,
+    required this.selected,
     required this.onTap,
   });
   final String label;
   final IconData icon;
+  final bool selected;
   final VoidCallback onTap;
 
   @override
@@ -639,32 +669,52 @@ class _FilterChip extends StatelessWidget {
     // Phase 20.1 device feedback § 7: pinned splash/highlight stop the
     // default Material yellow ripple from leaking through on Android.
     return Material(
+      key: ValueKey(
+        'archive_filter_${label.toLowerCase().replaceAll(' ', '_')}_${selected ? 'selected' : 'normal'}',
+      ),
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
         borderRadius: BorderRadius.circular(14),
-        splashColor: ApexColors.sapphire.withValues(alpha: 0.18),
-        highlightColor: ApexColors.sapphire.withValues(alpha: 0.10),
-        hoverColor: ApexColors.sapphire.withValues(alpha: 0.08),
+        splashColor: (selected ? ApexColors.mistake : ApexColors.sapphire)
+            .withValues(alpha: 0.18),
+        highlightColor: (selected ? ApexColors.mistake : ApexColors.sapphire)
+            .withValues(alpha: 0.10),
+        hoverColor: (selected ? ApexColors.mistake : ApexColors.sapphire)
+            .withValues(alpha: 0.08),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: ApexColors.nebula.withValues(alpha: 0.6),
+            color: selected
+                ? ApexColors.mistake.withValues(alpha: 0.16)
+                : ApexColors.nebula.withValues(alpha: 0.6),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: ApexColors.stardustLine.withValues(alpha: 0.4),
+              color: selected
+                  ? ApexColors.mistake.withValues(alpha: 0.62)
+                  : ApexColors.stardustLine.withValues(alpha: 0.4),
             ),
           ),
           child: Row(
             children: [
-              Icon(icon, size: 14, color: ApexColors.sapphireBright),
+              Icon(
+                icon,
+                size: 14,
+                color: selected
+                    ? ApexColors.mistake
+                    : ApexColors.sapphireBright,
+              ),
               const SizedBox(width: 6),
               Text(
                 label,
                 style: ApexTypography.bodyMedium.copyWith(
-                  color: ApexColors.textPrimary,
+                  color: selected ? ApexColors.mistake : ApexColors.textPrimary,
                   fontSize: 12,
                   letterSpacing: 0.5,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                 ),
               ),
             ],
@@ -783,15 +833,7 @@ class _ArchiveCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 6),
-            Text(
-              game.compactQualityLine,
-              style: ApexTypography.bodyMedium.copyWith(
-                color: ApexColors.textTertiary,
-                fontSize: 11,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+            _QualitySummaryChips(game: game),
             const SizedBox(height: 9),
             Row(
               children: [
@@ -828,7 +870,6 @@ class _ArchiveCard extends StatelessWidget {
       game.reviewModeLabel,
       if (game.timeControl != null && game.timeControl!.isNotEmpty)
         game.timeControl!,
-      '${game.totalPlies} plies',
       game.relativePlayedAt,
     ].join(' • ');
   }
@@ -877,6 +918,79 @@ class _CompactTag extends StatelessWidget {
   }
 }
 
+class _QualitySummaryChips extends StatelessWidget {
+  const _QualitySummaryChips({required this.game});
+
+  final ArchivedGame game;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 6,
+      runSpacing: 5,
+      children: [
+        _QualityPill(
+          label: 'Brilliant',
+          count: game.brilliantCount,
+          color: ApexColors.brilliant,
+        ),
+        _QualityPill(
+          label: 'Great',
+          count: game.greatCount,
+          color: ApexColors.sapphireBright,
+        ),
+        _QualityPill(
+          label: 'Miss',
+          count: game.missCount,
+          color: ApexColors.miss,
+        ),
+        _QualityPill(
+          label: 'Blunder',
+          count: game.blunderCount,
+          color: ApexColors.blunder,
+        ),
+      ],
+    );
+  }
+}
+
+class _QualityPill extends StatelessWidget {
+  const _QualityPill({
+    required this.label,
+    required this.count,
+    required this.color,
+  });
+
+  final String label;
+  final int count;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final isZero = count == 0;
+    final effective = isZero ? ApexColors.textTertiary : color;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: effective.withValues(alpha: isZero ? 0.06 : 0.11),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: effective.withValues(alpha: isZero ? 0.14 : 0.30),
+          width: 0.5,
+        ),
+      ),
+      child: Text(
+        '$label $count',
+        style: ApexTypography.bodyMedium.copyWith(
+          color: effective,
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
 // ── Empty state ──────────────────────────────────────────────────────
 
 class _EmptyState extends StatelessWidget {
@@ -906,6 +1020,51 @@ class _EmptyState extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FilterEmptyState extends StatelessWidget {
+  const _FilterEmptyState({required this.onClear});
+
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: GlassPanel(
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+          accentColor: ApexColors.mistake,
+          accentAlpha: 0.18,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.filter_alt_off_rounded,
+                size: 22,
+                color: ApexColors.mistake.withValues(alpha: 0.85),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                ApexCopy.noMatchingGames,
+                textAlign: TextAlign.center,
+                style: ApexTypography.bodyMedium.copyWith(
+                  color: ApexColors.textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 6),
+              TextButton(
+                onPressed: onClear,
+                child: const Text(ApexCopy.clearFilters),
+              ),
+            ],
+          ),
         ),
       ),
     );

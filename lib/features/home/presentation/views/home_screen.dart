@@ -33,9 +33,11 @@ import 'package:apex_chess/features/pgn_review/presentation/views/review_summary
 import 'package:apex_chess/features/profile/presentation/views/profile_screen.dart';
 import 'package:apex_chess/features/profile_scanner/presentation/views/profile_scanner_screen.dart';
 import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
+import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_snack.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -327,9 +329,9 @@ class _PgnPasteDialogState extends State<_PgnPasteDialog> {
     );
   }
 
-  bool? get _effectiveUserIsWhite {
-    if (_sideTouched) return _userIsWhite;
-    return _currentPreview.userIsWhite;
+  bool get _effectiveUserIsWhite {
+    if (_sideTouched) return _userIsWhite ?? true;
+    return _currentPreview.userIsWhite ?? true;
   }
 
   PgnGameIdentity get _currentPreview {
@@ -376,7 +378,7 @@ class _PgnPasteDialogState extends State<_PgnPasteDialog> {
     final viewInsets = MediaQuery.viewInsetsOf(context);
     final screen = MediaQuery.sizeOf(context);
     final preview = _currentPreview;
-    final selectedSide = _sideTouched ? _userIsWhite : preview.userIsWhite;
+    final selectedSide = _effectiveUserIsWhite;
     return AnimatedPadding(
       duration: ApexMotion.normal,
       curve: ApexMotion.standard,
@@ -435,7 +437,7 @@ class _PgnPasteDialogState extends State<_PgnPasteDialog> {
                       ),
                       decoration: _dialogField(
                         hint: _pgnCollapsed
-                            ? 'PGN detected. Tap to edit.'
+                            ? ApexCopy.pgnDetectedHint
                             : ApexCopy.pgnDialogHint,
                       ),
                       onChanged: _onPgnChanged,
@@ -454,34 +456,33 @@ class _PgnPasteDialogState extends State<_PgnPasteDialog> {
                         fontSize: 12,
                         color: ApexColors.textPrimary,
                       ),
-                      decoration: _dialogField(
-                        hint: 'Player name for side detection',
-                      ),
+                      decoration: _dialogField(hint: ApexCopy.pgnPlayerHint),
                       onChanged: (_) => setState(() {}),
                     ),
                   ],
                   const SizedBox(height: 12),
-                  _PgnPreview(identity: preview, detected: _hasDetectedGame),
+                  _PgnPreview(
+                    identity: preview,
+                    detected: _hasDetectedGame,
+                    userIsWhite: selectedSide,
+                  ),
                   const SizedBox(height: 12),
                   _PerspectiveSelector(
                     value: selectedSide,
-                    autoDetected: !_sideTouched && preview.userIsWhite != null,
                     onChanged: (v) => setState(() {
                       _sideTouched = true;
                       _userIsWhite = v;
                     }),
-                    onSwitch: selectedSide == null
-                        ? null
-                        : () => setState(() {
-                            _sideTouched = true;
-                            _userIsWhite = !selectedSide;
-                          }),
+                    onSwitch: () => setState(() {
+                      _sideTouched = true;
+                      _userIsWhite = !selectedSide;
+                    }),
                   ),
                   const SizedBox(height: 16),
                   _ReviewModeButtons(onSelected: _pop),
                   const SizedBox(height: 8),
                   Text(
-                    'Offline Review runs on this device and may be slower.',
+                    ApexCopy.depthOfflineBlurb,
                     style: ApexTypography.bodyMedium.copyWith(
                       color: ApexColors.textTertiary,
                       fontSize: 10,
@@ -523,17 +524,23 @@ class _PgnPasteDialogState extends State<_PgnPasteDialog> {
 }
 
 class _PgnPreview extends StatelessWidget {
-  const _PgnPreview({required this.identity, required this.detected});
+  const _PgnPreview({
+    required this.identity,
+    required this.detected,
+    required this.userIsWhite,
+  });
 
   final PgnGameIdentity identity;
   final bool detected;
+  final bool userIsWhite;
 
   @override
   Widget build(BuildContext context) {
-    final opening = identity.opening ?? identity.eco ?? 'Opening not detected';
+    final opening =
+        identity.opening ?? identity.eco ?? ApexCopy.openingNotDetected;
     final result = const GameIdentityService().resultLabel(
       identity.result,
-      userIsWhite: identity.userIsWhite,
+      userIsWhite: userIsWhite,
     );
     return Container(
       padding: const EdgeInsets.all(12),
@@ -556,7 +563,7 @@ class _PgnPreview extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Text(
-                detected ? 'Detected Game Preview' : 'Paste a PGN to preview',
+                detected ? ApexCopy.pgnDetected : ApexCopy.pgnPreviewPrompt,
                 style: ApexTypography.labelLarge.copyWith(
                   color: detected ? ApexColors.best : ApexColors.textTertiary,
                   fontSize: 10,
@@ -573,7 +580,7 @@ class _PgnPreview extends StatelessWidget {
                   label: 'White',
                   name: identity.white,
                   rating: identity.whiteRating,
-                  isUser: identity.userIsWhite == true,
+                  isUser: userIsWhite,
                 ),
               ),
               const SizedBox(width: 10),
@@ -582,7 +589,7 @@ class _PgnPreview extends StatelessWidget {
                   label: 'Black',
                   name: identity.black,
                   rating: identity.blackRating,
-                  isUser: identity.userIsWhite == false,
+                  isUser: !userIsWhite,
                 ),
               ),
             ],
@@ -591,9 +598,7 @@ class _PgnPreview extends StatelessWidget {
           _PreviewMetaRow(
             icon: Icons.flag_rounded,
             label: result,
-            color: identity.userIsWhite == null
-                ? ApexColors.textSecondary
-                : ApexColors.sapphireBright,
+            color: ApexColors.sapphireBright,
           ),
           const SizedBox(height: 6),
           _PreviewMetaRow(
@@ -622,10 +627,10 @@ class _PgnPreview extends StatelessWidget {
                 ),
             ],
           ),
-          if (identity.userIsWhite != null) ...[
+          if (detected) ...[
             const SizedBox(height: 8),
             Text(
-              'Detected perspective: You: ${identity.userIsWhite! ? 'White' : 'Black'}',
+              ApexCopy.youPlayed(userIsWhite),
               style: ApexTypography.bodyMedium.copyWith(
                 color: ApexColors.sapphireBright,
                 fontSize: 11,
@@ -780,23 +785,19 @@ class _SmallPreviewFact extends StatelessWidget {
 class _PerspectiveSelector extends StatelessWidget {
   const _PerspectiveSelector({
     required this.value,
-    required this.autoDetected,
     required this.onChanged,
     this.onSwitch,
   });
 
   final bool? value;
-  final bool autoDetected;
   final ValueChanged<bool?> onChanged;
   final VoidCallback? onSwitch;
 
   @override
   Widget build(BuildContext context) {
     final title = value == null
-        ? 'Choose your side'
-        : autoDetected
-        ? 'Side detected'
-        : 'You: ${value! ? 'White' : 'Black'}';
+        ? ApexCopy.chooseSide
+        : ApexCopy.youPlayed(value!);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -815,7 +816,7 @@ class _PerspectiveSelector extends StatelessWidget {
               TextButton.icon(
                 onPressed: onSwitch,
                 icon: const Icon(Icons.swap_horiz_rounded, size: 16),
-                label: const Text('Switch Side'),
+                label: const Text(ApexCopy.switchSide),
                 style: TextButton.styleFrom(
                   visualDensity: VisualDensity.compact,
                   padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -1381,6 +1382,21 @@ class _AccountStrip extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final presence = ref.watch(connectionPresenceProvider);
+    void openProfile() {
+      if (presence.isOffline) {
+        showApexSnack(
+          context,
+          message: ApexCopy.offline,
+          detail: ApexCopy.showingSavedData,
+          color: ApexColors.ruby,
+        );
+      }
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute<void>(builder: (_) => const ProfileScreen()));
+    }
+
     if (account == null) {
       return Align(
         alignment: Alignment.centerRight,
@@ -1405,7 +1421,7 @@ class _AccountStrip extends ConsumerWidget {
             ),
           ),
           icon: const Icon(Icons.link_rounded, size: 16),
-          label: const Text('CONNECT ACCOUNT'),
+          label: const Text(ApexCopy.onboardingConnect),
         ),
       );
     }
@@ -1417,9 +1433,7 @@ class _AccountStrip extends ConsumerWidget {
           color: Colors.transparent,
           child: InkWell(
             borderRadius: BorderRadius.circular(10),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const ProfileScreen()),
-            ),
+            onTap: openProfile,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
@@ -1438,6 +1452,8 @@ class _AccountStrip extends ConsumerWidget {
                     size: 14,
                     color: ApexColors.emeraldBright,
                   ),
+                  const SizedBox(width: 5),
+                  _ConnectionDot(presence: presence),
                   const SizedBox(width: 6),
                   Text(
                     '${account!.source.wire.toUpperCase()} · ${account!.username}',
@@ -1456,16 +1472,56 @@ class _AccountStrip extends ConsumerWidget {
         const Spacer(),
         IconButton(
           tooltip: 'Profile',
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const ProfileScreen()),
-          ),
-          icon: const Icon(
-            Icons.account_circle_outlined,
-            size: 22,
-            color: ApexColors.sapphireBright,
+          onPressed: openProfile,
+          icon: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              const Icon(
+                Icons.account_circle_outlined,
+                size: 22,
+                color: ApexColors.sapphireBright,
+              ),
+              Positioned(
+                right: -1,
+                bottom: -1,
+                child: _ConnectionDot(presence: presence, compact: true),
+              ),
+            ],
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ConnectionDot extends StatelessWidget {
+  const _ConnectionDot({required this.presence, this.compact = false});
+
+  final ApexConnectionPresence presence;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (presence.status) {
+      ApexConnectionStatus.online => ApexColors.emeraldBright,
+      ApexConnectionStatus.offline => ApexColors.ruby,
+      ApexConnectionStatus.syncing => ApexColors.aurora,
+    };
+    final size = compact ? 8.0 : 9.0;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        border: Border.all(color: ApexColors.deepSpace, width: compact ? 1 : 0),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.55),
+            blurRadius: compact ? 5 : 7,
+          ),
+        ],
+      ),
     );
   }
 }

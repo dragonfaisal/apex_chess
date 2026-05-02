@@ -12,6 +12,8 @@ import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/features/account/presentation/controllers/account_controller.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/archives/presentation/controllers/archive_controller.dart';
+import 'package:apex_chess/features/profile_stats/data/profile_stats_service.dart';
+import 'package:apex_chess/features/profile_stats/presentation/controllers/profile_stats_controller.dart';
 
 /// Which side the user wants to inspect. Drives every derived stat on
 /// the Stats dashboard so the pie, trend, and opening table all respect
@@ -47,6 +49,8 @@ class OpeningStats {
 final dashboardColorFilterProvider = StateProvider<ColorPerspective>(
   (_) => ColorPerspective.all,
 );
+
+final dashboardInlineNoticeProvider = StateProvider<String?>((_) => null);
 
 class DashboardStats {
   const DashboardStats({
@@ -106,6 +110,96 @@ class DashboardStats {
 
   bool get hasData => gamesAnalyzed > 0;
 }
+
+class DashboardPlayerSearchState {
+  const DashboardPlayerSearchState({
+    this.source = ProfileStatsSource.chessCom,
+    this.username = '',
+    this.isLoading = false,
+    this.result,
+    this.error,
+    this.hasSearched = false,
+  });
+
+  final ProfileStatsSource source;
+  final String username;
+  final bool isLoading;
+  final ProfileStats? result;
+  final String? error;
+  final bool hasSearched;
+
+  DashboardPlayerSearchState copyWith({
+    ProfileStatsSource? source,
+    String? username,
+    bool? isLoading,
+    ProfileStats? result,
+    String? error,
+    bool clearResult = false,
+    bool clearError = false,
+    bool? hasSearched,
+  }) {
+    return DashboardPlayerSearchState(
+      source: source ?? this.source,
+      username: username ?? this.username,
+      isLoading: isLoading ?? this.isLoading,
+      result: clearResult ? null : (result ?? this.result),
+      error: clearError ? null : (error ?? this.error),
+      hasSearched: hasSearched ?? this.hasSearched,
+    );
+  }
+}
+
+class DashboardPlayerSearchController
+    extends Notifier<DashboardPlayerSearchState> {
+  int _generation = 0;
+
+  @override
+  DashboardPlayerSearchState build() => const DashboardPlayerSearchState();
+
+  void setSource(ProfileStatsSource source) {
+    if (source == state.source) return;
+    _generation++;
+    state = state.copyWith(
+      source: source,
+      isLoading: false,
+      clearError: true,
+      clearResult: true,
+      hasSearched: false,
+    );
+  }
+
+  void setUsername(String username) {
+    state = state.copyWith(username: username, clearError: true);
+  }
+
+  Future<void> search() async {
+    final username = state.username.trim();
+    if (username.isEmpty) return;
+    final gen = ++_generation;
+    state = state.copyWith(
+      isLoading: true,
+      clearError: true,
+      clearResult: true,
+      hasSearched: true,
+    );
+    try {
+      final result = await ref
+          .read(profileStatsServiceProvider)
+          .fetch(source: state.source, username: username);
+      if (gen != _generation) return;
+      state = state.copyWith(isLoading: false, result: result);
+    } catch (_) {
+      if (gen != _generation) return;
+      state = state.copyWith(isLoading: false, error: 'No public data');
+    }
+  }
+}
+
+final dashboardPlayerSearchProvider =
+    NotifierProvider<
+      DashboardPlayerSearchController,
+      DashboardPlayerSearchState
+    >(DashboardPlayerSearchController.new);
 
 /// Games-per-page for the recent-games table at the bottom of the
 /// dashboard. Kept small so the table stays above the fold on phones.

@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:apex_chess/features/profile_scanner/data/profile_scanner_service.dart';
 import 'package:apex_chess/features/profile_scanner/domain/profile_scan_result.dart';
 import 'package:apex_chess/features/profile_scanner/presentation/controllers/profile_scanner_controller.dart';
+import 'package:apex_chess/features/import_match/presentation/controllers/recent_searches_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   test(
@@ -44,6 +46,28 @@ void main() {
       expect(afterLateResult.result, isNull);
       expect(afterLateResult.wasCancelled, isTrue);
       expect(afterLateResult.isLoading, isFalse);
+    },
+  );
+
+  test(
+    'Opponent Insights stores recent search after successful scan',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final service = _SlowScannerService();
+      final container = ProviderContainer(
+        overrides: [profileScannerServiceProvider.overrideWithValue(service)],
+      );
+      addTearDown(container.dispose);
+
+      final scanFuture = container
+          .read(profileScannerControllerProvider.notifier)
+          .scan(username: 'ApexUser', source: 'chess.com');
+      await Future<void>.delayed(Duration.zero);
+      service.completer.complete(_result());
+      await scanFuture;
+
+      final recents = await container.read(recentSearchesProvider.future);
+      expect(recents.chessCom, contains('ApexUser'));
     },
   );
 }

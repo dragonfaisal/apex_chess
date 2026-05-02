@@ -32,4 +32,14 @@ void main() {
       isFalse,
     );
   });
+
+  test('PGN side copy uses played-side wording', () {
+    expect(PgnPasteDisplayState.sideLabel(true), 'You played White');
+    expect(PgnPasteDisplayState.sideLabel(false), 'You played Black');
+    expect(
+      PgnPasteDisplayState.sideLabel(true),
+      isNot(contains('Detected perspective')),
+    );
+    expect(PgnPasteDisplayState.sideLabel(false), isNot(contains('You:')));
+  });
 }
