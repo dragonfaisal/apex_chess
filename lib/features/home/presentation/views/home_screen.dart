@@ -1437,6 +1437,7 @@ class _AccountStrip extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final presence = ref.watch(connectionPresenceProvider);
     void openProfile() {
+      unawaited(ref.read(connectionPresenceProvider.notifier).checkNow());
       if (presence.isOffline) {
         showApexGlassToast(
           context,

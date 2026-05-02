@@ -1,6 +1,7 @@
 /// Opponent Insights screen.
 library;
 
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -13,6 +14,7 @@ import 'package:apex_chess/features/import_match/domain/imported_game.dart';
 import 'package:apex_chess/features/import_match/presentation/controllers/recent_searches_controller.dart';
 import 'package:apex_chess/features/user_validation/presentation/username_validation_controller.dart';
 import 'package:apex_chess/features/user_validation/presentation/widgets/username_validation_pill.dart';
+import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
@@ -109,6 +111,7 @@ class _ProfileScannerScreenState extends ConsumerState<ProfileScannerScreen> {
     final name = _controller.text.trim();
     if (name.isEmpty) return;
     FocusScope.of(context).unfocus();
+    unawaited(ref.read(connectionPresenceProvider.notifier).checkNow());
     await ref
         .read(profileScannerControllerProvider.notifier)
         .scan(username: name, source: _source);

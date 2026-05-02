@@ -59,7 +59,7 @@ Future<bool> _defaultReachabilityProbe() async {
   try {
     final result = await InternetAddress.lookup(
       'one.one.one.one',
-    ).timeout(const Duration(seconds: 2));
+    ).timeout(const Duration(seconds: 1));
     return result.isNotEmpty && result.first.rawAddress.isNotEmpty;
   } catch (_) {
     return false;
@@ -70,7 +70,7 @@ final connectionReachabilityProbeProvider =
     Provider<ConnectionReachabilityProbe>((_) => _defaultReachabilityProbe);
 
 class ConnectionPresenceController extends Notifier<ApexConnectionPresence> {
-  static const pollInterval = Duration(seconds: 5);
+  static const pollInterval = Duration(seconds: 3);
 
   Timer? _timer;
   bool _checking = false;
@@ -86,7 +86,8 @@ class ConnectionPresenceController extends Notifier<ApexConnectionPresence> {
     return const ApexConnectionPresence();
   }
 
-  Future<void> refresh({bool notify = true}) async {
+  Future<void> refresh({bool notify = true, bool showSyncing = false}) async {
+    if (showSyncing) markSyncing();
     if (_checking) return;
     _checking = true;
     try {
@@ -108,6 +109,10 @@ class ConnectionPresenceController extends Notifier<ApexConnectionPresence> {
   void markSyncing() {
     if (state.isOffline) return;
     state = state.copyWith(status: ApexConnectionStatus.syncing);
+  }
+
+  Future<void> checkNow({bool notify = true}) {
+    return refresh(notify: notify, showSyncing: true);
   }
 
   void markOffline(String? message, {String? detail, bool notify = false}) {

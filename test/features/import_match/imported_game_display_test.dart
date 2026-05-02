@@ -107,6 +107,18 @@ void main() {
     );
   });
 
+  test('official result stays secondary to the import card headline', () {
+    final imported = game(
+      result: GameResult.whiteWon,
+      userColor: PlayerColor.white,
+    );
+
+    expect(imported.perspectiveHeadline, 'You won vs RojoHijo');
+    expect(imported.secondaryResultText, 'White won · 1-0');
+    expect(imported.perspectiveHeadline, isNot(imported.secondaryResultText));
+    expect(imported.perspectiveHeadline, isNot(contains('White won')));
+  });
+
   test('import offline empty state copy is calm and single-message', () {
     const state = ImportState(
       errorMessage: 'Could not reach Chess.com. Check your connection.',

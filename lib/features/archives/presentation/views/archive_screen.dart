@@ -565,13 +565,13 @@ class _FilterBar extends ConsumerWidget {
                       ),
                       decoration: BoxDecoration(
                         color: item.selected
-                            ? ApexColors.mistake.withValues(alpha: 0.16)
-                            : Colors.transparent,
+                            ? ApexColors.mistake.withValues(alpha: 0.10)
+                            : ApexColors.nebula.withValues(alpha: 0.20),
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
                           color: item.selected
-                              ? ApexColors.mistake.withValues(alpha: 0.58)
-                              : Colors.transparent,
+                              ? ApexColors.mistake.withValues(alpha: 0.36)
+                              : ApexColors.stardustLine.withValues(alpha: 0.18),
                           width: 0.7,
                         ),
                       ),
@@ -591,10 +591,10 @@ class _FilterBar extends ConsumerWidget {
                             ),
                           ),
                           if (item.selected)
-                            const Icon(
+                            Icon(
                               Icons.check_rounded,
                               size: 18,
-                              color: ApexColors.mistake,
+                              color: ApexColors.mistake.withValues(alpha: 0.88),
                             ),
                         ],
                       ),
@@ -763,13 +763,14 @@ class _FilterChip extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
             color: selected
-                ? ApexColors.mistake.withValues(alpha: 0.16)
+                ? ApexColors.mistake.withValues(alpha: 0.22)
                 : ApexColors.nebula.withValues(alpha: 0.6),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: selected
-                  ? ApexColors.mistake.withValues(alpha: 0.62)
+                  ? ApexColors.mistake.withValues(alpha: 0.78)
                   : ApexColors.stardustLine.withValues(alpha: 0.4),
+              width: selected ? 1.0 : 0.7,
             ),
           ),
           child: Row(

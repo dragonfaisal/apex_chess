@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -40,6 +42,45 @@ void main() {
       expect(restored.status, ApexConnectionStatus.online);
       expect(restored.toastMessage, ApexCopy.backOnline);
       expect(restored.toastId, greaterThan(offlineToastId));
+    },
+  );
+
+  test(
+    'checkNow marks syncing before user-action reachability result',
+    () async {
+      var calls = 0;
+      final secondProbe = Completer<bool>();
+      final container = ProviderContainer(
+        overrides: [
+          connectionReachabilityProbeProvider.overrideWithValue(() {
+            calls++;
+            if (calls == 1) return Future<bool>.value(true);
+            return secondProbe.future;
+          }),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final controller = container.read(connectionPresenceProvider.notifier);
+      await Future<void>.delayed(Duration.zero);
+
+      final pending = controller.checkNow();
+      expect(
+        container.read(connectionPresenceProvider).status,
+        ApexConnectionStatus.syncing,
+      );
+
+      secondProbe.complete(false);
+      await pending;
+
+      expect(
+        container.read(connectionPresenceProvider).status,
+        ApexConnectionStatus.offline,
+      );
+      expect(
+        container.read(connectionPresenceProvider).toastMessage,
+        ApexCopy.offline,
+      );
     },
   );
 }

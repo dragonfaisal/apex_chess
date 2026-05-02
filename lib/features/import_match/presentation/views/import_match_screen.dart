@@ -188,13 +188,27 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
       if (state.isLoading) return;
       _lastAutoKey = key;
       _gameFilterController.clear();
-      ref.read(importControllerProvider.notifier).fetch();
+      _fetchNow();
     });
   }
 
   void _cancelAutoFetch() {
     _autoFetchDebounce?.cancel();
     _autoFetchDebounce = null;
+  }
+
+  void _checkConnectionForAction() {
+    unawaited(ref.read(connectionPresenceProvider.notifier).checkNow());
+  }
+
+  void _fetchNow() {
+    _checkConnectionForAction();
+    ref.read(importControllerProvider.notifier).fetch();
+  }
+
+  void _fetchMoreNow() {
+    _checkConnectionForAction();
+    ref.read(importControllerProvider.notifier).fetchMore();
   }
 
   void _maybeFetchMore() {
@@ -204,7 +218,7 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
     // user hits the spinner — keeps the feed feeling continuous rather
     // than paged.
     if (pos.pixels >= pos.maxScrollExtent - 220) {
-      ref.read(importControllerProvider.notifier).fetchMore();
+      _fetchMoreNow();
     }
   }
 
@@ -268,7 +282,7 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
                           _cancelAutoFetch();
                           _lastAutoKey = '${state.source.name}:${v.trim()}';
                           _gameFilterController.clear();
-                          notifier.fetch();
+                          _fetchNow();
                         },
                         onVerified: (v) {
                           _scheduleAutoFetchAfterVerification(
@@ -287,7 +301,7 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
                           _cancelAutoFetch();
                           _lastAutoKey = '${state.source.name}:$username';
                           _gameFilterController.clear();
-                          notifier.fetch();
+                          _fetchNow();
                         },
                       ),
                     ),
@@ -415,8 +429,7 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
                   isLoading: state.isLoadingMore,
                   hasMore: state.hasMore,
                   errorMessage: state.errorMessage,
-                  onRetry: () =>
-                      ref.read(importControllerProvider.notifier).fetchMore(),
+                  onRetry: _fetchMoreNow,
                 );
               }
               return _GameCard(game: visibleGames[i]);
@@ -1166,10 +1179,6 @@ class _GameCard extends ConsumerWidget {
                   spacing: 8,
                   runSpacing: 6,
                   children: [
-                    _MetaPill(
-                      label: game.secondaryResultText,
-                      color: accentColor,
-                    ),
                     _MetaPill(
                       label: '${game.moveCount} moves',
                       color: ApexColors.textTertiary,

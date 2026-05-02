@@ -17,6 +17,7 @@ import 'package:apex_chess/features/archives/presentation/controllers/archive_co
 import 'package:apex_chess/features/archives/presentation/views/archive_screen.dart';
 import 'package:apex_chess/features/profile_stats/data/profile_stats_service.dart';
 import 'package:apex_chess/features/profile_stats/presentation/controllers/profile_stats_controller.dart';
+import 'package:apex_chess/features/global_dashboard/presentation/models/recent_scan_display.dart';
 import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
@@ -1720,7 +1721,9 @@ class _RecentGamesTable extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final slice = ref.watch(dashboardVisibleGamesProvider);
     final page = ref.watch(dashboardPageProvider);
-    final total = ref.watch(dashboardStatsProvider).gamesAnalyzed;
+    final stats = ref.watch(dashboardStatsProvider);
+    final total = stats.gamesAnalyzed;
+    final perspective = stats.perspective;
     final hasPrev = page > 0;
     final hasNext = (page + 1) * dashboardPageSize < total;
 
@@ -1736,7 +1739,7 @@ class _RecentGamesTable extends ConsumerWidget {
             accent: ApexColors.sapphire,
           ),
           const SizedBox(height: 8),
-          ...slice.map((g) => _RecentRow(game: g)),
+          ...slice.map((g) => _RecentRow(game: g, perspective: perspective)),
           const SizedBox(height: 6),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
@@ -1766,53 +1769,53 @@ class _RecentGamesTable extends ConsumerWidget {
 }
 
 class _RecentRow extends StatelessWidget {
-  const _RecentRow({required this.game});
+  const _RecentRow({required this.game, required this.perspective});
   final ArchivedGame game;
+  final String? perspective;
 
   @override
   Widget build(BuildContext context) {
-    final acc = (100 - game.averageCpLoss).clamp(0, 100);
+    final display = RecentScanDisplay.fromGame(game, perspective: perspective);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 5,
-            child: Text(
-              '${game.white} vs ${game.black}',
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        decoration: BoxDecoration(
+          color: ApexColors.nebula.withValues(alpha: 0.42),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: ApexColors.stardustLine.withValues(alpha: 0.28),
+            width: 0.6,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              display.title,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: ApexTypography.bodyMedium.copyWith(
                 color: ApexColors.textPrimary,
-                fontSize: 12,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                height: 1.25,
               ),
             ),
-          ),
-          Expanded(
-            flex: 2,
-            child: Text(
-              game.result,
-              textAlign: TextAlign.center,
+            const SizedBox(height: 4),
+            Text(
+              display.subtitle,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: ApexTypography.bodyMedium.copyWith(
-                color: ApexColors.textSecondary,
+                color: ApexColors.textTertiary,
+                fontWeight: FontWeight.w600,
                 fontSize: 11,
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
-          ),
-          Expanded(
-            flex: 3,
-            child: Text(
-              '${acc.toStringAsFixed(0)}%',
-              textAlign: TextAlign.right,
-              style: ApexTypography.bodyMedium.copyWith(
-                color: ApexColors.emeraldBright,
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

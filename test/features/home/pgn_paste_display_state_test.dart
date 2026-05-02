@@ -64,6 +64,16 @@ void main() {
     );
   });
 
+  test('PGN opening fallback detects a common opening instantly', () {
+    const pgn = '1. e4 c5 2. Nf3 d6 *';
+    final preview = identity.parsePgn(pgn);
+
+    expect(
+      PgnPasteDisplayState.openingLabel(pgn: pgn, identity: preview),
+      'B20 · Sicilian Defense',
+    );
+  });
+
   test('PGN unknown opening returns fallback copy', () {
     const pgn = '1. h4 h5 2. Rh3 Rh6 *';
     final preview = identity.parsePgn(pgn);

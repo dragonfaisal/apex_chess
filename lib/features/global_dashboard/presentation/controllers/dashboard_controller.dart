@@ -6,6 +6,8 @@
 /// is the source of truth and refreshes on save).
 library;
 
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
@@ -14,6 +16,8 @@ import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/archives/presentation/controllers/archive_controller.dart';
 import 'package:apex_chess/features/profile_stats/data/profile_stats_service.dart';
 import 'package:apex_chess/features/profile_stats/presentation/controllers/profile_stats_controller.dart';
+import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.dart';
+import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 
 /// Which side the user wants to inspect. Drives every derived stat on
 /// the Stats dashboard so the pie, trend, and opening table all respect
@@ -176,6 +180,7 @@ class DashboardPlayerSearchController
     final username = state.username.trim();
     if (username.isEmpty) return;
     final gen = ++_generation;
+    unawaited(ref.read(connectionPresenceProvider.notifier).checkNow());
     state = state.copyWith(
       isLoading: true,
       clearError: true,
@@ -187,10 +192,14 @@ class DashboardPlayerSearchController
           .read(profileStatsServiceProvider)
           .fetch(source: state.source, username: username);
       if (gen != _generation) return;
+      ref.read(connectionPresenceProvider.notifier).markSynced();
       state = state.copyWith(isLoading: false, result: result);
     } catch (_) {
       if (gen != _generation) return;
-      state = state.copyWith(isLoading: false, error: 'No public data');
+      ref
+          .read(connectionPresenceProvider.notifier)
+          .markOffline(ApexCopy.noConnection);
+      state = state.copyWith(isLoading: false, error: ApexCopy.noConnection);
     }
   }
 }
