@@ -20,6 +20,7 @@ import 'package:apex_chess/features/pgn_review/presentation/views/review_summary
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_snack.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
 
 class ArchiveScreen extends ConsumerStatefulWidget {
@@ -161,8 +162,9 @@ class _ArchiveScreenState extends ConsumerState<ArchiveScreen> {
       return;
     }
 
-    final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final toastBottomMargin = MediaQuery.paddingOf(context).bottom + 78;
     showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -206,11 +208,11 @@ class _ArchiveScreenState extends ConsumerState<ArchiveScreen> {
     } catch (e) {
       if (!navigator.mounted) return;
       navigator.pop();
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Re-analysis failed: $e'),
-          backgroundColor: ApexColors.rubyDeep,
-        ),
+      showApexGlassToastOnMessenger(
+        messenger,
+        bottomMargin: toastBottomMargin,
+        message: ApexCopy.tryAgain,
+        type: ApexGlassToastType.warning,
       );
     }
   }
@@ -395,17 +397,19 @@ class _FilterBar extends ConsumerWidget {
 
   void _showSourceSheet(BuildContext context, WidgetRef ref) {
     _showSheet(context, 'Source', [
-      (
-        'All sources',
-        () {
+      _SheetOption(
+        label: 'All sources',
+        selected: filters.source == null,
+        onTap: () {
           ref.read(archiveControllerProvider.notifier).setSource(null);
           Navigator.of(context).pop();
         },
       ),
       for (final s in ArchiveSource.values)
-        (
-          _sourceLabel(s),
-          () {
+        _SheetOption(
+          label: _sourceLabel(s),
+          selected: filters.source == s,
+          onTap: () {
             ref.read(archiveControllerProvider.notifier).setSource(s);
             Navigator.of(context).pop();
           },
@@ -416,9 +420,10 @@ class _FilterBar extends ConsumerWidget {
   void _showModeSheet(BuildContext context, WidgetRef ref) {
     _showSheet(context, 'Analysis mode', [
       for (final m in ArchiveModeFilter.values)
-        (
-          _modeLabel(m),
-          () {
+        _SheetOption(
+          label: _modeLabel(m),
+          selected: filters.mode == m,
+          onTap: () {
             ref.read(archiveControllerProvider.notifier).setModeFilter(m);
             Navigator.of(context).pop();
           },
@@ -435,9 +440,10 @@ class _FilterBar extends ConsumerWidget {
           : 'Filter by your colour ($current)',
       [
         for (final c in ArchiveColorFilter.values)
-          (
-            _colorLabel(c),
-            () {
+          _SheetOption(
+            label: _colorLabel(c),
+            selected: filters.color == c,
+            onTap: () {
               ref
                   .read(archiveControllerProvider.notifier)
                   .setColorFilter(c, perspective: current);
@@ -466,9 +472,10 @@ class _FilterBar extends ConsumerWidget {
   void _showSortSheet(BuildContext context, WidgetRef ref) {
     _showSheet(context, 'Sort by', [
       for (final s in ArchiveSort.values)
-        (
-          _sortLabel(s),
-          () {
+        _SheetOption(
+          label: _sortLabel(s),
+          selected: filters.sort == s,
+          onTap: () {
             ref.read(archiveControllerProvider.notifier).setSort(s);
             Navigator.of(context).pop();
           },
@@ -485,9 +492,10 @@ class _FilterBar extends ConsumerWidget {
           : 'Result for $current',
       [
         for (final r in ArchiveResultFilter.values)
-          (
-            _resultLabel(r),
-            () {
+          _SheetOption(
+            label: _resultLabel(r),
+            selected: filters.result == r,
+            onTap: () {
               ref
                   .read(archiveControllerProvider.notifier)
                   .setResultFilter(r, current);
@@ -501,9 +509,10 @@ class _FilterBar extends ConsumerWidget {
   void _showBrilliantsSheet(BuildContext context, WidgetRef ref) {
     _showSheet(context, 'Minimum brilliants', [
       for (final n in const [0, 1, 2, 3, 5])
-        (
-          n == 0 ? 'Any' : '≥ $n',
-          () {
+        _SheetOption(
+          label: n == 0 ? 'Any' : '≥ $n',
+          selected: filters.minBrilliants == n,
+          onTap: () {
             ref.read(archiveControllerProvider.notifier).setMinBrilliants(n);
             Navigator.of(context).pop();
           },
@@ -514,7 +523,7 @@ class _FilterBar extends ConsumerWidget {
   void _showSheet(
     BuildContext context,
     String title,
-    List<(String, VoidCallback)> items,
+    List<_SheetOption> items,
   ) {
     showModalBottomSheet<void>(
       context: context,
@@ -535,13 +544,61 @@ class _FilterBar extends ConsumerWidget {
                 ),
               ),
             ),
-            for (final (label, cb) in items)
-              ListTile(
-                onTap: cb,
-                title: Text(
-                  label,
-                  style: ApexTypography.bodyLarge.copyWith(
-                    color: ApexColors.textPrimary,
+            for (final item in items)
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 3,
+                ),
+                child: Material(
+                  key: ValueKey(
+                    'archive_sheet_option_${_keyFor(item.label)}_${item.selected ? 'selected' : 'normal'}',
+                  ),
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: item.onTap,
+                    borderRadius: BorderRadius.circular(14),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: item.selected
+                            ? ApexColors.mistake.withValues(alpha: 0.16)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: item.selected
+                              ? ApexColors.mistake.withValues(alpha: 0.58)
+                              : Colors.transparent,
+                          width: 0.7,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              item.label,
+                              style: ApexTypography.bodyLarge.copyWith(
+                                color: item.selected
+                                    ? ApexColors.mistake
+                                    : ApexColors.textPrimary,
+                                fontWeight: item.selected
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          if (item.selected)
+                            const Icon(
+                              Icons.check_rounded,
+                              size: 18,
+                              color: ApexColors.mistake,
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -551,6 +608,23 @@ class _FilterBar extends ConsumerWidget {
       ),
     );
   }
+
+  static String _keyFor(String label) => label
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+      .replaceAll(RegExp(r'^_|_$'), '');
+}
+
+class _SheetOption {
+  const _SheetOption({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
 }
 
 /// Plain-text archive search field — matches against opponent name,
@@ -843,9 +917,9 @@ class _ArchiveCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: ApexTypography.bodyMedium.copyWith(
-                      color: accent,
+                      color: ApexColors.textTertiary,
                       fontSize: 10.5,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),

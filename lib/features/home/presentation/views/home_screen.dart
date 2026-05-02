@@ -32,6 +32,7 @@ import 'package:apex_chess/features/pgn_review/domain/review_analysis_provider.d
 import 'package:apex_chess/features/pgn_review/presentation/views/review_summary_screen.dart';
 import 'package:apex_chess/features/profile/presentation/views/profile_screen.dart';
 import 'package:apex_chess/features/profile_scanner/presentation/views/profile_scanner_screen.dart';
+import 'package:apex_chess/infrastructure/engine/eco_book.dart';
 import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
 import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
@@ -47,11 +48,53 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen>
+    with WidgetsBindingObserver {
   int _tabIndex = 0;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(
+        ref.read(connectionPresenceProvider.notifier).refresh(notify: false),
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    unawaited(ref.read(connectionPresenceProvider.notifier).refresh());
+  }
+
+  @override
   Widget build(BuildContext context) {
+    ref.listen<ApexConnectionPresence>(connectionPresenceProvider, (
+      previous,
+      next,
+    ) {
+      if (next.toastId == previous?.toastId || next.toastMessage == null) {
+        return;
+      }
+      final type = next.isOffline
+          ? ApexGlassToastType.warning
+          : ApexGlassToastType.success;
+      showApexGlassToast(
+        context,
+        message: next.toastMessage!,
+        detail: next.toastDetail,
+        type: type,
+      );
+    });
     final account = ref.watch(accountControllerProvider).valueOrNull;
     return Scaffold(
       resizeToAvoidBottomInset: true,
@@ -284,16 +327,16 @@ class _PgnPasteResult {
 /// PGN paste dialog with side selector, optional handle, and split
 /// Quick / Deep analyse buttons. See [_PgnPasteResult] for why each
 /// field is needed.
-class _PgnPasteDialog extends StatefulWidget {
+class _PgnPasteDialog extends ConsumerStatefulWidget {
   const _PgnPasteDialog({this.connectedHandle});
 
   final String? connectedHandle;
 
   @override
-  State<_PgnPasteDialog> createState() => _PgnPasteDialogState();
+  ConsumerState<_PgnPasteDialog> createState() => _PgnPasteDialogState();
 }
 
-class _PgnPasteDialogState extends State<_PgnPasteDialog> {
+class _PgnPasteDialogState extends ConsumerState<_PgnPasteDialog> {
   static const _identity = GameIdentityService();
   final _pgnController = TextEditingController();
   final _handleController = TextEditingController();
@@ -378,6 +421,7 @@ class _PgnPasteDialogState extends State<_PgnPasteDialog> {
     final viewInsets = MediaQuery.viewInsetsOf(context);
     final screen = MediaQuery.sizeOf(context);
     final preview = _currentPreview;
+    final ecoBook = ref.watch(ecoBookProvider).valueOrNull;
     final selectedSide = _effectiveUserIsWhite;
     return AnimatedPadding(
       duration: ApexMotion.normal,
@@ -463,6 +507,8 @@ class _PgnPasteDialogState extends State<_PgnPasteDialog> {
                   const SizedBox(height: 12),
                   _PgnPreview(
                     identity: preview,
+                    pgn: _pgnController.text,
+                    ecoBook: ecoBook,
                     detected: _hasDetectedGame,
                     userIsWhite: selectedSide,
                   ),
@@ -526,18 +572,25 @@ class _PgnPasteDialogState extends State<_PgnPasteDialog> {
 class _PgnPreview extends StatelessWidget {
   const _PgnPreview({
     required this.identity,
+    required this.pgn,
+    required this.ecoBook,
     required this.detected,
     required this.userIsWhite,
   });
 
   final PgnGameIdentity identity;
+  final String pgn;
+  final EcoBook? ecoBook;
   final bool detected;
   final bool userIsWhite;
 
   @override
   Widget build(BuildContext context) {
-    final opening =
-        identity.opening ?? identity.eco ?? ApexCopy.openingNotDetected;
+    final opening = PgnPasteDisplayState.openingLabel(
+      pgn: pgn,
+      identity: identity,
+      ecoBook: ecoBook,
+    );
     final result = const GameIdentityService().resultLabel(
       identity.result,
       userIsWhite: userIsWhite,
@@ -1385,11 +1438,11 @@ class _AccountStrip extends ConsumerWidget {
     final presence = ref.watch(connectionPresenceProvider);
     void openProfile() {
       if (presence.isOffline) {
-        showApexSnack(
+        showApexGlassToast(
           context,
           message: ApexCopy.offline,
           detail: ApexCopy.showingSavedData,
-          color: ApexColors.ruby,
+          type: ApexGlassToastType.warning,
         );
       }
       Navigator.of(

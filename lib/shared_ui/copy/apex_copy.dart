@@ -159,15 +159,16 @@ class ApexCopy {
   static const String dashboardOpeningCard = 'OPENING ARSENAL';
   static const String dashboardOpeningEmpty =
       'Scan a handful of matches to surface your strongest and weakest lines.';
-  static const String dashboardPlayerSearchTitle = 'PLAYER SEARCH';
+  static const String dashboardPlayerSearchTitle = 'PROFILE LOOKUP';
+  static const String dashboardPlayerSearchSubtitle = 'Public profile';
   static const String dashboardPlayerSearchHint = 'Search username';
   static const String dashboardNoPublicData = 'No public data';
   static const String dashboardNoGamesFound = 'No games found';
   static const String dashboardAccountOverview = 'Account overview';
   static const String dashboardRatings = 'Ratings';
   static const String dashboardRecentForm = 'Recent form';
-  static const String dashboardFutureSections =
-      'Openings · Results · Accuracy · Weak phases';
+  static const String dashboardPublicAccountStats = 'Public account stats';
+  static const String dashboardPublicSections = 'Ratings · Results · Games';
 
   // ── Apex Academy ───────────────────────────────────────────────────────
   static const String academyTitle = 'ACADEMY';

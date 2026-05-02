@@ -2,6 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:apex_chess/core/domain/services/game_identity_service.dart';
 import 'package:apex_chess/features/home/presentation/pgn_paste_display_state.dart';
+import 'package:apex_chess/infrastructure/engine/eco_book.dart';
+import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 
 void main() {
   const identity = GameIdentityService();
@@ -41,5 +43,39 @@ void main() {
       isNot(contains('Detected perspective')),
     );
     expect(PgnPasteDisplayState.sideLabel(false), isNot(contains('You:')));
+  });
+
+  test('PGN opening lookup returns a known opening from local ECO data', () {
+    const pgn = '''
+1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 *
+''';
+    final preview = identity.parsePgn(pgn);
+    final book = EcoBook.fromTsv(
+      'eco\tname\tpgn\nC60\tRuy Lopez\t1. e4 e5 2. Nf3 Nc6 3. Bb5\n',
+    );
+
+    expect(
+      PgnPasteDisplayState.openingLabel(
+        pgn: pgn,
+        identity: preview,
+        ecoBook: book,
+      ),
+      'C60 · Ruy Lopez',
+    );
+  });
+
+  test('PGN unknown opening returns fallback copy', () {
+    const pgn = '1. h4 h5 2. Rh3 Rh6 *';
+    final preview = identity.parsePgn(pgn);
+    final book = EcoBook.fromTsv('eco\tname\tpgn\n');
+
+    expect(
+      PgnPasteDisplayState.openingLabel(
+        pgn: pgn,
+        identity: preview,
+        ecoBook: book,
+      ),
+      ApexCopy.openingNotDetected,
+    );
   });
 }

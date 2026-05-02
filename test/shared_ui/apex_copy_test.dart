@@ -16,6 +16,9 @@ void main() {
       ApexCopy.synced,
       ApexCopy.searchPlayer,
       ApexCopy.searchOpponentOpening,
+      ApexCopy.dashboardPlayerSearchTitle,
+      ApexCopy.dashboardPlayerSearchSubtitle,
+      ApexCopy.dashboardPublicAccountStats,
     ];
 
     for (final value in publicCopy) {
@@ -25,5 +28,20 @@ void main() {
       expect(value, isNot(contains('Radar')));
       expect(value.split(RegExp(r'\s+')).length, lessThanOrEqualTo(4));
     }
+  });
+
+  test('Stats search copy stays honest about public profile scope', () {
+    expect(ApexCopy.dashboardPlayerSearchTitle, 'PROFILE LOOKUP');
+    expect(ApexCopy.dashboardPlayerSearchSubtitle, 'Public profile');
+    expect(ApexCopy.dashboardPublicAccountStats, 'Public account stats');
+    expect(
+      [
+        ApexCopy.dashboardPlayerSearchTitle,
+        ApexCopy.dashboardPlayerSearchSubtitle,
+        ApexCopy.dashboardPublicAccountStats,
+        ApexCopy.dashboardPublicSections,
+      ].join(' '),
+      isNot(contains('analytics')),
+    );
   });
 }

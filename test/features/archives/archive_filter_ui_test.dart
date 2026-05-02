@@ -23,6 +23,29 @@ void main() {
     );
   });
 
+  testWidgets('Archive bottom sheet marks current option selected', (
+    tester,
+  ) async {
+    await _pumpArchive(
+      tester,
+      ArchiveState(
+        filters: const ArchiveFilters(result: ArchiveResultFilter.wins),
+        games: [_game()],
+      ),
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('archive_filter_wins_selected')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('archive_sheet_option_wins_selected')),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+  });
+
   testWidgets('Archive no matching filter keeps controls visible', (
     tester,
   ) async {

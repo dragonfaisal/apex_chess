@@ -22,6 +22,7 @@ import 'package:apex_chess/features/user_validation/presentation/widgets/usernam
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_snack.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
 
 import '../../domain/apex_account.dart';
@@ -111,7 +112,6 @@ class _ConnectAccountScreenState extends ConsumerState<ConnectAccountScreen> {
   Future<void> _connect() async {
     final name = _textController.text.trim();
     if (name.isEmpty) return;
-    final messenger = ScaffoldMessenger.of(context);
     setState(() => _busy = true);
     try {
       await ref
@@ -122,22 +122,19 @@ class _ConnectAccountScreenState extends ConsumerState<ConnectAccountScreen> {
       // this screen when the backend failed. Surface success briefly
       // (so the user knows the connect worked) and call onComplete to
       // pop back automatically.
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Connected to ${_source.wire} as $name'),
-          backgroundColor: ApexColors.aurora,
-          duration: const Duration(seconds: 2),
-        ),
+      showApexGlassToast(
+        context,
+        message: ApexCopy.synced,
+        detail: name,
+        type: ApexGlassToastType.success,
       );
       widget.onComplete?.call();
     } catch (e) {
       if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Connect failed: $e'),
-          backgroundColor: ApexColors.rubyDeep,
-          duration: const Duration(seconds: 4),
-        ),
+      showApexGlassToast(
+        context,
+        message: ApexCopy.tryAgain,
+        type: ApexGlassToastType.warning,
       );
     } finally {
       if (mounted) setState(() => _busy = false);

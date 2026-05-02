@@ -8,6 +8,8 @@ import 'package:apex_chess/features/import_match/domain/imported_game.dart'
     show GameSource, ImportException;
 import 'package:apex_chess/features/import_match/presentation/controllers/import_controller.dart';
 import 'package:apex_chess/features/import_match/presentation/controllers/recent_searches_controller.dart';
+import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.dart';
+import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 
 import '../../data/profile_scanner_service.dart';
 import '../../domain/profile_scan_result.dart';
@@ -94,6 +96,7 @@ class ProfileScannerController extends Notifier<ProfileScannerState> {
       await ref
           .read(recentSearchesProvider.notifier)
           .record(_gameSourceFor(source), username);
+      ref.read(connectionPresenceProvider.notifier).markSynced();
       state = state.copyWith(
         isLoading: false,
         result: result,
@@ -110,9 +113,15 @@ class ProfileScannerController extends Notifier<ProfileScannerState> {
       if (gen != _generation || cancellation.isCancelled) return;
       // Show the human-friendly message the repository already
       // tailored, not Dart's `Exception: ...` toString().
+      final connectionIssue = _looksLikeConnectionIssue(e.userMessage);
+      if (connectionIssue) {
+        ref
+            .read(connectionPresenceProvider.notifier)
+            .markOffline(ApexCopy.noConnection);
+      }
       state = state.copyWith(
         isLoading: false,
-        error: e.userMessage,
+        error: connectionIssue ? ApexCopy.noConnection : e.userMessage,
         clearProgress: true,
       );
     } catch (e) {
@@ -145,6 +154,14 @@ class ProfileScannerController extends Notifier<ProfileScannerState> {
   }
 
   void reset() => state = const ProfileScannerState();
+}
+
+bool _looksLikeConnectionIssue(String message) {
+  final m = message.toLowerCase();
+  return m.contains('could not reach') ||
+      m.contains('connection') ||
+      m.contains('timed out') ||
+      m.contains('network');
 }
 
 GameSource _gameSourceFor(String source) {

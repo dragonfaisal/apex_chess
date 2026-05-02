@@ -402,7 +402,7 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
           hasScrollBody: false,
           child: _EmptyState(
             icon: Icons.manage_search_rounded,
-            label: 'No matching games.',
+            label: ApexCopy.noMatchingGames,
           ),
         )
       else
@@ -1091,7 +1091,7 @@ class _GameCard extends ConsumerWidget {
       },
     };
     final opening = game.openingName == null
-        ? 'Opening not detected'
+        ? ApexCopy.openingNotDetected
         : '${game.eco != null ? '${game.eco} ' : ''}${game.openingName}';
 
     return GlassPanel(
@@ -1143,24 +1143,21 @@ class _GameCard extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 10),
-                Row(
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(
-                      child: _PlayerRow(
-                        name: game.whiteName,
-                        rating: game.whiteRating,
-                        light: true,
-                        isUser: game.userColor == PlayerColor.white,
-                      ),
+                    _PlayerRow(
+                      name: game.whiteName,
+                      rating: game.whiteRating,
+                      light: true,
+                      isUser: game.userColor == PlayerColor.white,
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _PlayerRow(
-                        name: game.blackName,
-                        rating: game.blackRating,
-                        light: false,
-                        isUser: game.userColor == PlayerColor.black,
-                      ),
+                    const SizedBox(height: 6),
+                    _PlayerRow(
+                      name: game.blackName,
+                      rating: game.blackRating,
+                      light: false,
+                      isUser: game.userColor == PlayerColor.black,
                     ),
                   ],
                 ),

@@ -345,26 +345,22 @@ class _ProfileStatsCard extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _CardHeader(
-            title: 'PUBLIC ACCOUNT STATS',
-            subtitle: 'Chess.com / Lichess public ratings when available.',
+            title: ApexCopy.dashboardPublicAccountStats.toUpperCase(),
+            subtitle: 'Chess.com / Lichess public ratings.',
             accent: ApexColors.aurora,
           ),
           const SizedBox(height: 12),
           async.when(
             loading: () => _profileLoading(),
-            error: (_, __) => _profileFallback(
-              'Could not reach profile service. Retry in a moment.',
-            ),
+            error: (_, __) => _profileFallback(ApexCopy.noConnection),
             data: (stats) {
               if (stats == null) {
-                return _profileFallback(
-                  'Connect an account to stream live rating snapshots.',
-                );
+                return _profileFallback('Connect a handle');
               }
               if (!stats.hasData) {
                 return _profileFallback(
                   '@${account?.username ?? stats.displayName}\n'
-                  'Connection issue — showing saved data.',
+                  '${ApexCopy.showingSavedData}',
                 );
               }
               return _profileBody(stats);
@@ -485,7 +481,7 @@ class _PlayerSearchCardState extends ConsumerState<_PlayerSearchCard> {
         children: [
           _CardHeader(
             title: ApexCopy.dashboardPlayerSearchTitle,
-            subtitle: 'Public profile lookup.',
+            subtitle: ApexCopy.dashboardPlayerSearchSubtitle,
             accent: ApexColors.sapphireBright,
           ),
           const SizedBox(height: 12),
@@ -693,7 +689,7 @@ class _SearchedPlayerDashboard extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          ApexCopy.dashboardFutureSections,
+          ApexCopy.dashboardPublicSections,
           textAlign: TextAlign.center,
           style: ApexTypography.bodyMedium.copyWith(
             color: ApexColors.textTertiary,
