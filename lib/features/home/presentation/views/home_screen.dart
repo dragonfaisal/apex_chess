@@ -35,6 +35,7 @@ import 'package:apex_chess/features/profile_scanner/presentation/views/profile_s
 import 'package:apex_chess/infrastructure/engine/eco_book.dart';
 import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
 import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.dart';
+import 'package:apex_chess/shared_ui/controllers/connectivity_presence_display.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
@@ -1556,11 +1557,7 @@ class _ConnectionDot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = switch (presence.status) {
-      ApexConnectionStatus.online => ApexColors.emeraldBright,
-      ApexConnectionStatus.offline => ApexColors.ruby,
-      ApexConnectionStatus.syncing => ApexColors.aurora,
-    };
+    final color = ConnectivityPresenceDisplay.colorFor(presence);
     final size = compact ? 8.0 : 9.0;
     return Container(
       width: size,

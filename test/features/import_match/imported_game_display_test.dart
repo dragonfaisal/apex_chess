@@ -120,15 +120,22 @@ void main() {
   });
 
   test('import offline empty state copy is calm and single-message', () {
-    const state = ImportState(
-      errorMessage: 'Could not reach Chess.com. Check your connection.',
-      hasFetched: true,
-    );
+    const state = ImportState(errorMessage: ApexCopy.offline, hasFetched: true);
 
     expect(
       state.emptyErrorMessage,
-      '${ApexCopy.noConnection}\n${ApexCopy.tryAgainOnline}',
+      '${ApexCopy.offline}\n${ApexCopy.tryAgainOnline}',
     );
     expect(state.emptyErrorMessage, isNot(contains('Could not reach')));
+  });
+
+  test('import service unavailable copy is not global offline copy', () {
+    const state = ImportState(
+      errorMessage: ApexCopy.chessComUnavailable,
+      hasFetched: true,
+    );
+
+    expect(state.emptyErrorMessage, ApexCopy.chessComUnavailable);
+    expect(state.emptyErrorMessage, isNot(contains(ApexCopy.offline)));
   });
 }

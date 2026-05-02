@@ -6,8 +6,6 @@
 /// is the source of truth and refreshes on save).
 library;
 
-import 'dart:async';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
@@ -180,7 +178,9 @@ class DashboardPlayerSearchController
     final username = state.username.trim();
     if (username.isEmpty) return;
     final gen = ++_generation;
-    unawaited(ref.read(connectionPresenceProvider.notifier).checkNow());
+    final service = ref
+        .read(serviceHealthServiceProvider)
+        .serviceForProfileSource(state.source);
     state = state.copyWith(
       isLoading: true,
       clearError: true,
@@ -188,18 +188,53 @@ class DashboardPlayerSearchController
       hasSearched: true,
     );
     try {
+      final online = await ref
+          .read(connectionPresenceProvider.notifier)
+          .ensureOnlineForAction();
+      if (gen != _generation) return;
+      if (!online) {
+        state = state.copyWith(isLoading: false, error: ApexCopy.offline);
+        return;
+      }
       final result = await ref
           .read(profileStatsServiceProvider)
-          .fetch(source: state.source, username: username);
-      if (gen != _generation) return;
-      ref.read(connectionPresenceProvider.notifier).markSynced();
-      state = state.copyWith(isLoading: false, result: result);
-    } catch (_) {
+          .fetchStrict(source: state.source, username: username);
       if (gen != _generation) return;
       ref
           .read(connectionPresenceProvider.notifier)
-          .markOffline(ApexCopy.noConnection);
-      state = state.copyWith(isLoading: false, error: ApexCopy.noConnection);
+          .markServiceAvailable(service);
+      state = state.copyWith(isLoading: false, result: result);
+    } on ProfileStatsException catch (e) {
+      if (gen != _generation) return;
+      final resolved = await ref
+          .read(connectionPresenceProvider.notifier)
+          .resolveServiceFailure(
+            service: service,
+            message: e.message,
+            availability: e.availability,
+          );
+      if (gen != _generation) return;
+      state = state.copyWith(
+        isLoading: false,
+        error: resolved == ApexCopy.offline
+            ? ApexCopy.offline
+            : ApexCopy.profileUnavailable,
+      );
+    } catch (_) {
+      if (gen != _generation) return;
+      final resolved = await ref
+          .read(connectionPresenceProvider.notifier)
+          .resolveServiceFailure(
+            service: service,
+            message: ApexCopy.profileUnavailable,
+          );
+      if (gen != _generation) return;
+      state = state.copyWith(
+        isLoading: false,
+        error: resolved == ApexCopy.offline
+            ? ApexCopy.offline
+            : ApexCopy.profileUnavailable,
+      );
     }
   }
 }

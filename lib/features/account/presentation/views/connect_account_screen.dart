@@ -12,6 +12,8 @@
 /// gated behind onboarding.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -19,6 +21,7 @@ import 'package:apex_chess/app/di/providers.dart';
 import 'package:apex_chess/features/user_validation/data/username_validator.dart';
 import 'package:apex_chess/features/user_validation/presentation/username_validation_controller.dart';
 import 'package:apex_chess/features/user_validation/presentation/widgets/username_validation_pill.dart';
+import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
@@ -106,12 +109,14 @@ class _ConnectAccountScreenState extends ConsumerState<ConnectAccountScreen> {
   void _onSourceChanged(AccountSource src) {
     if (src == _source) return;
     setState(() => _source = src);
+    unawaited(ref.read(connectionPresenceProvider.notifier).checkNow());
     _pushValidation();
   }
 
   Future<void> _connect() async {
     final name = _textController.text.trim();
     if (name.isEmpty) return;
+    unawaited(ref.read(connectionPresenceProvider.notifier).checkNow());
     setState(() => _busy = true);
     try {
       await ref

@@ -40,10 +40,14 @@ class ApexCopy {
 
   // ── Global status / actions ───────────────────────────────────────────
   static const String checking = 'Checking...';
+  static const String online = 'Online';
   static const String verified = 'Verified';
   static const String notFound = 'Not found';
   static const String offline = 'Offline';
   static const String noConnection = 'No connection';
+  static const String chessComUnavailable = 'Chess.com unavailable';
+  static const String lichessUnavailable = 'Lichess unavailable';
+  static const String profileUnavailable = 'Profile unavailable';
   static const String showingSavedData = 'Showing saved data';
   static const String backOnline = 'Back online';
   static const String synced = 'Synced';

@@ -17,6 +17,8 @@ import 'package:apex_chess/features/account/presentation/controllers/account_con
 import 'package:apex_chess/features/account/presentation/views/connect_account_screen.dart';
 import 'package:apex_chess/features/profile_stats/data/profile_stats_service.dart';
 import 'package:apex_chess/features/profile_stats/presentation/controllers/profile_stats_controller.dart';
+import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.dart';
+import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
@@ -28,6 +30,22 @@ class ProfileScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final account = ref.watch(accountControllerProvider).valueOrNull;
     final statsAsync = ref.watch(liveProfileStatsProvider);
+    ref.listen(liveProfileStatsProvider, (previous, next) {
+      final current = ref.read(accountControllerProvider).valueOrNull;
+      if (current == null) return;
+      next.whenData((stats) {
+        if (stats == null || !stats.hasData) return;
+        final source = current.source == AccountSource.chessCom
+            ? ProfileStatsSource.chessCom
+            : ProfileStatsSource.lichess;
+        final service = ref
+            .read(serviceHealthServiceProvider)
+            .serviceForProfileSource(source);
+        ref
+            .read(connectionPresenceProvider.notifier)
+            .markServiceAvailable(service);
+      });
+    });
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(gradient: ApexGradients.spaceCanvas),
@@ -213,12 +231,10 @@ class _StatsCard extends StatelessWidget {
         loading: () =>
             const ApexSkeletonCard(height: 90, margin: EdgeInsets.zero),
         error: (_, __) =>
-            const _StatsEmpty(message: 'Couldn\'t reach the rating service.'),
+            const _StatsEmpty(message: ApexCopy.profileUnavailable),
         data: (stats) {
           if (stats == null || !stats.hasData) {
-            return const _StatsEmpty(
-              message: 'No live ratings yet — play a few games to populate.',
-            );
+            return const _StatsEmpty(message: ApexCopy.dashboardNoPublicData);
           }
           return _StatsBody(stats: stats);
         },

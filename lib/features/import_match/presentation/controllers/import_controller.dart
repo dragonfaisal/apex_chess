@@ -8,10 +8,12 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
+import 'package:apex_chess/core/network/connectivity_models.dart';
 import 'package:apex_chess/features/import_match/data/chess_com_repository.dart';
 import 'package:apex_chess/features/import_match/data/lichess_repository.dart';
 import 'package:apex_chess/features/import_match/domain/imported_game.dart';
 import 'package:apex_chess/features/import_match/presentation/controllers/recent_searches_controller.dart';
+import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 
 // Own the HTTP client at the provider layer so its connection pool is
@@ -56,8 +58,8 @@ class ImportState {
   String? get emptyErrorMessage {
     final message = errorMessage;
     if (message == null) return null;
-    if (_looksLikeConnectionIssue(message)) {
-      return '${ApexCopy.noConnection}\n${ApexCopy.tryAgainOnline}';
+    if (message == ApexCopy.offline || message == ApexCopy.noConnection) {
+      return '${ApexCopy.offline}\n${ApexCopy.tryAgainOnline}';
     }
     return message;
   }
@@ -87,15 +89,6 @@ class ImportState {
       hasMore: hasMore ?? this.hasMore,
     );
   }
-}
-
-bool _looksLikeConnectionIssue(String message) {
-  final m = message.toLowerCase();
-  return m.contains('could not reach') ||
-      m.contains('connection') ||
-      m.contains('too long') ||
-      m.contains('timed out') ||
-      m.contains('network');
 }
 
 class ImportController extends Notifier<ImportState> {
@@ -174,6 +167,9 @@ class ImportController extends Notifier<ImportState> {
     // completion would overwrite the second's results with games
     // from a different source/user.
     final gen = _generation;
+    final service = ref
+        .read(serviceHealthServiceProvider)
+        .serviceForGameSource(state.source);
     state = state.copyWith(
       isLoading: true,
       // Any in-flight fetchMore() is now stale; clear the footer
@@ -188,8 +184,23 @@ class ImportController extends Notifier<ImportState> {
     );
 
     try {
+      final online = await ref
+          .read(connectionPresenceProvider.notifier)
+          .ensureOnlineForAction();
+      if (gen != _generation) return;
+      if (!online) {
+        state = state.copyWith(
+          isLoading: false,
+          errorMessage: ApexCopy.offline,
+          hasFetched: true,
+        );
+        return;
+      }
       final page = await _fetchPage();
       if (gen != _generation) return; // stale — superseded
+      ref
+          .read(connectionPresenceProvider.notifier)
+          .markServiceAvailable(service);
       state = state.copyWith(
         games: page.games,
         isLoading: false,
@@ -208,16 +219,23 @@ class ImportController extends Notifier<ImportState> {
       }
     } on ImportException catch (e) {
       if (gen != _generation) return;
+      final message = await _friendlyFailureMessage(service, e.userMessage);
+      if (gen != _generation) return;
       state = state.copyWith(
         isLoading: false,
-        errorMessage: e.userMessage,
+        errorMessage: message,
         hasFetched: true,
       );
     } catch (_) {
       if (gen != _generation) return;
+      final message = await _friendlyFailureMessage(
+        service,
+        'Could not reach ${state.source == GameSource.chessCom ? 'Chess.com' : 'Lichess'}. Check your connection.',
+      );
+      if (gen != _generation) return;
       state = state.copyWith(
         isLoading: false,
-        errorMessage: 'Something went wrong. Try again.',
+        errorMessage: message,
         hasFetched: true,
       );
     }
@@ -235,11 +253,28 @@ class ImportController extends Notifier<ImportState> {
     // the result — otherwise we'd cross-wire the previous profile's
     // pages and cursor into the new profile's state.
     final gen = _generation;
+    final service = ref
+        .read(serviceHealthServiceProvider)
+        .serviceForGameSource(state.source);
     state = state.copyWith(isLoadingMore: true, clearError: true);
 
     try {
+      final online = await ref
+          .read(connectionPresenceProvider.notifier)
+          .ensureOnlineForAction();
+      if (gen != _generation) return;
+      if (!online) {
+        state = state.copyWith(
+          isLoadingMore: false,
+          errorMessage: ApexCopy.offline,
+        );
+        return;
+      }
       final page = await _fetchPage(cursor: state.cursor);
       if (gen != _generation) return; // stale — a new search superseded us
+      ref
+          .read(connectionPresenceProvider.notifier)
+          .markServiceAvailable(service);
       // De-dup by id in case an archive boundary repeated a game.
       final existingIds = state.games.map((g) => g.id).toSet();
       final appended = [
@@ -255,14 +290,34 @@ class ImportController extends Notifier<ImportState> {
       );
     } on ImportException catch (e) {
       if (gen != _generation) return;
-      state = state.copyWith(isLoadingMore: false, errorMessage: e.userMessage);
+      final message = await _friendlyFailureMessage(service, e.userMessage);
+      if (gen != _generation) return;
+      state = state.copyWith(isLoadingMore: false, errorMessage: message);
     } catch (_) {
       if (gen != _generation) return;
-      state = state.copyWith(
-        isLoadingMore: false,
-        errorMessage: 'Could not load more games.',
+      final message = await _friendlyFailureMessage(
+        service,
+        'Could not reach ${state.source == GameSource.chessCom ? 'Chess.com' : 'Lichess'}. Check your connection.',
       );
+      if (gen != _generation) return;
+      state = state.copyWith(isLoadingMore: false, errorMessage: message);
     }
+  }
+
+  Future<String> _friendlyFailureMessage(
+    AppService service,
+    String message,
+  ) async {
+    final health = ref.read(serviceHealthServiceProvider);
+    if (!health.isServiceFailureMessage(message)) {
+      ref
+          .read(connectionPresenceProvider.notifier)
+          .markServiceAvailable(service);
+      return message;
+    }
+    return ref
+        .read(connectionPresenceProvider.notifier)
+        .resolveServiceFailure(service: service, message: message);
   }
 }
 

@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/core/domain/services/move_quality_display.dart';
+import 'package:apex_chess/features/account/domain/apex_account.dart';
 import 'package:apex_chess/features/account/presentation/controllers/account_controller.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/archives/presentation/controllers/archive_controller.dart';
@@ -39,11 +40,16 @@ class GlobalDashboardScreen extends ConsumerWidget {
       next.whenData((stats) {
         if (stats == null) return;
         if (stats.hasData) {
-          ref.read(connectionPresenceProvider.notifier).markSynced();
-        } else {
+          final service = ref
+              .read(serviceHealthServiceProvider)
+              .serviceForProfileSource(
+                account.source == AccountSource.chessCom
+                    ? ProfileStatsSource.chessCom
+                    : ProfileStatsSource.lichess,
+              );
           ref
               .read(connectionPresenceProvider.notifier)
-              .markOffline(ApexCopy.noConnection);
+              .markServiceAvailable(service);
         }
       });
     });

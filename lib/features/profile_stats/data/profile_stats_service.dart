@@ -20,9 +20,21 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 import 'package:apex_chess/core/network/api_headers.dart';
+import 'package:apex_chess/core/network/connectivity_models.dart';
+import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 
 /// Which platform the handle belongs to.
 enum ProfileStatsSource { chessCom, lichess }
+
+class ProfileStatsException implements Exception {
+  const ProfileStatsException(this.message, this.availability);
+
+  final String message;
+  final ServiceAvailability availability;
+
+  @override
+  String toString() => message;
+}
 
 /// A single time-control rating snapshot plus lifetime record.
 class RatingBucket {
@@ -91,6 +103,17 @@ class ProfileStatsService {
     required ProfileStatsSource source,
     required String username,
   }) async {
+    try {
+      return await fetchStrict(source: source, username: username);
+    } catch (_) {
+      return ProfileStats.unknown(source: source, username: username);
+    }
+  }
+
+  Future<ProfileStats> fetchStrict({
+    required ProfileStatsSource source,
+    required String username,
+  }) async {
     final u = username.trim().toLowerCase();
     if (u.isEmpty) {
       return ProfileStats.unknown(source: source, username: username);
@@ -100,14 +123,28 @@ class ProfileStatsService {
         ProfileStatsSource.chessCom => await _fetchChessCom(u),
         ProfileStatsSource.lichess => await _fetchLichess(u),
       };
+    } on ProfileStatsException {
+      rethrow;
     } on TimeoutException {
-      return ProfileStats.unknown(source: source, username: username);
+      throw const ProfileStatsException(
+        ApexCopy.profileUnavailable,
+        ServiceAvailability.timeout,
+      );
     } on SocketException {
-      return ProfileStats.unknown(source: source, username: username);
+      throw const ProfileStatsException(
+        ApexCopy.profileUnavailable,
+        ServiceAvailability.unavailable,
+      );
     } on http.ClientException {
-      return ProfileStats.unknown(source: source, username: username);
+      throw const ProfileStatsException(
+        ApexCopy.profileUnavailable,
+        ServiceAvailability.unavailable,
+      );
     } on FormatException {
-      return ProfileStats.unknown(source: source, username: username);
+      throw const ProfileStatsException(
+        ApexCopy.profileUnavailable,
+        ServiceAvailability.unavailable,
+      );
     }
   }
 
@@ -118,10 +155,22 @@ class ProfileStatsService {
     final res = await _client
         .get(statsUri, headers: apexJsonHeaders)
         .timeout(_timeout);
-    if (res.statusCode != 200) {
+    if (res.statusCode == 404) {
       return ProfileStats.unknown(
         source: ProfileStatsSource.chessCom,
         username: u,
+      );
+    }
+    if (res.statusCode == 429) {
+      throw const ProfileStatsException(
+        ApexCopy.chessComUnavailable,
+        ServiceAvailability.rateLimited,
+      );
+    }
+    if (res.statusCode != 200) {
+      throw const ProfileStatsException(
+        ApexCopy.chessComUnavailable,
+        ServiceAvailability.unavailable,
       );
     }
     final body = json.decode(res.body) as Map<String, dynamic>;
@@ -173,10 +222,22 @@ class ProfileStatsService {
     final res = await _client
         .get(uri, headers: apexJsonHeaders)
         .timeout(_timeout);
-    if (res.statusCode != 200) {
+    if (res.statusCode == 404) {
       return ProfileStats.unknown(
         source: ProfileStatsSource.lichess,
         username: u,
+      );
+    }
+    if (res.statusCode == 429) {
+      throw const ProfileStatsException(
+        ApexCopy.lichessUnavailable,
+        ServiceAvailability.rateLimited,
+      );
+    }
+    if (res.statusCode != 200) {
+      throw const ProfileStatsException(
+        ApexCopy.lichessUnavailable,
+        ServiceAvailability.unavailable,
       );
     }
     final body = json.decode(res.body) as Map<String, dynamic>;

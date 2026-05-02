@@ -4,6 +4,7 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:apex_chess/app/di/providers.dart';
+import 'package:apex_chess/core/network/connectivity_models.dart';
 import 'package:apex_chess/features/import_match/domain/imported_game.dart'
     show GameSource, ImportException;
 import 'package:apex_chess/features/import_match/presentation/controllers/import_controller.dart';
@@ -80,7 +81,22 @@ class ProfileScannerController extends Notifier<ProfileScannerState> {
       clearProgress: true,
       wasCancelled: false,
     );
+    final service = ref
+        .read(serviceHealthServiceProvider)
+        .serviceForGameSource(_gameSourceFor(source));
     try {
+      final online = await ref
+          .read(connectionPresenceProvider.notifier)
+          .ensureOnlineForAction();
+      if (gen != _generation || cancellation.isCancelled) return;
+      if (!online) {
+        state = state.copyWith(
+          isLoading: false,
+          error: ApexCopy.offline,
+          clearProgress: true,
+        );
+        return;
+      }
       final svc = ref.read(profileScannerServiceProvider);
       final result = await svc.scan(
         username: username,
@@ -96,7 +112,9 @@ class ProfileScannerController extends Notifier<ProfileScannerState> {
       await ref
           .read(recentSearchesProvider.notifier)
           .record(_gameSourceFor(source), username);
-      ref.read(connectionPresenceProvider.notifier).markSynced();
+      ref
+          .read(connectionPresenceProvider.notifier)
+          .markServiceAvailable(service);
       state = state.copyWith(
         isLoading: false,
         result: result,
@@ -111,24 +129,23 @@ class ProfileScannerController extends Notifier<ProfileScannerState> {
       );
     } on ImportException catch (e) {
       if (gen != _generation || cancellation.isCancelled) return;
-      // Show the human-friendly message the repository already
-      // tailored, not Dart's `Exception: ...` toString().
-      final connectionIssue = _looksLikeConnectionIssue(e.userMessage);
-      if (connectionIssue) {
-        ref
-            .read(connectionPresenceProvider.notifier)
-            .markOffline(ApexCopy.noConnection);
-      }
-      state = state.copyWith(
-        isLoading: false,
-        error: connectionIssue ? ApexCopy.noConnection : e.userMessage,
-        clearProgress: true,
-      );
-    } catch (e) {
+      final message = await _scannerFailureMessage(service, e.userMessage);
       if (gen != _generation || cancellation.isCancelled) return;
       state = state.copyWith(
         isLoading: false,
-        error: 'Scan failed: $e',
+        error: message,
+        clearProgress: true,
+      );
+    } catch (_) {
+      if (gen != _generation || cancellation.isCancelled) return;
+      final message = await _scannerFailureMessage(
+        service,
+        'Could not reach ${source.trim().toLowerCase() == 'lichess' ? 'Lichess' : 'Chess.com'}. Check your connection.',
+      );
+      if (gen != _generation || cancellation.isCancelled) return;
+      state = state.copyWith(
+        isLoading: false,
+        error: message,
         clearProgress: true,
       );
     } finally {
@@ -154,14 +171,23 @@ class ProfileScannerController extends Notifier<ProfileScannerState> {
   }
 
   void reset() => state = const ProfileScannerState();
-}
 
-bool _looksLikeConnectionIssue(String message) {
-  final m = message.toLowerCase();
-  return m.contains('could not reach') ||
-      m.contains('connection') ||
-      m.contains('timed out') ||
-      m.contains('network');
+  Future<String> _scannerFailureMessage(
+    AppService service,
+    String message,
+  ) async {
+    final health = ref.read(serviceHealthServiceProvider);
+    if (!health.isServiceFailureMessage(message)) {
+      ref
+          .read(connectionPresenceProvider.notifier)
+          .markServiceAvailable(service);
+      return message;
+    }
+    final resolved = await ref
+        .read(connectionPresenceProvider.notifier)
+        .resolveServiceFailure(service: service, message: message);
+    return resolved == ApexCopy.offline ? ApexCopy.offline : ApexCopy.tryAgain;
+  }
 }
 
 GameSource _gameSourceFor(String source) {

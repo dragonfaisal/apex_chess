@@ -115,11 +115,9 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
     if (!mounted) return;
     final error = next.errorMessage;
     if (error != null && error != previous?.errorMessage) {
-      _hadConnectionIssue = true;
-      ref
-          .read(connectionPresenceProvider.notifier)
-          .markOffline(ApexCopy.noConnection);
-      if (next.games.isNotEmpty) {
+      final presence = ref.read(connectionPresenceProvider);
+      _hadConnectionIssue = presence.isOffline;
+      if (presence.isOffline && next.games.isNotEmpty) {
         _showApexSnack(
           ApexCopy.offline,
           detail: ApexCopy.showingSavedData,
@@ -197,17 +195,11 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
     _autoFetchDebounce = null;
   }
 
-  void _checkConnectionForAction() {
-    unawaited(ref.read(connectionPresenceProvider.notifier).checkNow());
-  }
-
   void _fetchNow() {
-    _checkConnectionForAction();
     ref.read(importControllerProvider.notifier).fetch();
   }
 
   void _fetchMoreNow() {
-    _checkConnectionForAction();
     ref.read(importControllerProvider.notifier).fetchMore();
   }
 

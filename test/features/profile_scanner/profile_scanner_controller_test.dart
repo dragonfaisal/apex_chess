@@ -4,6 +4,7 @@ import 'package:apex_chess/features/profile_scanner/data/profile_scanner_service
 import 'package:apex_chess/features/profile_scanner/domain/profile_scan_result.dart';
 import 'package:apex_chess/features/profile_scanner/presentation/controllers/profile_scanner_controller.dart';
 import 'package:apex_chess/features/import_match/presentation/controllers/recent_searches_controller.dart';
+import 'package:apex_chess/core/network/connectivity_models.dart';
 import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,7 +19,7 @@ void main() {
         overrides: [
           profileScannerServiceProvider.overrideWithValue(service),
           connectionReachabilityProbeProvider.overrideWithValue(
-            () async => true,
+            () async => NetworkAvailability.online,
           ),
         ],
       );
@@ -64,7 +65,7 @@ void main() {
         overrides: [
           profileScannerServiceProvider.overrideWithValue(service),
           connectionReachabilityProbeProvider.overrideWithValue(
-            () async => true,
+            () async => NetworkAvailability.online,
           ),
         ],
       );
