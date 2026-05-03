@@ -2,31 +2,38 @@
 library;
 
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
+import 'package:apex_chess/features/archives/presentation/models/archived_game_card_display.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_game_card.dart';
 
 class RecentScanDisplay {
-  const RecentScanDisplay({required this.title, required this.subtitle});
+  const RecentScanDisplay({
+    required this.card,
+    required this.accuracy,
+    required this.summary,
+  });
 
-  final String title;
-  final String subtitle;
+  final ApexGameCardDisplayModel card;
+  final String accuracy;
+  final String summary;
+
+  String get title => '${card.white.name} vs ${card.black.name}';
+  String get subtitle => summary;
 
   factory RecentScanDisplay.fromGame(ArchivedGame game, {String? perspective}) {
     final accuracy = (100 - game.averageCpLoss)
         .clamp(0, 100)
         .toStringAsFixed(0);
-    final result = _shortResult(game.resultHeadline(userHandle: perspective));
     final moveCount = (game.totalPlies / 2).ceil();
+    final base = game.toApexGameCardDisplay(userHandle: perspective);
     return RecentScanDisplay(
-      title: '${game.white} vs ${game.black}',
-      subtitle:
-          '$result · $accuracy% · ${game.reviewModeLabel} · $moveCount moves',
+      card: ApexGameCardDisplayModel(
+        resultTone: base.resultTone,
+        white: base.white,
+        black: base.black,
+        primaryMeta: '$accuracy% · ${game.reviewModeLabel} · $moveCount moves',
+      ),
+      accuracy: accuracy,
+      summary: '$accuracy% · ${game.reviewModeLabel} · $moveCount moves',
     );
-  }
-
-  static String _shortResult(String headline) {
-    if (headline.startsWith('You won')) return 'You won';
-    if (headline.startsWith('You lost')) return 'You lost';
-    if (headline.startsWith('Draw')) return 'Draw';
-    if (headline == 'White won' || headline == 'Black won') return headline;
-    return headline.isEmpty ? 'Result unavailable' : headline;
   }
 }

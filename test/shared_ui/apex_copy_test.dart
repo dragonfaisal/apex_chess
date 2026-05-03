@@ -17,6 +17,8 @@ void main() {
       ApexCopy.lichessUnavailable,
       ApexCopy.profileUnavailable,
       ApexCopy.synced,
+      ApexCopy.searchOlderGames,
+      ApexCopy.searchingOlderGames,
       ApexCopy.searchPlayer,
       ApexCopy.searchOpponentOpening,
       ApexCopy.dashboardPlayerSearchTitle,

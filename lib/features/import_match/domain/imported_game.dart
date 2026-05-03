@@ -127,10 +127,11 @@ class ImportedGame {
       openingName,
       eco,
       timeControl,
-      perspectiveHeadline,
       userOutcomeLabel,
-      secondaryResultText,
       '$moveCount moves',
+      moveCount.toString(),
+      relativeTime,
+      playedAt.toIso8601String(),
     ].whereType<String>().join(' ').toLowerCase();
   }
 

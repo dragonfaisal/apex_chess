@@ -26,6 +26,7 @@ import 'package:apex_chess/features/global_dashboard/presentation/views/global_d
 import 'package:apex_chess/features/import_match/presentation/views/import_match_screen.dart';
 import 'package:apex_chess/features/live_play/presentation/views/live_play_screen.dart';
 import 'package:apex_chess/features/mistake_vault/data/mistake_vault_save_hook.dart';
+import 'package:apex_chess/features/home/presentation/controllers/home_activity_controller.dart';
 import 'package:apex_chess/features/home/presentation/pgn_paste_display_state.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
 import 'package:apex_chess/features/pgn_review/domain/review_analysis_provider.dart';
@@ -97,6 +98,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       );
     });
     final account = ref.watch(accountControllerProvider).valueOrNull;
+    final activity =
+        ref.watch(homeActivityControllerProvider).valueOrNull ??
+        const HomeActivityState();
+    final presence = ref.watch(connectionPresenceProvider);
     return Scaffold(
       resizeToAvoidBottomInset: true,
       body: IndexedStack(
@@ -104,7 +109,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         children: [
           _AnalyzeTab(
             account: account,
+            activity: activity,
+            isOffline: presence.isOffline,
             onPastePgn: () => _showPgnDialog(context, ref, account?.username),
+            onRetry: () => unawaited(
+              ref.read(connectionPresenceProvider.notifier).refresh(),
+            ),
           ),
           const ArchiveScreen(showBackButton: false),
           const GlobalDashboardScreen(showBackButton: false),
@@ -152,6 +162,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     );
     if (result == null) return;
     if (!context.mounted) return;
+    unawaited(
+      ref.read(homeActivityControllerProvider.notifier).recordPgnReview(),
+    );
     _startLocalAnalysis(context, ref, result);
   }
 
@@ -174,14 +187,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 }
 
-class _AnalyzeTab extends StatelessWidget {
-  const _AnalyzeTab({required this.account, required this.onPastePgn});
+class _AnalyzeTab extends ConsumerWidget {
+  const _AnalyzeTab({
+    required this.account,
+    required this.activity,
+    required this.isOffline,
+    required this.onPastePgn,
+    required this.onRetry,
+  });
 
   final ApexAccount? account;
+  final HomeActivityState activity;
+  final bool isOffline;
   final VoidCallback onPastePgn;
+  final VoidCallback onRetry;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hero = HomeHeroDisplay.fromActivity(activity, isOffline: isOffline);
+    final quickActions = buildHomeQuickActions(hero);
     return Container(
       decoration: const BoxDecoration(gradient: ApexGradients.spaceCanvas),
       child: SafeArea(
@@ -221,56 +245,22 @@ class _AnalyzeTab extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 20),
-                      _HeroPlayCard(
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const LivePlayScreen(),
-                          ),
-                        ),
+                      _DynamicHeroCard(
+                        hero: hero,
+                        onTap: () => _runHeroAction(context, ref, hero.kind),
                       ),
                       const SizedBox(height: 14),
                       _HomeTileGrid(
                         children: [
-                          _TileCard(
-                            title: 'Import Games',
-                            subtitle: 'Chess.com · Lichess',
-                            icon: Icons.cloud_download_rounded,
-                            accent: ApexColors.sapphire,
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const ImportMatchScreen(),
-                              ),
+                          for (final action in quickActions)
+                            _TileCard(
+                              title: action.label,
+                              subtitle: _subtitleForAction(action),
+                              icon: _iconForAction(action),
+                              accent: _accentForAction(action),
+                              onTap: () =>
+                                  _runQuickAction(context, ref, action),
                             ),
-                          ),
-                          _TileCard(
-                            title: 'Paste PGN',
-                            subtitle: 'Detected preview · review',
-                            icon: Icons.auto_graph_rounded,
-                            accent: ApexColors.aurora,
-                            onTap: onPastePgn,
-                          ),
-                          _TileCard(
-                            title: 'Opponent Insights',
-                            subtitle: 'Profile review',
-                            icon: Icons.person_search_rounded,
-                            accent: ApexColors.ruby,
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const ProfileScannerScreen(),
-                              ),
-                            ),
-                          ),
-                          _TileCard(
-                            title: 'Live',
-                            subtitle: 'Play · feedback · review',
-                            icon: Icons.play_arrow_rounded,
-                            accent: ApexColors.emerald,
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const LivePlayScreen(),
-                              ),
-                            ),
-                          ),
                         ],
                       ),
                       const SizedBox(height: 28),
@@ -292,6 +282,140 @@ class _AnalyzeTab extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _subtitleForAction(HomeQuickActionDisplay action) {
+    return switch (action.label) {
+      'Import Games' => 'Chess.com · Lichess',
+      'Paste PGN' => 'Game detected · review',
+      'Opponent Insights' => 'Profile review',
+      ApexCopy.tryAgain => ApexCopy.tryAgainOnline,
+      'Continue Review' => 'Latest review',
+      'Recent Game' => 'Import discovery',
+      _ => 'Start review',
+    };
+  }
+
+  IconData _iconForAction(HomeQuickActionDisplay action) {
+    return switch (action.label) {
+      'Import Games' || 'Recent Game' => Icons.cloud_download_rounded,
+      'Paste PGN' => Icons.auto_graph_rounded,
+      'Opponent Insights' => Icons.person_search_rounded,
+      ApexCopy.tryAgain => Icons.refresh_rounded,
+      'Continue Review' => Icons.play_circle_outline_rounded,
+      _ => Icons.auto_graph_rounded,
+    };
+  }
+
+  Color _accentForAction(HomeQuickActionDisplay action) {
+    return switch (action.label) {
+      'Import Games' || 'Recent Game' => ApexColors.sapphire,
+      'Paste PGN' => ApexColors.aurora,
+      'Opponent Insights' => ApexColors.ruby,
+      ApexCopy.tryAgain => ApexColors.inaccuracy,
+      'Continue Review' => ApexColors.emerald,
+      _ => ApexColors.sapphireBright,
+    };
+  }
+
+  void _runHomeAction(
+    BuildContext context,
+    WidgetRef ref,
+    HomeActivityKind kind,
+  ) {
+    switch (kind) {
+      case HomeActivityKind.pgn:
+        onPastePgn();
+        return;
+      case HomeActivityKind.importGame:
+        unawaited(
+          ref
+              .read(homeActivityControllerProvider.notifier)
+              .recordImportReview(),
+        );
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const ImportMatchScreen()));
+        return;
+      case HomeActivityKind.live:
+        unawaited(
+          ref.read(homeActivityControllerProvider.notifier).recordLive(),
+        );
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const LivePlayScreen()));
+        return;
+      case HomeActivityKind.retry:
+        onRetry();
+        return;
+      case HomeActivityKind.review:
+        unawaited(
+          ref.read(homeActivityControllerProvider.notifier).recordReview(),
+        );
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const ReviewSummaryScreen()));
+        return;
+      case HomeActivityKind.firstUse:
+        unawaited(
+          ref
+              .read(homeActivityControllerProvider.notifier)
+              .recordImportReview(),
+        );
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const ImportMatchScreen()));
+        return;
+    }
+  }
+
+  void _runHeroAction(
+    BuildContext context,
+    WidgetRef ref,
+    HomeActivityKind kind,
+  ) {
+    final hasCurrentReview =
+        ref.read(reviewControllerProvider).timeline != null;
+    if (hasCurrentReview &&
+        (kind == HomeActivityKind.pgn ||
+            kind == HomeActivityKind.importGame ||
+            kind == HomeActivityKind.review)) {
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const ReviewSummaryScreen()));
+      return;
+    }
+    _runHomeAction(context, ref, kind);
+  }
+
+  void _runQuickAction(
+    BuildContext context,
+    WidgetRef ref,
+    HomeQuickActionDisplay action,
+  ) {
+    switch (action.label) {
+      case 'Import Games':
+      case 'Recent Game':
+        _runHomeAction(context, ref, HomeActivityKind.importGame);
+        return;
+      case 'Paste PGN':
+        _runHomeAction(context, ref, HomeActivityKind.pgn);
+        return;
+      case 'Opponent Insights':
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const ProfileScannerScreen()));
+        return;
+      case ApexCopy.tryAgain:
+        _runHomeAction(context, ref, HomeActivityKind.retry);
+        return;
+      case 'Continue Review':
+        _runHeroAction(context, ref, HomeActivityKind.review);
+        return;
+      default:
+        _runHomeAction(context, ref, action.kind);
+        return;
+    }
   }
 }
 
@@ -1039,8 +1163,10 @@ class _DialogPrimaryAction extends StatelessWidget {
 // Dashboard tiles — fixed two-column entries, each with its own accent theme.
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _HeroPlayCard extends StatelessWidget {
-  const _HeroPlayCard({required this.onTap});
+class _DynamicHeroCard extends StatelessWidget {
+  const _DynamicHeroCard({required this.hero, required this.onTap});
+
+  final HomeHeroDisplay hero;
   final VoidCallback onTap;
 
   @override
@@ -1053,7 +1179,16 @@ class _HeroPlayCard extends StatelessWidget {
         child: Ink(
           height: 128,
           decoration: BoxDecoration(
-            gradient: ApexGradients.sapphireRuby,
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                ApexColors.sapphireBright,
+                ApexColors.sapphire,
+                ApexColors.deepSpace,
+              ],
+              stops: [0, 0.46, 1],
+            ),
             borderRadius: BorderRadius.circular(22),
             boxShadow: [
               BoxShadow(
@@ -1064,55 +1199,73 @@ class _HeroPlayCard extends StatelessWidget {
               ),
             ],
           ),
-          padding: const EdgeInsets.fromLTRB(22, 16, 16, 16),
-          child: Row(
+          child: Stack(
             children: [
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              Positioned.fill(
+                child: CustomPaint(painter: _HeroBoardMotifPainter()),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(22, 16, 16, 16),
+                child: Row(
                   children: [
-                    Text(
-                      'LIVE',
-                      style: ApexTypography.bodyMedium.copyWith(
-                        color: Colors.white.withValues(alpha: 0.8),
-                        fontSize: 10,
-                        letterSpacing: 2.2,
-                        fontWeight: FontWeight.w700,
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            hero.eyebrow,
+                            style: ApexTypography.bodyMedium.copyWith(
+                              color: Colors.white.withValues(alpha: 0.78),
+                              fontSize: 10,
+                              letterSpacing: 1.8,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            hero.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: ApexTypography.displayLarge.copyWith(
+                              fontSize: 22,
+                              letterSpacing: 0,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            hero.subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: ApexTypography.bodyMedium.copyWith(
+                              color: Colors.white.withValues(alpha: 0.78),
+                              fontSize: 11,
+                              letterSpacing: 0,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      ApexCopy.playLive,
-                      style: ApexTypography.displayLarge.copyWith(
-                        fontSize: 22,
-                        letterSpacing: 1.6,
+                    const SizedBox(width: 12),
+                    Container(
+                      width: 54,
+                      height: 54,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.20),
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Icon(
+                        _heroIcon(hero.kind),
                         color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Play · feedback · review',
-                      style: ApexTypography.bodyMedium.copyWith(
-                        color: Colors.white.withValues(alpha: 0.78),
-                        fontSize: 11,
-                        letterSpacing: 0.4,
+                        size: 30,
                       ),
                     ),
                   ],
-                ),
-              ),
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Icon(
-                  Icons.play_arrow_rounded,
-                  color: Colors.white,
-                  size: 32,
                 ),
               ),
             ],
@@ -1121,6 +1274,45 @@ class _HeroPlayCard extends StatelessWidget {
       ),
     );
   }
+
+  IconData _heroIcon(HomeActivityKind kind) => switch (kind) {
+    HomeActivityKind.pgn => Icons.article_outlined,
+    HomeActivityKind.importGame => Icons.cloud_download_rounded,
+    HomeActivityKind.review => Icons.play_circle_outline_rounded,
+    HomeActivityKind.live => Icons.play_arrow_rounded,
+    HomeActivityKind.retry => Icons.refresh_rounded,
+    HomeActivityKind.firstUse => Icons.auto_graph_rounded,
+  };
+}
+
+class _HeroBoardMotifPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint();
+    const cell = 24.0;
+    for (var y = 0; y < 6; y++) {
+      for (var x = 0; x < 12; x++) {
+        final isLight = (x + y).isEven;
+        paint.color = Colors.white.withValues(alpha: isLight ? 0.035 : 0.015);
+        canvas.drawRect(
+          Rect.fromLTWH(size.width - (x + 1) * cell, y * cell, cell, cell),
+          paint,
+        );
+      }
+    }
+    final wave = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2
+      ..color = ApexColors.aurora.withValues(alpha: 0.22);
+    final path = Path()..moveTo(0, size.height * 0.62);
+    for (var x = 0.0; x <= size.width; x += 18) {
+      path.lineTo(x, size.height * 0.62 + (x % 54 == 0 ? -7 : 7));
+    }
+    canvas.drawPath(path, wave);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _HomeTileGrid extends StatelessWidget {

@@ -56,6 +56,8 @@ class ApexCopy {
   static const String clear = 'Clear';
   static const String clearFilters = 'Clear filters';
   static const String noMatchingGames = 'No matching games';
+  static const String searchOlderGames = 'Search older games';
+  static const String searchingOlderGames = 'Searching older games';
   static const String search = 'Search';
   static const String searchPlayer = 'Search player';
   static const String searchOpponent = 'Search opponent';

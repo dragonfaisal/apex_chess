@@ -13,14 +13,15 @@ import 'package:apex_chess/app/di/providers.dart';
 import 'package:apex_chess/features/account/presentation/controllers/account_controller.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/archives/presentation/controllers/archive_controller.dart';
+import 'package:apex_chess/features/archives/presentation/models/archived_game_card_display.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
 import 'package:apex_chess/features/pgn_review/domain/review_analysis_provider.dart';
-import 'package:apex_chess/features/pgn_review/domain/review_summary.dart';
 import 'package:apex_chess/features/pgn_review/presentation/views/review_summary_screen.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_snack.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_game_card.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
 
 class ArchiveScreen extends ConsumerStatefulWidget {
@@ -820,247 +821,17 @@ class _ArchiveCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final userIsBlack = game.userIsBlackFor(userHandle);
-    final headline = game.resultHeadline(userHandle: userHandle);
-    final isWin = headline.startsWith('You won') || headline == 'White won';
-    final isLoss = headline.startsWith('You lost') || headline == 'Black won';
-    final accent = headline.startsWith('Draw')
-        ? ApexColors.inaccuracy
-        : isWin
-        ? ApexColors.best
-        : isLoss
-        ? ApexColors.blunder
-        : ApexColors.sapphire;
-    return InkWell(
+    return ApexGameCard(
+      model: game.toApexGameCardDisplay(userHandle: userHandle),
       onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
-      child: GlassPanel(
-        padding: const EdgeInsets.fromLTRB(16, 15, 10, 15),
-        accentColor: accent,
-        accentAlpha: 0.22,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        headline,
-                        style: ApexTypography.titleMedium.copyWith(
-                          fontSize: 15,
-                          color: ApexColors.textPrimary,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        _metaLine,
-                        style: ApexTypography.bodyMedium.copyWith(
-                          color: ApexColors.textTertiary,
-                          fontSize: 11,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  onPressed: onDelete,
-                  icon: const Icon(
-                    Icons.close_rounded,
-                    size: 18,
-                    color: ApexColors.textTertiary,
-                  ),
-                  tooltip: 'Remove from archive',
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              game.openingLine,
-              style: ApexTypography.bodyMedium.copyWith(
-                color: game.openingName == null
-                    ? ApexColors.textTertiary
-                    : ApexColors.book,
-                fontSize: 11.5,
-                fontWeight: game.openingName == null
-                    ? FontWeight.w500
-                    : FontWeight.w600,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 6),
-            Text(
-              _accuracyText(userIsBlack),
-              style: ApexTypography.bodyMedium.copyWith(
-                color: ApexColors.textSecondary,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 6),
-            _QualitySummaryChips(game: game),
-            const SizedBox(height: 9),
-            Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    game.secondaryResultText,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: ApexTypography.bodyMedium.copyWith(
-                      color: ApexColors.textTertiary,
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                if (userIsBlack != null) ...[
-                  const SizedBox(width: 8),
-                  _CompactTag(
-                    label: userIsBlack ? 'You: Black' : 'You: White',
-                    color: ApexColors.aurora,
-                  ),
-                ],
-              ],
-            ),
-          ],
+      trailing: IconButton(
+        onPressed: onDelete,
+        icon: const Icon(
+          Icons.close_rounded,
+          size: 18,
+          color: ApexColors.textTertiary,
         ),
-      ),
-    );
-  }
-
-  String get _metaLine {
-    return [
-      game.sourceLabel,
-      game.reviewModeLabel,
-      if (game.timeControl != null && game.timeControl!.isNotEmpty)
-        game.timeControl!,
-      game.relativePlayedAt,
-    ].join(' • ');
-  }
-
-  String _accuracyText(bool? userIsBlack) {
-    final tl = game.cachedTimeline;
-    if (userIsBlack != null && tl != null) {
-      final summary = const ReviewSummaryService().compute(
-        timeline: tl,
-        userIsWhite: !userIsBlack,
-      );
-      return 'You ${summary.userAccuracyPct.toStringAsFixed(0)}% • Opp ${summary.opponentAccuracyPct.toStringAsFixed(0)}%';
-    }
-    return 'ACPL ${game.averageCpLoss.toStringAsFixed(1)}';
-  }
-}
-
-class _CompactTag extends StatelessWidget {
-  const _CompactTag({required this.label, required this.color});
-
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Flexible(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: color.withValues(alpha: 0.35), width: 0.6),
-        ),
-        child: Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: ApexTypography.bodyMedium.copyWith(
-            color: color,
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _QualitySummaryChips extends StatelessWidget {
-  const _QualitySummaryChips({required this.game});
-
-  final ArchivedGame game;
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 6,
-      runSpacing: 5,
-      children: [
-        _QualityPill(
-          label: 'Brilliant',
-          count: game.brilliantCount,
-          color: ApexColors.brilliant,
-        ),
-        _QualityPill(
-          label: 'Great',
-          count: game.greatCount,
-          color: ApexColors.sapphireBright,
-        ),
-        _QualityPill(
-          label: 'Miss',
-          count: game.missCount,
-          color: ApexColors.miss,
-        ),
-        _QualityPill(
-          label: 'Blunder',
-          count: game.blunderCount,
-          color: ApexColors.blunder,
-        ),
-      ],
-    );
-  }
-}
-
-class _QualityPill extends StatelessWidget {
-  const _QualityPill({
-    required this.label,
-    required this.count,
-    required this.color,
-  });
-
-  final String label;
-  final int count;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final isZero = count == 0;
-    final effective = isZero ? ApexColors.textTertiary : color;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: effective.withValues(alpha: isZero ? 0.06 : 0.11),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: effective.withValues(alpha: isZero ? 0.14 : 0.30),
-          width: 0.5,
-        ),
-      ),
-      child: Text(
-        '$label $count',
-        style: ApexTypography.bodyMedium.copyWith(
-          color: effective,
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-        ),
+        tooltip: 'Remove from archive',
       ),
     );
   }

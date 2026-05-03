@@ -23,6 +23,7 @@ import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_game_card.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
 
 import '../controllers/dashboard_controller.dart';
@@ -1784,44 +1785,10 @@ class _RecentRow extends StatelessWidget {
     final display = RecentScanDisplay.fromGame(game, perspective: perspective);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-        decoration: BoxDecoration(
-          color: ApexColors.nebula.withValues(alpha: 0.42),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: ApexColors.stardustLine.withValues(alpha: 0.28),
-            width: 0.6,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              display.title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: ApexTypography.bodyMedium.copyWith(
-                color: ApexColors.textPrimary,
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
-                height: 1.25,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              display.subtitle,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: ApexTypography.bodyMedium.copyWith(
-                color: ApexColors.textTertiary,
-                fontWeight: FontWeight.w600,
-                fontSize: 11,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-          ],
-        ),
+      child: ApexGameCard(
+        model: display.card,
+        dense: true,
+        enableHaptic: false,
       ),
     );
   }

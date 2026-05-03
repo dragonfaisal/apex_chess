@@ -23,6 +23,9 @@ import 'package:apex_chess/features/archives/data/archive_save_hook.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/import_match/domain/imported_game.dart';
 import 'package:apex_chess/features/import_match/presentation/controllers/import_controller.dart';
+import 'package:apex_chess/features/import_match/presentation/models/import_discovery_display.dart';
+import 'package:apex_chess/features/import_match/presentation/models/imported_game_card_display.dart';
+import 'package:apex_chess/features/home/presentation/controllers/home_activity_controller.dart';
 import 'package:apex_chess/features/mistake_vault/data/mistake_vault_save_hook.dart';
 import 'package:apex_chess/features/import_match/presentation/controllers/recent_searches_controller.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
@@ -35,6 +38,7 @@ import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_game_card.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_snack.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
 
@@ -61,9 +65,11 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
   //   * Cancelled on submit (Enter), on tapping a recent, on source
   //     toggle, and on dispose.
   Timer? _autoFetchDebounce;
+  Timer? _gameFilterDebounce;
   String? _lastAutoKey;
   bool _hadConnectionIssue = false;
   static const Duration _autoFetchWindow = Duration(milliseconds: 600);
+  static const Duration _gameFilterWindow = Duration(milliseconds: 240);
 
   @override
   void initState() {
@@ -148,6 +154,7 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
   @override
   void dispose() {
     _autoFetchDebounce?.cancel();
+    _gameFilterDebounce?.cancel();
     _scrollController.removeListener(_maybeFetchMore);
     _scrollController.dispose();
     _usernameFocus.dispose();
@@ -158,7 +165,11 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
   }
 
   void _onGameFilterChanged() {
-    setState(() => _gameFilter = _gameFilterController.text);
+    _gameFilterDebounce?.cancel();
+    _gameFilterDebounce = Timer(_gameFilterWindow, () {
+      if (!mounted) return;
+      setState(() => _gameFilter = _gameFilterController.text);
+    });
   }
 
   /// Schedules an auto-fetch 600 ms *after the username-validation
@@ -185,7 +196,7 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
       if (state.source != source) return;
       if (state.isLoading) return;
       _lastAutoKey = key;
-      _gameFilterController.clear();
+      _clearGameFilter();
       _fetchNow();
     });
   }
@@ -201,6 +212,12 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
 
   void _fetchMoreNow() {
     ref.read(importControllerProvider.notifier).fetchMore();
+  }
+
+  void _clearGameFilter() {
+    _gameFilterDebounce?.cancel();
+    _gameFilterController.clear();
+    if (_gameFilter.isNotEmpty) setState(() => _gameFilter = '');
   }
 
   void _maybeFetchMore() {
@@ -257,7 +274,7 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
                         notifier.setSource(src);
                         _cancelAutoFetch();
                         _lastAutoKey = null;
-                        _gameFilterController.clear();
+                        _clearGameFilter();
                       },
                     ),
                     const SizedBox(height: 16),
@@ -273,7 +290,7 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
                         onSubmitted: (v) {
                           _cancelAutoFetch();
                           _lastAutoKey = '${state.source.name}:${v.trim()}';
-                          _gameFilterController.clear();
+                          _clearGameFilter();
                           _fetchNow();
                         },
                         onVerified: (v) {
@@ -292,7 +309,7 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
                           _usernameFocus.unfocus();
                           _cancelAutoFetch();
                           _lastAutoKey = '${state.source.name}:$username';
-                          _gameFilterController.clear();
+                          _clearGameFilter();
                           _fetchNow();
                         },
                       ),
@@ -370,32 +387,34 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
         ),
       ];
     }
-    if (!state.hasFetched) {
-      return const [
+    final discovery = ImportDiscoveryDisplay.from(
+      state: state,
+      query: filterQuery,
+    );
+    if (discovery.emptyState == ImportDiscoveryEmptyState.notFetched) {
+      return [
         SliverFillRemaining(
           hasScrollBody: false,
           child: _EmptyState(
             icon: Icons.search_rounded,
-            label: 'Search a player to show recent games.',
+            label: discovery.emptyLabel,
           ),
         ),
       ];
     }
-    if (state.games.isEmpty) {
-      return const [
+    if (discovery.emptyState == ImportDiscoveryEmptyState.noGames) {
+      return [
         SliverFillRemaining(
           hasScrollBody: false,
           child: _EmptyState(
             icon: Icons.inbox_rounded,
-            label: ApexCopy.importEmpty,
+            label: discovery.emptyLabel,
           ),
         ),
       ];
     }
-    final visibleGames = state.games
-        .where((game) => game.matchesLocalFilter(filterQuery))
-        .toList(growable: false);
-    final isFiltering = filterQuery.trim().isNotEmpty;
+    final visibleGames = discovery.games;
+    final isFiltering = discovery.isFiltering;
     return [
       SliverToBoxAdapter(
         child: Padding(
@@ -404,11 +423,16 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
         ),
       ),
       if (visibleGames.isEmpty)
-        const SliverFillRemaining(
+        SliverFillRemaining(
           hasScrollBody: false,
           child: _EmptyState(
             icon: Icons.manage_search_rounded,
-            label: ApexCopy.noMatchingGames,
+            label: discovery.emptyLabel,
+            actionLabel: discovery.showSearchOlderAction
+                ? ApexCopy.searchOlderGames
+                : null,
+            isLoading: discovery.showSearchingOlder,
+            onAction: discovery.showSearchOlderAction ? _fetchMoreNow : null,
           ),
         )
       else
@@ -1082,140 +1106,21 @@ class _GameCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final headline = game.perspectiveHeadline;
-    final outcome = game.userOutcomeLabel;
-    final accentColor = switch (outcome) {
-      'Won' => ApexColors.best,
-      'Lost' => ApexColors.blunder,
-      'Draw' => ApexColors.inaccuracy,
-      _ => switch (game.result) {
-        GameResult.whiteWon => ApexColors.best,
-        GameResult.blackWon => ApexColors.blunder,
-        GameResult.draw => ApexColors.inaccuracy,
-        GameResult.unknown => ApexColors.subtleBorder,
-      },
-    };
-    final opening = game.openingName == null
-        ? ApexCopy.openingNotDetected
-        : '${game.eco != null ? '${game.eco} ' : ''}${game.openingName}';
-
-    return GlassPanel(
-      padding: EdgeInsets.zero,
-      margin: null,
-      borderRadius: 16,
-      accentColor: accentColor,
-      accentAlpha: 0.28,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => _openDepthPicker(context, ref),
-          borderRadius: BorderRadius.circular(16),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    _SourceBadge(source: game.source),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            headline,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: ApexTypography.titleMedium.copyWith(
-                              color: ApexColors.textPrimary,
-                              fontSize: 15,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            '${game.sourceLabel} • ${game.timeControl ?? 'Time control unavailable'} • ${game.relativeTime}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: ApexTypography.bodyMedium.copyWith(
-                              color: ApexColors.textTertiary,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _PlayerRow(
-                      name: game.whiteName,
-                      rating: game.whiteRating,
-                      light: true,
-                      isUser: game.userColor == PlayerColor.white,
-                    ),
-                    const SizedBox(height: 6),
-                    _PlayerRow(
-                      name: game.blackName,
-                      rating: game.blackRating,
-                      light: false,
-                      isUser: game.userColor == PlayerColor.black,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: [
-                    _MetaPill(
-                      label: '${game.moveCount} moves',
-                      color: ApexColors.textTertiary,
-                    ),
-                    _MetaPill(
-                      label: opening,
-                      color: game.openingName == null
-                          ? ApexColors.textTertiary
-                          : ApexColors.book,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _ReviewModeAction(
-                        label: 'Fast',
-                        icon: Icons.flash_on_rounded,
-                        onTap: () => _startAnalysis(
-                          context,
-                          ref,
-                          AnalysisProfile.fastReview,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _ReviewModeAction(
-                        label: 'Deep',
-                        icon: Icons.auto_awesome_rounded,
-                        onTap: () => _startAnalysis(
-                          context,
-                          ref,
-                          AnalysisProfile.deepReview,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
+    return ApexGameCard(
+      model: game.toApexGameCardDisplay(),
+      onTap: () => _openDepthPicker(context, ref),
+      actions: [
+        _ReviewModeAction(
+          label: 'Fast',
+          icon: Icons.flash_on_rounded,
+          onTap: () => _startAnalysis(context, ref, AnalysisProfile.fastReview),
         ),
-      ),
+        _ReviewModeAction(
+          label: 'Deep',
+          icon: Icons.auto_awesome_rounded,
+          onTap: () => _startAnalysis(context, ref, AnalysisProfile.deepReview),
+        ),
+      ],
     );
   }
 
@@ -1235,6 +1140,9 @@ class _GameCard extends ConsumerWidget {
     WidgetRef ref,
     AnalysisProfile profile,
   ) {
+    unawaited(
+      ref.read(homeActivityControllerProvider.notifier).recordImportReview(),
+    );
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -1283,162 +1191,22 @@ class _ReviewModeAction extends StatelessWidget {
   }
 }
 
-class _SourceBadge extends StatelessWidget {
-  const _SourceBadge({required this.source});
-  final GameSource source;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = switch (source) {
-      GameSource.chessCom => 'CC',
-      GameSource.lichess => 'LI',
-    };
-    final color = switch (source) {
-      GameSource.chessCom => const Color(0xFF81B64C),
-      GameSource.lichess => const Color(0xFFB8B5AF),
-    };
-    return Container(
-      width: 40,
-      height: 40,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.45), width: 0.6),
-      ),
-      child: Text(
-        label,
-        style: ApexTypography.monoEval.copyWith(
-          color: color,
-          fontSize: 14,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-}
-
-class _MetaPill extends StatelessWidget {
-  const _MetaPill({required this.label, required this.color});
-
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      constraints: BoxConstraints(
-        maxWidth: MediaQuery.sizeOf(context).width - 64,
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.09),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha: 0.22), width: 0.5),
-      ),
-      child: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: ApexTypography.bodyMedium.copyWith(
-          color: color,
-          fontSize: 10.5,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-}
-
-class _PlayerRow extends StatelessWidget {
-  const _PlayerRow({
-    required this.name,
-    required this.rating,
-    required this.light,
-    required this.isUser,
-  });
-
-  final String name;
-  final int? rating;
-  final bool light;
-  final bool isUser;
-
-  @override
-  Widget build(BuildContext context) {
-    final dotColor = light ? Colors.white : ApexColors.trueBlack;
-    final dotBorder = light
-        ? ApexColors.subtleBorder
-        : Colors.white.withValues(alpha: 0.25);
-    return Row(
-      children: [
-        Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(
-            color: dotColor,
-            shape: BoxShape.circle,
-            border: Border.all(color: dotBorder, width: 0.6),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Flexible(
-          child: Text(
-            name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: ApexTypography.bodyMedium.copyWith(
-              color: isUser
-                  ? ApexColors.sapphireBright
-                  : ApexColors.textPrimary,
-              fontSize: 13,
-              fontWeight: isUser ? FontWeight.w700 : FontWeight.w500,
-              letterSpacing: 0.3,
-            ),
-          ),
-        ),
-        if (rating != null) ...[
-          const SizedBox(width: 8),
-          Text(
-            rating.toString(),
-            style: ApexTypography.monoEval.copyWith(
-              color: ApexColors.textTertiary,
-              fontSize: 11,
-            ),
-          ),
-        ],
-        if (isUser) ...[
-          const SizedBox(width: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-            decoration: BoxDecoration(
-              color: ApexColors.sapphire.withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              'YOU',
-              style: ApexTypography.labelLarge.copyWith(
-                color: ApexColors.sapphireBright,
-                fontSize: 9,
-                letterSpacing: 0.7,
-              ),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
 class _EmptyState extends StatelessWidget {
   const _EmptyState({
     required this.icon,
     required this.label,
     this.accent = ApexColors.sapphire,
+    this.actionLabel,
+    this.onAction,
+    this.isLoading = false,
   });
 
   final IconData icon;
   final String label;
   final Color accent;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -1457,6 +1225,20 @@ class _EmptyState extends StatelessWidget {
               fontSize: 13,
             ),
           ),
+          if (isLoading) ...[
+            const SizedBox(height: 14),
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: ApexColors.sapphireBright,
+              ),
+            ),
+          ] else if (actionLabel != null && onAction != null) ...[
+            const SizedBox(height: 10),
+            TextButton(onPressed: onAction, child: Text(actionLabel!)),
+          ],
         ],
       ),
     );

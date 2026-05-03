@@ -23,8 +23,36 @@ void main() {
       perspective: 'ALFAISALpro',
     );
 
-    expect(display.title, 'ALFAISALpro vs EMANUEL-1972');
-    expect(display.subtitle, 'You won · 85% · Fast · 28 moves');
+    expect(display.card.white.name, 'ALFAISALpro');
+    expect(display.card.black.name, 'EMANUEL-1972');
+    expect(display.card.white.isUser, isTrue);
+    expect(display.card.primaryMeta, '85% · Fast · 28 moves');
+    expect(display.subtitle, '85% · Fast · 28 moves');
     expect(display.subtitle, isNot(contains('White won')));
+    expect(display.subtitle, isNot(contains('You won')));
+  });
+
+  test('RecentScanDisplay keeps long names in side rows for mini-card use', () {
+    final display = RecentScanDisplay.fromGame(
+      ArchivedGame(
+        id: 'scan-2',
+        source: ArchiveSource.pgn,
+        white: 'ALFAISALpro-extra-long-handle',
+        black: 'EMANUEL-1972-extra-long-handle',
+        result: '1/2-1/2',
+        analyzedAt: DateTime(2026, 5, 2),
+        depth: 22,
+        pgn: '1. e4 *',
+        qualityCounts: const {MoveQuality.blunder: 1},
+        averageCpLoss: 12,
+        totalPlies: 64,
+        analysisMode: AnalysisMode.deep,
+      ),
+      perspective: 'ALFAISALpro-extra-long-handle',
+    );
+
+    expect(display.card.white.name, contains('ALFAISALpro'));
+    expect(display.card.black.name, contains('EMANUEL-1972'));
+    expect(display.card.primaryMeta, '88% · Deep · 32 moves');
   });
 }

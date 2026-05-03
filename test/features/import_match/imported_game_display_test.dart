@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:apex_chess/features/import_match/domain/imported_game.dart';
 import 'package:apex_chess/features/import_match/presentation/controllers/import_controller.dart';
+import 'package:apex_chess/features/import_match/presentation/models/imported_game_card_display.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 
 void main() {
@@ -118,6 +119,31 @@ void main() {
     expect(imported.perspectiveHeadline, isNot(imported.secondaryResultText));
     expect(imported.perspectiveHeadline, isNot(contains('White won')));
   });
+
+  test(
+    'shared import card model does not expose duplicated result phrases',
+    () {
+      final imported = game(
+        result: GameResult.whiteWon,
+        userColor: PlayerColor.white,
+        openingName: 'Scotch Game',
+        eco: 'C45',
+      );
+      final display = imported.toApexGameCardDisplay();
+      final visibleCopy = [
+        display.resolvedResultLabel,
+        display.white.name,
+        display.black.name,
+        display.primaryMeta,
+        display.secondaryMeta,
+      ].whereType<String>().join(' ');
+
+      expect(visibleCopy, contains('Won'));
+      expect(visibleCopy, isNot(contains('You won vs')));
+      expect(visibleCopy, isNot(contains('White won')));
+      expect(visibleCopy, isNot(contains('1-0')));
+    },
+  );
 
   test('import offline empty state copy is calm and single-message', () {
     const state = ImportState(errorMessage: ApexCopy.offline, hasFetched: true);
