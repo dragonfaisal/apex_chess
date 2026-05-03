@@ -25,6 +25,11 @@ void main() {
 
       network = NetworkAvailability.offline;
       await controller.refresh();
+      final unstable = container.read(connectionPresenceProvider);
+      expect(unstable.status, isNot(ApexConnectionStatus.offline));
+      expect(unstable.toastMessage, isNull);
+
+      await controller.refresh();
       final offline = container.read(connectionPresenceProvider);
       expect(offline.status, ApexConnectionStatus.offline);
       expect(offline.toastMessage, ApexCopy.offline);
@@ -87,14 +92,68 @@ void main() {
 
       expect(
         container.read(connectionPresenceProvider).status,
-        ApexConnectionStatus.offline,
+        isNot(ApexConnectionStatus.offline),
       );
+      expect(container.read(connectionPresenceProvider).toastMessage, isNull);
+    },
+  );
+
+  test(
+    'consecutive failures show Offline after hysteresis threshold',
+    () async {
+      var network = NetworkAvailability.online;
+      final container = ProviderContainer(
+        overrides: [
+          connectionReachabilityProbeProvider.overrideWithValue(
+            () async => network,
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final controller = container.read(connectionPresenceProvider.notifier);
+      await Future<void>.delayed(Duration.zero);
+
+      network = NetworkAvailability.offline;
+      await controller.refresh();
+      expect(container.read(connectionPresenceProvider).isOffline, isFalse);
+      await controller.refresh();
+      expect(container.read(connectionPresenceProvider).isOffline, isTrue);
       expect(
         container.read(connectionPresenceProvider).toastMessage,
         ApexCopy.offline,
       );
     },
   );
+
+  test('recovered connection shows Back online once', () async {
+    var network = NetworkAvailability.online;
+    final container = ProviderContainer(
+      overrides: [
+        connectionReachabilityProbeProvider.overrideWithValue(
+          () async => network,
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final controller = container.read(connectionPresenceProvider.notifier);
+    await Future<void>.delayed(Duration.zero);
+    network = NetworkAvailability.offline;
+    await controller.refresh();
+    await controller.refresh();
+
+    final offlineToast = container.read(connectionPresenceProvider).toastId;
+    network = NetworkAvailability.online;
+    await controller.refresh();
+    final restored = container.read(connectionPresenceProvider);
+    expect(restored.toastMessage, ApexCopy.backOnline);
+    expect(restored.toastId, greaterThan(offlineToast));
+
+    final restoredToast = restored.toastId;
+    await controller.refresh();
+    expect(container.read(connectionPresenceProvider).toastId, restoredToast);
+  });
 
   test('service failure while internet works does not set global offline', () {
     final container = ProviderContainer(
@@ -150,6 +209,29 @@ void main() {
     expect(state.isOffline, isFalse);
   });
 
+  test('service timeout is not labeled device offline', () {
+    final container = ProviderContainer(
+      overrides: [
+        connectionReachabilityProbeProvider.overrideWithValue(
+          () async => NetworkAvailability.online,
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final controller = container.read(connectionPresenceProvider.notifier);
+    controller.markServiceStatus(
+      AppService.chessCom,
+      ServiceAvailability.timeout,
+      message: ApexCopy.chessComUnavailable,
+      notify: true,
+    );
+
+    final state = container.read(connectionPresenceProvider);
+    expect(state.isOffline, isFalse);
+    expect(state.toastMessage, ApexCopy.chessComUnavailable);
+  });
+
   test(
     'resolveServiceFailure checks internet before marking offline',
     () async {
@@ -181,10 +263,10 @@ void main() {
         service: AppService.chessCom,
         message: 'Could not reach Chess.com. Check your connection.',
       );
-      expect(offlineMessage, ApexCopy.offline);
+      expect(offlineMessage, ApexCopy.chessComUnavailable);
       expect(
         container.read(connectionPresenceProvider).snapshot.network,
-        NetworkAvailability.offline,
+        NetworkAvailability.online,
       );
     },
   );

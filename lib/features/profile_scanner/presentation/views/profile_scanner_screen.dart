@@ -7,12 +7,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:apex_chess/app/di/providers.dart';
-import 'package:apex_chess/features/account/domain/apex_account.dart';
 import 'package:apex_chess/features/account/presentation/controllers/account_controller.dart';
 import 'package:apex_chess/features/import_match/domain/imported_game.dart';
 import 'package:apex_chess/features/import_match/presentation/controllers/recent_searches_controller.dart';
 import 'package:apex_chess/features/user_validation/presentation/username_validation_controller.dart';
 import 'package:apex_chess/features/user_validation/presentation/widgets/username_validation_pill.dart';
+import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
@@ -43,10 +43,6 @@ class _ProfileScannerScreenState extends ConsumerState<ProfileScannerScreen> {
     super.initState();
     _controller.addListener(_onTextChanged);
     _focusNode.addListener(_updateRecentVisibility);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final account = ref.read(accountControllerProvider).valueOrNull;
-      if (account != null) _applyConnectedAccount(account);
-    });
   }
 
   @override
@@ -86,32 +82,19 @@ class _ProfileScannerScreenState extends ConsumerState<ProfileScannerScreen> {
     _ensureValidation().updateInput(source: source, username: _controller.text);
   }
 
-  void _applyConnectedAccount(ApexAccount account, {ApexAccount? previous}) {
-    if (!mounted) return;
-    final current = _controller.text.trim();
-    final previousName = previous?.username.trim().toLowerCase();
-    final canOverwrite =
-        current.isEmpty ||
-        (previousName != null && current.toLowerCase() == previousName);
-    if (!canOverwrite) return;
-    setState(() => _source = account.source.wire);
-    _controller.text = account.username;
-    _controller.selection = TextSelection.collapsed(
-      offset: account.username.length,
-    );
-    _ensureValidation().updateInput(
-      source: account.source.wire,
-      username: account.username,
-    );
-  }
-
   Future<void> _scan() async {
     final name = _controller.text.trim();
     if (name.isEmpty) return;
     FocusScope.of(context).unfocus();
+    final account = ref.read(accountControllerProvider).valueOrNull;
     await ref
         .read(profileScannerControllerProvider.notifier)
-        .scan(username: name, source: _source);
+        .scan(
+          username: name,
+          source: _source,
+          connectedUsername: account?.username,
+          connectedSource: account?.source.wire,
+        );
   }
 
   GameSource get _gameSource =>
@@ -135,11 +118,6 @@ class _ProfileScannerScreenState extends ConsumerState<ProfileScannerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(accountControllerProvider, (previous, next) {
-      final account = next.valueOrNull;
-      if (account == null) return;
-      _applyConnectedAccount(account, previous: previous?.valueOrNull);
-    });
     final state = ref.watch(profileScannerControllerProvider);
     final recents = ref
         .watch(recentSearchesProvider)
@@ -153,49 +131,60 @@ class _ProfileScannerScreenState extends ConsumerState<ProfileScannerScreen> {
       body: Container(
         decoration: const BoxDecoration(gradient: ApexGradients.spaceCanvas),
         child: SafeArea(
-          child: SingleChildScrollView(
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: EdgeInsets.fromLTRB(
-              18,
-              8,
-              18,
-              MediaQuery.viewInsetsOf(context).bottom + 32,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _Header(onBack: () => Navigator.of(context).pop()),
-                const SizedBox(height: 16),
-                _InputCard(
-                  controller: _controller,
-                  source: _source,
-                  onSourceChanged: _onSourceChanged,
-                  onSubmit: _scan,
-                  isLoading: state.isLoading,
-                  validation: _ensureValidation(),
-                  focusNode: _focusNode,
-                  showRecents: _showRecents && recents.isNotEmpty,
-                  recents: recents,
-                  onRecentTapped: _useRecent,
-                  onClearRecents: () => ref
-                      .read(recentSearchesProvider.notifier)
-                      .clear(_gameSource),
-                  onRemoveRecent: (u) => ref
-                      .read(recentSearchesProvider.notifier)
-                      .remove(_gameSource, u),
-                ),
-                const SizedBox(height: 20),
-                if (state.isLoading)
-                  _LoadingCard(progress: state.progress, onCancel: _cancelScan)
-                else if (state.wasCancelled)
-                  const _CancelledCard()
-                else if (state.error != null)
-                  _ErrorCard(message: state.error!)
-                else if (state.result != null)
-                  _ResultSection(result: state.result!)
-                else
-                  const _ScannerEmptyState(),
-              ],
+          child: RefreshIndicator(
+            color: ApexColors.sapphireBright,
+            backgroundColor: ApexColors.nebula,
+            onRefresh: () => ref
+                .read(connectionPresenceProvider.notifier)
+                .refresh(showSyncing: true),
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: EdgeInsets.fromLTRB(
+                18,
+                8,
+                18,
+                MediaQuery.viewInsetsOf(context).bottom + 32,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _Header(onBack: () => Navigator.of(context).pop()),
+                  const SizedBox(height: 16),
+                  _InputCard(
+                    controller: _controller,
+                    source: _source,
+                    onSourceChanged: _onSourceChanged,
+                    onSubmit: _scan,
+                    isLoading: state.isLoading,
+                    validation: _ensureValidation(),
+                    focusNode: _focusNode,
+                    showRecents: _showRecents && recents.isNotEmpty,
+                    recents: recents,
+                    onRecentTapped: _useRecent,
+                    onClearRecents: () => ref
+                        .read(recentSearchesProvider.notifier)
+                        .clear(_gameSource),
+                    onRemoveRecent: (u) => ref
+                        .read(recentSearchesProvider.notifier)
+                        .remove(_gameSource, u),
+                  ),
+                  const SizedBox(height: 20),
+                  if (state.isLoading)
+                    _LoadingCard(
+                      progress: state.progress,
+                      onCancel: _cancelScan,
+                    )
+                  else if (state.wasCancelled)
+                    const _CancelledCard()
+                  else if (state.error != null)
+                    _ErrorCard(message: state.error!)
+                  else if (state.result != null)
+                    _ResultSection(result: state.result!)
+                  else
+                    const _ScannerEmptyState(),
+                ],
+              ),
             ),
           ),
         ),

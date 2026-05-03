@@ -60,6 +60,30 @@ void main() {
       expect(text, isNot(contains('Black won')));
       expect(text, isNot(contains('0-1')));
     });
+
+    test('card display model carries long names and opening safely', () {
+      final model = ImportedGame(
+        id: 'long',
+        source: GameSource.chessCom,
+        whiteName: 'VeryVeryLongWhiteHandleThatShouldEllipsize',
+        blackName: 'VeryVeryLongBlackHandleThatShouldEllipsize',
+        whiteRating: 1500,
+        blackRating: 1510,
+        result: GameResult.draw,
+        playedAt: DateTime(2026, 4, 20),
+        timeControl: '3 min',
+        moveCount: 42,
+        pgn: '1. e4 *',
+        openingName:
+            'Extremely Long Opening Name With Many Words And A Variation',
+        eco: 'C45',
+        userColor: PlayerColor.white,
+      ).toApexGameCardDisplay();
+
+      expect(model.white.name, contains('VeryVeryLongWhite'));
+      expect(model.black.name, contains('VeryVeryLongBlack'));
+      expect(model.primaryMeta, contains('Extremely Long Opening Name'));
+    });
   });
 
   group('ApexGameCardDisplayModel archive mapping', () {

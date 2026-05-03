@@ -123,8 +123,8 @@ class _ApexGameCardState extends State<ApexGameCard> {
         margin: null,
         borderRadius: radius,
         accentColor: accent,
-        accentAlpha: _pressed ? 0.54 : 0.30,
-        fillAlpha: widget.dense ? 0.43 : 0.50,
+        accentAlpha: _pressed ? 0.46 : 0.24,
+        fillAlpha: widget.dense ? 0.40 : 0.46,
         showGlow: _pressed,
         glowIntensity: _pressed ? 0.24 : 0.0,
         child: Material(
@@ -294,11 +294,9 @@ class ApexPlayerSideRow extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: ApexTypography.bodyMedium.copyWith(
-              color: player.isUser
-                  ? ApexColors.sapphireBright
-                  : ApexColors.textPrimary,
+              color: ApexColors.textPrimary,
               fontSize: 13,
-              fontWeight: player.isUser ? FontWeight.w800 : FontWeight.w600,
+              fontWeight: player.isUser ? FontWeight.w700 : FontWeight.w600,
               letterSpacing: 0,
             ),
           ),

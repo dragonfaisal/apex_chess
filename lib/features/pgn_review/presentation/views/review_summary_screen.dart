@@ -126,6 +126,10 @@ class _SummaryBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final players = _SummaryPlayerPair.from(
+      timeline: timeline,
+      userIsWhite: summary.userIsWhite,
+    );
     return Container(
       decoration: const BoxDecoration(gradient: ApexGradients.spaceCanvas),
       child: SafeArea(
@@ -141,9 +145,9 @@ class _SummaryBody extends StatelessWidget {
               const _DeepReviewNotice(),
             ],
             const SizedBox(height: 16),
-            _PlayerCardsRow(summary: summary, timeline: timeline),
+            _PlayerCardsRow(summary: summary, players: players),
             const SizedBox(height: 16),
-            _MoveQualityTable(counts: summary.counts),
+            _MoveQualityTable(counts: summary.counts, players: players),
             const SizedBox(height: 16),
             _HighlightsBlock(summary: summary),
             const SizedBox(height: 16),
@@ -278,21 +282,150 @@ class _ModePill extends StatelessWidget {
   }
 }
 
-// ── Player cards ───────────────────────────────────────────────────
+class _SummaryPlayerPair {
+  const _SummaryPlayerPair({required this.white, required this.black});
 
-class _PlayerCardsRow extends StatelessWidget {
-  const _PlayerCardsRow({required this.summary, required this.timeline});
+  final _SummaryPlayerIdentity white;
+  final _SummaryPlayerIdentity black;
 
-  final ReviewSummary summary;
-  final AnalysisTimeline timeline;
+  factory _SummaryPlayerPair.from({
+    required AnalysisTimeline timeline,
+    required bool? userIsWhite,
+  }) {
+    final h = timeline.headers;
+    return _SummaryPlayerPair(
+      white: _SummaryPlayerIdentity(
+        name: h['White'] ?? 'White',
+        rating: h['WhiteElo'],
+        isWhite: true,
+        isUser: userIsWhite == true,
+      ),
+      black: _SummaryPlayerIdentity(
+        name: h['Black'] ?? 'Black',
+        rating: h['BlackElo'],
+        isWhite: false,
+        isUser: userIsWhite == false,
+      ),
+    );
+  }
+}
+
+class _SummaryPlayerIdentity {
+  const _SummaryPlayerIdentity({
+    required this.name,
+    required this.isWhite,
+    required this.isUser,
+    this.rating,
+  });
+
+  final String name;
+  final String? rating;
+  final bool isWhite;
+  final bool isUser;
+
+  String get sideLabel => isWhite ? 'White' : 'Black';
+  String get compactFallback => isUser ? 'You' : 'Opp';
+  String get tableName {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty || trimmed == sideLabel) return compactFallback;
+    return trimmed;
+  }
+}
+
+class _SideMarker extends StatelessWidget {
+  const _SideMarker({required this.isWhite, this.size = 13});
+
+  final bool isWhite;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
-    final h = timeline.headers;
+    final fill = isWhite ? const Color(0xFFF4F7FB) : const Color(0xFF05070D);
+    final stroke = isWhite
+        ? ApexColors.textPrimary.withAlpha(210)
+        : ApexColors.sapphireBright.withAlpha(120);
+    return Semantics(
+      label: isWhite ? 'White side' : 'Black side',
+      child: Container(
+        key: ValueKey(
+          isWhite ? 'summary-white-side-marker' : 'summary-black-side-marker',
+        ),
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: fill,
+          border: Border.all(color: stroke, width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: (isWhite ? Colors.white : ApexColors.sapphireBright)
+                  .withAlpha(isWhite ? 80 : 55),
+              blurRadius: 8,
+              spreadRadius: -3,
+            ),
+          ],
+        ),
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: Container(
+            width: size * 0.34,
+            height: size * 0.34,
+            margin: EdgeInsets.all(size * 0.16),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withAlpha(isWhite ? 145 : 42),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _YouChip extends StatelessWidget {
+  const _YouChip({this.compact = false});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 4 : 6,
+        vertical: compact ? 1 : 2,
+      ),
+      decoration: BoxDecoration(
+        color: ApexColors.sapphireBright.withAlpha(28),
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(
+          color: ApexColors.sapphireBright.withAlpha(95),
+          width: 0.5,
+        ),
+      ),
+      child: Text(
+        'YOU',
+        style: ApexTypography.labelLarge.copyWith(
+          color: ApexColors.sapphireBright,
+          fontSize: compact ? 7.5 : 9,
+          letterSpacing: compact ? 0.5 : 0.8,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Player cards ───────────────────────────────────────────────────
+
+class _PlayerCardsRow extends StatelessWidget {
+  const _PlayerCardsRow({required this.summary, required this.players});
+
+  final ReviewSummary summary;
+  final _SummaryPlayerPair players;
+
+  @override
+  Widget build(BuildContext context) {
     final white = _PlayerCard(
-      name: h['White'] ?? 'White',
-      rating: h['WhiteElo'],
-      colorLabel: 'White',
+      identity: players.white,
       result: _sideResult('1-0'),
       accuracy: summary.userIsWhite == true
           ? summary.userAccuracyPct
@@ -300,12 +433,9 @@ class _PlayerCardsRow extends StatelessWidget {
       acpl: summary.userIsWhite == true
           ? summary.userAverageCpLoss
           : summary.opponentAverageCpLoss,
-      isUser: summary.userIsWhite == true,
     );
     final black = _PlayerCard(
-      name: h['Black'] ?? 'Black',
-      rating: h['BlackElo'],
-      colorLabel: 'Black',
+      identity: players.black,
       result: _sideResult('0-1'),
       accuracy: summary.userIsWhite == false
           ? summary.userAccuracyPct
@@ -313,7 +443,6 @@ class _PlayerCardsRow extends StatelessWidget {
       acpl: summary.userIsWhite == false
           ? summary.userAverageCpLoss
           : summary.opponentAverageCpLoss,
-      isUser: summary.userIsWhite == false,
     );
     return LayoutBuilder(
       builder: (context, box) {
@@ -342,26 +471,22 @@ class _PlayerCardsRow extends StatelessWidget {
 
 class _PlayerCard extends StatelessWidget {
   const _PlayerCard({
-    required this.name,
-    required this.colorLabel,
+    required this.identity,
     required this.result,
     required this.accuracy,
     required this.acpl,
-    required this.isUser,
-    this.rating,
   });
 
-  final String name;
-  final String? rating;
-  final String colorLabel;
+  final _SummaryPlayerIdentity identity;
   final String result;
   final double accuracy;
   final double acpl;
-  final bool isUser;
 
   @override
   Widget build(BuildContext context) {
-    final accent = isUser ? ApexColors.sapphireBright : ApexColors.textTertiary;
+    final accent = identity.isUser
+        ? ApexColors.sapphireBright
+        : ApexColors.textTertiary;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -374,9 +499,11 @@ class _PlayerCard extends StatelessWidget {
         children: [
           Row(
             children: [
+              _SideMarker(isWhite: identity.isWhite, size: 14),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  name,
+                  identity.tableName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: ApexTypography.titleMedium.copyWith(
@@ -385,21 +512,15 @@ class _PlayerCard extends StatelessWidget {
                   ),
                 ),
               ),
-              if (isUser)
-                Text(
-                  'YOU',
-                  style: ApexTypography.labelLarge.copyWith(
-                    color: ApexColors.sapphireBright,
-                    fontSize: 10,
-                  ),
-                ),
+              if (identity.isUser) const _YouChip(),
             ],
           ),
           const SizedBox(height: 4),
           Text(
             [
-              colorLabel,
-              if (rating != null && rating!.isNotEmpty) rating!,
+              identity.sideLabel,
+              if (identity.rating != null && identity.rating!.isNotEmpty)
+                identity.rating!,
               result,
             ].join(' · '),
             style: ApexTypography.bodyMedium.copyWith(
@@ -641,9 +762,10 @@ class _FastReviewBanner extends StatelessWidget {
 // ── Move quality table ─────────────────────────────────────────────
 
 class _MoveQualityTable extends StatelessWidget {
-  const _MoveQualityTable({required this.counts});
+  const _MoveQualityTable({required this.counts, required this.players});
 
   final ReviewCounts counts;
+  final _SummaryPlayerPair players;
 
   @override
   Widget build(BuildContext context) {
@@ -667,28 +789,47 @@ class _MoveQualityTable extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Label',
-                  style: ApexTypography.bodyMedium.copyWith(
-                    color: ApexColors.textTertiary,
-                    fontSize: 11,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 350;
+              final columnWidth = compact ? 64.0 : 78.0;
+              return Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Label',
+                          style: ApexTypography.bodyMedium.copyWith(
+                            color: ApexColors.textTertiary,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                      _CountHeader(
+                        identity: players.white,
+                        compact: compact,
+                        width: columnWidth,
+                      ),
+                      _CountHeader(
+                        identity: players.black,
+                        compact: compact,
+                        width: columnWidth,
+                      ),
+                    ],
                   ),
-                ),
-              ),
-              const _CountHeader('White'),
-              const _CountHeader('Black'),
-            ],
+                  const SizedBox(height: 6),
+                  for (final label in visibleRows)
+                    _MoveQualityRow(
+                      label: label,
+                      white: counts.whiteDisplayCounts[label] ?? 0,
+                      black: counts.blackDisplayCounts[label] ?? 0,
+                      cellWidth: columnWidth,
+                    ),
+                ],
+              );
+            },
           ),
-          const SizedBox(height: 6),
-          for (final label in visibleRows)
-            _MoveQualityRow(
-              label: label,
-              white: counts.whiteDisplayCounts[label] ?? 0,
-              black: counts.blackDisplayCounts[label] ?? 0,
-            ),
         ],
       ),
     );
@@ -696,20 +837,43 @@ class _MoveQualityTable extends StatelessWidget {
 }
 
 class _CountHeader extends StatelessWidget {
-  const _CountHeader(this.label);
-  final String label;
+  const _CountHeader({
+    required this.identity,
+    required this.compact,
+    required this.width,
+  });
+
+  final _SummaryPlayerIdentity identity;
+  final bool compact;
+  final double width;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 56,
-      child: Text(
-        label,
-        textAlign: TextAlign.right,
-        style: ApexTypography.bodyMedium.copyWith(
-          color: ApexColors.textTertiary,
-          fontSize: 11,
-        ),
+      width: width,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          _SideMarker(isWhite: identity.isWhite, size: compact ? 9 : 10),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              compact ? identity.compactFallback : identity.tableName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+              style: ApexTypography.bodyMedium.copyWith(
+                color: ApexColors.textTertiary,
+                fontSize: compact ? 10 : 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          if (identity.isUser && !compact) ...[
+            const SizedBox(width: 4),
+            const _YouChip(compact: true),
+          ],
+        ],
       ),
     );
   }
@@ -720,11 +884,13 @@ class _MoveQualityRow extends StatelessWidget {
     required this.label,
     required this.white,
     required this.black,
+    required this.cellWidth,
   });
 
   final ReviewMoveLabel label;
   final int white;
   final int black;
+  final double cellWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -743,8 +909,8 @@ class _MoveQualityRow extends StatelessWidget {
               ),
             ),
           ),
-          _CountCell(white),
-          _CountCell(black),
+          _CountCell(white, width: cellWidth),
+          _CountCell(black, width: cellWidth),
         ],
       ),
     );
@@ -752,13 +918,14 @@ class _MoveQualityRow extends StatelessWidget {
 }
 
 class _CountCell extends StatelessWidget {
-  const _CountCell(this.value);
+  const _CountCell(this.value, {required this.width});
   final int value;
+  final double width;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 56,
+      width: width,
       child: Text(
         '$value',
         textAlign: TextAlign.right,

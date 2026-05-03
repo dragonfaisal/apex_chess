@@ -39,7 +39,10 @@ MoveAnalysis _m({
   message: '',
 );
 
-AnalysisTimeline _timeline() => AnalysisTimeline(
+AnalysisTimeline _timeline({
+  String white = 'ALFAISALpro',
+  String black = 'magnoliachickenhatdog',
+}) => AnalysisTimeline(
   moves: [
     _m(ply: 0, isWhite: true, cls: MoveQuality.best),
     _m(ply: 1, isWhite: false, cls: MoveQuality.best),
@@ -53,7 +56,13 @@ AnalysisTimeline _timeline() => AnalysisTimeline(
     _m(ply: 3, isWhite: false, cls: MoveQuality.best),
   ],
   startingFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
-  headers: const {'Result': '1-0'},
+  headers: {
+    'Result': '1-0',
+    'White': white,
+    'Black': black,
+    'WhiteElo': '860',
+    'BlackElo': '851',
+  },
   winPercentages: const [50, 50, 10, 10],
 );
 
@@ -95,10 +104,18 @@ void main() {
 
       // Result header.
       expect(find.text('You won'), findsOneWidget);
-      expect(find.text('YOU'), findsOneWidget);
+      expect(find.text('YOU'), findsWidgets);
       expect(find.text('MOVE QUALITY'), findsOneWidget);
-      expect(find.text('White'), findsWidgets);
-      expect(find.text('Black'), findsWidgets);
+      expect(find.text('ALFAISALpro'), findsWidgets);
+      expect(find.text('magnoliachickenhatdog'), findsWidgets);
+      expect(
+        find.byKey(const ValueKey('summary-white-side-marker')),
+        findsWidgets,
+      );
+      expect(
+        find.byKey(const ValueKey('summary-black-side-marker')),
+        findsWidgets,
+      );
       // The summary is a long ListView on test surfaces — scroll the
       // remaining sections into the viewport before asserting.
       final keyMoments = find.text('KEY MOMENTS');
@@ -156,6 +173,77 @@ void main() {
       expect(find.text('Theory'), findsNothing);
     },
   );
+
+  testWidgets('Move quality headers render player identity and side markers', (
+    tester,
+  ) async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    container
+        .read(reviewControllerProvider.notifier)
+        .loadTimeline(
+          _timeline(),
+          userIsBlack: false,
+          mode: AnalysisMode.deep,
+          userIsWhite: true,
+        );
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: ReviewSummaryScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('ALFAISALpro'), findsWidgets);
+    expect(find.text('magnoliachickenhatdog'), findsWidgets);
+    expect(
+      find.byKey(const ValueKey('summary-white-side-marker')),
+      findsWidgets,
+    );
+    expect(
+      find.byKey(const ValueKey('summary-black-side-marker')),
+      findsWidgets,
+    );
+    expect(find.text('YOU'), findsWidgets);
+  });
+
+  testWidgets('Move quality headers handle long names without overflow', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    container
+        .read(reviewControllerProvider.notifier)
+        .loadTimeline(
+          _timeline(
+            white: 'ALFAISALproWithVeryLongTournamentHandle',
+            black: 'magnoliachickenhatdogWithVeryLongSuffix',
+          ),
+          userIsBlack: false,
+          mode: AnalysisMode.deep,
+          userIsWhite: true,
+        );
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: ReviewSummaryScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('MOVE QUALITY'), findsOneWidget);
+  });
 
   testWidgets('Re-analyze CTA appears only in Fast mode', (tester) async {
     final container = ProviderContainer();

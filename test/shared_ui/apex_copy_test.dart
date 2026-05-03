@@ -13,6 +13,8 @@ void main() {
       ApexCopy.depthDeepLabel,
       ApexCopy.depthOfflineLabel,
       ApexCopy.noConnection,
+      ApexCopy.chooseExactPlayer,
+      ApexCopy.noExactPlayerFound,
       ApexCopy.chessComUnavailable,
       ApexCopy.lichessUnavailable,
       ApexCopy.profileUnavailable,

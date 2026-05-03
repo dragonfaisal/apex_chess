@@ -87,9 +87,16 @@ final connectionReachabilityProbeProvider =
 
 class ConnectionPresenceController extends Notifier<ApexConnectionPresence> {
   static const pollInterval = Duration(seconds: 3);
+  static const failureThreshold = 2;
+  static const recoveryThreshold = 1;
+  static const toastCooldown = Duration(seconds: 4);
 
   Timer? _timer;
   Future<void>? _activeCheck;
+  int _consecutiveFailures = 0;
+  int _consecutiveSuccesses = 0;
+  DateTime? _lastToastAt;
+  String? _lastToastMessage;
 
   @override
   ApexConnectionPresence build() {
@@ -160,10 +167,22 @@ class ConnectionPresenceController extends Notifier<ApexConnectionPresence> {
     final checkedAt = DateTime.now();
     final network = await ref.read(connectionReachabilityProbeProvider)();
     if (network == NetworkAvailability.online) {
+      _consecutiveSuccesses++;
+      _consecutiveFailures = 0;
       _markNetworkOnline(
         checkedAt: checkedAt,
-        notify: notify && previous == NetworkAvailability.offline,
+        notify:
+            notify &&
+            _consecutiveSuccesses >= recoveryThreshold &&
+            (previous == NetworkAvailability.offline ||
+                previous == NetworkAvailability.captive),
       );
+      return;
+    }
+    _consecutiveFailures++;
+    _consecutiveSuccesses = 0;
+    if (_consecutiveFailures < failureThreshold) {
+      _markNetworkUnstable(checkedAt: checkedAt);
       return;
     }
     if (network == NetworkAvailability.captive) {
@@ -202,6 +221,8 @@ class ConnectionPresenceController extends Notifier<ApexConnectionPresence> {
   void markServiceAvailable(AppService service, {bool notify = false}) {
     final checkedAt = DateTime.now();
     final wasOffline = state.snapshot.network == NetworkAvailability.offline;
+    final showToast =
+        notify && wasOffline && _canEmitToast(ApexCopy.backOnline, checkedAt);
     final snapshot = state.snapshot
         .withService(
           service,
@@ -215,8 +236,8 @@ class ConnectionPresenceController extends Notifier<ApexConnectionPresence> {
       snapshot: snapshot,
       hadIssue: false,
       clearLastMessage: true,
-      toastId: notify && wasOffline ? state.toastId + 1 : state.toastId,
-      toastMessage: notify && wasOffline ? ApexCopy.backOnline : null,
+      toastId: showToast ? state.toastId + 1 : state.toastId,
+      toastMessage: showToast ? ApexCopy.backOnline : null,
     );
   }
 
@@ -227,6 +248,8 @@ class ConnectionPresenceController extends Notifier<ApexConnectionPresence> {
     bool notify = false,
   }) {
     final checkedAt = DateTime.now();
+    final showToast =
+        notify && message != null && _canEmitToast(message, checkedAt);
     final snapshot = state.snapshot
         .withService(
           service,
@@ -242,8 +265,8 @@ class ConnectionPresenceController extends Notifier<ApexConnectionPresence> {
       snapshot: snapshot,
       hadIssue: false,
       lastMessage: message,
-      toastId: notify && message != null ? state.toastId + 1 : state.toastId,
-      toastMessage: notify ? message : null,
+      toastId: showToast ? state.toastId + 1 : state.toastId,
+      toastMessage: showToast ? message : null,
     );
   }
 
@@ -265,6 +288,7 @@ class ConnectionPresenceController extends Notifier<ApexConnectionPresence> {
   }
 
   void _markNetworkOnline({required DateTime checkedAt, required bool notify}) {
+    final showToast = notify && _canEmitToast(ApexCopy.backOnline, checkedAt);
     final services = <AppService, ServiceAvailability>{
       for (final entry in state.snapshot.services.entries)
         entry.key: entry.value,
@@ -279,8 +303,18 @@ class ConnectionPresenceController extends Notifier<ApexConnectionPresence> {
       ),
       hadIssue: false,
       clearLastMessage: true,
-      toastId: notify ? state.toastId + 1 : state.toastId,
-      toastMessage: notify ? ApexCopy.backOnline : null,
+      toastId: showToast ? state.toastId + 1 : state.toastId,
+      toastMessage: showToast ? ApexCopy.backOnline : null,
+    );
+  }
+
+  void _markNetworkUnstable({required DateTime checkedAt}) {
+    state = state.copyWith(
+      snapshot: state.snapshot.copyWith(
+        sync: SyncStatus.checking,
+        lastCheckedAt: checkedAt,
+      ),
+      toastId: state.toastId,
     );
   }
 
@@ -292,6 +326,8 @@ class ConnectionPresenceController extends Notifier<ApexConnectionPresence> {
     required bool notify,
   }) {
     final wasOffline = state.snapshot.network == NetworkAvailability.offline;
+    final showToast =
+        notify && !wasOffline && _canEmitToast(message, checkedAt);
     state = state.copyWith(
       snapshot: state.snapshot.copyWith(
         network: network,
@@ -301,10 +337,22 @@ class ConnectionPresenceController extends Notifier<ApexConnectionPresence> {
       ),
       hadIssue: true,
       lastMessage: message,
-      toastId: notify && !wasOffline ? state.toastId + 1 : state.toastId,
-      toastMessage: notify && !wasOffline ? message : null,
-      toastDetail: notify && !wasOffline ? detail : null,
+      toastId: showToast ? state.toastId + 1 : state.toastId,
+      toastMessage: showToast ? message : null,
+      toastDetail: showToast ? detail : null,
     );
+  }
+
+  bool _canEmitToast(String message, DateTime now) {
+    final lastAt = _lastToastAt;
+    if (_lastToastMessage == message &&
+        lastAt != null &&
+        now.difference(lastAt) < toastCooldown) {
+      return false;
+    }
+    _lastToastMessage = message;
+    _lastToastAt = now;
+    return true;
   }
 }
 

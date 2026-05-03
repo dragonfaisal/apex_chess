@@ -65,15 +65,33 @@ class GlobalDashboardScreen extends ConsumerWidget {
             children: [
               _AppBar(showBackButton: showBackButton),
               Expanded(
-                child: allStats.hasData
-                    ? _DashboardBody(stats: stats)
-                    : const _EmptyState(),
+                child: RefreshIndicator(
+                  color: ApexColors.sapphireBright,
+                  backgroundColor: ApexColors.nebula,
+                  onRefresh: () => _refreshStats(ref),
+                  child: allStats.hasData
+                      ? _DashboardBody(stats: stats)
+                      : const _EmptyState(),
+                ),
               ),
             ],
           ),
         ),
       ),
     );
+  }
+}
+
+Future<void> _refreshStats(WidgetRef ref) async {
+  await ref
+      .read(connectionPresenceProvider.notifier)
+      .refresh(showSyncing: true);
+  await ref.read(archiveControllerProvider.notifier).refresh();
+  try {
+    final _ = await ref.refresh(liveProfileStatsProvider.future);
+  } catch (_) {
+    // The card already renders the service state; pull-to-refresh should
+    // settle without surfacing a second error path.
   }
 }
 
@@ -122,6 +140,7 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -187,6 +206,7 @@ class _DashboardBody extends ConsumerWidget {
     final filterOnlyEmpty =
         !stats.hasData && activeFilter != ColorPerspective.all;
     return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1751,22 +1771,22 @@ class _RecentGamesTable extends ConsumerWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              IconButton(
-                onPressed: hasPrev
-                    ? () => ref.read(dashboardPageProvider.notifier).prev()
-                    : null,
-                icon: const Icon(Icons.chevron_left_rounded),
-                color: ApexColors.textSecondary,
-                disabledColor: ApexColors.textTertiary.withValues(alpha: 0.35),
-              ),
-              IconButton(
-                onPressed: hasNext
-                    ? () => ref.read(dashboardPageProvider.notifier).next()
-                    : null,
-                icon: const Icon(Icons.chevron_right_rounded),
-                color: ApexColors.textSecondary,
-                disabledColor: ApexColors.textTertiary.withValues(alpha: 0.35),
-              ),
+              if (hasPrev)
+                IconButton(
+                  tooltip: 'Previous',
+                  onPressed: () =>
+                      ref.read(dashboardPageProvider.notifier).prev(),
+                  icon: const Icon(Icons.chevron_left_rounded),
+                  color: ApexColors.textSecondary,
+                ),
+              if (hasNext)
+                IconButton(
+                  tooltip: 'Next',
+                  onPressed: () =>
+                      ref.read(dashboardPageProvider.notifier).next(),
+                  icon: const Icon(Icons.chevron_right_rounded),
+                  color: ApexColors.textSecondary,
+                ),
             ],
           ),
         ],

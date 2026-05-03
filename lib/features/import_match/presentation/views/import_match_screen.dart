@@ -68,6 +68,8 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
   Timer? _gameFilterDebounce;
   String? _lastAutoKey;
   bool _hadConnectionIssue = false;
+  int? _gameFilterBaselineCount;
+  String _gameFilterBaselineQuery = '';
   static const Duration _autoFetchWindow = Duration(milliseconds: 600);
   static const Duration _gameFilterWindow = Duration(milliseconds: 240);
 
@@ -168,7 +170,20 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
     _gameFilterDebounce?.cancel();
     _gameFilterDebounce = Timer(_gameFilterWindow, () {
       if (!mounted) return;
-      setState(() => _gameFilter = _gameFilterController.text);
+      final query = _gameFilterController.text.trim();
+      setState(() {
+        _gameFilter = _gameFilterController.text;
+        if (query.isEmpty) {
+          _gameFilterBaselineCount = null;
+          _gameFilterBaselineQuery = '';
+        } else if (query.toLowerCase() != _gameFilterBaselineQuery) {
+          _gameFilterBaselineQuery = query.toLowerCase();
+          _gameFilterBaselineCount = ref
+              .read(importControllerProvider)
+              .games
+              .length;
+        }
+      });
     });
   }
 
@@ -217,7 +232,13 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
   void _clearGameFilter() {
     _gameFilterDebounce?.cancel();
     _gameFilterController.clear();
-    if (_gameFilter.isNotEmpty) setState(() => _gameFilter = '');
+    if (_gameFilter.isNotEmpty) {
+      setState(() {
+        _gameFilter = '';
+        _gameFilterBaselineQuery = '';
+        _gameFilterBaselineCount = null;
+      });
+    }
   }
 
   void _maybeFetchMore() {
@@ -248,81 +269,94 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
       body: Container(
         decoration: const BoxDecoration(gradient: ApexGradients.spaceCanvas),
         child: SafeArea(
-          child: CustomScrollView(
-            controller: _scrollController,
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            slivers: [
-              SliverToBoxAdapter(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildAppBar(context),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 6, 24, 8),
-                      child: Text(
-                        ApexCopy.importSubtitle,
-                        textAlign: TextAlign.center,
-                        style: ApexTypography.bodyMedium.copyWith(
-                          color: ApexColors.textTertiary,
-                          fontSize: 12,
+          child: RefreshIndicator(
+            color: ApexColors.sapphireBright,
+            backgroundColor: ApexColors.nebula,
+            onRefresh: () async {
+              await ref
+                  .read(connectionPresenceProvider.notifier)
+                  .refresh(showSyncing: true);
+              if (ref.read(importControllerProvider).hasFetched) {
+                _fetchNow();
+              }
+            },
+            child: CustomScrollView(
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(),
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildAppBar(context),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 6, 24, 8),
+                        child: Text(
+                          ApexCopy.importSubtitle,
+                          textAlign: TextAlign.center,
+                          style: ApexTypography.bodyMedium.copyWith(
+                            color: ApexColors.textTertiary,
+                            fontSize: 12,
+                          ),
                         ),
                       ),
-                    ),
-                    _SourceToggle(
-                      source: state.source,
-                      onChanged: (src) {
-                        notifier.setSource(src);
-                        _cancelAutoFetch();
-                        _lastAutoKey = null;
-                        _clearGameFilter();
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: _UsernameField(
-                        controller: _controller,
-                        focusNode: _usernameFocus,
-                        onChanged: (v) {
-                          notifier.setUsername(v);
-                          _cancelAutoFetch();
-                        },
-                        onSubmitted: (v) {
-                          _cancelAutoFetch();
-                          _lastAutoKey = '${state.source.name}:${v.trim()}';
-                          _clearGameFilter();
-                          _fetchNow();
-                        },
-                        onVerified: (v) {
-                          _scheduleAutoFetchAfterVerification(
-                            source: state.source,
-                            username: v,
-                          );
-                        },
+                      _SourceToggle(
                         source: state.source,
-                        onRecentTapped: (username) {
-                          _controller.text = username;
-                          _controller.selection = TextSelection.collapsed(
-                            offset: username.length,
-                          );
-                          notifier.setUsername(username);
-                          _usernameFocus.unfocus();
+                        onChanged: (src) {
+                          notifier.setSource(src);
                           _cancelAutoFetch();
-                          _lastAutoKey = '${state.source.name}:$username';
+                          _lastAutoKey = null;
                           _clearGameFilter();
-                          _fetchNow();
                         },
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    _AutoFetchStatus(state: state),
-                    const SizedBox(height: 14),
-                  ],
+                      const SizedBox(height: 16),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: _UsernameField(
+                          controller: _controller,
+                          focusNode: _usernameFocus,
+                          onChanged: (v) {
+                            notifier.setUsername(v);
+                            _cancelAutoFetch();
+                          },
+                          onSubmitted: (v) {
+                            _cancelAutoFetch();
+                            _lastAutoKey = '${state.source.name}:${v.trim()}';
+                            _clearGameFilter();
+                            _fetchNow();
+                          },
+                          onVerified: (v) {
+                            _scheduleAutoFetchAfterVerification(
+                              source: state.source,
+                              username: v,
+                            );
+                          },
+                          source: state.source,
+                          onRecentTapped: (username) {
+                            _controller.text = username;
+                            _controller.selection = TextSelection.collapsed(
+                              offset: username.length,
+                            );
+                            notifier.setUsername(username);
+                            _usernameFocus.unfocus();
+                            _cancelAutoFetch();
+                            _lastAutoKey = '${state.source.name}:$username';
+                            _clearGameFilter();
+                            _fetchNow();
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      _AutoFetchStatus(state: state),
+                      const SizedBox(height: 14),
+                    ],
+                  ),
                 ),
-              ),
-              ..._buildBodySlivers(state, _gameFilter),
-              SliverToBoxAdapter(child: SizedBox(height: bottomInset + 24)),
-            ],
+                ..._buildBodySlivers(state, _gameFilter),
+                SliverToBoxAdapter(child: SizedBox(height: bottomInset + 24)),
+              ],
+            ),
           ),
         ),
       ),
@@ -390,6 +424,7 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
     final discovery = ImportDiscoveryDisplay.from(
       state: state,
       query: filterQuery,
+      searchBaselineCount: _gameFilterBaselineCount,
     );
     if (discovery.emptyState == ImportDiscoveryEmptyState.notFetched) {
       return [
@@ -1528,6 +1563,11 @@ class _ImportAnalysisDialogState extends ConsumerState<_ImportAnalysisDialog> {
           ),
         );
       }
+      unawaited(
+        ref
+            .read(homeActivityControllerProvider.notifier)
+            .markCompleted(HomeActivityKind.importGame),
+      );
       if (!mounted) return;
       setState(() => _done = true);
     } on LocalAnalysisException catch (e) {

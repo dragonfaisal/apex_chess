@@ -32,13 +32,14 @@ import 'package:apex_chess/features/pgn_review/presentation/controllers/review_c
 import 'package:apex_chess/features/pgn_review/domain/review_analysis_provider.dart';
 import 'package:apex_chess/features/pgn_review/presentation/views/review_summary_screen.dart';
 import 'package:apex_chess/features/profile/presentation/views/profile_screen.dart';
+import 'package:apex_chess/features/profile_scanner/presentation/controllers/profile_scanner_controller.dart';
 import 'package:apex_chess/features/profile_scanner/presentation/views/profile_scanner_screen.dart';
 import 'package:apex_chess/infrastructure/engine/eco_book.dart';
 import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
 import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.dart';
-import 'package:apex_chess/shared_ui/controllers/connectivity_presence_display.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_connection_presence_badge.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_snack.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
@@ -112,9 +113,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             activity: activity,
             isOffline: presence.isOffline,
             onPastePgn: () => _showPgnDialog(context, ref, account?.username),
-            onRetry: () => unawaited(
-              ref.read(connectionPresenceProvider.notifier).refresh(),
-            ),
+            onRefresh: () => ref
+                .read(connectionPresenceProvider.notifier)
+                .refresh(showSyncing: true),
           ),
           const ArchiveScreen(showBackButton: false),
           const GlobalDashboardScreen(showBackButton: false),
@@ -193,87 +194,122 @@ class _AnalyzeTab extends ConsumerWidget {
     required this.activity,
     required this.isOffline,
     required this.onPastePgn,
-    required this.onRetry,
+    required this.onRefresh,
   });
 
   final ApexAccount? account;
   final HomeActivityState activity;
   final bool isOffline;
   final VoidCallback onPastePgn;
-  final VoidCallback onRetry;
+  final Future<void> Function() onRefresh;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final hero = HomeHeroDisplay.fromActivity(activity, isOffline: isOffline);
-    final quickActions = buildHomeQuickActions(hero);
+    final quickActions = buildHomeQuickActions(hero, activity: activity);
     return Container(
       decoration: const BoxDecoration(gradient: ApexGradients.spaceCanvas),
       child: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
-            return SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.viewInsetsOf(context).bottom + 16,
-              ),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const SizedBox(height: 24),
-                      _AccountStrip(account: account),
-                      const SizedBox(height: 22),
-                      Text(
-                        ApexCopy.appTitle,
-                        textAlign: TextAlign.center,
-                        style: ApexTypography.displayLarge.copyWith(
-                          fontSize: 32,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        ApexCopy.tagline,
-                        textAlign: TextAlign.center,
-                        style: ApexTypography.bodyMedium.copyWith(
-                          color: ApexColors.sapphireBright.withValues(
-                            alpha: 0.72,
+            return RefreshIndicator(
+              color: ApexColors.sapphireBright,
+              backgroundColor: ApexColors.nebula,
+              onRefresh: onRefresh,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics(),
+                ),
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.viewInsetsOf(context).bottom + 16,
+                ),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const SizedBox(height: 24),
+                        _AccountStrip(account: account),
+                        const SizedBox(height: 22),
+                        Text(
+                          ApexCopy.appTitle,
+                          textAlign: TextAlign.center,
+                          style: ApexTypography.displayLarge.copyWith(
+                            fontSize: 32,
                           ),
-                          fontSize: 11,
                         ),
-                      ),
-                      const SizedBox(height: 20),
-                      _DynamicHeroCard(
-                        hero: hero,
-                        onTap: () => _runHeroAction(context, ref, hero.kind),
-                      ),
-                      const SizedBox(height: 14),
-                      _HomeTileGrid(
-                        children: [
-                          for (final action in quickActions)
-                            _TileCard(
-                              title: action.label,
-                              subtitle: _subtitleForAction(action),
-                              icon: _iconForAction(action),
-                              accent: _accentForAction(action),
-                              onTap: () =>
-                                  _runQuickAction(context, ref, action),
+                        const SizedBox(height: 6),
+                        Text(
+                          ApexCopy.tagline,
+                          textAlign: TextAlign.center,
+                          style: ApexTypography.bodyMedium.copyWith(
+                            color: ApexColors.sapphireBright.withValues(
+                              alpha: 0.72,
                             ),
-                        ],
-                      ),
-                      const SizedBox(height: 28),
-                      Text(
-                        ApexCopy.liveEngineFooter,
-                        textAlign: TextAlign.center,
-                        style: ApexTypography.bodyMedium.copyWith(
-                          color: ApexColors.textTertiary,
-                          fontSize: 11,
+                            fontSize: 11,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 24),
-                    ],
+                        const SizedBox(height: 20),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 220),
+                          switchInCurve: Curves.easeOutCubic,
+                          switchOutCurve: Curves.easeInCubic,
+                          transitionBuilder: (child, animation) {
+                            final slide = Tween<Offset>(
+                              begin: const Offset(0, 0.035),
+                              end: Offset.zero,
+                            ).animate(animation);
+                            return FadeTransition(
+                              opacity: animation,
+                              child: SlideTransition(
+                                position: slide,
+                                child: ScaleTransition(
+                                  scale: Tween<double>(
+                                    begin: 0.985,
+                                    end: 1,
+                                  ).animate(animation),
+                                  child: child,
+                                ),
+                              ),
+                            );
+                          },
+                          child: _DynamicHeroCard(
+                            key: ValueKey(
+                              '${hero.type}-${hero.title}-${hero.subtitle}',
+                            ),
+                            hero: hero,
+                            onTap: () =>
+                                _runHeroAction(context, ref, hero.actionIntent),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        _HomeTileGrid(
+                          children: [
+                            for (final action in quickActions)
+                              _TileCard(
+                                title: action.label,
+                                subtitle: action.subtitle,
+                                icon: _iconForAction(action),
+                                accent: _accentForAction(action),
+                                onTap: () =>
+                                    _runQuickAction(context, ref, action),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 28),
+                        Text(
+                          ApexCopy.liveEngineFooter,
+                          textAlign: TextAlign.center,
+                          style: ApexTypography.bodyMedium.copyWith(
+                            color: ApexColors.textTertiary,
+                            fontSize: 11,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -284,108 +320,87 @@ class _AnalyzeTab extends ConsumerWidget {
     );
   }
 
-  String _subtitleForAction(HomeQuickActionDisplay action) {
-    return switch (action.label) {
-      'Import Games' => 'Chess.com · Lichess',
-      'Paste PGN' => 'Game detected · review',
-      'Opponent Insights' => 'Profile review',
-      ApexCopy.tryAgain => ApexCopy.tryAgainOnline,
-      'Continue Review' => 'Latest review',
-      'Recent Game' => 'Import discovery',
-      _ => 'Start review',
-    };
-  }
-
   IconData _iconForAction(HomeQuickActionDisplay action) {
-    return switch (action.label) {
-      'Import Games' || 'Recent Game' => Icons.cloud_download_rounded,
-      'Paste PGN' => Icons.auto_graph_rounded,
-      'Opponent Insights' => Icons.person_search_rounded,
-      ApexCopy.tryAgain => Icons.refresh_rounded,
-      'Continue Review' => Icons.play_circle_outline_rounded,
-      _ => Icons.auto_graph_rounded,
+    return switch (action.kind) {
+      HomeActivityKind.importGame => Icons.cloud_download_rounded,
+      HomeActivityKind.pgn => Icons.description_rounded,
+      HomeActivityKind.opponentScan => Icons.person_search_rounded,
+      HomeActivityKind.live => Icons.sports_esports_rounded,
+      HomeActivityKind.retry => Icons.refresh_rounded,
+      HomeActivityKind.review => Icons.inventory_2_rounded,
+      HomeActivityKind.firstUse => Icons.auto_graph_rounded,
     };
   }
 
   Color _accentForAction(HomeQuickActionDisplay action) {
-    return switch (action.label) {
-      'Import Games' || 'Recent Game' => ApexColors.sapphire,
-      'Paste PGN' => ApexColors.aurora,
-      'Opponent Insights' => ApexColors.ruby,
-      ApexCopy.tryAgain => ApexColors.inaccuracy,
-      'Continue Review' => ApexColors.emerald,
-      _ => ApexColors.sapphireBright,
+    return switch (action.kind) {
+      HomeActivityKind.importGame => ApexColors.electricBlue,
+      HomeActivityKind.pgn => ApexColors.aurora,
+      HomeActivityKind.opponentScan => ApexColors.ruby,
+      HomeActivityKind.live => ApexColors.emeraldBright,
+      HomeActivityKind.retry => ApexColors.inaccuracy,
+      HomeActivityKind.review => ApexColors.sapphireBright,
+      HomeActivityKind.firstUse => ApexColors.sapphireBright,
     };
   }
 
   void _runHomeAction(
     BuildContext context,
     WidgetRef ref,
-    HomeActivityKind kind,
+    HomeActionIntent intent,
   ) {
-    switch (kind) {
-      case HomeActivityKind.pgn:
+    switch (intent) {
+      case HomeActionIntent.pastePgn:
         onPastePgn();
         return;
-      case HomeActivityKind.importGame:
-        unawaited(
-          ref
-              .read(homeActivityControllerProvider.notifier)
-              .recordImportReview(),
-        );
+      case HomeActionIntent.importGames:
+        unawaited(_openImport(context));
+        return;
+      case HomeActionIntent.live:
+        unawaited(_openLive(context));
+        return;
+      case HomeActionIntent.opponentInsights:
+        unawaited(_openOpponentInsights(context, ref));
+        return;
+      case HomeActionIntent.retry:
+        unawaited(onRefresh());
+        return;
+      case HomeActionIntent.openArchive:
         Navigator.of(
           context,
-        ).push(MaterialPageRoute(builder: (_) => const ImportMatchScreen()));
-        return;
-      case HomeActivityKind.live:
-        unawaited(
-          ref.read(homeActivityControllerProvider.notifier).recordLive(),
-        );
-        Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const LivePlayScreen()));
-        return;
-      case HomeActivityKind.retry:
-        onRetry();
-        return;
-      case HomeActivityKind.review:
-        unawaited(
-          ref.read(homeActivityControllerProvider.notifier).recordReview(),
-        );
-        Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const ReviewSummaryScreen()));
-        return;
-      case HomeActivityKind.firstUse:
-        unawaited(
-          ref
-              .read(homeActivityControllerProvider.notifier)
-              .recordImportReview(),
-        );
-        Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const ImportMatchScreen()));
+        ).push(MaterialPageRoute(builder: (_) => const ArchiveScreen()));
         return;
     }
+  }
+
+  Future<void> _openImport(BuildContext context) async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ImportMatchScreen()));
+  }
+
+  Future<void> _openLive(BuildContext context) async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const LivePlayScreen()));
+  }
+
+  Future<void> _openOpponentInsights(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    ref.read(profileScannerControllerProvider.notifier).reset();
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ProfileScannerScreen()));
   }
 
   void _runHeroAction(
     BuildContext context,
     WidgetRef ref,
-    HomeActivityKind kind,
+    HomeActionIntent intent,
   ) {
-    final hasCurrentReview =
-        ref.read(reviewControllerProvider).timeline != null;
-    if (hasCurrentReview &&
-        (kind == HomeActivityKind.pgn ||
-            kind == HomeActivityKind.importGame ||
-            kind == HomeActivityKind.review)) {
-      Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => const ReviewSummaryScreen()));
-      return;
-    }
-    _runHomeAction(context, ref, kind);
+    _runHomeAction(context, ref, intent);
   }
 
   void _runQuickAction(
@@ -393,29 +408,7 @@ class _AnalyzeTab extends ConsumerWidget {
     WidgetRef ref,
     HomeQuickActionDisplay action,
   ) {
-    switch (action.label) {
-      case 'Import Games':
-      case 'Recent Game':
-        _runHomeAction(context, ref, HomeActivityKind.importGame);
-        return;
-      case 'Paste PGN':
-        _runHomeAction(context, ref, HomeActivityKind.pgn);
-        return;
-      case 'Opponent Insights':
-        Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const ProfileScannerScreen()));
-        return;
-      case ApexCopy.tryAgain:
-        _runHomeAction(context, ref, HomeActivityKind.retry);
-        return;
-      case 'Continue Review':
-        _runHeroAction(context, ref, HomeActivityKind.review);
-        return;
-      default:
-        _runHomeAction(context, ref, action.kind);
-        return;
-    }
+    _runHomeAction(context, ref, action.intent);
   }
 }
 
@@ -1164,7 +1157,7 @@ class _DialogPrimaryAction extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _DynamicHeroCard extends StatelessWidget {
-  const _DynamicHeroCard({required this.hero, required this.onTap});
+  const _DynamicHeroCard({super.key, required this.hero, required this.onTap});
 
   final HomeHeroDisplay hero;
   final VoidCallback onTap;
@@ -1223,14 +1216,16 @@ class _DynamicHeroCard extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 6),
-                          Text(
-                            hero.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: ApexTypography.displayLarge.copyWith(
-                              fontSize: 22,
-                              letterSpacing: 0,
-                              color: Colors.white,
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              hero.title,
+                              style: ApexTypography.displayLarge.copyWith(
+                                fontSize: 22,
+                                letterSpacing: 0,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -1259,11 +1254,7 @@ class _DynamicHeroCard extends StatelessWidget {
                           width: 0.8,
                         ),
                       ),
-                      child: Icon(
-                        _heroIcon(hero.kind),
-                        color: Colors.white,
-                        size: 30,
-                      ),
+                      child: Icon(hero.icon, color: Colors.white, size: 30),
                     ),
                   ],
                 ),
@@ -1274,15 +1265,6 @@ class _DynamicHeroCard extends StatelessWidget {
       ),
     );
   }
-
-  IconData _heroIcon(HomeActivityKind kind) => switch (kind) {
-    HomeActivityKind.pgn => Icons.article_outlined,
-    HomeActivityKind.importGame => Icons.cloud_download_rounded,
-    HomeActivityKind.review => Icons.play_circle_outline_rounded,
-    HomeActivityKind.live => Icons.play_arrow_rounded,
-    HomeActivityKind.retry => Icons.refresh_rounded,
-    HomeActivityKind.firstUse => Icons.auto_graph_rounded,
-  };
 }
 
 class _HeroBoardMotifPainter extends CustomPainter {
@@ -1339,7 +1321,7 @@ class _HomeTileGrid extends StatelessWidget {
   }
 }
 
-class _TileCard extends StatelessWidget {
+class _TileCard extends StatefulWidget {
   const _TileCard({
     required this.title,
     required this.subtitle,
@@ -1355,62 +1337,100 @@ class _TileCard extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
+  State<_TileCard> createState() => _TileCardState();
+}
+
+class _TileCardState extends State<_TileCard> {
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (_pressed == value) return;
+    setState(() => _pressed = value);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return GlassPanel(
-      padding: EdgeInsets.zero,
-      margin: null,
-      borderRadius: 16,
-      accentColor: accent,
-      accentAlpha: 0.32,
-      fillAlpha: 0.45,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-            child: SizedBox(
-              height: 104,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: accent.withValues(alpha: 0.18),
-                      borderRadius: BorderRadius.circular(10),
+    return AnimatedScale(
+      scale: _pressed ? 0.985 : 1,
+      duration: const Duration(milliseconds: 110),
+      curve: Curves.easeOutCubic,
+      child: GlassPanel(
+        padding: EdgeInsets.zero,
+        margin: null,
+        borderRadius: 16,
+        accentColor: widget.accent,
+        accentAlpha: _pressed ? 0.42 : 0.28,
+        fillAlpha: _pressed ? 0.50 : 0.43,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: widget.onTap,
+            onTapDown: (_) => _setPressed(true),
+            onTapCancel: () => _setPressed(false),
+            onTapUp: (_) => _setPressed(false),
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+              child: SizedBox(
+                height: 104,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 120),
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: widget.accent.withValues(
+                          alpha: _pressed ? 0.24 : 0.16,
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: widget.accent.withValues(
+                              alpha: _pressed ? 0.30 : 0.14,
+                            ),
+                            blurRadius: _pressed ? 18 : 10,
+                            spreadRadius: -6,
+                          ),
+                        ],
+                      ),
+                      child: Icon(widget.icon, color: widget.accent, size: 18),
                     ),
-                    child: Icon(icon, color: accent, size: 18),
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: ApexTypography.labelLarge.copyWith(
-                          color: ApexColors.textPrimary,
-                          letterSpacing: 1.1,
-                          fontSize: 13,
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            widget.title,
+                            maxLines: 1,
+                            style: ApexTypography.labelLarge.copyWith(
+                              color: ApexColors.textPrimary,
+                              letterSpacing: 1.1,
+                              fontSize: 13,
+                            ),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        subtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: ApexTypography.bodyMedium.copyWith(
-                          color: ApexColors.textTertiary,
-                          fontSize: 10.5,
+                        const SizedBox(height: 3),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            widget.subtitle,
+                            maxLines: 1,
+                            style: ApexTypography.bodyMedium.copyWith(
+                              color: ApexColors.textTertiary,
+                              fontSize: 10.5,
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -1530,6 +1550,11 @@ class _LocalAnalysisProgressDialogState
             ),
           );
         }
+        unawaited(
+          ref
+              .read(homeActivityControllerProvider.notifier)
+              .markCompleted(HomeActivityKind.pgn),
+        );
         if (!mounted) return;
         setState(() => _done = true);
       }
@@ -1638,6 +1663,12 @@ class _AccountStrip extends ConsumerWidget {
           detail: ApexCopy.showingSavedData,
           type: ApexGlassToastType.warning,
         );
+      } else if (presence.hasServiceIssue) {
+        showApexGlassToast(
+          context,
+          message: presence.lastMessage ?? ApexCopy.tryAgain,
+          type: ApexGlassToastType.warning,
+        );
       }
       Navigator.of(
         context,
@@ -1694,13 +1725,11 @@ class _AccountStrip extends ConsumerWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
-                    Icons.verified_rounded,
-                    size: 14,
-                    color: ApexColors.emeraldBright,
+                  ApexConnectionPresenceBadge(
+                    presence: presence,
+                    size: 22,
+                    tooltip: 'Profile',
                   ),
-                  const SizedBox(width: 5),
-                  _ConnectionDot(presence: presence),
                   const SizedBox(width: 6),
                   Text(
                     '${account!.source.wire.toUpperCase()} · ${account!.username}',
@@ -1717,54 +1746,13 @@ class _AccountStrip extends ConsumerWidget {
           ),
         ),
         const Spacer(),
-        IconButton(
+        ApexConnectionPresenceBadge(
+          presence: presence,
+          size: 40,
           tooltip: 'Profile',
-          onPressed: openProfile,
-          icon: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              const Icon(
-                Icons.account_circle_outlined,
-                size: 22,
-                color: ApexColors.sapphireBright,
-              ),
-              Positioned(
-                right: -1,
-                bottom: -1,
-                child: _ConnectionDot(presence: presence, compact: true),
-              ),
-            ],
-          ),
+          onTap: openProfile,
         ),
       ],
-    );
-  }
-}
-
-class _ConnectionDot extends StatelessWidget {
-  const _ConnectionDot({required this.presence, this.compact = false});
-
-  final ApexConnectionPresence presence;
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = ConnectivityPresenceDisplay.colorFor(presence);
-    final size = compact ? 8.0 : 9.0;
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
-        border: Border.all(color: ApexColors.deepSpace, width: compact ? 1 : 0),
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.55),
-            blurRadius: compact ? 5 : 7,
-          ),
-        ],
-      ),
     );
   }
 }

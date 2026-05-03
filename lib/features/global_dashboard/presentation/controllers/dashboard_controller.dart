@@ -16,6 +16,7 @@ import 'package:apex_chess/features/profile_stats/data/profile_stats_service.dar
 import 'package:apex_chess/features/profile_stats/presentation/controllers/profile_stats_controller.dart';
 import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
+import 'package:apex_chess/shared_ui/identity/apex_identity_matcher.dart';
 
 /// Which side the user wants to inspect. Drives every derived stat on
 /// the Stats dashboard so the pie, trend, and opening table all respect
@@ -177,6 +178,29 @@ class DashboardPlayerSearchController
   Future<void> search() async {
     final username = state.username.trim();
     if (username.isEmpty) return;
+    final account = ref.read(accountControllerProvider).valueOrNull;
+    final identity = const ApexIdentityMatcher().resolveOpponentQuery(
+      query: username,
+      platform: state.source.name,
+      connectedAccount: account == null
+          ? null
+          : ApexIdentityCandidate(
+              handle: account.username,
+              platform: account.source.wire == 'lichess'
+                  ? ProfileStatsSource.lichess.name
+                  : ProfileStatsSource.chessCom.name,
+            ),
+      excludeConnectedAccount: true,
+    );
+    if (identity.isAmbiguous) {
+      state = state.copyWith(
+        isLoading: false,
+        error: identity.copy,
+        clearResult: true,
+        hasSearched: true,
+      );
+      return;
+    }
     final gen = ++_generation;
     final service = ref
         .read(serviceHealthServiceProvider)

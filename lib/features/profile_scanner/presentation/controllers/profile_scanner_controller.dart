@@ -9,8 +9,10 @@ import 'package:apex_chess/features/import_match/domain/imported_game.dart'
     show GameSource, ImportException;
 import 'package:apex_chess/features/import_match/presentation/controllers/import_controller.dart';
 import 'package:apex_chess/features/import_match/presentation/controllers/recent_searches_controller.dart';
+import 'package:apex_chess/features/home/presentation/controllers/home_activity_controller.dart';
 import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
+import 'package:apex_chess/shared_ui/identity/apex_identity_matcher.dart';
 
 import '../../data/profile_scanner_service.dart';
 import '../../domain/profile_scan_result.dart';
@@ -70,7 +72,32 @@ class ProfileScannerController extends Notifier<ProfileScannerState> {
     required String username,
     required String source,
     int sampleSize = 5,
+    String? connectedUsername,
+    String? connectedSource,
   }) async {
+    final identity = const ApexIdentityMatcher().resolveOpponentQuery(
+      query: username,
+      platform: source,
+      connectedAccount:
+          connectedUsername == null || connectedUsername.trim().isEmpty
+          ? null
+          : ApexIdentityCandidate(
+              handle: connectedUsername,
+              platform: connectedSource ?? source,
+            ),
+      excludeConnectedAccount: true,
+    );
+    if (identity.isConfirmedUser || identity.isAmbiguous) {
+      state = state.copyWith(
+        isLoading: false,
+        error: identity.copy,
+        clearResult: true,
+        clearProgress: true,
+        wasCancelled: false,
+      );
+      return;
+    }
+
     final gen = ++_generation;
     final cancellation = ScanCancellation();
     _cancellation = cancellation;
@@ -112,6 +139,9 @@ class ProfileScannerController extends Notifier<ProfileScannerState> {
       await ref
           .read(recentSearchesProvider.notifier)
           .record(_gameSourceFor(source), username);
+      await ref
+          .read(homeActivityControllerProvider.notifier)
+          .recordOpponentScan();
       ref
           .read(connectionPresenceProvider.notifier)
           .markServiceAvailable(service);
@@ -170,7 +200,12 @@ class ProfileScannerController extends Notifier<ProfileScannerState> {
     );
   }
 
-  void reset() => state = const ProfileScannerState();
+  void reset() {
+    _cancellation?.cancel();
+    _cancellation = null;
+    _generation++;
+    state = const ProfileScannerState();
+  }
 
   Future<String> _scannerFailureMessage(
     AppService service,
