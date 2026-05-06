@@ -6,6 +6,7 @@ import 'package:apex_chess/core/domain/services/move_quality_display.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
 import 'package:apex_chess/features/pgn_review/presentation/models/review_board_display.dart';
+import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -137,6 +138,13 @@ void main() {
     expect(blackBottom.topPlayer.side, ReviewBoardSide.white);
     expect(blackBottom.bottomPlayer.side, ReviewBoardSide.black);
     expect(blackBottom.topPlayer.isUser, isTrue);
+    expect(whiteBottom.bottomPlayer.identity.isConnectedUser, isTrue);
+    expect(whiteBottom.bottomPlayer.identity.side, PlayerIdentitySide.white);
+    expect(whiteBottom.topPlayer.identity.isOpponent, isTrue);
+    expect(
+      blackBottom.topPlayer.identity.displayUsername,
+      'WhitePlayerLongName',
+    );
   });
 
   test('eval display maps positive negative equal mate and missing values', () {

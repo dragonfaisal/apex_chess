@@ -16,6 +16,7 @@ import 'package:apex_chess/features/pgn_review/presentation/controllers/review_c
 import 'package:apex_chess/features/pgn_review/presentation/models/review_board_display.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_chess_board.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_player_avatar.dart';
 import 'package:apex_chess/shared_ui/widgets/brilliant_glow.dart';
 
 bool shouldShowBetterMoveArrowForTesting(MoveAnalysis? move) =>
@@ -182,7 +183,11 @@ class _PlayerHeader extends StatelessWidget {
           ),
           child: Row(
             children: [
-              _PlayerAvatar(player: player),
+              ApexPlayerAvatar(
+                identity: player.identity,
+                size: ApexPlayerAvatarSize.medium,
+                showConnectedBadge: player.isUser,
+              ),
               const SizedBox(width: 9),
               Expanded(
                 child: Column(
@@ -223,61 +228,6 @@ class _PlayerHeader extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _PlayerAvatar extends StatelessWidget {
-  const _PlayerAvatar({required this.player});
-
-  final ReviewPlayerHeaderDisplay player;
-
-  @override
-  Widget build(BuildContext context) {
-    final avatarUrl = player.avatarUrl;
-    return Container(
-      width: 34,
-      height: 34,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: player.side == ReviewBoardSide.white
-            ? const LinearGradient(colors: [Colors.white, Color(0xFFBFD7FF)])
-            : const LinearGradient(
-                colors: [ApexColors.nebula, ApexColors.trueBlack],
-              ),
-        border: Border.all(
-          color: player.isUser
-              ? ApexColors.sapphireBright.withValues(alpha: 0.75)
-              : ApexColors.subtleBorder,
-          width: 1,
-        ),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: avatarUrl == null
-          ? Center(
-              child: Text(
-                player.initial,
-                style: ApexTypography.labelLarge.copyWith(
-                  color: player.side == ReviewBoardSide.white
-                      ? ApexColors.trueBlack
-                      : ApexColors.textPrimary,
-                  fontSize: 13,
-                ),
-              ),
-            )
-          : Image.network(
-              avatarUrl,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Center(
-                child: Text(
-                  player.initial,
-                  style: ApexTypography.labelLarge.copyWith(
-                    color: ApexColors.textPrimary,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-            ),
     );
   }
 }

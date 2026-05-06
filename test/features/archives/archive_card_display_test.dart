@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/archives/presentation/models/archived_game_card_display.dart';
+import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_game_card.dart';
 
 void main() {
@@ -56,5 +57,9 @@ void main() {
     expect(model.black.side, ApexPlayerSide.black);
     expect(model.white.isUser, isTrue);
     expect(model.black.isUser, isFalse);
+    expect(model.white.identity.isConnectedUser, isTrue);
+    expect(model.white.identity.side, PlayerIdentitySide.white);
+    expect(model.black.identity.isOpponent, isTrue);
+    expect(model.white.identity.platform, PlayerIdentityPlatform.chessCom);
   });
 }

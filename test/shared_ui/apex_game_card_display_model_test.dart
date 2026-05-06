@@ -3,6 +3,7 @@ import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/archives/presentation/models/archived_game_card_display.dart';
 import 'package:apex_chess/features/import_match/domain/imported_game.dart';
 import 'package:apex_chess/features/import_match/presentation/models/imported_game_card_display.dart';
+import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_game_card.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -19,6 +20,10 @@ void main() {
       expect(model.black.side, ApexPlayerSide.black);
       expect(model.white.isUser, isTrue);
       expect(model.black.isUser, isFalse);
+      expect(model.white.identity.isConnectedUser, isTrue);
+      expect(model.white.identity.side, PlayerIdentitySide.white);
+      expect(model.white.identity.platform, PlayerIdentityPlatform.chessCom);
+      expect(model.black.identity.isOpponent, isTrue);
       expect(model.resolvedResultLabel, 'Won');
     });
 
@@ -31,6 +36,8 @@ void main() {
       expect(model.resultTone, GameResultTone.lost);
       expect(model.white.isUser, isFalse);
       expect(model.black.isUser, isTrue);
+      expect(model.black.identity.isConnectedUser, isTrue);
+      expect(model.black.identity.sideLabel, 'Black');
       expect(model.resolvedResultLabel, 'Lost');
     });
 
@@ -83,6 +90,7 @@ void main() {
       expect(model.white.name, contains('VeryVeryLongWhite'));
       expect(model.black.name, contains('VeryVeryLongBlack'));
       expect(model.primaryMeta, contains('Extremely Long Opening Name'));
+      expect(model.white.identity.displayUsername, contains('VeryVeryLong'));
     });
   });
 
@@ -95,6 +103,8 @@ void main() {
       expect(model.resultTone, GameResultTone.lost);
       expect(model.white.isUser, isTrue);
       expect(model.black.isUser, isFalse);
+      expect(model.white.identity.platform, PlayerIdentityPlatform.chessCom);
+      expect(model.white.identity.rating, '1500');
       expect(model.badges, contains('Blunder 3'));
     });
   });

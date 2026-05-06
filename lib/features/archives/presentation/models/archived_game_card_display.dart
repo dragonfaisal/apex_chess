@@ -2,6 +2,7 @@
 library;
 
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
+import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_game_card.dart';
 
 extension ArchivedGameCardDisplay on ArchivedGame {
@@ -15,12 +16,14 @@ extension ArchivedGameCardDisplay on ArchivedGame {
         name: white,
         rating: _archiveRatingOrNull(whiteRating),
         isUser: userIsBlack == false,
+        platform: source.identityPlatform,
       ),
       black: ApexGamePlayerDisplay(
         side: ApexPlayerSide.black,
         name: black,
         rating: _archiveRatingOrNull(blackRating),
         isUser: userIsBlack == true,
+        platform: source.identityPlatform,
       ),
       primaryMeta: '$openingLine · $moveCount moves',
       secondaryMeta: [reviewModeLabel, relativePlayedAt].join(' · '),
@@ -44,6 +47,16 @@ extension ArchivedGameCardDisplay on ArchivedGame {
       if (brilliantCount > 0) 'Brilliant $brilliantCount',
       if (greatCount > 0) 'Great $greatCount',
     ];
+  }
+}
+
+extension on ArchiveSource {
+  PlayerIdentityPlatform get identityPlatform {
+    return switch (this) {
+      ArchiveSource.chessCom => PlayerIdentityPlatform.chessCom,
+      ArchiveSource.lichess => PlayerIdentityPlatform.lichess,
+      ArchiveSource.pgn => PlayerIdentityPlatform.pgn,
+    };
   }
 }
 

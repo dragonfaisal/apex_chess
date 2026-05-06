@@ -9,7 +9,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
+import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_player_avatar.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
 
 enum GameResultTone { won, lost, draw, unknown }
@@ -39,6 +41,7 @@ class ApexGamePlayerDisplay {
     this.rating,
     this.isUser = false,
     this.avatarUrl,
+    this.platform = PlayerIdentityPlatform.unknown,
   });
 
   final ApexPlayerSide side;
@@ -46,11 +49,24 @@ class ApexGamePlayerDisplay {
   final String? rating;
   final bool isUser;
   final String? avatarUrl;
+  final PlayerIdentityPlatform platform;
 
   String get sideLabel => switch (side) {
     ApexPlayerSide.white => 'White',
     ApexPlayerSide.black => 'Black',
   };
+
+  PlayerIdentityDisplay get identity => PlayerIdentityDisplay.fromRaw(
+    username: name,
+    platform: platform,
+    rating: rating,
+    avatarUrl: avatarUrl,
+    isConnectedUser: isUser,
+    isOpponent: !isUser,
+    side: side == ApexPlayerSide.white
+        ? PlayerIdentitySide.white
+        : PlayerIdentitySide.black,
+  );
 }
 
 class ApexGameCardDisplayModel {
@@ -288,6 +304,12 @@ class ApexPlayerSideRow extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 6),
+        ApexPlayerAvatar(
+          identity: player.identity,
+          size: ApexPlayerAvatarSize.small,
+          showConnectedBadge: player.isUser,
+        ),
+        const SizedBox(width: 7),
         Expanded(
           child: Text(
             player.name.trim().isEmpty ? 'Unknown' : player.name.trim(),

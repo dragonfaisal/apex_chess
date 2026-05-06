@@ -3,6 +3,7 @@ library;
 
 import 'package:apex_chess/features/import_match/domain/imported_game.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
+import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_game_card.dart';
 
 extension ImportedGameCardDisplay on ImportedGame {
@@ -14,12 +15,14 @@ extension ImportedGameCardDisplay on ImportedGame {
         name: whiteName,
         rating: whiteRating?.toString(),
         isUser: userColor == PlayerColor.white,
+        platform: source.identityPlatform,
       ),
       black: ApexGamePlayerDisplay(
         side: ApexPlayerSide.black,
         name: blackName,
         rating: blackRating?.toString(),
         isUser: userColor == PlayerColor.black,
+        platform: source.identityPlatform,
       ),
       primaryMeta: importOpeningLine,
       secondaryMeta: importSourceLine,
@@ -51,5 +54,14 @@ extension ImportedGameCardDisplay on ImportedGame {
         timeControl!.trim(),
       relativeTime,
     ].join(' · ');
+  }
+}
+
+extension on GameSource {
+  PlayerIdentityPlatform get identityPlatform {
+    return switch (this) {
+      GameSource.chessCom => PlayerIdentityPlatform.chessCom,
+      GameSource.lichess => PlayerIdentityPlatform.lichess,
+    };
   }
 }

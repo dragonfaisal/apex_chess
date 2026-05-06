@@ -29,7 +29,7 @@ void main() {
 
     expect(result.kind, ApexIdentityResolutionKind.confirmedUser);
     expect(result.isConfirmedUser, isTrue);
-    expect(result.copy, 'This is your connected account');
+    expect(result.copy, 'This is your account');
   });
 
   test('query magnolia returns opponent when loaded exact match exists', () {

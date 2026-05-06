@@ -38,9 +38,11 @@ import 'package:apex_chess/infrastructure/engine/eco_book.dart';
 import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
 import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
+import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_connection_presence_badge.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_player_avatar.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_snack.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
 
@@ -1709,6 +1711,11 @@ class _AccountStrip extends ConsumerWidget {
         ),
       );
     }
+    final identity = PlayerIdentityDisplay.connected(
+      username: account!.username,
+      platform: PlayerIdentityPlatform.fromWire(account!.source.wire),
+      isCached: presence.isOffline,
+    );
     return Row(
       children: [
         // Verified-handle chip — also tappable as a quick portal to the
@@ -1731,19 +1738,26 @@ class _AccountStrip extends ConsumerWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  ApexConnectionPresenceBadge(
-                    presence: presence,
-                    size: 22,
-                    tooltip: 'Profile',
+                  ApexPlayerAvatar(
+                    identity: identity,
+                    size: ApexPlayerAvatarSize.small,
+                    showConnectedBadge: true,
                   ),
                   const SizedBox(width: 6),
-                  Text(
-                    '${account!.source.wire.toUpperCase()} · ${account!.username}',
-                    style: ApexTypography.bodyMedium.copyWith(
-                      color: ApexColors.textPrimary,
-                      fontSize: 11,
-                      letterSpacing: 0.8,
-                      fontWeight: FontWeight.w600,
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: MediaQuery.sizeOf(context).width * 0.52,
+                    ),
+                    child: Text(
+                      '${identity.platformLabel} · ${identity.displayUsername}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: ApexTypography.bodyMedium.copyWith(
+                        color: ApexColors.textPrimary,
+                        fontSize: 11,
+                        letterSpacing: 0,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],

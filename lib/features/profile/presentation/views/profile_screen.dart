@@ -19,8 +19,10 @@ import 'package:apex_chess/features/profile_stats/data/profile_stats_service.dar
 import 'package:apex_chess/features/profile_stats/presentation/controllers/profile_stats_controller.dart';
 import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
+import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_player_avatar.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
 
 class ProfileScreen extends ConsumerWidget {
@@ -46,6 +48,7 @@ class ProfileScreen extends ConsumerWidget {
             .markServiceAvailable(service);
       });
     });
+    final presence = ref.watch(connectionPresenceProvider);
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(gradient: ApexGradients.spaceCanvas),
@@ -57,7 +60,7 @@ class ProfileScreen extends ConsumerWidget {
                 backgroundColor: Colors.transparent,
                 elevation: 0,
                 title: Text(
-                  'PROFILE',
+                  ApexCopy.profile.toUpperCase(),
                   style: ApexTypography.displayLarge.copyWith(
                     fontSize: 18,
                     letterSpacing: 4,
@@ -68,7 +71,10 @@ class ProfileScreen extends ConsumerWidget {
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
                 sliver: SliverList.list(
                   children: [
-                    _IdentityCard(account: account),
+                    _IdentityCard(
+                      account: account,
+                      showingSavedData: account != null && presence.isOffline,
+                    ),
                     const SizedBox(height: 18),
                     if (account != null)
                       _StatsCard(statsAsync: statsAsync)
@@ -92,12 +98,25 @@ class ProfileScreen extends ConsumerWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _IdentityCard extends StatelessWidget {
-  const _IdentityCard({required this.account});
+  const _IdentityCard({required this.account, required this.showingSavedData});
+
   final ApexAccount? account;
+  final bool showingSavedData;
 
   @override
   Widget build(BuildContext context) {
     final connected = account != null;
+    final identity = connected
+        ? PlayerIdentityDisplay.connected(
+            username: account!.username,
+            platform: PlayerIdentityPlatform.fromWire(account!.source.wire),
+            isCached: showingSavedData,
+          )
+        : PlayerIdentityDisplay.fromRaw(
+            username: null,
+            platform: PlayerIdentityPlatform.unknown,
+            status: PlayerIdentitySourceStatus.unknown,
+          );
     final accent = connected
         ? (account!.source == AccountSource.chessCom
               ? ApexColors.emerald
@@ -110,7 +129,12 @@ class _IdentityCard extends StatelessWidget {
       showGlow: connected,
       child: Row(
         children: [
-          _Avatar(seed: connected ? account!.username : '?', accent: accent),
+          ApexPlayerAvatar(
+            identity: identity,
+            size: ApexPlayerAvatarSize.large,
+            showPlatformBadge: connected,
+            showConnectedBadge: connected,
+          ),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
@@ -126,30 +150,29 @@ class _IdentityCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8),
-                    color: accent.withValues(alpha: 0.15),
-                    border: Border.all(
-                      color: accent.withValues(alpha: 0.45),
-                      width: 0.8,
-                    ),
-                  ),
-                  child: Text(
-                    connected
-                        ? account!.source.wire.toUpperCase()
-                        : 'TAP CONNECT BELOW',
-                    style: ApexTypography.bodyMedium.copyWith(
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    _IdentityChip(
+                      label: connected
+                          ? identity.platformLabel
+                          : 'Connect below',
                       color: accent,
-                      fontSize: 10.5,
-                      letterSpacing: 1.4,
-                      fontWeight: FontWeight.w700,
                     ),
-                  ),
+                    if (connected)
+                      _IdentityChip(
+                        label: identity.statusLabel,
+                        color: showingSavedData
+                            ? ApexColors.inaccuracy
+                            : ApexColors.sapphireBright,
+                      ),
+                    if (showingSavedData)
+                      const _IdentityChip(
+                        label: ApexCopy.showingSavedData,
+                        color: ApexColors.inaccuracy,
+                      ),
+                  ],
                 ),
               ],
             ),
@@ -160,56 +183,33 @@ class _IdentityCard extends StatelessWidget {
   }
 }
 
-class _Avatar extends StatelessWidget {
-  const _Avatar({required this.seed, required this.accent});
-  final String seed;
-  final Color accent;
+class _IdentityChip extends StatelessWidget {
+  const _IdentityChip({required this.label, required this.color});
+
+  final String label;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    final initials = _initials(seed);
     return Container(
-      width: 56,
-      height: 56,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: LinearGradient(
-          colors: [
-            accent.withValues(alpha: 0.85),
-            accent.withValues(alpha: 0.35),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: accent.withValues(alpha: 0.45),
-            blurRadius: 16,
-            spreadRadius: -4,
-          ),
-        ],
+        borderRadius: BorderRadius.circular(8),
+        color: color.withValues(alpha: 0.15),
+        border: Border.all(color: color.withValues(alpha: 0.45), width: 0.8),
       ),
-      child: Center(
-        child: Text(
-          initials,
-          style: ApexTypography.displayLarge.copyWith(
-            fontSize: 20,
-            letterSpacing: 1,
-          ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: ApexTypography.bodyMedium.copyWith(
+          color: color,
+          fontSize: 10.5,
+          letterSpacing: 1.0,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
-  }
-
-  static String _initials(String name) {
-    final trimmed = name.trim();
-    if (trimmed.isEmpty) return '?';
-    final parts = trimmed.split(RegExp(r'[\s_\-]+'));
-    if (parts.length == 1) {
-      return parts.first.substring(0, 1).toUpperCase();
-    }
-    return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
-        .toUpperCase();
   }
 }
 
@@ -262,7 +262,7 @@ class _StatsBody extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Text(
-              'LIVE RATINGS',
+              ApexCopy.ratings.toUpperCase(),
               style: ApexTypography.bodyMedium.copyWith(
                 color: ApexColors.sapphireBright,
                 fontSize: 11,
@@ -499,7 +499,9 @@ class _ActionsCard extends ConsumerWidget {
               ),
               icon: const Icon(Icons.swap_horiz_rounded, size: 18),
               label: Text(
-                account == null ? 'CONNECT ACCOUNT' : 'SWITCH ACCOUNT',
+                account == null
+                    ? ApexCopy.onboardingConnect
+                    : ApexCopy.switchAccount.toUpperCase(),
               ),
               style: OutlinedButton.styleFrom(
                 foregroundColor: ApexColors.sapphireBright,
@@ -522,7 +524,7 @@ class _ActionsCard extends ConsumerWidget {
               child: OutlinedButton.icon(
                 onPressed: () => _confirmLogout(context, ref),
                 icon: const Icon(Icons.logout_rounded, size: 18),
-                label: const Text('LOGOUT & WIPE LOCAL DATA'),
+                label: const Text(ApexCopy.clearLocalData),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: ApexColors.ruby,
                   side: BorderSide(
@@ -540,7 +542,7 @@ class _ActionsCard extends ConsumerWidget {
           ],
           const SizedBox(height: 8),
           Text(
-            'Logout clears the connected account, archived games, mistake vault, and onboarding state from this device. The Chess.com / Lichess account itself is untouched.',
+            'Clears local Apex data on this device. Chess.com / Lichess stays untouched.',
             textAlign: TextAlign.center,
             style: ApexTypography.bodyMedium.copyWith(
               color: ApexColors.textTertiary,
@@ -559,9 +561,9 @@ class _ActionsCard extends ConsumerWidget {
       builder: (ctx) => AlertDialog(
         backgroundColor: ApexColors.nebula,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Logout?'),
+        title: const Text('Clear local data?'),
         content: const Text(
-          'This wipes archived games, mistake vault, ratings cache, and the connected handle from this device.',
+          'This clears the connected handle and saved Apex data from this device only.',
         ),
         actions: [
           TextButton(
@@ -571,7 +573,7 @@ class _ActionsCard extends ConsumerWidget {
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(foregroundColor: ApexColors.ruby),
-            child: const Text('LOGOUT'),
+            child: const Text(ApexCopy.clearLocalData),
           ),
         ],
       ),

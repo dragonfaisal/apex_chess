@@ -4,6 +4,7 @@ import 'package:apex_chess/features/import_match/domain/imported_game.dart';
 import 'package:apex_chess/features/import_match/presentation/controllers/import_controller.dart';
 import 'package:apex_chess/features/import_match/presentation/models/imported_game_card_display.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
+import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
 
 void main() {
   ImportedGame game({
@@ -139,6 +140,10 @@ void main() {
       ].whereType<String>().join(' ');
 
       expect(visibleCopy, contains('Won'));
+      expect(display.white.identity.isConnectedUser, isTrue);
+      expect(display.white.identity.side, PlayerIdentitySide.white);
+      expect(display.black.identity.isOpponent, isTrue);
+      expect(display.white.identity.platform, PlayerIdentityPlatform.chessCom);
       expect(visibleCopy, isNot(contains('You won vs')));
       expect(visibleCopy, isNot(contains('White won')));
       expect(visibleCopy, isNot(contains('1-0')));

@@ -12,6 +12,7 @@ import 'package:apex_chess/core/domain/services/coach_explanation_service.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/core/domain/services/move_quality_display.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
+import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
 
 enum ReviewBoardSide { white, black }
 
@@ -33,6 +34,24 @@ class ReviewPlayerHeaderDisplay {
   final String? avatarUrl;
 
   String get sideLabel => side == ReviewBoardSide.white ? 'White' : 'Black';
+
+  PlayerIdentityDisplay get identity => PlayerIdentityDisplay.fromRaw(
+    username: username,
+    platform: PlayerIdentityPlatform.pgn,
+    rating: rating,
+    avatarUrl: avatarUrl,
+    isConnectedUser: isUser,
+    isOpponent: !isUser,
+    side: side == ReviewBoardSide.white
+        ? PlayerIdentitySide.white
+        : PlayerIdentitySide.black,
+    result: switch (result) {
+      'Won' => PlayerIdentityResult.won,
+      'Lost' => PlayerIdentityResult.lost,
+      'Draw' => PlayerIdentityResult.draw,
+      _ => PlayerIdentityResult.unknown,
+    },
+  );
 
   String get initial {
     final trimmed = username.trim();

@@ -357,7 +357,7 @@ void main() {
     ], perspective: public.username);
 
     expect(state.isConnectedAccount, isTrue);
-    expect(ApexCopy.connectedAccountNotice, 'This is your connected account');
+    expect(ApexCopy.connectedAccountNotice, 'This is your account');
     expect(public.totalGames, 20);
     expect(local.gamesAnalyzed, 1);
     expect(local.perspective, public.username);

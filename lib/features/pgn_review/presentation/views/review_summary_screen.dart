@@ -26,7 +26,9 @@ import 'package:apex_chess/core/domain/services/game_identity_service.dart';
 import 'package:apex_chess/core/domain/services/move_quality_display.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/pgn_review/domain/review_summary.dart';
+import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_player_avatar.dart';
 
 import '../controllers/review_controller.dart';
 import 'review_screen.dart';
@@ -299,12 +301,14 @@ class _SummaryPlayerPair {
         rating: h['WhiteElo'],
         isWhite: true,
         isUser: userIsWhite == true,
+        avatarUrl: h['WhiteAvatar'] ?? h['WhiteAvatarUrl'],
       ),
       black: _SummaryPlayerIdentity(
         name: h['Black'] ?? 'Black',
         rating: h['BlackElo'],
         isWhite: false,
         isUser: userIsWhite == false,
+        avatarUrl: h['BlackAvatar'] ?? h['BlackAvatarUrl'],
       ),
     );
   }
@@ -316,15 +320,27 @@ class _SummaryPlayerIdentity {
     required this.isWhite,
     required this.isUser,
     this.rating,
+    this.avatarUrl,
   });
 
   final String name;
   final String? rating;
   final bool isWhite;
   final bool isUser;
+  final String? avatarUrl;
 
   String get sideLabel => isWhite ? 'White' : 'Black';
   String get compactFallback => isUser ? 'You' : 'Opp';
+  PlayerIdentityDisplay get identity => PlayerIdentityDisplay.fromRaw(
+    username: name,
+    platform: PlayerIdentityPlatform.pgn,
+    rating: rating,
+    avatarUrl: avatarUrl,
+    isConnectedUser: isUser,
+    isOpponent: !isUser,
+    side: isWhite ? PlayerIdentitySide.white : PlayerIdentitySide.black,
+  );
+
   String get tableName {
     final trimmed = name.trim();
     if (trimmed.isEmpty || trimmed == sideLabel) return compactFallback;
@@ -499,7 +515,11 @@ class _PlayerCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              _SideMarker(isWhite: identity.isWhite, size: 14),
+              ApexPlayerAvatar(
+                identity: identity.identity,
+                size: ApexPlayerAvatarSize.small,
+                showConnectedBadge: identity.isUser,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(

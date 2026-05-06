@@ -139,7 +139,7 @@ void main() {
 
       final state = container.read(profileScannerControllerProvider);
       expect(service.calls, 0);
-      expect(state.error, 'This is your connected account');
+      expect(state.error, 'This is your account');
     },
   );
 

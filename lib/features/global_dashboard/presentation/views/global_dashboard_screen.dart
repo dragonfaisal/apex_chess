@@ -21,9 +21,11 @@ import 'package:apex_chess/features/pgn_review/presentation/controllers/review_c
 import 'package:apex_chess/features/pgn_review/presentation/views/review_screen.dart';
 import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
+import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_game_card.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_player_avatar.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
 
 import '../controllers/dashboard_controller.dart';
@@ -375,7 +377,7 @@ class _ProfileStatsCard extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _CardHeader(
-            title: 'PUBLIC ACCOUNT',
+            title: ApexCopy.publicAccount.toUpperCase(),
             subtitle: ApexCopy.synced,
             accent: ApexColors.aurora,
           ),
@@ -667,6 +669,13 @@ class _SearchedPlayerDashboard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final identity = PlayerIdentityDisplay.fromRaw(
+      username: stats.displayName,
+      platform: stats.source.identityPlatform,
+      rating: _firstRating(stats),
+      isConnectedUser: isConnectedAccount,
+      status: PlayerIdentitySourceStatus.publicProfile,
+    );
     final localStats = buildDashboardStatsForTesting(
       ref.watch(archiveControllerProvider).games,
       perspective: stats.username,
@@ -679,7 +688,7 @@ class _SearchedPlayerDashboard extends ConsumerWidget {
             const _SmallNotice(
               icon: Icons.verified_user_outlined,
               title: ApexCopy.connectedAccountNotice,
-              subtitle: 'Public Account',
+              subtitle: ApexCopy.publicAccount,
             ),
             const SizedBox(height: 8),
           ],
@@ -700,15 +709,11 @@ class _SearchedPlayerDashboard extends ConsumerWidget {
           const _SmallNotice(
             icon: Icons.verified_user_outlined,
             title: ApexCopy.connectedAccountNotice,
-            subtitle: 'Public Account',
+            subtitle: ApexCopy.publicAccount,
           ),
           const SizedBox(height: 8),
         ],
-        _SmallNotice(
-          icon: Icons.account_circle_outlined,
-          title: '@${stats.displayName}',
-          subtitle: 'Public Account',
-        ),
+        _SearchedPlayerIdentity(identity: identity),
         const SizedBox(height: 8),
         Row(
           children: [
@@ -753,7 +758,7 @@ class _SearchedPlayerDashboard extends ConsumerWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          'Public Account',
+          ApexCopy.publicAccount,
           textAlign: TextAlign.center,
           style: ApexTypography.bodyMedium.copyWith(
             color: ApexColors.textTertiary,
@@ -764,6 +769,116 @@ class _SearchedPlayerDashboard extends ConsumerWidget {
         _SearchedApexStats(stats: localStats),
       ],
     );
+  }
+}
+
+class _SearchedPlayerIdentity extends StatelessWidget {
+  const _SearchedPlayerIdentity({required this.identity});
+
+  final PlayerIdentityDisplay identity;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: ApexColors.nebula.withValues(alpha: 0.46),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: ApexColors.subtleBorder, width: 0.5),
+      ),
+      child: Row(
+        children: [
+          ApexPlayerAvatar(
+            identity: identity,
+            size: ApexPlayerAvatarSize.medium,
+            showPlatformBadge: true,
+            showConnectedBadge: identity.isConnectedUser,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '@${identity.displayUsername}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: ApexTypography.bodyMedium.copyWith(
+                    color: ApexColors.textPrimary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  [
+                    identity.platformLabel,
+                    ApexCopy.publicAccount,
+                    if (identity.hasKnownRating) identity.rating!,
+                  ].join(' · '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: ApexTypography.bodyMedium.copyWith(
+                    color: ApexColors.textTertiary,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (identity.isConnectedUser)
+            const Padding(
+              padding: EdgeInsets.only(left: 8),
+              child: _IdentityYouChip(),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _IdentityYouChip extends StatelessWidget {
+  const _IdentityYouChip();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: ApexColors.sapphire.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: ApexColors.sapphireBright.withValues(alpha: 0.42),
+          width: 0.5,
+        ),
+      ),
+      child: Text(
+        'YOU',
+        style: ApexTypography.labelLarge.copyWith(
+          color: ApexColors.sapphireBright,
+          fontSize: 9,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+}
+
+String? _firstRating(ProfileStats stats) {
+  for (final bucket in stats.buckets) {
+    final rating = bucket.rating;
+    if (rating != null) return '$rating';
+  }
+  return null;
+}
+
+extension on ProfileStatsSource {
+  PlayerIdentityPlatform get identityPlatform {
+    return switch (this) {
+      ProfileStatsSource.chessCom => PlayerIdentityPlatform.chessCom,
+      ProfileStatsSource.lichess => PlayerIdentityPlatform.lichess,
+    };
   }
 }
 

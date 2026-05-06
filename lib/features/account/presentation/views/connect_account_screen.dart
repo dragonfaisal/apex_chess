@@ -23,6 +23,7 @@ import 'package:apex_chess/features/user_validation/presentation/username_valida
 import 'package:apex_chess/features/user_validation/presentation/widgets/username_validation_pill.dart';
 import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
+import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_snack.dart';
@@ -97,7 +98,10 @@ class _ConnectAccountScreenState extends ConsumerState<ConnectAccountScreen> {
     setState(() {});
   }
 
-  void _onTextChange() => _pushValidation();
+  void _onTextChange() {
+    _pushValidation();
+    if (mounted) setState(() {});
+  }
 
   void _pushValidation() {
     _ensureValidation().updateInput(
@@ -155,6 +159,12 @@ class _ConnectAccountScreenState extends ConsumerState<ConnectAccountScreen> {
   @override
   Widget build(BuildContext context) {
     final state = _ensureValidation().value;
+    final existingAccount = ref.watch(accountControllerProvider).valueOrNull;
+    final isExactConnectedAccount =
+        existingAccount != null &&
+        existingAccount.source == _source &&
+        PlayerIdentityDisplay.normalizeUsername(existingAccount.username) ==
+            PlayerIdentityDisplay.normalizeUsername(_textController.text);
     final canConnect =
         !_busy &&
         state.existence == UsernameExistence.exists &&
@@ -269,6 +279,10 @@ class _ConnectAccountScreenState extends ConsumerState<ConnectAccountScreen> {
                           ),
                         ),
                       ),
+                      if (isExactConnectedAccount) ...[
+                        const SizedBox(height: 8),
+                        const _ConnectedAccountNotice(),
+                      ],
                       const SizedBox(height: 14),
                       _ConnectCta(
                         enabled: canConnect,
@@ -445,6 +459,47 @@ class _ConnectCta extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                 ),
               ),
+      ),
+    );
+  }
+}
+
+class _ConnectedAccountNotice extends StatelessWidget {
+  const _ConnectedAccountNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: ApexColors.sapphireBright.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: ApexColors.sapphireBright.withValues(alpha: 0.28),
+          width: 0.7,
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.verified_user_outlined,
+            color: ApexColors.sapphireBright,
+            size: 16,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              ApexCopy.connectedAccountNotice,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: ApexTypography.bodyMedium.copyWith(
+                color: ApexColors.sapphireBright,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
