@@ -325,6 +325,17 @@ class _FilterBar extends ConsumerWidget {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
+                if (filters.search.trim().isNotEmpty) ...[
+                  _FilterChip(
+                    label: filters.search.trim(),
+                    icon: Icons.search_rounded,
+                    selected: true,
+                    onTap: () => ref
+                        .read(archiveControllerProvider.notifier)
+                        .setSearch(''),
+                  ),
+                  const SizedBox(width: 8),
+                ],
                 _FilterChip(
                   label: _sortLabel(filters.sort),
                   icon: Icons.sort_rounded,
@@ -358,6 +369,13 @@ class _FilterBar extends ConsumerWidget {
                   icon: Icons.flag_outlined,
                   selected: filters.result != ArchiveResultFilter.any,
                   onTap: () => _showResultSheet(context, ref),
+                ),
+                const SizedBox(width: 8),
+                _FilterChip(
+                  label: _qualityLabel(filters.quality),
+                  icon: Icons.tune_rounded,
+                  selected: filters.quality != ArchiveQualityFilter.any,
+                  onTap: () => _showQualitySheet(context, ref),
                 ),
                 const SizedBox(width: 8),
                 _FilterChip(
@@ -465,9 +483,16 @@ class _FilterBar extends ConsumerWidget {
 
   String _resultLabel(ArchiveResultFilter r) => switch (r) {
     ArchiveResultFilter.any => 'All results',
-    ArchiveResultFilter.wins => 'Wins',
-    ArchiveResultFilter.losses => 'Losses',
-    ArchiveResultFilter.draws => 'Draws',
+    ArchiveResultFilter.wins => 'Won',
+    ArchiveResultFilter.losses => 'Lost',
+    ArchiveResultFilter.draws => 'Draw',
+  };
+
+  String _qualityLabel(ArchiveQualityFilter q) => switch (q) {
+    ArchiveQualityFilter.any => 'Any quality',
+    ArchiveQualityFilter.brilliant => 'Brilliant',
+    ArchiveQualityFilter.miss => 'Miss',
+    ArchiveQualityFilter.blunder => 'Blunder',
   };
 
   void _showSortSheet(BuildContext context, WidgetRef ref) {
@@ -505,6 +530,20 @@ class _FilterBar extends ConsumerWidget {
           ),
       ],
     );
+  }
+
+  void _showQualitySheet(BuildContext context, WidgetRef ref) {
+    _showSheet(context, 'Move quality', [
+      for (final q in ArchiveQualityFilter.values)
+        _SheetOption(
+          label: _qualityLabel(q),
+          selected: filters.quality == q,
+          onTap: () {
+            ref.read(archiveControllerProvider.notifier).setQualityFilter(q);
+            Navigator.of(context).pop();
+          },
+        ),
+    ]);
   }
 
   void _showBrilliantsSheet(BuildContext context, WidgetRef ref) {
@@ -646,6 +685,16 @@ class _ArchiveSearchFieldState extends ConsumerState<_ArchiveSearchField> {
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.current);
+  }
+
+  @override
+  void didUpdateWidget(covariant _ArchiveSearchField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.current == _controller.text) return;
+    _controller.value = TextEditingValue(
+      text: widget.current,
+      selection: TextSelection.collapsed(offset: widget.current.length),
+    );
   }
 
   @override

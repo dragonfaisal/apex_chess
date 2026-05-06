@@ -154,8 +154,7 @@ class ApexCopy {
       'Read-only. Public profile endpoints. No password, no OAuth.';
 
   static const String dashboardTitle = 'STATS';
-  static const String dashboardSubtitle =
-      'Public account stats and Apex analyzed games in one place.';
+  static const String dashboardSubtitle = 'Public account · Apex reviews';
   static const String dashboardEmptyTitle = 'No analyzed stats yet.';
   static const String dashboardEmpty = 'Review games to build your dashboard.';
   static const String dashboardEmptyHint = 'Use Analyze to review a game.';
@@ -168,7 +167,7 @@ class ApexCopy {
   static const String dashboardOpeningCard = 'OPENING ARSENAL';
   static const String dashboardOpeningEmpty =
       'Scan a handful of matches to surface your strongest and weakest lines.';
-  static const String dashboardPlayerSearchTitle = 'PROFILE LOOKUP';
+  static const String dashboardPlayerSearchTitle = 'PLAYER SEARCH';
   static const String dashboardPlayerSearchSubtitle = 'Public profile';
   static const String dashboardPlayerSearchHint = 'Search username';
   static const String dashboardNoPublicData = 'No public data';

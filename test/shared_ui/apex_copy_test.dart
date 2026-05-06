@@ -38,7 +38,7 @@ void main() {
   });
 
   test('Stats search copy stays honest about public profile scope', () {
-    expect(ApexCopy.dashboardPlayerSearchTitle, 'PROFILE LOOKUP');
+    expect(ApexCopy.dashboardPlayerSearchTitle, 'PLAYER SEARCH');
     expect(ApexCopy.dashboardPlayerSearchSubtitle, 'Public profile');
     expect(ApexCopy.dashboardPublicAccountStats, 'Public account stats');
     expect(

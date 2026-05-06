@@ -28,6 +28,10 @@ enum ArchiveSort {
 
 enum ArchiveResultFilter { any, wins, losses, draws }
 
+/// Move-quality shortcut filter used by Stats and Archive. Kept intentionally
+/// small so the archive remains a saved-review list, not a full query builder.
+enum ArchiveQualityFilter { any, brilliant, miss, blunder }
+
 /// Colour filter — only meaningful when [ArchiveFilters.perspective] is
 /// set, because "user played White" needs to know which side is the
 /// user. `any` disables the filter.
@@ -35,6 +39,95 @@ enum ArchiveColorFilter { any, white, black }
 
 /// Mode filter for the Fast/Deep split. `any` disables.
 enum ArchiveModeFilter { any, quick, deep, offline }
+
+/// Single contract for opening Archive from another feature.
+///
+/// The Archive controller ultimately renders [ArchiveFilters], but callers
+/// should speak in this intent model so result, side, source, mode, quality,
+/// opening, search, and sort stay in one pathway.
+class ArchiveFilterIntent {
+  const ArchiveFilterIntent({
+    this.result = ArchiveResultFilter.any,
+    this.userSide = ArchiveColorFilter.any,
+    this.source,
+    this.reviewMode = ArchiveModeFilter.any,
+    this.moveQuality = ArchiveQualityFilter.any,
+    this.openingQuery = '',
+    this.searchQuery = '',
+    this.sort = ArchiveSort.newest,
+  });
+
+  factory ArchiveFilterIntent.result(ArchiveResultFilter result) =>
+      ArchiveFilterIntent(result: result);
+
+  factory ArchiveFilterIntent.side(ArchiveColorFilter userSide) =>
+      ArchiveFilterIntent(userSide: userSide);
+
+  factory ArchiveFilterIntent.quality(ArchiveQualityFilter quality) =>
+      ArchiveFilterIntent(
+        moveQuality: quality,
+        sort: quality == ArchiveQualityFilter.blunder
+            ? ArchiveSort.mostBlunders
+            : quality == ArchiveQualityFilter.brilliant
+            ? ArchiveSort.mostBrilliants
+            : ArchiveSort.newest,
+      );
+
+  factory ArchiveFilterIntent.opening({required String name, String? eco}) =>
+      ArchiveFilterIntent(
+        openingQuery: eco?.trim().isNotEmpty == true ? eco!.trim() : name,
+      );
+
+  final ArchiveResultFilter result;
+  final ArchiveColorFilter userSide;
+  final ArchiveSource? source;
+  final ArchiveModeFilter reviewMode;
+  final ArchiveQualityFilter moveQuality;
+  final String openingQuery;
+  final String searchQuery;
+  final ArchiveSort sort;
+
+  ArchiveFilterIntent copyWith({
+    ArchiveResultFilter? result,
+    ArchiveColorFilter? userSide,
+    ArchiveSource? source,
+    bool clearSource = false,
+    ArchiveModeFilter? reviewMode,
+    ArchiveQualityFilter? moveQuality,
+    String? openingQuery,
+    String? searchQuery,
+    ArchiveSort? sort,
+  }) {
+    return ArchiveFilterIntent(
+      result: result ?? this.result,
+      userSide: userSide ?? this.userSide,
+      source: clearSource ? null : (source ?? this.source),
+      reviewMode: reviewMode ?? this.reviewMode,
+      moveQuality: moveQuality ?? this.moveQuality,
+      openingQuery: openingQuery ?? this.openingQuery,
+      searchQuery: searchQuery ?? this.searchQuery,
+      sort: sort ?? this.sort,
+    );
+  }
+
+  ArchiveFilters toFilters({String? perspective}) {
+    final query = openingQuery.trim().isNotEmpty
+        ? openingQuery.trim()
+        : searchQuery.trim();
+    final needsPerspective =
+        result != ArchiveResultFilter.any || userSide != ArchiveColorFilter.any;
+    return ArchiveFilters(
+      sort: sort,
+      result: result,
+      perspective: needsPerspective ? perspective : null,
+      source: source,
+      color: userSide,
+      mode: reviewMode,
+      quality: moveQuality,
+      search: query,
+    );
+  }
+}
 
 class ArchiveFilters {
   final ArchiveSort sort;
@@ -46,6 +139,9 @@ class ArchiveFilters {
 
   /// Only show games with at least this many brilliant moves.
   final int minBrilliants;
+
+  /// Compact quality filter for Stats-driven review actions.
+  final ArchiveQualityFilter quality;
 
   /// When non-null, only games from this source are shown.
   final ArchiveSource? source;
@@ -66,6 +162,7 @@ class ArchiveFilters {
     this.result = ArchiveResultFilter.any,
     this.perspective,
     this.minBrilliants = 0,
+    this.quality = ArchiveQualityFilter.any,
     this.source,
     this.color = ArchiveColorFilter.any,
     this.mode = ArchiveModeFilter.any,
@@ -78,6 +175,7 @@ class ArchiveFilters {
     String? perspective,
     bool clearPerspective = false,
     int? minBrilliants,
+    ArchiveQualityFilter? quality,
     ArchiveSource? source,
     bool clearSource = false,
     ArchiveColorFilter? color,
@@ -88,6 +186,7 @@ class ArchiveFilters {
     result: result ?? this.result,
     perspective: clearPerspective ? null : (perspective ?? this.perspective),
     minBrilliants: minBrilliants ?? this.minBrilliants,
+    quality: quality ?? this.quality,
     source: clearSource ? null : (source ?? this.source),
     color: color ?? this.color,
     mode: mode ?? this.mode,
@@ -132,6 +231,15 @@ class ArchiveState {
     final me = filters.perspective?.toLowerCase();
     for (final g in games) {
       if (g.brilliantCount < filters.minBrilliants) continue;
+      if (filters.quality != ArchiveQualityFilter.any) {
+        final keep = switch (filters.quality) {
+          ArchiveQualityFilter.brilliant => g.brilliantCount > 0,
+          ArchiveQualityFilter.miss => g.missCount > 0,
+          ArchiveQualityFilter.blunder => g.blunderCount > 0,
+          ArchiveQualityFilter.any => true,
+        };
+        if (!keep) continue;
+      }
       if (filters.source != null && g.source != filters.source) continue;
       if (filters.mode != ArchiveModeFilter.any) {
         final profileId = g.analysisProfileId;
@@ -334,6 +442,17 @@ class ArchiveController extends Notifier<ArchiveState> {
   void setMinBrilliants(int n) {
     state = state.copyWith(
       filters: state.filters.copyWith(minBrilliants: n.clamp(0, 99)),
+    );
+  }
+
+  void setQualityFilter(ArchiveQualityFilter quality) {
+    state = state.copyWith(
+      filters: state.filters.copyWith(
+        quality: quality,
+        minBrilliants: quality == ArchiveQualityFilter.brilliant
+            ? state.filters.minBrilliants.clamp(0, 99)
+            : state.filters.minBrilliants,
+      ),
     );
   }
 

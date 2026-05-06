@@ -9,8 +9,6 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
-import 'package:apex_chess/core/domain/services/move_quality_display.dart';
 import 'package:apex_chess/features/account/domain/apex_account.dart';
 import 'package:apex_chess/features/account/presentation/controllers/account_controller.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
@@ -238,11 +236,13 @@ class _DashboardBody extends ConsumerWidget {
             const SizedBox(height: 18),
             _AccuracyTrendCard(stats: stats),
             const SizedBox(height: 14),
-            _QualityPieCard(stats: stats),
+            _MoveQualityBreakdownCard(stats: stats),
             const SizedBox(height: 14),
             _ResultSplitCard(stats: stats),
             const SizedBox(height: 14),
             const _OpeningStatsCard(),
+            const SizedBox(height: 14),
+            const _WeakSpotsCard(),
             const SizedBox(height: 18),
             const _RecentGamesTable(),
           ],
@@ -373,8 +373,8 @@ class _ProfileStatsCard extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _CardHeader(
-            title: ApexCopy.dashboardPublicAccountStats.toUpperCase(),
-            subtitle: 'Chess.com / Lichess public ratings.',
+            title: 'PUBLIC ACCOUNT',
+            subtitle: ApexCopy.synced,
             accent: ApexColors.aurora,
           ),
           const SizedBox(height: 12),
@@ -588,7 +588,10 @@ class _PlayerSearchCardState extends ConsumerState<_PlayerSearchCard> {
             const ApexSkeletonCard(height: 70, margin: EdgeInsets.zero),
           ] else if (state.result != null) ...[
             const SizedBox(height: 12),
-            _SearchedPlayerDashboard(stats: state.result!),
+            _SearchedPlayerDashboard(
+              stats: state.result!,
+              isConnectedAccount: state.isConnectedAccount,
+            ),
           ] else if (state.hasSearched) ...[
             const SizedBox(height: 12),
             _SmallNotice(
@@ -651,27 +654,58 @@ class _SearchSourceChip extends StatelessWidget {
   }
 }
 
-class _SearchedPlayerDashboard extends StatelessWidget {
-  const _SearchedPlayerDashboard({required this.stats});
+class _SearchedPlayerDashboard extends ConsumerWidget {
+  const _SearchedPlayerDashboard({
+    required this.stats,
+    required this.isConnectedAccount,
+  });
 
   final ProfileStats stats;
+  final bool isConnectedAccount;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final localStats = buildDashboardStatsForTesting(
+      ref.watch(archiveControllerProvider).games,
+      perspective: stats.username,
+    );
     if (!stats.hasData) {
-      return const _SmallNotice(
-        icon: Icons.info_outline_rounded,
-        title: ApexCopy.dashboardNoPublicData,
-        subtitle: ApexCopy.dashboardNoGamesFound,
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (isConnectedAccount) ...[
+            const _SmallNotice(
+              icon: Icons.verified_user_outlined,
+              title: ApexCopy.connectedAccountNotice,
+              subtitle: 'Public Account',
+            ),
+            const SizedBox(height: 8),
+          ],
+          const _SmallNotice(
+            icon: Icons.info_outline_rounded,
+            title: ApexCopy.dashboardNoPublicData,
+            subtitle: ApexCopy.dashboardNoGamesFound,
+          ),
+          const SizedBox(height: 8),
+          _SearchedApexStats(stats: localStats),
+        ],
       );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (isConnectedAccount) ...[
+          const _SmallNotice(
+            icon: Icons.verified_user_outlined,
+            title: ApexCopy.connectedAccountNotice,
+            subtitle: 'Public Account',
+          ),
+          const SizedBox(height: 8),
+        ],
         _SmallNotice(
           icon: Icons.account_circle_outlined,
           title: '@${stats.displayName}',
-          subtitle: ApexCopy.dashboardAccountOverview,
+          subtitle: 'Public Account',
         ),
         const SizedBox(height: 8),
         Row(
@@ -717,12 +751,100 @@ class _SearchedPlayerDashboard extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          ApexCopy.dashboardPublicSections,
+          'Public Account',
           textAlign: TextAlign.center,
           style: ApexTypography.bodyMedium.copyWith(
             color: ApexColors.textTertiary,
             fontSize: 11,
           ),
+        ),
+        const SizedBox(height: 10),
+        _SearchedApexStats(stats: localStats),
+      ],
+    );
+  }
+}
+
+void _openStatsArchiveIntent(
+  BuildContext context,
+  WidgetRef ref,
+  StatsArchiveFilterIntent intent, {
+  int? count,
+  String? emptyNotice,
+}) {
+  if (count != null && count <= 0 && emptyNotice != null) {
+    ref.read(dashboardInlineNoticeProvider.notifier).state = emptyNotice;
+    return;
+  }
+  final perspective = ref.read(dashboardStatsProvider).perspective;
+  final scope = ref.read(dashboardColorFilterProvider);
+  ref.read(dashboardInlineNoticeProvider.notifier).state = null;
+  Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => ArchiveScreen(
+        initialFilters: intent.toArchiveFilters(
+          perspective: perspective,
+          scope: scope,
+        ),
+      ),
+    ),
+  );
+}
+
+class _SearchedApexStats extends StatelessWidget {
+  const _SearchedApexStats({required this.stats});
+
+  final DashboardStats stats;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!stats.hasData) {
+      return const _SmallNotice(
+        icon: Icons.analytics_outlined,
+        title: 'Apex Analyzed Stats',
+        subtitle: 'No analyzed games',
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _SmallNotice(
+          icon: Icons.analytics_outlined,
+          title: 'Apex Analyzed Stats',
+          subtitle: 'Local reviews',
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _SmallStat(
+                label: 'GAMES',
+                value: '${stats.gamesAnalyzed}',
+                color: ApexColors.sapphireBright,
+              ),
+            ),
+            Expanded(
+              child: _SmallStat(
+                label: 'AVG',
+                value: '${stats.averageAccuracy.toStringAsFixed(0)}%',
+                color: ApexColors.emeraldBright,
+              ),
+            ),
+            Expanded(
+              child: _SmallStat(
+                label: 'WON',
+                value: '${stats.wins}',
+                color: ApexColors.emeraldBright,
+              ),
+            ),
+            Expanded(
+              child: _SmallStat(
+                label: 'LOST',
+                value: '${stats.losses}',
+                color: ApexColors.ruby,
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -885,7 +1007,6 @@ class _OpeningStatsCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final openings = ref.watch(openingStatsProvider);
-    final revisit = ref.watch(academyRevisitQueueProvider);
     return GlassPanel(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
       accentColor: ApexColors.sapphireBright,
@@ -894,8 +1015,7 @@ class _OpeningStatsCard extends ConsumerWidget {
         children: [
           _CardHeader(
             title: 'OPENING PERFORMANCE',
-            subtitle:
-                'Top lines by frequency — Apex Academy prioritises your weakest.',
+            subtitle: 'Top lines by frequency',
             accent: ApexColors.sapphireBright,
           ),
           const SizedBox(height: 12),
@@ -912,48 +1032,6 @@ class _OpeningStatsCard extends ConsumerWidget {
             )
           else ...[
             for (final o in openings.take(6)) _OpeningRow(stats: o),
-            if (revisit.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: ApexColors.sapphireBright.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: ApexColors.sapphireBright.withValues(alpha: 0.35),
-                    width: 0.5,
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'REVISIT QUEUE',
-                      style: ApexTypography.bodyMedium.copyWith(
-                        color: ApexColors.sapphireBright,
-                        fontSize: 10,
-                        letterSpacing: 1.4,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    for (final o in revisit)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          '• ${o.name} — ${o.lossRate.toStringAsFixed(0)}% loss · ${o.total} games',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: ApexTypography.bodyMedium.copyWith(
-                            color: ApexColors.textSecondary,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
           ],
         ],
       ),
@@ -961,58 +1039,71 @@ class _OpeningStatsCard extends ConsumerWidget {
   }
 }
 
-class _OpeningRow extends StatelessWidget {
+class _OpeningRow extends ConsumerWidget {
   const _OpeningRow({required this.stats});
   final OpeningStats stats;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  stats.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: ApexTypography.bodyMedium.copyWith(
-                    color: ApexColors.textPrimary,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                  ),
+      child: InkWell(
+        onTap: () => _openStatsArchiveIntent(
+          context,
+          ref,
+          StatsArchiveFilterIntent.opening(stats),
+          count: stats.total,
+          emptyNotice: 'No matching games',
+        ),
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 5),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      stats.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: ApexTypography.bodyMedium.copyWith(
+                        color: ApexColors.textPrimary,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${stats.eco ?? "—"} · ${stats.total} games',
+                      style: ApexTypography.bodyMedium.copyWith(
+                        color: ApexColors.textTertiary,
+                        fontSize: 10.5,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  '${stats.eco ?? "—"} · ${stats.total} games',
-                  style: ApexTypography.bodyMedium.copyWith(
-                    color: ApexColors.textTertiary,
-                    fontSize: 10.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          _OpeningBar(stats: stats),
-          const SizedBox(width: 10),
-          SizedBox(
-            width: 46,
-            child: Text(
-              '${stats.winRate.toStringAsFixed(0)}%',
-              textAlign: TextAlign.right,
-              style: ApexTypography.bodyMedium.copyWith(
-                color: stats.winRate >= 50
-                    ? ApexColors.emeraldBright
-                    : ApexColors.ruby,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
               ),
-            ),
+              _OpeningBar(stats: stats),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 46,
+                child: Text(
+                  '${stats.scoreRate.toStringAsFixed(0)}%',
+                  textAlign: TextAlign.right,
+                  style: ApexTypography.bodyMedium.copyWith(
+                    color: stats.scoreRate >= 50
+                        ? ApexColors.emeraldBright
+                        : ApexColors.ruby,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -1061,82 +1152,64 @@ class _KpiRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final cards = <Widget>[
-      _KpiCard(
-        label: 'Games',
-        value: '${stats.gamesAnalyzed}',
-        accent: ApexColors.sapphire,
-        icon: Icons.analytics_rounded,
-        onTap: () => _openArchive(context, ref, const ArchiveFilters()),
-      ),
-      _KpiCard(
-        label: 'Avg Accuracy',
-        value: '${stats.averageAccuracy.toStringAsFixed(1)}%',
-        accent: ApexColors.emerald,
-        icon: Icons.auto_graph_rounded,
-      ),
-      _KpiCard(
-        label: 'Brilliants',
-        value: '${stats.totalBrilliants}',
-        accent: ApexColors.aurora,
-        icon: Icons.auto_awesome_rounded,
-        onTap: () {
-          if (stats.totalBrilliants <= 0) {
-            ref.read(dashboardInlineNoticeProvider.notifier).state =
-                'No Brilliant reviews yet';
-            return;
-          }
-          _openArchive(context, ref, const ArchiveFilters(minBrilliants: 1));
-        },
-      ),
-      _KpiCard(
-        label: 'Blunders',
-        value: '${stats.totalBlunders}',
-        accent: ApexColors.ruby,
-        icon: Icons.error_outline_rounded,
-        onTap: () {
-          if (stats.totalBlunders <= 0) {
-            ref.read(dashboardInlineNoticeProvider.notifier).state =
-                'No Blunder reviews yet';
-            return;
-          }
-          _openArchive(
-            context,
-            ref,
-            const ArchiveFilters(sort: ArchiveSort.mostBlunders),
-          );
-        },
-      ),
-    ];
+    final cards = buildDashboardKpis(stats)
+        .map(
+          (kpi) => _KpiCard(
+            label: kpi.label,
+            value: kpi.value,
+            accent: _kpiAccent(kpi.label),
+            icon: _kpiIcon(kpi.label),
+            onTap: kpi.intent == null
+                ? null
+                : () => _openStatsArchiveIntent(
+                    context,
+                    ref,
+                    kpi.intent!,
+                    count: kpi.count,
+                    emptyNotice: kpi.emptyNotice,
+                  ),
+          ),
+        )
+        .toList();
     return LayoutBuilder(
       builder: (context, box) {
-        // Auto-wrap into 2×2 on narrow phones, 1×4 on tablets / desktop.
-        final crossAxisCount = box.maxWidth >= 640 ? 4 : 2;
+        final crossAxisCount = box.maxWidth >= 720 ? 3 : 2;
         return GridView.count(
           crossAxisCount: crossAxisCount,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           mainAxisSpacing: 10,
           crossAxisSpacing: 10,
-          childAspectRatio: crossAxisCount == 4 ? 1.35 : 1.55,
+          childAspectRatio: crossAxisCount == 3 ? 1.55 : 1.45,
           children: cards,
         );
       },
     );
   }
 
-  void _openArchive(
-    BuildContext context,
-    WidgetRef ref,
-    ArchiveFilters filters,
-  ) {
-    ref.read(dashboardInlineNoticeProvider.notifier).state = null;
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ArchiveScreen(initialFilters: filters),
-      ),
-    );
-  }
+  Color _kpiAccent(String label) => switch (label) {
+    'Wins' => ApexColors.emerald,
+    'Losses' => ApexColors.ruby,
+    'Draws' => ApexColors.inaccuracy,
+    'Brilliants' => ApexColors.brilliant,
+    'Misses' => ApexColors.mistake,
+    'Blunders' => ApexColors.blunder,
+    'Avg Accuracy' => ApexColors.emerald,
+    'Avg ACPL' => ApexColors.sapphireBright,
+    _ => ApexColors.sapphire,
+  };
+
+  IconData _kpiIcon(String label) => switch (label) {
+    'Wins' => Icons.check_circle_outline_rounded,
+    'Losses' => Icons.cancel_outlined,
+    'Draws' => Icons.balance_rounded,
+    'Brilliants' => Icons.auto_awesome_rounded,
+    'Misses' => Icons.report_gmailerrorred_rounded,
+    'Blunders' => Icons.error_outline_rounded,
+    'Avg Accuracy' => Icons.auto_graph_rounded,
+    'Avg ACPL' => Icons.speed_rounded,
+    _ => Icons.analytics_rounded,
+  };
 }
 
 class _KpiCard extends StatelessWidget {
@@ -1202,6 +1275,7 @@ class _AccuracyTrendCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final display = buildAccuracyTrendDisplay(stats);
     return GlassPanel(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
       accentColor: ApexColors.emerald,
@@ -1210,11 +1284,22 @@ class _AccuracyTrendCard extends StatelessWidget {
         children: [
           _CardHeader(
             title: 'ACCURACY TREND',
-            subtitle: 'Higher is better — one point per analysed game.',
+            subtitle: 'Higher is better',
             accent: ApexColors.emerald,
           ),
           const SizedBox(height: 10),
-          SizedBox(height: 160, child: LineChart(_data(stats.accuracyTrend))),
+          if (!display.canChart)
+            _SmallNotice(
+              icon: Icons.auto_graph_rounded,
+              title: display.state == AccuracyTrendState.empty
+                  ? 'No games yet'
+                  : 'More games needed',
+              subtitle: display.state == AccuracyTrendState.empty
+                  ? 'Review a game to build stats'
+                  : 'One game logged',
+            )
+          else
+            SizedBox(height: 160, child: LineChart(_data(display.points))),
         ],
       ),
     );
@@ -1286,32 +1371,15 @@ class _AccuracyTrendCard extends StatelessWidget {
   }
 }
 
-// ── Quality pie ────────────────────────────────────────────────────────
+// ── Move quality breakdown ─────────────────────────────────────────────
 
-class _QualityPieCard extends StatelessWidget {
-  const _QualityPieCard({required this.stats});
+class _MoveQualityBreakdownCard extends ConsumerWidget {
+  const _MoveQualityBreakdownCard({required this.stats});
   final DashboardStats stats;
 
   @override
-  Widget build(BuildContext context) {
-    final entries =
-        stats.qualityDistribution.entries
-            .where((e) => e.value > 0 && e.key != MoveQuality.book)
-            .toList()
-          ..sort((a, b) => b.value.compareTo(a.value));
-    final total = entries.fold<int>(0, (s, e) => s + e.value);
-
-    final legendItems = entries
-        .map(
-          (e) => _LegendChip(
-            color: _qualityColor(e.key),
-            label: _qualityLabel(e.key),
-            count: e.value,
-            percent: total == 0 ? 0 : e.value / total,
-          ),
-        )
-        .toList();
-
+  Widget build(BuildContext context, WidgetRef ref) {
+    final display = buildMoveQualityBreakdownDisplay(stats);
     return GlassPanel(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
       accentColor: ApexColors.sapphire,
@@ -1320,109 +1388,119 @@ class _QualityPieCard extends StatelessWidget {
         children: [
           _CardHeader(
             title: 'MOVE QUALITY',
-            subtitle: 'Aggregate distribution across every ply scanned.',
+            subtitle: 'All public labels',
             accent: ApexColors.sapphire,
           ),
           const SizedBox(height: 12),
-          // ── Responsive: pie + legend-column side-by-side on ≥ 420 dp,
-          // stacked (pie above, wrapping legend grid below) on narrower
-          // phones. The old fixed-height Row with `flex: 6` on the
-          // legend overflowed both vertically (7 chips / 170 dp) and
-          // horizontally (label + count cramped into ~100 dp).
-          LayoutBuilder(
-            builder: (context, box) {
-              final wide = box.maxWidth >= 420;
-              if (wide) {
-                return SizedBox(
-                  height: 200,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Expanded(flex: 5, child: _buildPie(entries)),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        flex: 7,
-                        child: SingleChildScrollView(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: legendItems,
+          if (!display.hasMoves)
+            const _SmallNotice(
+              icon: Icons.category_outlined,
+              title: 'No games yet',
+              subtitle: 'Review a game to build stats',
+            )
+          else
+            Column(
+              children: [
+                for (final item in display.items)
+                  _MoveQualityRow(
+                    item: item,
+                    onTap: item.intent == null
+                        ? null
+                        : () => _openStatsArchiveIntent(
+                            context,
+                            ref,
+                            item.intent!,
+                            count: item.count,
+                            emptyNotice: 'No ${item.label} reviews yet',
                           ),
-                        ),
-                      ),
-                    ],
                   ),
-                );
-              }
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SizedBox(height: 170, child: _buildPie(entries)),
-                  const SizedBox(height: 10),
-                  // Two-column wrap keeps every chip inside the card even
-                  // on 320 dp widths, and each chip is its own Intrinsic
-                  // so the "· %" trailing figure never collides with the
-                  // label.
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 2,
-                    children: legendItems
-                        .map(
-                          (chip) => SizedBox(
-                            width: (box.maxWidth - 8) / 2,
-                            child: chip,
-                          ),
-                        )
-                        .toList(),
-                  ),
-                ],
-              );
-            },
-          ),
+              ],
+            ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildPie(List<MapEntry<MoveQuality, int>> entries) {
-    return PieChart(
-      PieChartData(
-        sectionsSpace: 2,
-        centerSpaceRadius: 36,
-        startDegreeOffset: -90,
-        sections: entries.isEmpty
-            ? []
-            : entries
-                  .map(
-                    (e) => PieChartSectionData(
-                      value: e.value.toDouble(),
-                      color: _qualityColor(e.key),
-                      radius: 42,
-                      title: '',
+class _MoveQualityRow extends StatelessWidget {
+  const _MoveQualityRow({required this.item, this.onTap});
+
+  final MoveQualityBreakdownItem item;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = item.reviewLabel.color;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 5),
+          child: Row(
+            children: [
+              Container(
+                width: 9,
+                height: 9,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(3),
+                  boxShadow: [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.35),
+                      blurRadius: 8,
                     ),
-                  )
-                  .toList(),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 9),
+              SizedBox(
+                width: 86,
+                child: Text(
+                  item.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: ApexTypography.bodyMedium.copyWith(
+                    color: ApexColors.textSecondary,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(
+                    minHeight: 7,
+                    value: item.percent,
+                    color: color,
+                    backgroundColor: ApexColors.stardustLine.withValues(
+                      alpha: 0.24,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 34,
+                child: Text(
+                  '${item.count}',
+                  textAlign: TextAlign.right,
+                  style: ApexTypography.bodyMedium.copyWith(
+                    color: ApexColors.textPrimary,
+                    fontSize: 11.5,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
-
-  Color _qualityColor(MoveQuality q) => switch (q) {
-    MoveQuality.brilliant => ApexColors.brilliant,
-    MoveQuality.great => ApexColors.brilliant,
-    MoveQuality.best => ApexColors.best,
-    MoveQuality.excellent => ApexColors.great,
-    MoveQuality.good => ApexColors.sapphireDeep,
-    MoveQuality.forced => ApexColors.textSecondary,
-    MoveQuality.inaccuracy => ApexColors.inaccuracy,
-    MoveQuality.missedWin => ApexColors.mistake,
-    MoveQuality.mistake => ApexColors.mistake,
-    MoveQuality.blunder => ApexColors.blunder,
-    MoveQuality.book => ApexColors.book,
-  };
-
-  String _qualityLabel(MoveQuality q) => switch (q) {
-    MoveQuality.forced => 'Best',
-    _ => MoveQualityDisplay.labelTextForQuality(q),
-  };
 }
 
 class _AnalyzedSectionLabel extends StatelessWidget {
@@ -1461,61 +1539,6 @@ class _AnalyzedSectionLabel extends StatelessWidget {
   }
 }
 
-class _LegendChip extends StatelessWidget {
-  const _LegendChip({
-    required this.color,
-    required this.label,
-    required this.count,
-    required this.percent,
-  });
-
-  final Color color;
-  final String label;
-  final int count;
-  final double percent;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        children: [
-          Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(2),
-              boxShadow: [
-                BoxShadow(color: color.withValues(alpha: 0.55), blurRadius: 8),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              label,
-              overflow: TextOverflow.ellipsis,
-              style: ApexTypography.bodyMedium.copyWith(
-                color: ApexColors.textSecondary,
-                fontSize: 11.5,
-              ),
-            ),
-          ),
-          Text(
-            '$count · ${(percent * 100).toStringAsFixed(0)}%',
-            style: ApexTypography.bodyMedium.copyWith(
-              color: ApexColors.textPrimary,
-              fontSize: 11,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 // ── Result split ───────────────────────────────────────────────────────
 
 class _ResultSplitCard extends ConsumerWidget {
@@ -1526,6 +1549,7 @@ class _ResultSplitCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final hasPerspective =
         stats.perspective != null && stats.perspective!.isNotEmpty;
+    final display = buildResultSplitDisplay(stats);
     return GlassPanel(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
       accentColor: ApexColors.ruby,
@@ -1536,7 +1560,7 @@ class _ResultSplitCard extends ConsumerWidget {
             title: 'RESULT SPLIT',
             subtitle: hasPerspective
                 ? 'From @${stats.perspective!}.'
-                : 'Connect an account to resolve W/L/D.',
+                : 'Connect account for W/L/D',
             accent: ApexColors.ruby,
           ),
           const SizedBox(height: 14),
@@ -1548,59 +1572,24 @@ class _ResultSplitCard extends ConsumerWidget {
                 fontSize: 11.5,
               ),
             )
+          else if (!display.hasGames)
+            const _SmallNotice(
+              icon: Icons.pie_chart_outline_rounded,
+              title: 'No games yet',
+              subtitle: 'Review a game to build stats',
+            )
           else ...[
-            SizedBox(
-              height: 150,
-              child: BarChart(
-                BarChartData(
-                  alignment: BarChartAlignment.spaceAround,
-                  maxY: [stats.wins, stats.draws, stats.losses]
-                      .fold<int>(0, (m, v) => v > m ? v : m)
-                      .toDouble()
-                      .clamp(1, double.infinity),
-                  barTouchData: BarTouchData(enabled: false),
-                  gridData: const FlGridData(show: false),
-                  borderData: FlBorderData(show: false),
-                  titlesData: FlTitlesData(
-                    leftTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                    rightTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                    topTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                    bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 28,
-                        getTitlesWidget: (v, meta) {
-                          final label = switch (v.toInt()) {
-                            0 => 'Wins',
-                            1 => 'Draws',
-                            2 => 'Losses',
-                            _ => '',
-                          };
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 6),
-                            child: Text(
-                              label,
-                              style: ApexTypography.bodyMedium.copyWith(
-                                color: ApexColors.textTertiary,
-                                fontSize: 10.5,
-                                letterSpacing: 0.6,
-                              ),
-                            ),
-                          );
-                        },
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: SizedBox(
+                height: 14,
+                child: Row(
+                  children: [
+                    for (final segment in display.segments)
+                      Expanded(
+                        flex: (segment.fraction * 1000).round().clamp(1, 1000),
+                        child: Container(color: _resultColor(segment.label)),
                       ),
-                    ),
-                  ),
-                  barGroups: [
-                    _bar(0, stats.wins.toDouble(), ApexColors.emerald),
-                    _bar(1, stats.draws.toDouble(), ApexColors.sapphire),
-                    _bar(2, stats.losses.toDouble(), ApexColors.ruby),
                   ],
                 ),
               ),
@@ -1608,44 +1597,21 @@ class _ResultSplitCard extends ConsumerWidget {
             const SizedBox(height: 10),
             Row(
               children: [
-                _ResultShortcut(
-                  label: 'Wins',
-                  count: stats.wins,
-                  color: ApexColors.emerald,
-                  onTap: () => _openResultArchive(
-                    context,
-                    ref,
-                    ArchiveResultFilter.wins,
-                    stats.wins,
-                    'No wins yet',
+                for (var i = 0; i < display.segments.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 8),
+                  _ResultShortcut(
+                    label: display.segments[i].label,
+                    count: display.segments[i].count,
+                    color: _resultColor(display.segments[i].label),
+                    onTap: () => _openStatsArchiveIntent(
+                      context,
+                      ref,
+                      display.segments[i].intent,
+                      count: display.segments[i].count,
+                      emptyNotice: display.segments[i].emptyNotice,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                _ResultShortcut(
-                  label: 'Draws',
-                  count: stats.draws,
-                  color: ApexColors.sapphire,
-                  onTap: () => _openResultArchive(
-                    context,
-                    ref,
-                    ArchiveResultFilter.draws,
-                    stats.draws,
-                    'No draws yet',
-                  ),
-                ),
-                const SizedBox(width: 8),
-                _ResultShortcut(
-                  label: 'Losses',
-                  count: stats.losses,
-                  color: ApexColors.ruby,
-                  onTap: () => _openResultArchive(
-                    context,
-                    ref,
-                    ArchiveResultFilter.losses,
-                    stats.losses,
-                    'No losses yet',
-                  ),
-                ),
+                ],
               ],
             ),
           ],
@@ -1654,45 +1620,12 @@ class _ResultSplitCard extends ConsumerWidget {
     );
   }
 
-  BarChartGroupData _bar(int x, double y, Color color) => BarChartGroupData(
-    x: x,
-    barRods: [
-      BarChartRodData(
-        toY: y,
-        width: 28,
-        borderRadius: BorderRadius.circular(6),
-        gradient: LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: [color.withValues(alpha: 0.55), color],
-        ),
-      ),
-    ],
-  );
-
-  void _openResultArchive(
-    BuildContext context,
-    WidgetRef ref,
-    ArchiveResultFilter result,
-    int count,
-    String emptyNotice,
-  ) {
-    if (count <= 0) {
-      ref.read(dashboardInlineNoticeProvider.notifier).state = emptyNotice;
-      return;
-    }
-    ref.read(dashboardInlineNoticeProvider.notifier).state = null;
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ArchiveScreen(
-          initialFilters: ArchiveFilters(
-            result: result,
-            perspective: stats.perspective,
-          ),
-        ),
-      ),
-    );
-  }
+  Color _resultColor(String label) => switch (label) {
+    'Won' => ApexColors.emerald,
+    'Draw' => ApexColors.inaccuracy,
+    'Lost' => ApexColors.ruby,
+    _ => ApexColors.sapphire,
+  };
 }
 
 class _ResultShortcut extends StatelessWidget {
@@ -1732,6 +1665,112 @@ class _ResultShortcut extends StatelessWidget {
               fontSize: 11,
               fontWeight: FontWeight.w700,
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Weak spots ─────────────────────────────────────────────────────────
+
+class _WeakSpotsCard extends ConsumerWidget {
+  const _WeakSpotsCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final spots = ref.watch(dashboardWeakSpotsProvider);
+    return GlassPanel(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      accentColor: ApexColors.mistake,
+      accentAlpha: 0.22,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _CardHeader(
+            title: 'WEAK SPOTS',
+            subtitle: 'Review next',
+            accent: ApexColors.mistake,
+          ),
+          const SizedBox(height: 10),
+          for (final spot in spots) _WeakSpotRow(spot: spot),
+        ],
+      ),
+    );
+  }
+}
+
+class _WeakSpotRow extends ConsumerWidget {
+  const _WeakSpotRow({required this.spot});
+
+  final WeakSpotDisplay spot;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: InkWell(
+        onTap: spot.intent == null
+            ? null
+            : () => _openStatsArchiveIntent(
+                context,
+                ref,
+                spot.intent!,
+                count: spot.count > 0 ? spot.count : null,
+              ),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          decoration: BoxDecoration(
+            color: ApexColors.nebula.withValues(alpha: 0.40),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: ApexColors.stardustLine.withValues(alpha: 0.22),
+              width: 0.6,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.insights_rounded,
+                color: ApexColors.mistake.withValues(alpha: 0.90),
+                size: 17,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      spot.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: ApexTypography.bodyMedium.copyWith(
+                        color: ApexColors.textPrimary,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      spot.subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: ApexTypography.bodyMedium.copyWith(
+                        color: ApexColors.textTertiary,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (spot.intent != null)
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: ApexColors.textTertiary,
+                  size: 18,
+                ),
+            ],
           ),
         ),
       ),
@@ -1809,6 +1848,17 @@ class _RecentRow extends StatelessWidget {
         model: display.card,
         dense: true,
         enableHaptic: false,
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => ArchiveScreen(
+              initialFilters: ArchiveFilters(
+                search: game.ecoCode?.trim().isNotEmpty == true
+                    ? game.ecoCode!.trim()
+                    : (game.openingName ?? game.black),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

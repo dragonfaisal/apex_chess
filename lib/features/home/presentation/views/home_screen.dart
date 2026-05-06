@@ -1192,74 +1192,78 @@ class _DynamicHeroCard extends StatelessWidget {
               ),
             ],
           ),
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: CustomPaint(painter: _HeroBoardMotifPainter()),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(22, 16, 16, 16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            hero.eyebrow,
-                            style: ApexTypography.bodyMedium.copyWith(
-                              color: Colors.white.withValues(alpha: 0.78),
-                              fontSize: 10,
-                              letterSpacing: 1.8,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              hero.title,
-                              style: ApexTypography.displayLarge.copyWith(
-                                fontSize: 22,
-                                letterSpacing: 0,
-                                color: Colors.white,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(22),
+            child: Stack(
+              clipBehavior: Clip.hardEdge,
+              children: [
+                Positioned.fill(
+                  child: CustomPaint(painter: _HeroBoardMotifPainter()),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 16, 16, 16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              hero.eyebrow,
+                              style: ApexTypography.bodyMedium.copyWith(
+                                color: Colors.white.withValues(alpha: 0.78),
+                                fontSize: 10,
+                                letterSpacing: 1.8,
+                                fontWeight: FontWeight.w800,
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            hero.subtitle,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: ApexTypography.bodyMedium.copyWith(
-                              color: Colors.white.withValues(alpha: 0.78),
-                              fontSize: 11,
-                              letterSpacing: 0,
+                            const SizedBox(height: 6),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                hero.title,
+                                style: ApexTypography.displayLarge.copyWith(
+                                  fontSize: 22,
+                                  letterSpacing: 0,
+                                  color: Colors.white,
+                                ),
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Container(
-                      width: 54,
-                      height: 54,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.20),
-                          width: 0.8,
+                            const SizedBox(height: 4),
+                            Text(
+                              hero.subtitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: ApexTypography.bodyMedium.copyWith(
+                                color: Colors.white.withValues(alpha: 0.78),
+                                fontSize: 11,
+                                letterSpacing: 0,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      child: Icon(hero.icon, color: Colors.white, size: 30),
-                    ),
-                  ],
+                      const SizedBox(width: 12),
+                      Container(
+                        width: 54,
+                        height: 54,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.20),
+                            width: 0.8,
+                          ),
+                        ),
+                        child: Icon(hero.icon, color: Colors.white, size: 30),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
