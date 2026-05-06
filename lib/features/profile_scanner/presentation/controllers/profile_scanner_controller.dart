@@ -221,7 +221,7 @@ class ProfileScannerController extends Notifier<ProfileScannerState> {
     final resolved = await ref
         .read(connectionPresenceProvider.notifier)
         .resolveServiceFailure(service: service, message: message);
-    return resolved == ApexCopy.offline ? ApexCopy.offline : ApexCopy.tryAgain;
+    return resolved;
   }
 }
 

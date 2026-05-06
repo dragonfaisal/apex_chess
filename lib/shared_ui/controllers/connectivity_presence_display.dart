@@ -6,7 +6,15 @@ import 'package:flutter/material.dart';
 import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 
-enum ConnectivityPresenceTone { online, offline, checking, serviceIssue }
+enum ConnectivityPresenceTone {
+  online,
+  offline,
+  checking,
+  unstable,
+  serviceIssue,
+  captiveOrBlocked,
+  unknown,
+}
 
 class ConnectivityPresenceBadgeModel {
   const ConnectivityPresenceBadgeModel({
@@ -57,6 +65,17 @@ class ConnectivityPresenceBadgeModel {
         showHalo: true,
         animateRing: false,
       ),
+      ConnectivityPresenceTone.captiveOrBlocked =>
+        const ConnectivityPresenceBadgeModel(
+          tone: ConnectivityPresenceTone.captiveOrBlocked,
+          label: 'Network blocked',
+          icon: Icons.account_circle_outlined,
+          accent: ApexColors.mistake,
+          iconColor: ApexColors.textTertiary,
+          dotColor: ApexColors.mistake,
+          showHalo: true,
+          animateRing: false,
+        ),
       ConnectivityPresenceTone.checking => const ConnectivityPresenceBadgeModel(
         tone: ConnectivityPresenceTone.checking,
         label: 'Checking',
@@ -66,6 +85,16 @@ class ConnectivityPresenceBadgeModel {
         dotColor: ApexColors.aurora,
         showHalo: true,
         animateRing: true,
+      ),
+      ConnectivityPresenceTone.unstable => const ConnectivityPresenceBadgeModel(
+        tone: ConnectivityPresenceTone.unstable,
+        label: 'Unstable',
+        icon: Icons.account_circle_rounded,
+        accent: ApexColors.inaccuracy,
+        iconColor: ApexColors.textSecondary,
+        dotColor: ApexColors.inaccuracy,
+        showHalo: true,
+        animateRing: false,
       ),
       ConnectivityPresenceTone.serviceIssue =>
         const ConnectivityPresenceBadgeModel(
@@ -78,6 +107,16 @@ class ConnectivityPresenceBadgeModel {
           showHalo: true,
           animateRing: false,
         ),
+      ConnectivityPresenceTone.unknown => const ConnectivityPresenceBadgeModel(
+        tone: ConnectivityPresenceTone.unknown,
+        label: 'Unknown',
+        icon: Icons.account_circle_rounded,
+        accent: ApexColors.sapphireBright,
+        iconColor: ApexColors.textSecondary,
+        dotColor: ApexColors.sapphireBright,
+        showHalo: false,
+        animateRing: false,
+      ),
     };
   }
 }
@@ -86,10 +125,17 @@ class ConnectivityPresenceDisplay {
   const ConnectivityPresenceDisplay._();
 
   static ConnectivityPresenceTone toneFor(ApexConnectionPresence presence) {
-    if (presence.isSyncing) return ConnectivityPresenceTone.checking;
-    if (presence.isOffline) return ConnectivityPresenceTone.offline;
-    if (presence.hasServiceIssue) return ConnectivityPresenceTone.serviceIssue;
-    return ConnectivityPresenceTone.online;
+    return switch (presence.status) {
+      ApexConnectionStatus.online => ConnectivityPresenceTone.online,
+      ApexConnectionStatus.offline => ConnectivityPresenceTone.offline,
+      ApexConnectionStatus.checking => ConnectivityPresenceTone.checking,
+      ApexConnectionStatus.unstable => ConnectivityPresenceTone.unstable,
+      ApexConnectionStatus.serviceIssue =>
+        ConnectivityPresenceTone.serviceIssue,
+      ApexConnectionStatus.captiveOrBlocked =>
+        ConnectivityPresenceTone.captiveOrBlocked,
+      ApexConnectionStatus.unknown => ConnectivityPresenceTone.unknown,
+    };
   }
 
   static Color colorFor(ApexConnectionPresence presence) {
@@ -97,7 +143,10 @@ class ConnectivityPresenceDisplay {
       ConnectivityPresenceTone.online => ApexColors.emeraldBright,
       ConnectivityPresenceTone.offline => ApexColors.ruby,
       ConnectivityPresenceTone.checking => ApexColors.aurora,
+      ConnectivityPresenceTone.unstable => ApexColors.inaccuracy,
       ConnectivityPresenceTone.serviceIssue => ApexColors.inaccuracy,
+      ConnectivityPresenceTone.captiveOrBlocked => ApexColors.mistake,
+      ConnectivityPresenceTone.unknown => ApexColors.sapphireBright,
     };
   }
 }

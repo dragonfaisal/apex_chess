@@ -13,7 +13,15 @@ import 'package:apex_chess/core/network/connectivity_service.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/controllers/service_health_service.dart';
 
-enum ApexConnectionStatus { online, offline, syncing }
+enum ApexConnectionStatus {
+  unknown,
+  online,
+  checking,
+  unstable,
+  serviceIssue,
+  captiveOrBlocked,
+  offline,
+}
 
 class ApexConnectionPresence {
   const ApexConnectionPresence({
@@ -33,22 +41,30 @@ class ApexConnectionPresence {
   final String? toastDetail;
 
   ApexConnectionStatus get status {
-    if (snapshot.isChecking ||
-        snapshot.network == NetworkAvailability.unknown) {
-      return ApexConnectionStatus.syncing;
-    }
-    if (snapshot.network == NetworkAvailability.offline ||
-        snapshot.network == NetworkAvailability.captive) {
+    if (snapshot.network == NetworkAvailability.offline) {
       return ApexConnectionStatus.offline;
     }
+    if (snapshot.network == NetworkAvailability.captiveOrBlocked) {
+      return ApexConnectionStatus.captiveOrBlocked;
+    }
+    if (snapshot.network == NetworkAvailability.unstable) {
+      return ApexConnectionStatus.unstable;
+    }
+    if (snapshot.isChecking) return ApexConnectionStatus.checking;
+    if (snapshot.network == NetworkAvailability.unknown) {
+      return ApexConnectionStatus.unknown;
+    }
+    if (snapshot.hasServiceIssue) return ApexConnectionStatus.serviceIssue;
     return ApexConnectionStatus.online;
   }
 
   bool get isOffline => status == ApexConnectionStatus.offline;
-  bool get isSyncing => status == ApexConnectionStatus.syncing;
-  bool get hasServiceIssue =>
-      snapshot.network == NetworkAvailability.online &&
-      snapshot.hasServiceIssue;
+  bool get isCaptiveOrBlocked =>
+      status == ApexConnectionStatus.captiveOrBlocked;
+  bool get isNetworkBlocked => isOffline || isCaptiveOrBlocked;
+  bool get isSyncing => status == ApexConnectionStatus.checking;
+  bool get isUnstable => status == ApexConnectionStatus.unstable;
+  bool get hasServiceIssue => status == ApexConnectionStatus.serviceIssue;
 
   ApexConnectionPresence copyWith({
     ConnectivitySnapshot? snapshot,
@@ -88,7 +104,7 @@ final connectionReachabilityProbeProvider =
 class ConnectionPresenceController extends Notifier<ApexConnectionPresence> {
   static const pollInterval = Duration(seconds: 3);
   static const failureThreshold = 2;
-  static const recoveryThreshold = 1;
+  static const recoveryThreshold = 2;
   static const toastCooldown = Duration(seconds: 4);
 
   Timer? _timer;
@@ -130,7 +146,7 @@ class ConnectionPresenceController extends Notifier<ApexConnectionPresence> {
 
   Future<bool> ensureOnlineForAction({bool notify = true}) async {
     await checkNow(notify: notify);
-    return state.snapshot.network == NetworkAvailability.online;
+    return !state.isNetworkBlocked;
   }
 
   Future<String> resolveServiceFailure({
@@ -143,23 +159,28 @@ class ConnectionPresenceController extends Notifier<ApexConnectionPresence> {
     final resolvedAvailability =
         availability ?? health.availabilityForMessage(message);
     await refresh(notify: false, showSyncing: true);
-    if (state.snapshot.network != NetworkAvailability.online) {
-      markOffline(
-        ApexCopy.offline,
-        detail: state.snapshot.hasUsableCachedData
-            ? ApexCopy.showingSavedData
-            : null,
-        notify: notify,
-      );
+    if (state.isOffline) {
       return ApexCopy.offline;
     }
+    if (state.isCaptiveOrBlocked) {
+      return ApexCopy.noConnection;
+    }
+    if (state.snapshot.network != NetworkAvailability.online) {
+      _markNetworkUnstable(checkedAt: DateTime.now());
+      return ApexCopy.tryAgain;
+    }
+    final userMessage = _serviceFailureCopy(
+      health,
+      service,
+      resolvedAvailability,
+    );
     markServiceStatus(
       service,
       resolvedAvailability,
-      message: health.unavailableCopy(service),
+      message: userMessage,
       notify: notify,
     );
-    return health.unavailableCopy(service);
+    return userMessage;
   }
 
   Future<void> _runReachabilityCheck({required bool notify}) async {
@@ -169,28 +190,36 @@ class ConnectionPresenceController extends Notifier<ApexConnectionPresence> {
     if (network == NetworkAvailability.online) {
       _consecutiveSuccesses++;
       _consecutiveFailures = 0;
-      _markNetworkOnline(
-        checkedAt: checkedAt,
-        notify:
-            notify &&
-            _consecutiveSuccesses >= recoveryThreshold &&
-            (previous == NetworkAvailability.offline ||
-                previous == NetworkAvailability.captive),
-      );
+      final wasBlocked =
+          previous == NetworkAvailability.offline ||
+          previous == NetworkAvailability.captiveOrBlocked;
+      if (wasBlocked && _consecutiveSuccesses < recoveryThreshold) {
+        _markRecoveryPending(checkedAt: checkedAt);
+        return;
+      }
+      _markNetworkOnline(checkedAt: checkedAt, notify: notify && wasBlocked);
       return;
     }
     _consecutiveFailures++;
     _consecutiveSuccesses = 0;
+    if (network == NetworkAvailability.unstable) {
+      if (state.isNetworkBlocked) {
+        _markRecoveryPending(checkedAt: checkedAt);
+      } else {
+        _markNetworkUnstable(checkedAt: checkedAt);
+      }
+      return;
+    }
     if (_consecutiveFailures < failureThreshold) {
       _markNetworkUnstable(checkedAt: checkedAt);
       return;
     }
-    if (network == NetworkAvailability.captive) {
+    if (network == NetworkAvailability.captiveOrBlocked) {
       _markNetworkOffline(
         checkedAt: checkedAt,
-        network: NetworkAvailability.captive,
+        network: NetworkAvailability.captiveOrBlocked,
         message: ApexCopy.noConnection,
-        notify: notify && previous != NetworkAvailability.captive,
+        notify: notify && previous != NetworkAvailability.captiveOrBlocked,
       );
       return;
     }
@@ -220,9 +249,11 @@ class ConnectionPresenceController extends Notifier<ApexConnectionPresence> {
 
   void markServiceAvailable(AppService service, {bool notify = false}) {
     final checkedAt = DateTime.now();
-    final wasOffline = state.snapshot.network == NetworkAvailability.offline;
+    final wasBlocked = state.isNetworkBlocked;
     final showToast =
-        notify && wasOffline && _canEmitToast(ApexCopy.backOnline, checkedAt);
+        notify && wasBlocked && _canEmitToast(ApexCopy.backOnline, checkedAt);
+    _consecutiveSuccesses = recoveryThreshold;
+    _consecutiveFailures = 0;
     final snapshot = state.snapshot
         .withService(
           service,
@@ -231,7 +262,16 @@ class ConnectionPresenceController extends Notifier<ApexConnectionPresence> {
           sync: SyncStatus.synced,
           checkedAt: checkedAt,
         )
-        .copyWith(lastOnlineAt: checkedAt);
+        .copyWith(
+          lastOnlineAt: checkedAt,
+          lastTransitionAt: _transitionAt(
+            NetworkAvailability.online,
+            checkedAt,
+          ),
+          lastStableNetwork: NetworkAvailability.online,
+          consecutiveSuccesses: _consecutiveSuccesses,
+          consecutiveFailures: _consecutiveFailures,
+        );
     state = state.copyWith(
       snapshot: snapshot,
       hadIssue: false,
@@ -250,6 +290,8 @@ class ConnectionPresenceController extends Notifier<ApexConnectionPresence> {
     final checkedAt = DateTime.now();
     final showToast =
         notify && message != null && _canEmitToast(message, checkedAt);
+    _consecutiveSuccesses = recoveryThreshold;
+    _consecutiveFailures = 0;
     final snapshot = state.snapshot
         .withService(
           service,
@@ -260,10 +302,19 @@ class ConnectionPresenceController extends Notifier<ApexConnectionPresence> {
               : SyncStatus.failed,
           checkedAt: checkedAt,
         )
-        .copyWith(lastOnlineAt: checkedAt);
+        .copyWith(
+          lastOnlineAt: checkedAt,
+          lastTransitionAt: _transitionAt(
+            NetworkAvailability.online,
+            checkedAt,
+          ),
+          lastStableNetwork: NetworkAvailability.online,
+          consecutiveSuccesses: _consecutiveSuccesses,
+          consecutiveFailures: _consecutiveFailures,
+        );
     state = state.copyWith(
       snapshot: snapshot,
-      hadIssue: false,
+      hadIssue: availability != ServiceAvailability.available,
       lastMessage: message,
       toastId: showToast ? state.toastId + 1 : state.toastId,
       toastMessage: showToast ? message : null,
@@ -282,13 +333,24 @@ class ConnectionPresenceController extends Notifier<ApexConnectionPresence> {
 
   /// Returns true when callers should show a one-shot recovery message.
   bool markSynced({bool notify = false}) {
-    final wasOffline = state.snapshot.network == NetworkAvailability.offline;
-    _markNetworkOnline(checkedAt: DateTime.now(), notify: notify && wasOffline);
-    return wasOffline;
+    final wasBlocked = state.isNetworkBlocked;
+    _markNetworkOnline(checkedAt: DateTime.now(), notify: notify && wasBlocked);
+    return wasBlocked;
+  }
+
+  void markCachedDataAvailable(bool available) {
+    state = state.copyWith(
+      snapshot: state.snapshot.copyWith(hasUsableCachedData: available),
+      toastId: state.toastId,
+    );
   }
 
   void _markNetworkOnline({required DateTime checkedAt, required bool notify}) {
     final showToast = notify && _canEmitToast(ApexCopy.backOnline, checkedAt);
+    if (_consecutiveSuccesses < recoveryThreshold) {
+      _consecutiveSuccesses = recoveryThreshold;
+    }
+    _consecutiveFailures = 0;
     final services = <AppService, ServiceAvailability>{
       for (final entry in state.snapshot.services.entries)
         entry.key: entry.value,
@@ -299,6 +361,10 @@ class ConnectionPresenceController extends Notifier<ApexConnectionPresence> {
         sync: SyncStatus.synced,
         lastCheckedAt: checkedAt,
         lastOnlineAt: checkedAt,
+        lastTransitionAt: _transitionAt(NetworkAvailability.online, checkedAt),
+        lastStableNetwork: NetworkAvailability.online,
+        consecutiveSuccesses: _consecutiveSuccesses,
+        consecutiveFailures: _consecutiveFailures,
         services: services,
       ),
       hadIssue: false,
@@ -311,8 +377,23 @@ class ConnectionPresenceController extends Notifier<ApexConnectionPresence> {
   void _markNetworkUnstable({required DateTime checkedAt}) {
     state = state.copyWith(
       snapshot: state.snapshot.copyWith(
+        network: NetworkAvailability.unstable,
+        sync: SyncStatus.failed,
+        lastCheckedAt: checkedAt,
+        consecutiveSuccesses: _consecutiveSuccesses,
+        consecutiveFailures: _consecutiveFailures,
+      ),
+      toastId: state.toastId,
+    );
+  }
+
+  void _markRecoveryPending({required DateTime checkedAt}) {
+    state = state.copyWith(
+      snapshot: state.snapshot.copyWith(
         sync: SyncStatus.checking,
         lastCheckedAt: checkedAt,
+        consecutiveSuccesses: _consecutiveSuccesses,
+        consecutiveFailures: _consecutiveFailures,
       ),
       toastId: state.toastId,
     );
@@ -325,15 +406,23 @@ class ConnectionPresenceController extends Notifier<ApexConnectionPresence> {
     String? detail,
     required bool notify,
   }) {
-    final wasOffline = state.snapshot.network == NetworkAvailability.offline;
+    if (_consecutiveFailures < failureThreshold) {
+      _consecutiveFailures = failureThreshold;
+    }
+    _consecutiveSuccesses = 0;
+    final wasBlocked = state.isNetworkBlocked;
     final showToast =
-        notify && !wasOffline && _canEmitToast(message, checkedAt);
+        notify && !wasBlocked && _canEmitToast(message, checkedAt);
     state = state.copyWith(
       snapshot: state.snapshot.copyWith(
         network: network,
         sync: SyncStatus.failed,
         lastCheckedAt: checkedAt,
         lastOfflineAt: checkedAt,
+        lastTransitionAt: _transitionAt(network, checkedAt),
+        lastStableNetwork: network,
+        consecutiveSuccesses: _consecutiveSuccesses,
+        consecutiveFailures: _consecutiveFailures,
       ),
       hadIssue: true,
       lastMessage: message,
@@ -353,6 +442,26 @@ class ConnectionPresenceController extends Notifier<ApexConnectionPresence> {
     _lastToastMessage = message;
     _lastToastAt = now;
     return true;
+  }
+
+  DateTime? _transitionAt(NetworkAvailability next, DateTime checkedAt) {
+    return state.snapshot.network == next
+        ? state.snapshot.lastTransitionAt
+        : checkedAt;
+  }
+
+  String _serviceFailureCopy(
+    ServiceHealthService health,
+    AppService service,
+    ServiceAvailability availability,
+  ) {
+    return switch (availability) {
+      ServiceAvailability.timeout => ApexCopy.tryAgain,
+      ServiceAvailability.available => ApexCopy.synced,
+      ServiceAvailability.unknown ||
+      ServiceAvailability.unavailable ||
+      ServiceAvailability.rateLimited => health.unavailableCopy(service),
+    };
   }
 }
 

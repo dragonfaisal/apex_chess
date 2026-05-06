@@ -423,12 +423,7 @@ class DashboardPlayerSearchController
             availability: e.availability,
           );
       if (gen != _generation) return;
-      state = state.copyWith(
-        isLoading: false,
-        error: resolved == ApexCopy.offline
-            ? ApexCopy.offline
-            : ApexCopy.profileUnavailable,
-      );
+      state = state.copyWith(isLoading: false, error: resolved);
     } catch (_) {
       if (gen != _generation) return;
       final resolved = await ref
@@ -438,12 +433,7 @@ class DashboardPlayerSearchController
             message: ApexCopy.profileUnavailable,
           );
       if (gen != _generation) return;
-      state = state.copyWith(
-        isLoading: false,
-        error: resolved == ApexCopy.offline
-            ? ApexCopy.offline
-            : ApexCopy.profileUnavailable,
-      );
+      state = state.copyWith(isLoading: false, error: resolved);
     }
   }
 }

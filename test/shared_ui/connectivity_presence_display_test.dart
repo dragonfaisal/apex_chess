@@ -35,6 +35,15 @@ void main() {
     expect(
       ConnectivityPresenceDisplay.toneFor(
         const ApexConnectionPresence(
+          snapshot: ConnectivitySnapshot(network: NetworkAvailability.unstable),
+        ),
+      ),
+      ConnectivityPresenceTone.unstable,
+    );
+
+    expect(
+      ConnectivityPresenceDisplay.toneFor(
+        const ApexConnectionPresence(
           snapshot: ConnectivitySnapshot(
             network: NetworkAvailability.online,
             services: {AppService.chessCom: ServiceAvailability.unavailable},
@@ -94,6 +103,20 @@ void main() {
     expect(model.hasServiceIssue, isTrue);
   });
 
+  test('captive or blocked network maps to separate badge tone', () {
+    final model = ConnectivityPresenceBadgeModel.fromPresence(
+      const ApexConnectionPresence(
+        snapshot: ConnectivitySnapshot(
+          network: NetworkAvailability.captiveOrBlocked,
+        ),
+      ),
+    );
+
+    expect(model.tone, ConnectivityPresenceTone.captiveOrBlocked);
+    expect(model.isOffline, isFalse);
+    expect(model.label, 'Network blocked');
+  });
+
   test('profile badge does not treat transient checking as offline', () {
     final tone = ConnectivityPresenceDisplay.toneFor(
       const ApexConnectionPresence(
@@ -108,12 +131,12 @@ void main() {
     expect(tone, isNot(ConnectivityPresenceTone.offline));
   });
 
-  test('repeated probe changes do not flicker badge model offline', () {
+  test('badge display model uses stable state, not raw probe result', () {
     final firstFailureModel = ConnectivityPresenceBadgeModel.fromPresence(
       const ApexConnectionPresence(
         snapshot: ConnectivitySnapshot(
-          network: NetworkAvailability.online,
-          sync: SyncStatus.checking,
+          network: NetworkAvailability.unstable,
+          consecutiveFailures: 1,
         ),
       ),
     );
@@ -123,7 +146,7 @@ void main() {
       ),
     );
 
-    expect(firstFailureModel.tone, ConnectivityPresenceTone.checking);
+    expect(firstFailureModel.tone, ConnectivityPresenceTone.unstable);
     expect(firstFailureModel.tone, isNot(ConnectivityPresenceTone.offline));
     expect(confirmedOfflineModel.tone, ConnectivityPresenceTone.offline);
   });

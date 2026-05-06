@@ -88,9 +88,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       if (next.toastId == previous?.toastId || next.toastMessage == null) {
         return;
       }
-      final type = next.isOffline
-          ? ApexGlassToastType.warning
-          : ApexGlassToastType.success;
+      final type = next.toastMessage == ApexCopy.backOnline
+          ? ApexGlassToastType.success
+          : ApexGlassToastType.warning;
       showApexGlassToast(
         context,
         message: next.toastMessage!,
@@ -1660,10 +1660,12 @@ class _AccountStrip extends ConsumerWidget {
     final presence = ref.watch(connectionPresenceProvider);
     void openProfile() {
       unawaited(ref.read(connectionPresenceProvider.notifier).checkNow());
-      if (presence.isOffline) {
+      if (presence.isNetworkBlocked) {
         showApexGlassToast(
           context,
-          message: ApexCopy.offline,
+          message: presence.isCaptiveOrBlocked
+              ? ApexCopy.noConnection
+              : ApexCopy.offline,
           detail: ApexCopy.showingSavedData,
           type: ApexGlassToastType.warning,
         );

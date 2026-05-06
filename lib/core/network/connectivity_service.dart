@@ -22,16 +22,18 @@ class ConnectivityService {
 
   Future<NetworkAvailability> checkInternet() async {
     var sawCaptive = false;
+    var sawUnstable = false;
     for (final endpoint in endpoints) {
       final result = await _probe(endpoint);
       if (result == NetworkAvailability.online) {
         return NetworkAvailability.online;
       }
-      sawCaptive = sawCaptive || result == NetworkAvailability.captive;
+      sawCaptive = sawCaptive || result == NetworkAvailability.captiveOrBlocked;
+      sawUnstable = sawUnstable || result == NetworkAvailability.unstable;
     }
-    return sawCaptive
-        ? NetworkAvailability.captive
-        : NetworkAvailability.offline;
+    if (sawCaptive) return NetworkAvailability.captiveOrBlocked;
+    if (sawUnstable) return NetworkAvailability.unstable;
+    return NetworkAvailability.offline;
   }
 
   Future<NetworkAvailability> _probe(Uri endpoint) async {
@@ -48,11 +50,19 @@ class ConnectivityService {
         return NetworkAvailability.online;
       }
       if (statusCode >= 300 && statusCode < 400) {
-        return NetworkAvailability.captive;
+        return NetworkAvailability.captiveOrBlocked;
       }
+      if (statusCode == HttpStatus.unauthorized ||
+          statusCode == HttpStatus.forbidden) {
+        return NetworkAvailability.captiveOrBlocked;
+      }
+      return NetworkAvailability.unstable;
+    } on TimeoutException {
+      return NetworkAvailability.unstable;
+    } on SocketException {
       return NetworkAvailability.offline;
     } catch (_) {
-      return NetworkAvailability.offline;
+      return NetworkAvailability.unstable;
     } finally {
       client.close(force: true);
     }
