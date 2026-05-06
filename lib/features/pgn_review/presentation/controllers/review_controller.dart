@@ -19,7 +19,7 @@ class ReviewState {
   /// The full pre-computed analysis timeline.
   final AnalysisTimeline? timeline;
 
-  /// Current ply index. -1 = starting position (no move played yet).
+  /// Current ply index. -1 is only used when no analysed move exists.
   final int currentPly;
 
   /// Whether the timeline is currently being loaded.
@@ -67,16 +67,15 @@ class ReviewState {
     bool? flipped,
     AnalysisMode? mode,
     bool? userIsWhite,
-  }) =>
-      ReviewState(
-        timeline: timeline ?? this.timeline,
-        currentPly: currentPly ?? this.currentPly,
-        isLoading: isLoading ?? this.isLoading,
-        error: error,
-        flipped: flipped ?? this.flipped,
-        mode: mode ?? this.mode,
-        userIsWhite: userIsWhite ?? this.userIsWhite,
-      );
+  }) => ReviewState(
+    timeline: timeline ?? this.timeline,
+    currentPly: currentPly ?? this.currentPly,
+    isLoading: isLoading ?? this.isLoading,
+    error: error,
+    flipped: flipped ?? this.flipped,
+    mode: mode ?? this.mode,
+    userIsWhite: userIsWhite ?? this.userIsWhite,
+  );
 
   /// O(1) access to the current ply's analysis.
   MoveAnalysis? get currentMove => timeline?[currentPly];
@@ -159,10 +158,14 @@ class ReviewController extends Notifier<ReviewState> {
     bool userIsBlack = false,
     AnalysisMode mode = AnalysisMode.deep,
     bool? userIsWhite,
+    int initialPly = 0,
   }) {
+    final safePly = timeline.totalPlies == 0
+        ? -1
+        : initialPly.clamp(0, timeline.totalPlies - 1).toInt();
     state = ReviewState(
       timeline: timeline,
-      currentPly: -1,
+      currentPly: safePly,
       flipped: userIsBlack,
       mode: mode,
       // If the caller didn't specify `userIsWhite` explicitly, derive
@@ -183,28 +186,39 @@ class ReviewController extends Notifier<ReviewState> {
   void jumpTo(int ply) {
     final t = state.timeline;
     if (t == null) return;
+    if (t.totalPlies == 0) return;
 
-    final clamped = ply.clamp(-1, t.totalPlies - 1);
+    final clamped = ply.clamp(0, t.totalPlies - 1).toInt();
     if (clamped == state.currentPly) return;
 
     final oldPly = state.currentPly;
     state = state.copyWith(currentPly: clamped);
 
-    onNavigation?.call(NavigationEvent(
-      oldPly: oldPly,
-      newPly: clamped,
-      moveAnalysis: t[clamped],
-    ));
+    onNavigation?.call(
+      NavigationEvent(
+        oldPly: oldPly,
+        newPly: clamped,
+        moveAnalysis: t[clamped],
+      ),
+    );
   }
 
   /// Step forward one ply.
-  void next() => jumpTo(state.currentPly + 1);
+  void next() {
+    final t = state.timeline;
+    if (t == null || t.totalPlies == 0) return;
+    if (state.currentPly >= t.totalPlies - 1) return;
+    jumpTo(state.currentPly + 1);
+  }
 
   /// Step backward one ply.
-  void prev() => jumpTo(state.currentPly - 1);
+  void prev() {
+    if (state.currentPly <= 0) return;
+    jumpTo(state.currentPly - 1);
+  }
 
-  /// Jump to the starting position.
-  void goToStart() => jumpTo(-1);
+  /// Jump to the first analysed ply.
+  void goToStart() => jumpTo(0);
 
   /// Jump to the final position.
   void goToEnd() {

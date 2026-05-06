@@ -1,51 +1,25 @@
-/// PGN Review Screen — full game review with pre-computed analysis.
+/// Premium move-by-move review board.
 ///
-/// Displays:
-///   - Board with SVG quality overlays
-///   - Advantage chart (interactive — tap to jump)
-///   - Coach dashboard with SAN + classification
-///   - ◀▶ navigation controls
-///
-/// All data comes from in-memory [AnalysisTimeline] via [ReviewController].
-/// ZERO network calls during navigation.
+/// The screen renders existing review data only: board state, move quality,
+/// coach copy, eval, and navigation all come from [ReviewController].
 library;
 
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
-import '../../../../shared_ui/themes/apex_theme.dart';
-import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
-import 'package:apex_chess/core/domain/services/coach_explanation_service.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
-import 'package:apex_chess/core/domain/services/move_quality_display.dart';
-import 'package:apex_chess/features/archives/domain/archived_game.dart';
+import 'package:apex_chess/features/pgn_review/presentation/controllers/review_audio_controller.dart';
+import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
+import 'package:apex_chess/features/pgn_review/presentation/models/review_board_display.dart';
+import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_chess_board.dart';
-import 'package:apex_chess/shared_ui/widgets/apex_eval_bar.dart';
 import 'package:apex_chess/shared_ui/widgets/brilliant_glow.dart';
-import 'package:apex_chess/shared_ui/widgets/evaluation_chart.dart';
-import '../controllers/review_controller.dart';
-import '../controllers/review_audio_controller.dart';
 
-/// `true` when the played move equals the engine's top line (after
-/// castling normalisation — the engine may emit `e1h1` while dartchess
-/// emits `e1g1` for the same king-side castle).
-///
-/// Used to suppress the "Better: &lt;same SAN&gt;" copy the Phase A audit
-/// flagged on real devices, and to render a "Top engine choice"
-/// chip instead.
-bool _playedEqualsBest(MoveAnalysis m) {
-  final best = m.engineBestMoveUci;
-  final played = m.uci;
-  if (best == null || played.isEmpty) return false;
-  return normalizeCastlingUci(best) == normalizeCastlingUci(played);
-}
-
-bool shouldShowBetterMoveArrowForTesting(MoveAnalysis? m) =>
-    ReviewScreen._shouldShowArrow(m);
+bool shouldShowBetterMoveArrowForTesting(MoveAnalysis? move) =>
+    ReviewBoardDisplayModel.shouldShowBetterMoveArrow(move);
 
 class ReviewScreen extends ConsumerWidget {
   const ReviewScreen({super.key});
@@ -53,8 +27,6 @@ class ReviewScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(reviewControllerProvider);
-
-    // Ensure audio controller is initialized (wired to navigation events).
     ref.watch(reviewAudioProvider);
 
     final timeline = state.timeline;
@@ -71,115 +43,67 @@ class ReviewScreen extends ConsumerWidget {
       );
     }
 
-    final currentMove = state.currentMove;
-    final isBrilliant = currentMove?.classification == MoveQuality.brilliant;
+    final controller = ref.read(reviewControllerProvider.notifier);
+    final display = ReviewBoardDisplayModel.fromTimeline(
+      timeline,
+      currentPly: state.currentPly,
+      flipped: state.flipped,
+      mode: state.mode,
+      userIsWhite: state.userIsWhite,
+    );
 
     return Scaffold(
-      appBar: _buildAppBar(
-        context,
-        timeline.headers,
-        state.flipped,
-        () => ref.read(reviewControllerProvider.notifier).toggleFlip(),
-      ),
-      // Phase A audit § 6: the nav controls + scrubber live in a fixed
-      // bottom bar so the board stays visible while the user scrolls
-      // through the Full Move Report. Previously tapping "Full Move
-      // Report" scrolled the controls off-screen and the user had to
-      // scroll back up to advance a move.
-      bottomNavigationBar: _ReviewBottomBar(
-        currentPly: state.currentPly,
-        totalPlies: state.totalPlies,
-        onStart: () => ref.read(reviewControllerProvider.notifier).goToStart(),
-        onBack: () => ref.read(reviewControllerProvider.notifier).prev(),
-        onForward: () => ref.read(reviewControllerProvider.notifier).next(),
-        onEnd: () => ref.read(reviewControllerProvider.notifier).goToEnd(),
-        onScrub: (ply) =>
-            ref.read(reviewControllerProvider.notifier).jumpTo(ply),
+      appBar: _buildAppBar(context, display),
+      bottomNavigationBar: _ReviewActionBar(
+        display: display,
+        onPrevious: controller.prev,
+        onNext: controller.next,
+        onScrub: controller.jumpTo,
+        onMoves: () => _showMoveList(context, controller.jumpTo),
+        onExplain: () => _showCoachExplain(context),
+        onBetter: display.insight.betterMove == null
+            ? null
+            : () => _showBestMove(context, display),
+        onLine: () => _showLineSheet(context),
+        onFlip: controller.toggleFlip,
+        onSummary: () => Navigator.of(context).maybePop(),
       ),
       body: Container(
         decoration: const BoxDecoration(gradient: ApexGradients.spaceCanvas),
         child: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              // Constrain the board so it never exceeds the viewport on
-              // landscape / desktop — previously it consumed full width and
-              // pushed the chart + nav controls off-screen (RenderFlex
-              // overflow by ~800px on wide windows).
-              final maxBoardWidth = (constraints.maxHeight * 0.55).clamp(
-                240.0,
-                560.0,
-              );
-              final boardSize = (constraints.maxWidth - 24).clamp(
-                240.0,
-                maxBoardWidth,
-              );
+              final boardMaxFromHeight = constraints.maxHeight * 0.47;
+              final boardSize = (constraints.maxWidth - 74)
+                  .clamp(240.0, boardMaxFromHeight.clamp(260.0, 520.0))
+                  .toDouble();
 
               return SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                  child: Column(
-                    children: [
-                      ApexEvalBar(
-                        scoreCp: currentMove?.scoreCpAfter,
-                        mateIn: currentMove?.mateInAfter,
-                        depth: 0,
-                        openingLabel: currentMove?.openingName,
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _PlayerHeader(
+                      key: const ValueKey('review-top-player-header'),
+                      player: display.topPlayer,
+                      compact: true,
+                    ),
+                    const SizedBox(height: 8),
+                    Center(
+                      child: SizedBox(
+                        width: boardSize + 38,
+                        child: _BoardWithEval(display: display),
                       ),
-                      const SizedBox(height: 8),
-                      Center(
-                        child: SizedBox(
-                          width: boardSize,
-                          child: BrilliantGlow(
-                            visible: isBrilliant,
-                            child: ApexChessBoard(
-                              fen: state.currentFen,
-                              flipped: state.flipped,
-                              lastMove: state.lastMove,
-                              lastMoveQuality: currentMove?.classification,
-                              betterMove: _shouldShowArrow(currentMove)
-                                  ? _arrowFromUci(
-                                      currentMove?.engineBestMoveUci,
-                                    )
-                                  : null,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      EvaluationChart(
-                        winPercentages: timeline.winPercentages,
-                        selectedPly: state.currentPly >= 0
-                            ? state.currentPly
-                            : null,
-                        onPlySelected: (ply) {
-                          ref
-                              .read(reviewControllerProvider.notifier)
-                              .jumpTo(ply);
-                        },
-                      ),
-                      const SizedBox(height: 10),
-                      _CoachCard(
-                        move: currentMove,
-                        ply: state.currentPly,
-                        timeline: timeline,
-                        mode: state.mode,
-                        userIsWhite: state.userIsWhite,
-                      ),
-                      const SizedBox(height: 12),
-                      // Full Move Report is now collapsible — the board
-                      // stays in sight and the user opts in to the long
-                      // list when they want to scan the whole game.
-                      _CollapsibleMoveReport(
-                        timeline: timeline,
-                        currentPly: state.currentPly,
-                        onTapPly: (ply) => ref
-                            .read(reviewControllerProvider.notifier)
-                            .jumpTo(ply),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 8),
+                    _PlayerHeader(
+                      key: const ValueKey('review-bottom-player-header'),
+                      player: display.bottomPlayer,
+                    ),
+                    const SizedBox(height: 10),
+                    _CoachInsightPanel(display: display),
+                  ],
                 ),
               );
             },
@@ -189,78 +113,36 @@ class ReviewScreen extends ConsumerWidget {
     );
   }
 
-  /// Show the better-move arrow only when the played move was strictly
-  /// worse than the engine's top line. We never overlay an arrow on
-  /// Best / Brilliant / Great / Book — pointing at the user's own
-  /// move is meaningless guidance.
-  static bool _shouldShowArrow(MoveAnalysis? m) {
-    if (m == null) return false;
-    if (m.engineBestMoveUci == null) return false;
-    if (_playedEqualsBest(m) || m.playedEqualsPv1) return false;
-    switch (m.classification) {
-      case MoveQuality.brilliant:
-      case MoveQuality.great:
-      case MoveQuality.best:
-      case MoveQuality.book:
-        return false;
-      case MoveQuality.forced:
-        // Forced means there was no real alternative — pointing the
-        // user at "the same move" is misleading.
-        return false;
-      case MoveQuality.excellent:
-      case MoveQuality.good:
-      case MoveQuality.inaccuracy:
-      case MoveQuality.mistake:
-      case MoveQuality.missedWin:
-      case MoveQuality.blunder:
-        return true;
-    }
-  }
-
-  /// Decompose a UCI string (e.g. `f8e7`, `e1g1`, `e7e8q`) into the
-  /// algebraic source/destination tuple consumed by [ApexChessBoard].
-  /// Returns `null` for malformed input — the board widget treats that
-  /// as "no arrow".
-  static (String, String)? _arrowFromUci(String? uci) {
-    if (uci == null) return null;
-    final norm = normalizeCastlingUci(uci);
-    if (norm.length < 4) return null;
-    return (norm.substring(0, 2), norm.substring(2, 4));
-  }
-
   PreferredSizeWidget _buildAppBar(
     BuildContext context, [
-    Map<String, String>? headers,
-    bool flipped = false,
-    VoidCallback? onFlip,
+    ReviewBoardDisplayModel? display,
   ]) {
-    final white = headers?['White'] ?? 'White';
-    final black = headers?['Black'] ?? 'Black';
-    final event = headers?['Event'];
-
+    final title = display == null
+        ? 'Review'
+        : '${display.bottomPlayer.username} vs ${display.topPlayer.username}';
     return AppBar(
       backgroundColor: ApexColors.darkSurface,
       elevation: 0,
       leading: IconButton(
-        icon: const Icon(
-          Icons.arrow_back_rounded,
-          color: ApexColors.textSecondary,
-        ),
-        onPressed: () => Navigator.of(context).pop(),
+        tooltip: 'Back',
+        icon: const Icon(Icons.arrow_back_rounded),
+        onPressed: () => Navigator.of(context).maybePop(),
       ),
       title: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            '$white vs $black',
+            'Review',
             style: ApexTypography.titleMedium.copyWith(
               color: ApexColors.textPrimary,
-              letterSpacing: 1,
-              fontSize: 14,
+              fontSize: 15,
             ),
           ),
-          if (event != null)
+          if (display != null)
             Text(
-              event,
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: ApexTypography.bodyMedium.copyWith(
                 color: ApexColors.textTertiary,
                 fontSize: 11,
@@ -269,520 +151,61 @@ class ReviewScreen extends ConsumerWidget {
         ],
       ),
       centerTitle: true,
-      actions: [
-        if (onFlip != null)
-          IconButton(
-            tooltip: flipped
-                ? 'Flip board (currently Black-at-bottom)'
-                : 'Flip board (currently White-at-bottom)',
-            icon: const Icon(
-              Icons.flip_camera_android_rounded,
-              color: ApexColors.textSecondary,
-            ),
-            onPressed: onFlip,
-          ),
-      ],
     );
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Coach Card
-// ─────────────────────────────────────────────────────────────────────────────
+class _PlayerHeader extends StatelessWidget {
+  const _PlayerHeader({super.key, required this.player, this.compact = false});
 
-class _CoachCard extends StatelessWidget {
-  final MoveAnalysis? move;
-  final int ply;
-  final AnalysisTimeline? timeline;
-  final AnalysisMode mode;
-  final bool? userIsWhite;
-
-  const _CoachCard({
-    this.move,
-    required this.ply,
-    this.timeline,
-    this.mode = AnalysisMode.deep,
-    this.userIsWhite,
-  });
+  final ReviewPlayerHeaderDisplay player;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 14),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: ApexColors.cardSurface.withAlpha(200),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: move != null
-                    ? move!.classification.color.withAlpha(60)
-                    : ApexColors.electricBlue.withAlpha(30),
-                width: 0.8,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: move != null
-                      ? move!.classification.color.withAlpha(15)
-                      : ApexColors.electricBlue.withAlpha(8),
-                  blurRadius: 20,
-                  spreadRadius: -4,
-                ),
-              ],
-            ),
-            child: move != null ? _moveContent() : _emptyContent(),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: compact ? 7 : 8,
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _moveContent() {
-    final m = move!;
-    // All coach copy flows through the single service — UI is now a
-    // pure renderer, no classification/copy branching in the widget
-    // layer. Phase 20.1 addendum rules (never "Better: <same>", mate
-    // reads "Checkmate.", Quick-mode "Needs Deep Scan") are enforced
-    // authoritatively by [CoachExplanationService].
-    const svc = CoachExplanationService();
-    final explanation = svc.explain(
-      CoachExplanationInput(
-        move: m,
-        mode: mode,
-        userIsWhite: userIsWhite,
-        previousUserMove: _previousUserMove(m),
-      ),
-    );
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        // Premium SVG quality badge — the asset encodes the color + icon;
-        // we drop a soft glow behind it and the ring becomes a thin ring
-        // in the tier's color so the card still reads at a glance.
-        Container(
-          width: 44,
-          height: 44,
-          alignment: Alignment.center,
-          padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
-            color: m.classification.color.withAlpha(25),
-            borderRadius: BorderRadius.circular(12),
+            color: ApexColors.cardSurface.withValues(alpha: 0.68),
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: m.classification.color.withAlpha(60),
-              width: 0.5,
+              color: ApexColors.stardustLine.withValues(alpha: 0.62),
+              width: 0.6,
             ),
-            boxShadow: [
-              BoxShadow(
-                color: m.classification.color.withAlpha(60),
-                blurRadius: 10,
-                spreadRadius: -2,
-              ),
-            ],
           ),
-          child: SvgPicture.asset(
-            m.classification.svgAssetPath,
-            fit: BoxFit.contain,
-          ),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+          child: Row(
             children: [
-              Text(
-                explanation.headline,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: ApexTypography.titleMedium.copyWith(
-                  color: m.classification.color,
-                  fontSize: 15,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                explanation.subline,
-                style: ApexTypography.bodyMedium.copyWith(
-                  color: ApexColors.textTertiary,
-                  fontSize: 12,
-                ),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
-              if (explanation.betterMoveSan != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  'Better: ${explanation.betterMoveSan}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: ApexTypography.bodyMedium.copyWith(
-                    color: ApexColors.electricBlue.withAlpha(180),
-                    fontSize: 11,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-                if (explanation.betterMoveReason != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(
-                      explanation.betterMoveReason!,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: ApexTypography.bodyMedium.copyWith(
-                        color: ApexColors.textSecondary,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ),
-              ],
-              if (explanation.needsDeepScan) ...[
-                const SizedBox(height: 8),
-                const _NeedsDeepScanChip(),
-              ],
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// Find the user's ply immediately preceding the current one — used
-  /// by the coach service to redirect "Allowed forced mate" blame to
-  /// the correct ply. Returns `null` when we don't know the user's
-  /// colour (unknown-side PGN paste) or when [move] is itself the
-  /// first ply of the game.
-  MoveAnalysis? _previousUserMove(MoveAnalysis m) {
-    if (userIsWhite == null) return null;
-    final t = timeline;
-    if (t == null) return null;
-    for (var i = m.ply - 1; i >= 0; i--) {
-      final prior = t.moves[i];
-      if (prior.isWhiteMove == userIsWhite) return prior;
-    }
-    return null;
-  }
-
-  Widget _emptyContent() {
-    return Row(
-      children: [
-        Icon(
-          Icons.psychology_rounded,
-          color: ApexColors.electricBlue.withAlpha(120),
-          size: 24,
-        ),
-        const SizedBox(width: 12),
-        Text(
-          'Navigate to see analysis',
-          style: ApexTypography.bodyMedium.copyWith(
-            color: ApexColors.textTertiary,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Small amber chip surfaced under the coach card when the current
-/// classification depends on Quick-mode eval and Deep analysis should
-/// re-verify it. Intentionally stateless / stand-alone so the Live
-/// Play screen can reuse it for the post-move feedback banner in
-/// Phase 20.3.
-class _NeedsDeepScanChip extends StatelessWidget {
-  const _NeedsDeepScanChip();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: ApexColors.inaccuracy.withAlpha(30),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: ApexColors.inaccuracy.withAlpha(120),
-          width: 0.6,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.radar_rounded,
-            size: 14,
-            color: ApexColors.inaccuracy.withAlpha(220),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            'Deep Review suggested',
-            style: ApexTypography.labelLarge.copyWith(
-              color: ApexColors.inaccuracy.withAlpha(220),
-              fontSize: 10,
-              letterSpacing: 1.4,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Navigation Controls
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _NavControls extends StatelessWidget {
-  final int currentPly;
-  final int totalPlies;
-  final VoidCallback onStart;
-  final VoidCallback onBack;
-  final VoidCallback onForward;
-  final VoidCallback onEnd;
-
-  const _NavControls({
-    required this.currentPly,
-    required this.totalPlies,
-    required this.onStart,
-    required this.onBack,
-    required this.onForward,
-    required this.onEnd,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    // Each IconButton's default hitbox is 48×48; paired with the
-    // padded ply-counter chip, five children used to exceed ~280 dp
-    // before hitting the spaceEvenly distribution, yielding the
-    // infamous yellow/black tape on ≤ 360 dp phones. We now clamp
-    // each icon button with tight visual density + a Flexible-wrapped
-    // counter so the whole bar scales down to the narrowest layout.
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 14),
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-      decoration: BoxDecoration(
-        color: ApexColors.elevatedSurface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: ApexColors.subtleBorder, width: 0.5),
-      ),
-      child: Row(
-        children: [
-          _navIcon(
-            icon: Icons.skip_previous_rounded,
-            color: ApexColors.textSecondary,
-            onPressed: currentPly > -1 ? onStart : null,
-          ),
-          _navIcon(
-            icon: Icons.chevron_left_rounded,
-            color: ApexColors.electricBlue,
-            iconSize: 28,
-            onPressed: currentPly > -1 ? onBack : null,
-          ),
-          Expanded(
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: ApexColors.cardSurface,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    '${currentPly + 1} / $totalPlies',
-                    maxLines: 1,
-                    style: ApexTypography.bodyMedium.copyWith(
-                      fontFamily: 'JetBrains Mono',
-                      color: ApexColors.textPrimary,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          _navIcon(
-            icon: Icons.chevron_right_rounded,
-            color: ApexColors.electricBlue,
-            iconSize: 28,
-            onPressed: currentPly < totalPlies - 1 ? onForward : null,
-          ),
-          _navIcon(
-            icon: Icons.skip_next_rounded,
-            color: ApexColors.textSecondary,
-            onPressed: currentPly < totalPlies - 1 ? onEnd : null,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _navIcon({
-    required IconData icon,
-    required Color color,
-    required VoidCallback? onPressed,
-    double iconSize = 22,
-  }) {
-    return IconButton(
-      icon: Icon(icon),
-      iconSize: iconSize,
-      color: color,
-      padding: const EdgeInsets.all(6),
-      visualDensity: VisualDensity.compact,
-      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-      onPressed: onPressed,
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Review bottom bar — fixed scrubber + nav controls that stay on-screen
-// even while the Full Move Report is expanded. Phase A audit § 6.
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _ReviewBottomBar extends StatelessWidget {
-  const _ReviewBottomBar({
-    required this.currentPly,
-    required this.totalPlies,
-    required this.onStart,
-    required this.onBack,
-    required this.onForward,
-    required this.onEnd,
-    required this.onScrub,
-  });
-
-  final int currentPly;
-  final int totalPlies;
-  final VoidCallback onStart;
-  final VoidCallback onBack;
-  final VoidCallback onForward;
-  final VoidCallback onEnd;
-  final ValueChanged<int> onScrub;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: ApexColors.cardSurface,
-      elevation: 4,
-      child: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (totalPlies > 0)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(14, 4, 14, 0),
-                child: Slider(
-                  value: currentPly
-                      .clamp(-1, totalPlies - 1)
-                      .toDouble()
-                      // Shift `-1` (starting position) to `0` for the
-                      // slider so the track starts at the left edge.
-                      .let((v) => v + 1),
-                  min: 0,
-                  max: totalPlies.toDouble(),
-                  divisions: totalPlies,
-                  label: currentPly < 0
-                      ? 'Start'
-                      : 'Move ${(currentPly ~/ 2) + 1}'
-                            '${currentPly.isEven ? '' : '…'}',
-                  activeColor: ApexColors.electricBlue,
-                  inactiveColor: ApexColors.subtleBorder.withValues(alpha: 0.6),
-                  onChanged: (v) => onScrub(v.round() - 1),
-                ),
-              ),
-            const SizedBox(height: 2),
-            _NavControls(
-              currentPly: currentPly,
-              totalPlies: totalPlies,
-              onStart: onStart,
-              onBack: onBack,
-              onForward: onForward,
-              onEnd: onEnd,
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// Local extension so the Slider `value` expression above stays readable.
-extension _IntLet on double {
-  T let<T>(T Function(double) f) => f(this);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Collapsible wrapper around the Full Move Report — defaults to
-// collapsed so the board stays visible on initial load. Phase A audit § 6.
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _CollapsibleMoveReport extends StatefulWidget {
-  const _CollapsibleMoveReport({
-    required this.timeline,
-    required this.currentPly,
-    required this.onTapPly,
-  });
-
-  final AnalysisTimeline timeline;
-  final int currentPly;
-  final ValueChanged<int> onTapPly;
-
-  @override
-  State<_CollapsibleMoveReport> createState() => _CollapsibleMoveReportState();
-}
-
-class _CollapsibleMoveReportState extends State<_CollapsibleMoveReport> {
-  bool _expanded = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      child: Container(
-        decoration: BoxDecoration(
-          color: ApexColors.elevatedSurface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: ApexColors.subtleBorder, width: 0.5),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            InkWell(
-              onTap: () => setState(() => _expanded = !_expanded),
-              borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 12,
-                ),
-                child: Row(
+              _PlayerAvatar(player: player),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      _expanded
-                          ? Icons.expand_less_rounded
-                          : Icons.expand_more_rounded,
-                      color: ApexColors.textSecondary,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
                     Text(
-                      'Full Move Report',
-                      style: ApexTypography.labelLarge.copyWith(
+                      player.username,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: ApexTypography.titleMedium.copyWith(
                         color: ApexColors.textPrimary,
-                        letterSpacing: 1.6,
-                        fontSize: 12,
+                        fontSize: 13,
                       ),
                     ),
-                    const Spacer(),
+                    const SizedBox(height: 2),
                     Text(
-                      '${widget.timeline.moves.length} plies',
+                      [
+                        player.sideLabel,
+                        if (player.rating != null) player.rating!,
+                      ].join(' · '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: ApexTypography.bodyMedium.copyWith(
                         color: ApexColors.textTertiary,
                         fontSize: 11,
@@ -791,246 +214,254 @@ class _CollapsibleMoveReportState extends State<_CollapsibleMoveReport> {
                   ],
                 ),
               ),
-            ),
-            if (_expanded)
-              _MoveReportList(
-                timeline: widget.timeline,
-                currentPly: widget.currentPly,
-                onTapPly: widget.onTapPly,
-              ),
-          ],
+              if (player.isUser) const _MiniChip(label: 'YOU'),
+              if (player.result != null) ...[
+                const SizedBox(width: 6),
+                _MiniChip(label: player.result!),
+              ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Full Move Report — every ply, scrollable, tap to jump.
-// ─────────────────────────────────────────────────────────────────────────────
+class _PlayerAvatar extends StatelessWidget {
+  const _PlayerAvatar({required this.player});
 
-/// A compact per-ply timeline laid out below the coach card.
-///
-/// Each ply renders the move number ("12.", "12..."), the SAN played,
-/// the post-move evaluation (centipawns or mate), the classification
-/// chip, and — when the engine disagreed with the played move — the
-/// suggested better SAN. Tapping a row jumps the review controller to
-/// that ply, so the list doubles as a navigation shortcut. The list
-/// height is capped so the rest of the review screen (board, chart,
-/// nav controls) stays on-screen on phones.
-class _MoveReportList extends StatelessWidget {
-  const _MoveReportList({
-    required this.timeline,
-    required this.currentPly,
-    required this.onTapPly,
-  });
-
-  final AnalysisTimeline timeline;
-  final int currentPly;
-  final ValueChanged<int> onTapPly;
+  final ReviewPlayerHeaderDisplay player;
 
   @override
   Widget build(BuildContext context) {
-    if (timeline.moves.isEmpty) return const SizedBox.shrink();
-    final opening = _resolveOpening();
+    final avatarUrl = player.avatarUrl;
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 14),
+      width: 34,
+      height: 34,
       decoration: BoxDecoration(
-        color: ApexColors.cardSurface.withAlpha(160),
-        borderRadius: BorderRadius.circular(16),
+        shape: BoxShape.circle,
+        gradient: player.side == ReviewBoardSide.white
+            ? const LinearGradient(colors: [Colors.white, Color(0xFFBFD7FF)])
+            : const LinearGradient(
+                colors: [ApexColors.nebula, ApexColors.trueBlack],
+              ),
         border: Border.all(
-          color: ApexColors.subtleBorder.withAlpha(120),
-          width: 0.5,
+          color: player.isUser
+              ? ApexColors.sapphireBright.withValues(alpha: 0.75)
+              : ApexColors.subtleBorder,
+          width: 1,
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(14, 12, 14, opening == null ? 8 : 4),
-            child: Text(
-              'Full Move Report',
-              style: ApexTypography.titleMedium.copyWith(
-                color: ApexColors.textPrimary,
-                fontSize: 13,
-                letterSpacing: 1.5,
-              ),
-            ),
-          ),
-          if (opening != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+      clipBehavior: Clip.antiAlias,
+      child: avatarUrl == null
+          ? Center(
               child: Text(
-                opening,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: ApexTypography.bodyMedium.copyWith(
-                  color: ApexColors.electricBlue.withAlpha(170),
-                  fontSize: 11,
-                  fontStyle: FontStyle.italic,
+                player.initial,
+                style: ApexTypography.labelLarge.copyWith(
+                  color: player.side == ReviewBoardSide.white
+                      ? ApexColors.trueBlack
+                      : ApexColors.textPrimary,
+                  fontSize: 13,
                 ),
               ),
-            ),
-          // Cap the height so the list scrolls inside its own viewport
-          // instead of pushing nav controls below the fold on narrow
-          // phones. 320 dp comfortably shows ~9 plies; the user
-          // scrolls (or taps the chart) for the rest.
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 320),
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-              shrinkWrap: true,
-              itemCount: timeline.moves.length,
-              itemBuilder: (context, i) {
-                final m = timeline.moves[i];
-                return _MoveRow(
-                  move: m,
-                  isCurrent: i == currentPly,
-                  onTap: () => onTapPly(i),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Compose the "ECO · Opening name" line shown under the report
-  /// title. We take the first non-null pair from any move's analysis
-  /// — the analyser annotates them on book moves only, so it's
-  /// effectively whichever variation the game stayed in longest. Falls
-  /// back to PGN headers when the engine never matched a book entry,
-  /// and finally to the generic "Opening phase" string when the game
-  /// diverged from theory before any ECO entry could match (Phase 6
-  /// fallback for the first 8–12 plies).
-  String? _resolveOpening() {
-    String? eco;
-    String? name;
-    for (final m in timeline.moves) {
-      eco ??= m.ecoCode;
-      name ??= m.openingName;
-      if (eco != null && name != null) break;
-    }
-    eco ??= timeline.headers['ECO'];
-    name ??= timeline.headers['Opening'];
-    if (eco != null && name != null) return '$eco · $name';
-    if (name != null || eco != null) return name ?? eco;
-    if (timeline.moves.length <= 12) return 'Opening phase';
-    return null;
-  }
-}
-
-class _MoveRow extends StatelessWidget {
-  const _MoveRow({
-    required this.move,
-    required this.isCurrent,
-    required this.onTap,
-  });
-
-  final MoveAnalysis move;
-  final bool isCurrent;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final moveNum = '${(move.ply ~/ 2) + 1}${move.ply % 2 == 0 ? "." : "..."}';
-    final cls = move.classification;
-    final visibleLabel = MoveQualityDisplay.labelForMove(move);
-    final visibleIcon = MoveQualityDisplay.iconQualityForMove(move);
-    final evalText = _evalString(move);
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: isCurrent
-                ? visibleLabel.color.withAlpha(28)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: isCurrent
-                  ? visibleLabel.color.withAlpha(120)
-                  : Colors.transparent,
-              width: 0.7,
-            ),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              SizedBox(
-                width: 38,
+            )
+          : Image.network(
+              avatarUrl,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Center(
                 child: Text(
-                  moveNum,
-                  style: ApexTypography.bodyMedium.copyWith(
-                    color: ApexColors.textTertiary,
-                    fontFamily: 'JetBrains Mono',
-                    fontSize: 11,
+                  player.initial,
+                  style: ApexTypography.labelLarge.copyWith(
+                    color: ApexColors.textPrimary,
+                    fontSize: 13,
                   ),
                 ),
               ),
-              Container(
-                width: 22,
-                alignment: Alignment.center,
-                child: SvgPicture.asset(
-                  visibleIcon.svgAssetPath,
-                  width: 16,
-                  height: 16,
-                  fit: BoxFit.contain,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      move.san,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: ApexTypography.bodyMedium.copyWith(
-                        color: visibleLabel.color,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
+            ),
+    );
+  }
+}
+
+class _MiniChip extends StatelessWidget {
+  const _MiniChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+      decoration: BoxDecoration(
+        color: ApexColors.sapphire.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: ApexColors.sapphireBright.withValues(alpha: 0.42),
+          width: 0.5,
+        ),
+      ),
+      child: Text(
+        label,
+        style: ApexTypography.labelLarge.copyWith(
+          color: ApexColors.sapphireBright,
+          fontSize: 10,
+        ),
+      ),
+    );
+  }
+}
+
+class _BoardWithEval extends StatelessWidget {
+  const _BoardWithEval({required this.display});
+
+  final ReviewBoardDisplayModel display;
+
+  @override
+  Widget build(BuildContext context) {
+    final currentMove = display.currentMove;
+    return Row(
+      key: const ValueKey('review-board-section'),
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        _VerticalEvalBar(display: display.eval, flipped: display.flipped),
+        const SizedBox(width: 8),
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(18),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: ApexColors.nebula.withValues(alpha: 0.72),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: _boardAccent(display).withValues(alpha: 0.42),
+                    width: 0.9,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _boardAccent(display).withValues(alpha: 0.16),
+                      blurRadius: 24,
+                      spreadRadius: -10,
                     ),
-                    // Phase A audit: only surface "Better: …" on plies
-                    // that actually deviate from the engine's top line.
-                    // When the played move equals best we stay silent
-                    // here — the coach card above already says "Top
-                    // engine choice" and a duplicate line in the move
-                    // list adds no value.
-                    if (move.engineBestMoveSan != null &&
-                        cls != MoveQuality.best &&
-                        cls != MoveQuality.brilliant &&
-                        cls != MoveQuality.great &&
-                        cls != MoveQuality.book &&
-                        cls != MoveQuality.forced &&
-                        !_playedEqualsBest(move))
-                      Text(
-                        'Better: ${move.engineBestMoveSan}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: ApexTypography.bodyMedium.copyWith(
-                          color: ApexColors.electricBlue.withAlpha(150),
-                          fontSize: 10,
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
                   ],
                 ),
+                child: BrilliantGlow(
+                  visible: currentMove?.classification == MoveQuality.brilliant,
+                  child: ApexChessBoard(
+                    fen: display.currentFen,
+                    flipped: display.flipped,
+                    lastMove: display.lastMove,
+                    selectedSquare: display.selectedSquare,
+                    lastMoveQuality: currentMove?.classification,
+                    betterMove: display.bestMoveArrow,
+                  ),
+                ),
               ),
-              const SizedBox(width: 8),
-              Text(
-                evalText,
-                style: ApexTypography.bodyMedium.copyWith(
-                  color: ApexColors.textSecondary,
-                  fontFamily: 'JetBrains Mono',
-                  fontSize: 11,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Color _boardAccent(ReviewBoardDisplayModel display) {
+    return display.currentMove == null
+        ? ApexColors.sapphire
+        : display.insight.quality.color;
+  }
+}
+
+class _VerticalEvalBar extends StatelessWidget {
+  const _VerticalEvalBar({required this.display, required this.flipped});
+
+  final ReviewEvalDisplay display;
+  final bool flipped;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 30,
+      height: 248,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: ApexColors.trueBlack.withValues(alpha: 0.92),
+            border: Border.all(
+              color: ApexColors.subtleBorder.withValues(alpha: 0.8),
+              width: 0.6,
+            ),
+          ),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween<double>(end: display.whiteShare),
+                  duration: ApexMotion.normal,
+                  curve: ApexMotion.standard,
+                  builder: (context, share, _) {
+                    return LayoutBuilder(
+                      builder: (context, constraints) {
+                        final height = constraints.maxHeight * share;
+                        return Align(
+                          alignment: flipped
+                              ? Alignment.topCenter
+                              : Alignment.bottomCenter,
+                          child: SizedBox(
+                            height: height,
+                            width: constraints.maxWidth,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    Colors.white.withValues(alpha: 0.96),
+                                    Colors.white.withValues(alpha: 0.68),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+              const Positioned(
+                left: 0,
+                right: 0,
+                top: 123.5,
+                child: Divider(height: 1, color: ApexColors.sapphireDeep),
+              ),
+              Align(
+                alignment: Alignment.center,
+                child: RotatedBox(
+                  quarterTurns: 3,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: ApexColors.nebula.withValues(alpha: 0.82),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      display.label,
+                      maxLines: 1,
+                      style: ApexTypography.monoEval.copyWith(
+                        color: display.isEqual
+                            ? ApexColors.textSecondary
+                            : display.whiteBetter
+                            ? Colors.white
+                            : ApexColors.textPrimary,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -1039,14 +470,1185 @@ class _MoveRow extends StatelessWidget {
       ),
     );
   }
+}
 
-  static String _evalString(MoveAnalysis m) {
-    if (m.mateInAfter != null) {
-      return 'M${m.mateInAfter!.abs()}';
+class _CoachInsightPanel extends StatelessWidget {
+  const _CoachInsightPanel({required this.display});
+
+  final ReviewBoardDisplayModel display;
+
+  @override
+  Widget build(BuildContext context) {
+    final insight = display.insight;
+    return ClipRRect(
+      key: const ValueKey('review-coach-insight'),
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: AnimatedContainer(
+          duration: ApexMotion.normal,
+          curve: ApexMotion.standard,
+          padding: const EdgeInsets.all(13),
+          decoration: BoxDecoration(
+            color: ApexColors.cardSurface.withValues(alpha: 0.76),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: insight.quality.color.withValues(alpha: 0.42),
+              width: 0.7,
+            ),
+          ),
+          child: AnimatedSwitcher(
+            duration: ApexMotion.fast,
+            child: Column(
+              key: ValueKey('insight-${display.currentPly}'),
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    _QualityChip(display: insight.quality),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${insight.moveLabel} ${insight.san}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: ApexTypography.titleMedium.copyWith(
+                          color: ApexColors.textPrimary,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  insight.explanation,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: ApexTypography.bodyMedium.copyWith(
+                    color: ApexColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+                if (insight.betterMove != null) ...[
+                  const SizedBox(height: 8),
+                  _InlineHint(
+                    icon: Icons.north_east_rounded,
+                    label: 'Better',
+                    value: insight.betterMove!,
+                    color: ApexColors.sapphireBright,
+                  ),
+                ],
+                if (insight.engineLinePreview != null) ...[
+                  const SizedBox(height: 6),
+                  _InlineHint(
+                    icon: Icons.timeline_rounded,
+                    label: 'Line',
+                    value: insight.engineLinePreview!,
+                    color: ApexColors.textTertiary,
+                  ),
+                ],
+                if (insight.needsDeepScan) ...[
+                  const SizedBox(height: 6),
+                  _InlineHint(
+                    icon: Icons.radar_rounded,
+                    label: 'Deep',
+                    value: 'Review suggested',
+                    color: ApexColors.inaccuracy,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _QualityChip extends StatelessWidget {
+  const _QualityChip({required this.display});
+
+  final ReviewMoveQualityChipDisplay display;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(
+        color: display.color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: display.color.withValues(alpha: 0.5)),
+      ),
+      child: Text(
+        display.marker.isEmpty
+            ? display.label
+            : '${display.label} ${display.marker}',
+        style: ApexTypography.labelLarge.copyWith(
+          color: display.color,
+          fontSize: 11,
+        ),
+      ),
+    );
+  }
+}
+
+class _InlineHint extends StatelessWidget {
+  const _InlineHint({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, color: color, size: 14),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          style: ApexTypography.labelLarge.copyWith(color: color, fontSize: 11),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: ApexTypography.bodyMedium.copyWith(
+              color: ApexColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MoveTimelineScrubber extends StatefulWidget {
+  const _MoveTimelineScrubber({
+    super.key,
+    required this.items,
+    required this.activePly,
+    required this.onTapPly,
+  });
+
+  final List<ReviewTimelinePlyDisplay> items;
+  final int activePly;
+  final ValueChanged<int> onTapPly;
+
+  @override
+  State<_MoveTimelineScrubber> createState() => _MoveTimelineScrubberState();
+}
+
+class _MoveTimelineScrubberState extends State<_MoveTimelineScrubber> {
+  final _controller = ScrollController();
+
+  @override
+  void didUpdateWidget(covariant _MoveTimelineScrubber oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.activePly != widget.activePly) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToActive());
     }
-    final cp = m.scoreCpAfter;
-    if (cp == null) return '—';
-    final p = (cp / 100).toStringAsFixed(2);
-    return cp >= 0 ? '+$p' : p;
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _scrollToActive() {
+    if (!_controller.hasClients || widget.items.isEmpty) return;
+    final target = (widget.activePly * 76.0).clamp(
+      0.0,
+      _controller.position.maxScrollExtent,
+    );
+    _controller.animateTo(
+      target,
+      duration: ApexMotion.normal,
+      curve: ApexMotion.standard,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.items.isEmpty) return const SizedBox.shrink();
+    return SizedBox(
+      height: 54,
+      child: ListView.separated(
+        controller: _controller,
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        itemCount: widget.items.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 7),
+        itemBuilder: (context, index) {
+          final item = widget.items[index];
+          return _TimelinePill(
+            item: item,
+            onTap: () => widget.onTapPly(item.ply),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _TimelinePill extends StatelessWidget {
+  const _TimelinePill({required this.item, required this.onTap});
+
+  final ReviewTimelinePlyDisplay item;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: ApexMotion.fast,
+          width: 72,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+          decoration: BoxDecoration(
+            color: item.isActive
+                ? item.color.withValues(alpha: 0.18)
+                : ApexColors.nebula.withValues(alpha: 0.62),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: item.isActive
+                  ? item.color.withValues(alpha: 0.65)
+                  : ApexColors.subtleBorder.withValues(alpha: 0.62),
+              width: 0.7,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                item.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: ApexTypography.bodyMedium.copyWith(
+                  color: item.isActive ? item.color : ApexColors.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                item.marker.isEmpty ? 'Move' : item.marker,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: ApexTypography.bodyMedium.copyWith(
+                  color: ApexColors.textTertiary,
+                  fontFamily: 'JetBrains Mono',
+                  fontSize: 10,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ReviewActionBar extends StatelessWidget {
+  const _ReviewActionBar({
+    required this.display,
+    required this.onPrevious,
+    required this.onNext,
+    required this.onScrub,
+    required this.onMoves,
+    required this.onExplain,
+    required this.onBetter,
+    required this.onLine,
+    required this.onFlip,
+    required this.onSummary,
+  });
+
+  final ReviewBoardDisplayModel display;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+  final ValueChanged<int> onScrub;
+  final VoidCallback onMoves;
+  final VoidCallback onExplain;
+  final VoidCallback? onBetter;
+  final VoidCallback onLine;
+  final VoidCallback onFlip;
+  final VoidCallback onSummary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      key: const ValueKey('review-nav-controls'),
+      color: ApexColors.nebula.withValues(alpha: 0.96),
+      elevation: 8,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _MoveTimelineScrubber(
+                key: const ValueKey('review-timeline'),
+                items: display.timeline,
+                activePly: display.currentPly,
+                onTapPly: onScrub,
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  SizedBox(
+                    width: 48,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: _ActionIcon(
+                        key: const ValueKey('review-move-list-button'),
+                        tooltip: 'Moves',
+                        icon: Icons.format_list_bulleted_rounded,
+                        onPressed: onMoves,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Center(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _ActionIcon(
+                            key: const ValueKey('review-prev-button'),
+                            tooltip: 'Previous',
+                            icon: Icons.chevron_left_rounded,
+                            onPressed: display.canGoPrevious
+                                ? onPrevious
+                                : null,
+                            accent: ApexColors.sapphireBright,
+                          ),
+                          SizedBox(
+                            width: 72,
+                            child: Text(
+                              '${display.currentPly + 1} / ${display.totalPlies}',
+                              key: const ValueKey('review-ply-counter'),
+                              maxLines: 1,
+                              textAlign: TextAlign.center,
+                              style: ApexTypography.monoEval.copyWith(
+                                color: ApexColors.textPrimary,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                          _ActionIcon(
+                            key: const ValueKey('review-next-button'),
+                            tooltip: 'Next',
+                            icon: Icons.chevron_right_rounded,
+                            onPressed: display.canGoNext ? onNext : null,
+                            accent: ApexColors.sapphireBright,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 48,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: _CoachCommandOrb(
+                        onExplain: onExplain,
+                        onBetter: onBetter,
+                        onLine: onLine,
+                        onFlip: onFlip,
+                        onSummary: onSummary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionIcon extends StatelessWidget {
+  const _ActionIcon({
+    super.key,
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+    this.accent = ApexColors.textSecondary,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: IconButton(
+        visualDensity: VisualDensity.compact,
+        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+        padding: const EdgeInsets.all(6),
+        icon: Icon(icon),
+        color: accent,
+        disabledColor: ApexColors.textTertiary.withValues(alpha: 0.38),
+        onPressed: onPressed,
+      ),
+    );
+  }
+}
+
+class _CoachCommandOrb extends StatefulWidget {
+  const _CoachCommandOrb({
+    required this.onExplain,
+    required this.onBetter,
+    required this.onLine,
+    required this.onFlip,
+    required this.onSummary,
+  });
+
+  final VoidCallback onExplain;
+  final VoidCallback? onBetter;
+  final VoidCallback onLine;
+  final VoidCallback onFlip;
+  final VoidCallback onSummary;
+
+  @override
+  State<_CoachCommandOrb> createState() => _CoachCommandOrbState();
+}
+
+class _CoachCommandOrbState extends State<_CoachCommandOrb> {
+  OverlayEntry? _entry;
+
+  bool get _isOpen => _entry != null;
+
+  @override
+  void didUpdateWidget(covariant _CoachCommandOrb oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_entry == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _entry?.markNeedsBuild();
+    });
+  }
+
+  @override
+  void dispose() {
+    _removeMenu(notify: false);
+    super.dispose();
+  }
+
+  void _toggleMenu() => _isOpen ? _closeMenu() : _openMenu();
+
+  void _openMenu() {
+    final overlay = Overlay.of(context);
+    _entry = OverlayEntry(
+      builder: (overlayContext) {
+        final bottom = MediaQuery.paddingOf(overlayContext).bottom + 108;
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                key: const ValueKey('review-command-outside-dismiss'),
+                behavior: HitTestBehavior.translucent,
+                onTap: _closeMenu,
+                child: const SizedBox.expand(),
+              ),
+            ),
+            Positioned(
+              right: 12,
+              bottom: bottom,
+              child: _CoachCommandMenu(
+                onExplain: () => _runCommand(widget.onExplain),
+                onBetter: widget.onBetter == null
+                    ? null
+                    : () => _runCommand(widget.onBetter!),
+                onLine: () => _runCommand(widget.onLine),
+                onFlip: () => _runCommand(widget.onFlip),
+                onSummary: () => _runCommand(widget.onSummary),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+    overlay.insert(_entry!);
+    setState(() {});
+  }
+
+  void _closeMenu() {
+    _removeMenu();
+  }
+
+  void _removeMenu({bool notify = true}) {
+    final entry = _entry;
+    if (entry == null) return;
+    _entry = null;
+    entry.remove();
+    if (notify && mounted) setState(() {});
+  }
+
+  void _runCommand(VoidCallback command) {
+    _closeMenu();
+    command();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedScale(
+      scale: _isOpen ? 1.04 : 1,
+      duration: ApexMotion.fast,
+      curve: ApexMotion.standard,
+      child: Tooltip(
+        message: 'Coach',
+        child: InkResponse(
+          key: const ValueKey('review-coach-orb'),
+          onTap: _toggleMenu,
+          radius: 24,
+          child: AnimatedContainer(
+            duration: ApexMotion.fast,
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: ApexColors.cardSurface.withValues(alpha: 0.92),
+              border: Border.all(
+                color: ApexColors.sapphireBright.withValues(
+                  alpha: _isOpen ? 0.85 : 0.36,
+                ),
+                width: 0.8,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: ApexColors.sapphireBright.withValues(
+                    alpha: _isOpen ? 0.28 : 0.08,
+                  ),
+                  blurRadius: _isOpen ? 18 : 10,
+                  spreadRadius: _isOpen ? -2 : -6,
+                ),
+              ],
+            ),
+            child: Icon(
+              Icons.psychology_alt_rounded,
+              color: _isOpen
+                  ? ApexColors.sapphireBright
+                  : ApexColors.textSecondary,
+              size: 21,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CoachCommandMenu extends StatelessWidget {
+  const _CoachCommandMenu({
+    required this.onExplain,
+    required this.onBetter,
+    required this.onLine,
+    required this.onFlip,
+    required this.onSummary,
+  });
+
+  final VoidCallback onExplain;
+  final VoidCallback? onBetter;
+  final VoidCallback onLine;
+  final VoidCallback onFlip;
+  final VoidCallback onSummary;
+
+  @override
+  Widget build(BuildContext context) {
+    final actions = <_CoachCommandAction>[
+      _CoachCommandAction(
+        label: 'Explain',
+        icon: Icons.chat_bubble_outline_rounded,
+        onTap: onExplain,
+      ),
+      if (onBetter != null)
+        _CoachCommandAction(
+          label: 'Better',
+          icon: Icons.north_east_rounded,
+          onTap: onBetter!,
+        ),
+      _CoachCommandAction(
+        label: 'Line',
+        icon: Icons.timeline_rounded,
+        onTap: onLine,
+      ),
+      _CoachCommandAction(
+        label: 'Flip',
+        icon: Icons.screen_rotation_alt_rounded,
+        onTap: onFlip,
+      ),
+      _CoachCommandAction(
+        label: 'Summary',
+        icon: Icons.analytics_outlined,
+        onTap: onSummary,
+      ),
+    ];
+
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: ApexMotion.normal,
+      curve: ApexMotion.standard,
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(0, (1 - value) * 10),
+            child: Transform.scale(
+              scale: 0.96 + (0.04 * value),
+              alignment: Alignment.bottomRight,
+              child: child,
+            ),
+          ),
+        );
+      },
+      child: Material(
+        key: const ValueKey('review-coach-command-menu'),
+        color: Colors.transparent,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            child: Container(
+              width: 152,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              decoration: BoxDecoration(
+                color: ApexColors.cardSurface.withValues(alpha: 0.92),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: ApexColors.sapphireBright.withValues(alpha: 0.36),
+                  width: 0.7,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: ApexColors.sapphireBright.withValues(alpha: 0.13),
+                    blurRadius: 20,
+                    spreadRadius: -6,
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final action in actions)
+                    _CoachCommandButton(action: action),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CoachCommandAction {
+  const _CoachCommandAction({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+}
+
+class _CoachCommandButton extends StatelessWidget {
+  const _CoachCommandButton({required this.action});
+
+  final _CoachCommandAction action;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      key: ValueKey('review-command-${action.label.toLowerCase()}'),
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: action.onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Row(
+            children: [
+              Icon(action.icon, color: ApexColors.sapphireBright, size: 16),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  action.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: ApexTypography.bodyMedium.copyWith(
+                    color: ApexColors.textPrimary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+void _showBestMove(BuildContext context, ReviewBoardDisplayModel display) {
+  final best = display.insight.betterMove;
+  if (best == null) return;
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder: (_) => _GlassSheet(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Better',
+            style: ApexTypography.titleMedium.copyWith(
+              color: ApexColors.sapphireBright,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            best,
+            style: ApexTypography.headlineMedium.copyWith(
+              color: ApexColors.textPrimary,
+              fontSize: 24,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+void _showCoachExplain(BuildContext context) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => const _CoachExplainSheet(),
+  );
+}
+
+void _showLineSheet(BuildContext context) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => const _LineSheet(),
+  );
+}
+
+void _showMoveList(BuildContext context, ValueChanged<int> onTapPly) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => _MoveListSheet(
+      onTapPly: (ply) {
+        onTapPly(ply);
+      },
+    ),
+  );
+}
+
+class _CoachExplainSheet extends ConsumerWidget {
+  const _CoachExplainSheet();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final display = _displayFromReviewState(
+      ref.watch(reviewControllerProvider),
+    );
+    final insight = display?.insight;
+    return _GlassSheet(
+      child: Column(
+        key: const ValueKey('review-coach-explain-sheet'),
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Text(
+                'Coach',
+                style: ApexTypography.titleMedium.copyWith(
+                  color: ApexColors.textPrimary,
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                tooltip: 'Close',
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close_rounded),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          if (display == null || insight == null)
+            Text(
+              'No deeper explanation available for this move.',
+              style: ApexTypography.bodyMedium.copyWith(
+                color: ApexColors.textSecondary,
+                fontSize: 13,
+              ),
+            )
+          else ...[
+            Row(
+              children: [
+                _QualityChip(display: insight.quality),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${insight.moveLabel} ${insight.san}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: ApexTypography.titleMedium.copyWith(
+                      color: ApexColors.textPrimary,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              insight.coachDetail,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: ApexTypography.bodyMedium.copyWith(
+                color: ApexColors.textSecondary,
+                fontSize: 13,
+              ),
+            ),
+            if (insight.betterMove != null) ...[
+              const SizedBox(height: 12),
+              _InlineHint(
+                icon: Icons.north_east_rounded,
+                label: 'Better',
+                value: 'Better was ${insight.betterMove}.',
+                color: ApexColors.sapphireBright,
+              ),
+            ],
+            if (insight.engineLinePreview != null) ...[
+              const SizedBox(height: 8),
+              _InlineHint(
+                icon: Icons.timeline_rounded,
+                label: 'Line',
+                value: insight.engineLinePreview!,
+                color: ApexColors.textTertiary,
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _LineSheet extends ConsumerWidget {
+  const _LineSheet();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final display = _displayFromReviewState(
+      ref.watch(reviewControllerProvider),
+    );
+    final insight = display?.insight;
+    return _GlassSheet(
+      child: Column(
+        key: const ValueKey('review-line-sheet'),
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Text(
+                'Line',
+                style: ApexTypography.titleMedium.copyWith(
+                  color: ApexColors.textPrimary,
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                tooltip: 'Close',
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close_rounded),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (insight?.engineLinePreview != null)
+            _SheetLinePreview(
+              label: 'Line',
+              value: insight!.engineLinePreview!,
+              color: ApexColors.sapphireBright,
+            )
+          else
+            Text(
+              'No line available.',
+              style: ApexTypography.bodyMedium.copyWith(
+                color: ApexColors.textTertiary,
+                fontSize: 13,
+              ),
+            ),
+          if (insight?.betterMove != null) ...[
+            const SizedBox(height: 8),
+            _SheetLinePreview(
+              label: 'Better',
+              value: insight!.betterMove!,
+              color: ApexColors.sapphireBright,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _MoveListSheet extends ConsumerWidget {
+  const _MoveListSheet({required this.onTapPly});
+
+  final ValueChanged<int> onTapPly;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final display = _displayFromReviewState(
+      ref.watch(reviewControllerProvider),
+    );
+    return _GlassSheet(
+      child: ConstrainedBox(
+        key: const ValueKey('review-move-list-sheet'),
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.62,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Text(
+                  'Moves',
+                  style: ApexTypography.titleMedium.copyWith(
+                    color: ApexColors.textPrimary,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  tooltip: 'Close',
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            if (display?.insight.engineLinePreview != null) ...[
+              _SheetLinePreview(
+                label: 'Current line',
+                value: display!.insight.engineLinePreview!,
+                color: ApexColors.textTertiary,
+              ),
+              const SizedBox(height: 8),
+            ],
+            Flexible(
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: display?.timeline.length ?? 0,
+                separatorBuilder: (_, __) => const SizedBox(height: 4),
+                itemBuilder: (context, index) {
+                  final item = display!.timeline[index];
+                  return _MoveListRow(
+                    item: item,
+                    onTap: () => onTapPly(item.ply),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+ReviewBoardDisplayModel? _displayFromReviewState(ReviewState state) {
+  final timeline = state.timeline;
+  if (timeline == null) return null;
+  return ReviewBoardDisplayModel.fromTimeline(
+    timeline,
+    currentPly: state.currentPly,
+    flipped: state.flipped,
+    mode: state.mode,
+    userIsWhite: state.userIsWhite,
+  );
+}
+
+class _SheetLinePreview extends StatelessWidget {
+  const _SheetLinePreview({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: ApexColors.nebula.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: ApexColors.subtleBorder.withValues(alpha: 0.5),
+        ),
+      ),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: ApexTypography.labelLarge.copyWith(
+              color: color,
+              fontSize: 11,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: ApexTypography.bodyMedium.copyWith(
+                color: ApexColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MoveListRow extends StatelessWidget {
+  const _MoveListRow({required this.item, required this.onTap});
+
+  final ReviewTimelinePlyDisplay item;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: Container(
+          key: item.isActive
+              ? ValueKey('review-move-row-active-${item.ply}')
+              : ValueKey('review-move-row-${item.ply}'),
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+          decoration: BoxDecoration(
+            color: item.isActive
+                ? item.color.withValues(alpha: 0.16)
+                : ApexColors.nebula.withValues(alpha: 0.55),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: item.isActive
+                  ? item.color.withValues(alpha: 0.55)
+                  : ApexColors.subtleBorder.withValues(alpha: 0.5),
+            ),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 40,
+                child: Text(
+                  item.marker.isEmpty ? 'Move' : item.marker,
+                  style: ApexTypography.bodyMedium.copyWith(
+                    color: item.color,
+                    fontFamily: 'JetBrains Mono',
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  item.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: ApexTypography.bodyMedium.copyWith(
+                    color: ApexColors.textPrimary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GlassSheet extends StatelessWidget {
+  const _GlassSheet({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(22),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: ApexColors.cardSurface.withValues(alpha: 0.9),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(
+                  color: ApexColors.stardustLine.withValues(alpha: 0.72),
+                  width: 0.7,
+                ),
+              ),
+              child: child,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

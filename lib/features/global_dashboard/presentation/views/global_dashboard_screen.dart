@@ -17,6 +17,8 @@ import 'package:apex_chess/features/archives/presentation/views/archive_screen.d
 import 'package:apex_chess/features/profile_stats/data/profile_stats_service.dart';
 import 'package:apex_chess/features/profile_stats/presentation/controllers/profile_stats_controller.dart';
 import 'package:apex_chess/features/global_dashboard/presentation/models/recent_scan_display.dart';
+import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
+import 'package:apex_chess/features/pgn_review/presentation/views/review_screen.dart';
 import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
@@ -1834,13 +1836,13 @@ class _RecentGamesTable extends ConsumerWidget {
   }
 }
 
-class _RecentRow extends StatelessWidget {
+class _RecentRow extends ConsumerWidget {
   const _RecentRow({required this.game, required this.perspective});
   final ArchivedGame game;
   final String? perspective;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final display = RecentScanDisplay.fromGame(game, perspective: perspective);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -1848,15 +1850,37 @@ class _RecentRow extends StatelessWidget {
         model: display.card,
         dense: true,
         enableHaptic: false,
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => ArchiveScreen(
-              initialFilters: ArchiveFilters(
-                search: game.ecoCode?.trim().isNotEmpty == true
-                    ? game.ecoCode!.trim()
-                    : (game.openingName ?? game.black),
-              ),
-            ),
+        onTap: () => _openRecentScan(context, ref),
+      ),
+    );
+  }
+
+  void _openRecentScan(BuildContext context, WidgetRef ref) {
+    final cached = game.cachedTimeline;
+    final userIsBlack = game.userIsBlackFor(perspective);
+    final userIsWhite = userIsBlack == null ? null : !userIsBlack;
+    if (game.isCacheCurrent && cached != null && cached.moves.isNotEmpty) {
+      ref
+          .read(reviewControllerProvider.notifier)
+          .loadTimeline(
+            cached,
+            userIsBlack: userIsBlack ?? false,
+            mode: game.analysisMode,
+            userIsWhite: userIsWhite,
+          );
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute<void>(builder: (_) => const ReviewScreen()));
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ArchiveScreen(
+          initialFilters: ArchiveFilters(
+            search: game.ecoCode?.trim().isNotEmpty == true
+                ? game.ecoCode!.trim()
+                : (game.openingName ?? game.black),
           ),
         ),
       ),

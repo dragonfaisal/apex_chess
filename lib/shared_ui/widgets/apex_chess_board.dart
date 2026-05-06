@@ -57,6 +57,7 @@ class ApexChessBoard extends StatelessWidget {
         builder: (context, constraints) {
           final boardSize = constraints.maxWidth;
           final squareSize = boardSize / 8;
+          final moveAccent = lastMoveQuality?.color ?? ApexColors.electricBlue;
           return GestureDetector(
             onTapUp: (details) => _handleTap(details, squareSize),
             child: Stack(
@@ -64,14 +65,21 @@ class ApexChessBoard extends StatelessWidget {
                 Positioned.fill(
                   child: CustomPaint(
                     painter: _ApexBoardPainter(flipped: flipped),
-                    isComplex: false, willChange: false,
+                    isComplex: false,
+                    willChange: false,
                   ),
                 ),
                 if (lastMove != null) ...[
-                  _buildHighlight(lastMove!.$1, squareSize,
-                      ApexColors.electricBlue.withAlpha(25)),
-                  _buildHighlight(lastMove!.$2, squareSize,
-                      ApexColors.electricBlue.withAlpha(40)),
+                  _buildHighlight(
+                    lastMove!.$1,
+                    squareSize,
+                    moveAccent.withAlpha(26),
+                  ),
+                  _buildHighlight(
+                    lastMove!.$2,
+                    squareSize,
+                    moveAccent.withAlpha(44),
+                  ),
                   // Castling: detect from king's 2-square horizontal hop
                   // on the back rank and highlight the rook's trail so the
                   // eye reads the move as a single combined action
@@ -79,52 +87,85 @@ class ApexChessBoard extends StatelessWidget {
                   ..._buildCastlingRookHighlight(lastMove!, squareSize),
                 ],
                 if (selectedSquare != null)
-                  _buildHighlight(selectedSquare!, squareSize,
-                      ApexColors.electricBlue.withAlpha(65)),
+                  _buildHighlight(
+                    selectedSquare!,
+                    squareSize,
+                    ApexColors.electricBlue.withAlpha(65),
+                  ),
                 if (isCheck) _buildCheckHighlight(pieces, squareSize),
                 for (final sq in legalMoveSquares)
-                  _buildLegalMoveIndicator(sq, squareSize,
-                      isOccupied: pieces.values.any((e) =>
+                  _buildLegalMoveIndicator(
+                    sq,
+                    squareSize,
+                    isOccupied: pieces.values.any(
+                      (e) =>
                           e.$1 == _fileFromAlgebraic(sq) &&
-                          e.$2 == _rankFromAlgebraic(sq))),
+                          e.$2 == _rankFromAlgebraic(sq),
+                    ),
+                  ),
                 // Per-quality breathing neon aura on the move's target
                 // square. Rendered under the piece so the piece reads
                 // against a glowing halo instead of being washed out.
                 if (lastMove != null && lastMoveQuality != null)
-                  _buildQualityAura(
-                      lastMove!.$2, squareSize, lastMoveQuality!),
+                  _buildQualityAura(lastMove!.$2, squareSize, lastMoveQuality!),
                 for (final entry in pieces.entries)
                   _buildPiece(entry.key, entry.value, squareSize),
                 if (lastMove != null && lastMoveQuality != null)
                   _buildQualityOverlay(
-                      lastMove!.$2, squareSize, lastMoveQuality!),
+                    lastMove!.$2,
+                    squareSize,
+                    lastMoveQuality!,
+                  ),
                 // Engine "better move" arrow + destination halo. Drawn
                 // *after* pieces so it reads on top of the board, but
                 // *before* coordinates so the file/rank labels stay
                 // legible. Only renders for valid algebraic squares —
                 // out-of-band data is silently skipped.
-                if (betterMove != null) ...[
-                  _buildBetterMoveHalo(betterMove!.$2, squareSize),
+                if (betterMove != null)
                   Positioned.fill(
-                    child: IgnorePointer(
-                      child: CustomPaint(
-                        painter: _BetterMoveArrowPainter(
-                          fromFile: _fileFromAlgebraic(betterMove!.$1),
-                          fromRank: _rankFromAlgebraic(betterMove!.$1),
-                          toFile: _fileFromAlgebraic(betterMove!.$2),
-                          toRank: _rankFromAlgebraic(betterMove!.$2),
-                          flipped: flipped,
-                        ),
-                        isComplex: false,
-                        willChange: false,
+                    child: TweenAnimationBuilder<double>(
+                      key: ValueKey(
+                        'better-${betterMove!.$1}-${betterMove!.$2}-$flipped',
+                      ),
+                      tween: Tween(begin: 0, end: 1),
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.easeOutCubic,
+                      builder: (context, value, child) {
+                        return Opacity(
+                          opacity: value,
+                          child: Transform.scale(
+                            scale: 0.96 + (0.04 * value),
+                            child: child,
+                          ),
+                        );
+                      },
+                      child: Stack(
+                        children: [
+                          _buildBetterMoveHalo(betterMove!.$2, squareSize),
+                          Positioned.fill(
+                            child: IgnorePointer(
+                              child: CustomPaint(
+                                painter: _BetterMoveArrowPainter(
+                                  fromFile: _fileFromAlgebraic(betterMove!.$1),
+                                  fromRank: _rankFromAlgebraic(betterMove!.$1),
+                                  toFile: _fileFromAlgebraic(betterMove!.$2),
+                                  toRank: _rankFromAlgebraic(betterMove!.$2),
+                                  flipped: flipped,
+                                ),
+                                isComplex: false,
+                                willChange: false,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                ],
                 Positioned.fill(
                   child: CustomPaint(
                     painter: _CoordinatePainter(flipped: flipped),
-                    isComplex: false, willChange: false,
+                    isComplex: false,
+                    willChange: false,
                   ),
                 ),
               ],
@@ -141,8 +182,12 @@ class ApexChessBoard extends StatelessWidget {
     final dy = details.localPosition.dy;
     int file = (dx / squareSize).floor().clamp(0, 7);
     int rank = (dy / squareSize).floor().clamp(0, 7);
-    if (flipped) { file = 7 - file; rank = 7 - rank; }
-    else { rank = 7 - rank; }
+    if (flipped) {
+      file = 7 - file;
+      rank = 7 - rank;
+    } else {
+      rank = 7 - rank;
+    }
     final algebraic =
         '${String.fromCharCode('a'.codeUnitAt(0) + file)}${rank + 1}';
     onSquareTapped!(algebraic);
@@ -151,7 +196,10 @@ class ApexChessBoard extends StatelessWidget {
   Widget _buildHighlight(String square, double squareSize, Color color) {
     final pos = _squareToPosition(square, squareSize);
     return Positioned(
-      left: pos.dx, top: pos.dy, width: squareSize, height: squareSize,
+      left: pos.dx,
+      top: pos.dy,
+      width: squareSize,
+      height: squareSize,
       child: Container(color: color),
     );
   }
@@ -165,7 +213,9 @@ class ApexChessBoard extends StatelessWidget {
   /// Returns an empty list for any non-castling move — cheap guard, runs
   /// once per rebuild, and callers can spread the result unconditionally.
   List<Widget> _buildCastlingRookHighlight(
-      (String, String) move, double squareSize) {
+    (String, String) move,
+    double squareSize,
+  ) {
     final (from, to) = move;
     if (from.length != 2 || to.length != 2) return const [];
     // Must be a king starting on e-file and landing on g/c-file of the
@@ -186,31 +236,48 @@ class ApexChessBoard extends StatelessWidget {
         return const [];
     }
     return [
-      _buildHighlight(rookFrom, squareSize,
-          ApexColors.electricBlue.withAlpha(25)),
-      _buildHighlight(rookTo, squareSize,
-          ApexColors.electricBlue.withAlpha(40)),
+      _buildHighlight(
+        rookFrom,
+        squareSize,
+        ApexColors.electricBlue.withAlpha(25),
+      ),
+      _buildHighlight(
+        rookTo,
+        squareSize,
+        ApexColors.electricBlue.withAlpha(40),
+      ),
     ];
   }
 
   Widget _buildCheckHighlight(
-      Map<String, (int, int, String)> pieces, double squareSize) {
+    Map<String, (int, int, String)> pieces,
+    double squareSize,
+  ) {
     final fenParts = fen.split(' ');
     final sideToMove = fenParts.length > 1 ? fenParts[1] : 'w';
     final kingChar = sideToMove == 'w' ? 'K' : 'k';
     for (final entry in pieces.entries) {
       if (entry.value.$3 == kingChar) {
         final pos = _squareToPositionFromFileRank(
-            entry.value.$1, entry.value.$2, squareSize);
+          entry.value.$1,
+          entry.value.$2,
+          squareSize,
+        );
         return Positioned(
-          left: pos.dx, top: pos.dy, width: squareSize, height: squareSize,
+          left: pos.dx,
+          top: pos.dy,
+          width: squareSize,
+          height: squareSize,
           child: Container(
             decoration: BoxDecoration(
-              gradient: RadialGradient(colors: [
-                ApexColors.blunder.withAlpha(180),
-                ApexColors.blunder.withAlpha(60),
-                Colors.transparent,
-              ], stops: const [0.0, 0.5, 1.0]),
+              gradient: RadialGradient(
+                colors: [
+                  ApexColors.blunder.withAlpha(180),
+                  ApexColors.blunder.withAlpha(60),
+                  Colors.transparent,
+                ],
+                stops: const [0.0, 0.5, 1.0],
+              ),
             ),
           ),
         );
@@ -219,30 +286,47 @@ class ApexChessBoard extends StatelessWidget {
     return const SizedBox.shrink();
   }
 
-  Widget _buildLegalMoveIndicator(String square, double squareSize,
-      {bool isOccupied = false}) {
+  Widget _buildLegalMoveIndicator(
+    String square,
+    double squareSize, {
+    bool isOccupied = false,
+  }) {
     final pos = _squareToPosition(square, squareSize);
     return Positioned(
-      left: pos.dx, top: pos.dy, width: squareSize, height: squareSize,
+      left: pos.dx,
+      top: pos.dy,
+      width: squareSize,
+      height: squareSize,
       child: Center(
         child: isOccupied
             ? Container(
-                width: squareSize * 0.95, height: squareSize * 0.95,
-                decoration: BoxDecoration(shape: BoxShape.circle,
+                width: squareSize * 0.95,
+                height: squareSize * 0.95,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
                   border: Border.all(
                     color: ApexColors.electricBlue.withAlpha(100),
-                    width: squareSize * 0.08)))
+                    width: squareSize * 0.08,
+                  ),
+                ),
+              )
             : Container(
-                width: squareSize * 0.28, height: squareSize * 0.28,
+                width: squareSize * 0.28,
+                height: squareSize * 0.28,
                 decoration: BoxDecoration(
                   color: ApexColors.electricBlue.withAlpha(90),
-                  shape: BoxShape.circle)),
+                  shape: BoxShape.circle,
+                ),
+              ),
       ),
     );
   }
 
   Widget _buildQualityAura(
-      String square, double squareSize, MoveQuality quality) {
+    String square,
+    double squareSize,
+    MoveQuality quality,
+  ) {
     final pos = _squareToPosition(square, squareSize);
     return Positioned(
       left: pos.dx,
@@ -260,17 +344,27 @@ class ApexChessBoard extends StatelessWidget {
   }
 
   Widget _buildQualityOverlay(
-      String square, double squareSize, MoveQuality quality) {
+    String square,
+    double squareSize,
+    MoveQuality quality,
+  ) {
     final pos = _squareToPosition(square, squareSize);
     final iconSize = squareSize * 0.38;
     return Positioned(
       left: pos.dx + squareSize - iconSize - 1,
-      top: pos.dy + 1, width: iconSize, height: iconSize,
+      top: pos.dy + 1,
+      width: iconSize,
+      height: iconSize,
       child: Container(
-        decoration: BoxDecoration(boxShadow: [
-          BoxShadow(color: quality.color.withAlpha(80),
-              blurRadius: 6, spreadRadius: -1),
-        ]),
+        decoration: BoxDecoration(
+          boxShadow: [
+            BoxShadow(
+              color: quality.color.withAlpha(80),
+              blurRadius: 6,
+              spreadRadius: -1,
+            ),
+          ],
+        ),
         child: SvgPicture.asset(quality.svgAssetPath, fit: BoxFit.contain),
       ),
     );
@@ -289,10 +383,10 @@ class ApexChessBoard extends StatelessWidget {
       child: IgnorePointer(
         child: Container(
           decoration: BoxDecoration(
-            color: ApexColors.electricBlue.withAlpha(45),
+            color: ApexColors.electricBlue.withAlpha(28),
             border: Border.all(
-              color: ApexColors.electricBlue.withAlpha(160),
-              width: 1.5,
+              color: ApexColors.sapphireBright.withAlpha(120),
+              width: 1.1,
             ),
             borderRadius: BorderRadius.circular(2),
           ),
@@ -305,10 +399,16 @@ class ApexChessBoard extends StatelessWidget {
     final (file, rank, pieceChar) = value;
     final pos = _squareToPositionFromFileRank(file, rank, squareSize);
     return Positioned(
-      left: pos.dx, top: pos.dy, width: squareSize, height: squareSize,
+      left: pos.dx,
+      top: pos.dy,
+      width: squareSize,
+      height: squareSize,
       child: Padding(
         padding: EdgeInsets.all(squareSize * 0.05),
-        child: SvgPicture.asset(_pieceAssetPath(pieceChar), fit: BoxFit.contain),
+        child: SvgPicture.asset(
+          _pieceAssetPath(pieceChar),
+          fit: BoxFit.contain,
+        ),
       ),
     );
   }
@@ -339,8 +439,9 @@ class ApexChessBoard extends StatelessWidget {
         final c = String.fromCharCode(char);
         if (file >= 8) break;
         final digit = int.tryParse(c);
-        if (digit != null) { file += digit; }
-        else {
+        if (digit != null) {
+          file += digit;
+        } else {
           final boardRank = 7 - fenRank;
           pieces['$file-$boardRank-$c'] = (file, boardRank, c);
           file++;
@@ -360,8 +461,8 @@ class ApexChessBoard extends StatelessWidget {
 class _ApexBoardPainter extends CustomPainter {
   final bool flipped;
   _ApexBoardPainter({this.flipped = false});
-  static const Color _lightSquare = Color(0xFF333340);
-  static const Color _darkSquare = Color(0xFF1E1E28);
+  static const Color _lightSquare = Color(0xFF2A344B);
+  static const Color _darkSquare = Color(0xFF111827);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -372,14 +473,20 @@ class _ApexBoardPainter extends CustomPainter {
       for (int file = 0; file < 8; file++) {
         final isLight = (rank + file) % 2 == 0;
         canvas.drawRect(
-          Rect.fromLTWH(file * squareSize, rank * squareSize,
-              squareSize, squareSize),
-          isLight ? lightPaint : darkPaint);
+          Rect.fromLTWH(
+            file * squareSize,
+            rank * squareSize,
+            squareSize,
+            squareSize,
+          ),
+          isLight ? lightPaint : darkPaint,
+        );
       }
     }
     final borderPaint = Paint()
       ..color = ApexColors.electricBlue.withAlpha(50)
-      ..style = PaintingStyle.stroke ..strokeWidth = 1.5;
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
     canvas.drawRect(Offset.zero & size, borderPaint);
   }
 
@@ -438,14 +545,14 @@ class _BetterMoveArrowPainter extends CustomPainter {
     final shaftEnd = tip - unit * (squareSize * 0.30);
 
     final shaftPaint = Paint()
-      ..color = ApexColors.electricBlue.withAlpha(220)
+      ..color = ApexColors.sapphireBright.withAlpha(172)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = squareSize * 0.16
+      ..strokeWidth = squareSize * 0.105
       ..strokeCap = StrokeCap.round;
     canvas.drawLine(shaftStart, shaftEnd, shaftPaint);
 
     final perp = Offset(-unit.dy, unit.dx);
-    final headHalfWidth = squareSize * 0.28;
+    final headHalfWidth = squareSize * 0.22;
     final headBaseLeft = shaftEnd + perp * headHalfWidth;
     final headBaseRight = shaftEnd - perp * headHalfWidth;
     final headPath = Path()
@@ -454,7 +561,7 @@ class _BetterMoveArrowPainter extends CustomPainter {
       ..lineTo(headBaseRight.dx, headBaseRight.dy)
       ..close();
     final headPaint = Paint()
-      ..color = ApexColors.electricBlue.withAlpha(230)
+      ..color = ApexColors.sapphireBright.withAlpha(188)
       ..style = PaintingStyle.fill;
     canvas.drawPath(headPath, headPaint);
   }
@@ -479,21 +586,30 @@ class _CoordinatePainter extends CustomPainter {
     final fontSize = squareSize * 0.15;
     final textStyle = TextStyle(
       color: ApexColors.textTertiary.withAlpha(130),
-      fontSize: fontSize, fontWeight: FontWeight.w600, fontFamily: 'Inter');
+      fontSize: fontSize,
+      fontWeight: FontWeight.w600,
+      fontFamily: 'Inter',
+    );
     for (int f = 0; f < 8; f++) {
       final fileIndex = flipped ? 7 - f : f;
       final tp = TextPainter(
         text: TextSpan(text: _files[fileIndex], style: textStyle),
-        textDirection: TextDirection.ltr)..layout();
-      tp.paint(canvas,
-          Offset(f * squareSize + squareSize - tp.width - 2,
-              size.height - tp.height - 2));
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(
+        canvas,
+        Offset(
+          f * squareSize + squareSize - tp.width - 2,
+          size.height - tp.height - 2,
+        ),
+      );
     }
     for (int r = 0; r < 8; r++) {
       final rankNumber = flipped ? r + 1 : 8 - r;
       final tp = TextPainter(
         text: TextSpan(text: '$rankNumber', style: textStyle),
-        textDirection: TextDirection.ltr)..layout();
+        textDirection: TextDirection.ltr,
+      )..layout();
       tp.paint(canvas, Offset(3, r * squareSize + 2));
     }
   }
