@@ -209,7 +209,7 @@ void main() {
       find.byKey(const ValueKey('review-command-explain')),
       findsOneWidget,
     );
-    expect(find.byKey(const ValueKey('review-command-line')), findsOneWidget);
+    expect(find.byKey(const ValueKey('review-command-line')), findsNothing);
     expect(find.byKey(const ValueKey('review-command-flip')), findsOneWidget);
     expect(
       find.byKey(const ValueKey('review-command-summary')),
@@ -270,7 +270,18 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.descendant(of: sheet, matching: find.text('Better was c5.')),
+        find.descendant(of: sheet, matching: find.text('Better Move')),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: sheet, matching: find.text('Better: c5')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: sheet,
+          matching: find.text('Stronger continuation.'),
+        ),
         findsOneWidget,
       );
       expect(
@@ -293,13 +304,22 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.descendant(of: sheet, matching: find.text('Better was Nf3.')),
+        find.descendant(of: sheet, matching: find.text('Better: Nf3')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: sheet,
+          matching: find.text('Avoids the worst of the danger.'),
+        ),
         findsOneWidget,
       );
     },
   );
 
-  testWidgets('line sheet handles missing line safely', (tester) async {
+  testWidgets('Better Move and line detail update with active ply', (
+    tester,
+  ) async {
     final container = ProviderContainer();
     addTearDown(container.dispose);
     container
@@ -309,21 +329,42 @@ void main() {
     await tester.pumpWidget(_host(container));
     await _pumpReview(tester);
 
-    await tester.tap(find.byKey(const ValueKey('review-coach-orb')));
-    await _pumpReview(tester);
-    await tester.tap(find.byKey(const ValueKey('review-command-line')));
+    expect(
+      find.byKey(const ValueKey('review-coach-better-move')),
+      findsNothing,
+    );
+    expect(find.text('This move keeps the advantage.'), findsOneWidget);
+    expect(find.textContaining('Better:'), findsNothing);
+
+    container.read(reviewControllerProvider.notifier).jumpTo(1);
     await _pumpReview(tester);
 
-    final sheet = find.byKey(const ValueKey('review-line-sheet'));
-    expect(sheet, findsOneWidget);
     expect(
-      find.descendant(of: sheet, matching: find.text('Line')),
+      find.byKey(const ValueKey('review-coach-better-move')),
       findsOneWidget,
     );
     expect(
-      find.descendant(of: sheet, matching: find.text('No line available.')),
+      find.text('This move misses a stronger continuation.'),
       findsOneWidget,
     );
+    expect(find.text('Better: c5'), findsOneWidget);
+    expect(find.text('Stronger continuation.'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('review-coach-line-detail')),
+      findsOneWidget,
+    );
+    expect(find.text('c5 Nf3'), findsOneWidget);
+
+    container.read(reviewControllerProvider.notifier).jumpTo(2);
+    await _pumpReview(tester);
+
+    expect(find.text('Better: Nf3'), findsOneWidget);
+    expect(find.text('Avoids the worst of the danger.'), findsOneWidget);
+    expect(find.text('Better: c5'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('review-coach-orb')));
+    await _pumpReview(tester);
+    expect(find.byKey(const ValueKey('review-command-line')), findsNothing);
   });
 
   testWidgets('move list sheet is ordered compact and tracks active ply', (

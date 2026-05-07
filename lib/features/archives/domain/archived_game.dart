@@ -9,8 +9,10 @@ library;
 
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/analysis_profile.dart';
+import 'package:apex_chess/core/domain/services/analysis_cache_key.dart';
 import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
+import 'package:apex_chess/core/domain/services/game_identity_service.dart';
 import 'package:apex_chess/core/domain/services/move_quality_display.dart';
 
 /// Bumped on every classifier-behaviour change so cached timelines
@@ -233,6 +235,85 @@ class ArchivedGame {
     _ => 'Deep',
   };
 
+  String get canonicalGameKey => canonicalKeyFor(
+    pgn: pgn,
+    pgnHash: pgnHash,
+    white: white,
+    black: black,
+    result: result,
+    playedAt: playedAt,
+  );
+
+  static String canonicalKeyFor({
+    required String pgn,
+    String? pgnHash,
+    required String white,
+    required String black,
+    required String result,
+    DateTime? playedAt,
+  }) {
+    final tags = const GameIdentityService().parseTags(pgn);
+    final site = _cleanKeyPart(tags['Site']);
+    final date = _cleanKeyPart(
+      playedAt?.toIso8601String().split('T').first ??
+          tags['UTCDate'] ??
+          tags['Date'],
+    );
+    final hash = _cleanKeyPart(pgnHash) ?? stablePgnHash(pgn);
+    return [
+      'game',
+      hash,
+      _cleanKeyPart(white) ?? 'white',
+      _cleanKeyPart(black) ?? 'black',
+      _cleanKeyPart(result) ?? '*',
+      if (date != null) date,
+      if (site != null) site,
+    ].join('|');
+  }
+
+  static List<ArchivedGame> collapseCanonical(Iterable<ArchivedGame> games) {
+    final byKey = <String, ArchivedGame>{};
+    for (final game in games) {
+      final key = game.canonicalGameKey;
+      final existing = byKey[key];
+      if (existing == null || game.isPreferredVisibleRecordOver(existing)) {
+        byKey[key] = game;
+      }
+    }
+    final out = byKey.values.toList()
+      ..sort((a, b) => b.analyzedAt.compareTo(a.analyzedAt));
+    return out;
+  }
+
+  bool isPreferredVisibleRecordOver(ArchivedGame other) {
+    final modeCompare = _modeRank.compareTo(other._modeRank);
+    if (modeCompare != 0) return modeCompare > 0;
+    final cacheCompare = _cacheRank.compareTo(other._cacheRank);
+    if (cacheCompare != 0) return cacheCompare > 0;
+    final sourceCompare = _sourceRank.compareTo(other._sourceRank);
+    if (sourceCompare != 0) return sourceCompare > 0;
+    final depthCompare = depth.compareTo(other.depth);
+    if (depthCompare != 0) return depthCompare > 0;
+    final plyCompare = totalPlies.compareTo(other.totalPlies);
+    if (plyCompare != 0) return plyCompare > 0;
+    return analyzedAt.isAfter(other.analyzedAt);
+  }
+
+  int get _modeRank {
+    final profile = analysisProfileId.trim();
+    if (profile == 'deep_review') return 3;
+    if (profile == 'offline_review') return 2;
+    if (profile == 'fast_review') return 1;
+    return analysisMode == AnalysisMode.deep ? 3 : 1;
+  }
+
+  int get _cacheRank => isCacheCurrent ? 2 : (cachedTimeline == null ? 0 : 1);
+
+  int get _sourceRank => switch (source) {
+    ArchiveSource.chessCom || ArchiveSource.lichess => 2,
+    ArchiveSource.pgn => 1,
+  };
+
   bool? userIsBlackFor(String? userHandle) {
     final me = userHandle?.trim().toLowerCase();
     if (me == null || me.isEmpty) return null;
@@ -433,5 +514,11 @@ class ArchivedGame {
     // PGN standard uses "YYYY.MM.DD"; Chess.com uses "YYYY-MM-DD".
     final normalized = raw.replaceAll('.', '-').replaceAll('?', '1');
     return DateTime.tryParse(normalized);
+  }
+
+  static String? _cleanKeyPart(String? raw) {
+    final trimmed = raw?.trim().toLowerCase();
+    if (trimmed == null || trimmed.isEmpty || trimmed == '?') return null;
+    return trimmed.replaceAll(RegExp(r'\s+'), ' ');
   }
 }

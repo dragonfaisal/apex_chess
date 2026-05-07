@@ -64,20 +64,16 @@ Future<String?> saveAnalysisToArchive({
   String? timeControl,
 }) async {
   try {
-    final profileId = AnalysisProfileId.fromWire(timeline.analysisProfileId);
     final pgnHash = timeline.pgnHash ?? stablePgnHash(pgn);
-    final id =
-        timeline.cacheKey ??
-        archiveIdForAnalysis(
-          pgn: pgn,
-          pgnHash: pgnHash,
-          analysisProfileId: profileId,
-          providerId: timeline.providerId,
-          engineVersion: timeline.engineVersion,
-          classifierVersion: timeline.classifierVersion,
-          tacticalVerifierVersion: timeline.tacticalVerifierVersion,
-          openingBookVersion: timeline.openingBookVersion,
-        );
+    final headers = timeline.headers;
+    final id = ArchivedGame.canonicalKeyFor(
+      pgn: pgn,
+      pgnHash: pgnHash,
+      white: headers['White'] ?? 'White',
+      black: headers['Black'] ?? 'Black',
+      result: headers['Result'] ?? '*',
+      playedAt: playedAt,
+    );
     final game = ArchivedGame.fromTimeline(
       timeline: timeline,
       id: id,

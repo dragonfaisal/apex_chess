@@ -10,11 +10,9 @@
 /// secondary engine pass over the candidate line. We compose only what
 /// we can prove from the inputs:
 ///
-///   * the piece name (decoded from SAN's leading letter or pawn fall-
-///     through),
-///   * the destination square (last two characters of the UCI before
-///     any promotion suffix),
-///   * a verb tuned to the classification of the *played* move.
+///   * the source / destination squares from UCI,
+///   * a conservative reason tuned to the classification of the
+///     *played* move.
 ///
 /// Falls back to `null` for inputs we can't parse so callers can hide
 /// the row instead of rendering "Move the null to ?".
@@ -60,79 +58,47 @@ class BetterMoveExplanation {
     final toSq = norm.substring(2, 4);
     if (!_isAlgebraic(fromSq) || !_isAlgebraic(toSq)) return null;
 
-    final piece = _pieceFromSan(bestMoveSan) ?? 'piece';
-    final verb = _verbForClassification(playedQuality);
-    final isCastle = bestMoveSan != null &&
-        (bestMoveSan.startsWith('O-O-O') || bestMoveSan.startsWith('O-O'));
-    final isPromotion = norm.length >= 5;
-    final destPhrase = isCastle
-        ? (bestMoveSan.startsWith('O-O-O')
-            ? 'castle queenside'
-            : 'castle kingside')
-        : isPromotion
-            ? 'promote on $toSq'
-            : 'move the $piece to $toSq';
-
-    final sentence = '${_capitalise(destPhrase)} $verb';
-    return BetterMoveExplanation(
-      from: fromSq,
-      to: toSq,
-      sentence: sentence,
-    );
+    final sentence = _reasonForClassification(playedQuality);
+    return BetterMoveExplanation(from: fromSq, to: toSq, sentence: sentence);
   }
 
   static bool _isAlgebraic(String s) {
     if (s.length != 2) return false;
     final f = s.codeUnitAt(0);
     final r = s.codeUnitAt(1);
-    return f >= 0x61 /* a */ && f <= 0x68 /* h */ &&
-        r >= 0x31 /* 1 */ && r <= 0x38 /* 8 */;
+    return f >= 0x61 /* a */ &&
+        f <= 0x68 /* h */ &&
+        r >= 0x31 /* 1 */ &&
+        r <= 0x38 /* 8 */;
   }
 
-  static String _capitalise(String s) =>
-      s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
-
-  static String? _pieceFromSan(String? san) {
-    if (san == null || san.isEmpty) return null;
-    if (san.startsWith('O-O-O') || san.startsWith('O-O')) return 'king';
-    final c = san[0];
-    return switch (c) {
-      'K' => 'king',
-      'Q' => 'queen',
-      'R' => 'rook',
-      'B' => 'bishop',
-      'N' => 'knight',
-      _ => 'pawn',
-    };
-  }
-
-  /// Verb / clause matching the *played* move's classification.
+  /// Safe reason matching the *played* move's classification.
   ///
   /// We never claim a specific tactical reason ("to defend the king",
   /// "to fork the queen") because that would require a second engine
-  /// pass. Instead we tune the *severity* of the recommendation so the
-  /// user reads "avoid losing material" on a Blunder and "keep the
-  /// initiative" on a Best.
-  static String _verbForClassification(MoveQuality q) {
+  /// pass. Instead we describe the suggestion as a stronger
+  /// continuation and tune severity only where the existing verdict
+  /// supports it.
+  static String _reasonForClassification(MoveQuality q) {
     switch (q) {
       case MoveQuality.blunder:
-        return 'to avoid losing material and steady the position.';
+        return 'Avoids the worst of the danger.';
       case MoveQuality.mistake:
-        return 'to keep the position safe and recover the eval.';
+        return 'Improves the line.';
       case MoveQuality.missedWin:
-        return 'to convert the winning advantage instead of letting it slip.';
+        return 'Keeps the winning chance alive.';
       case MoveQuality.inaccuracy:
-        return 'for a stronger continuation that holds the eval.';
+        return 'Stronger continuation.';
       case MoveQuality.good:
       case MoveQuality.excellent:
-        return 'to stay flush with the engine\'s top line.';
+        return 'Improves the line.';
       case MoveQuality.forced:
-        return 'as the only move that keeps the position alive.';
+        return 'Keeps the position alive.';
       case MoveQuality.best:
       case MoveQuality.brilliant:
       case MoveQuality.great:
       case MoveQuality.book:
-        return 'to maintain the initiative.';
+        return 'Keeps the initiative.';
     }
   }
 }

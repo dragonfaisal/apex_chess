@@ -499,8 +499,10 @@ List<ArchivedGame> _filterBySource(
   List<ArchivedGame> games,
   ArchiveSource? source,
 ) {
-  if (source == null) return games;
-  return games.where((g) => g.source == source).toList();
+  final scoped = source == null
+      ? games
+      : games.where((g) => g.source == source);
+  return ArchivedGame.collapseCanonical(scoped);
 }
 
 /// Whether [g] is from the user's perspective according to [filter].
@@ -529,6 +531,7 @@ DashboardStats _buildStats(
   String? perspective,
   ColorPerspective filter,
 ) {
+  games = ArchivedGame.collapseCanonical(games);
   if (games.isEmpty) return DashboardStats.empty();
   // Oldest-first so the trend series reads left-to-right in time.
   final ordered = [...games]
@@ -631,6 +634,7 @@ List<OpeningStats> _buildOpeningStats(
   String? me,
   ColorPerspective filter,
 ) {
+  games = ArchivedGame.collapseCanonical(games);
   if (games.isEmpty) return const [];
   final buckets = <String, _OpeningAccum>{};
   final meL = me?.toLowerCase();
@@ -846,6 +850,7 @@ List<WeakSpotDisplay> _buildWeakSpots(
   String? perspective,
   ColorPerspective filter,
 ) {
+  games = ArchivedGame.collapseCanonical(games);
   final stats = _buildStats(games, perspective, filter);
   if (stats.gamesAnalyzed < 2) {
     return const [

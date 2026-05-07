@@ -361,32 +361,59 @@ class _SourceChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final display = ApexPlatformBadgeDisplay.fromPlatform(platform);
+    final activeAccent = platform == PlayerIdentityPlatform.lichess
+        ? ApexColors.aurora
+        : ApexColors.sapphireBright;
     return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            gradient: selected
-                ? ApexGradients.sapphire
-                : LinearGradient(
-                    colors: [
-                      ApexColors.deepSpace.withValues(alpha: 0.6),
-                      ApexColors.deepSpace.withValues(alpha: 0.6),
-                    ],
-                  ),
-            border: Border.all(
-              color: selected
-                  ? ApexColors.sapphireBright
-                  : ApexColors.subtleBorder,
-              width: 1,
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: display.label,
+        child: GestureDetector(
+          onTap: onTap,
+          child: AnimatedContainer(
+            key: ValueKey('connect-source-${platform.name}-chip'),
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              gradient: selected
+                  ? LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        activeAccent.withValues(alpha: 0.26),
+                        ApexColors.sapphire.withValues(alpha: 0.34),
+                        ApexColors.deepSpace.withValues(alpha: 0.78),
+                      ],
+                    )
+                  : LinearGradient(
+                      colors: [
+                        ApexColors.deepSpace.withValues(alpha: 0.62),
+                        ApexColors.deepSpace.withValues(alpha: 0.50),
+                      ],
+                    ),
+              border: Border.all(
+                color: selected
+                    ? activeAccent.withValues(alpha: 0.92)
+                    : ApexColors.subtleBorder.withValues(alpha: 0.78),
+                width: selected ? 1.25 : 0.7,
+              ),
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                        color: activeAccent.withValues(alpha: 0.20),
+                        blurRadius: 18,
+                        spreadRadius: -7,
+                      ),
+                    ]
+                  : null,
             ),
-          ),
-          child: Center(
-            child: ApexPlatformBadge(platform: platform, selected: selected),
+            child: Center(
+              child: ApexPlatformBadge(platform: platform, selected: selected),
+            ),
           ),
         ),
       ),
@@ -410,6 +437,7 @@ class _ConnectCta extends StatelessWidget {
     return GestureDetector(
       onTap: enabled ? onTap : null,
       child: AnimatedContainer(
+        key: const ValueKey('connect-account-cta'),
         duration: const Duration(milliseconds: 200),
         height: 48,
         alignment: Alignment.center,
@@ -419,9 +447,15 @@ class _ConnectCta extends StatelessWidget {
               ? ApexGradients.sapphire
               : LinearGradient(
                   colors: [
-                    ApexColors.deepSpace.withValues(alpha: 0.6),
-                    ApexColors.deepSpace.withValues(alpha: 0.6),
+                    ApexColors.deepSpace.withValues(alpha: 0.68),
+                    ApexColors.deepSpace.withValues(alpha: 0.56),
                   ],
+                ),
+          border: enabled
+              ? null
+              : Border.all(
+                  color: ApexColors.subtleBorder.withValues(alpha: 0.82),
+                  width: 0.7,
                 ),
           boxShadow: enabled
               ? [
@@ -444,10 +478,11 @@ class _ConnectCta extends StatelessWidget {
               )
             : Text(
                 ApexCopy.onboardingConnect,
+                key: const ValueKey('connect-account-cta-label'),
                 style: ApexTypography.labelLarge.copyWith(
                   color: enabled
                       ? ApexColors.textOnAccent
-                      : ApexColors.textTertiary,
+                      : ApexColors.textSecondary,
                   letterSpacing: 3,
                   fontWeight: FontWeight.w800,
                 ),

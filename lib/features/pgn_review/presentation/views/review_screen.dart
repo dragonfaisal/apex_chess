@@ -66,7 +66,6 @@ class ReviewScreen extends ConsumerWidget {
         onBetter: display.insight.betterMove == null
             ? null
             : () => _showBestMove(context, display),
-        onLine: () => _showLineSheet(context),
         onFlip: controller.toggleFlip,
         onSummary: () => Navigator.of(context).maybePop(),
       ),
@@ -497,16 +496,16 @@ class _CoachInsightPanel extends StatelessWidget {
                 ),
                 if (insight.betterMove != null) ...[
                   const SizedBox(height: 8),
-                  _InlineHint(
-                    icon: Icons.north_east_rounded,
-                    label: 'Better',
-                    value: insight.betterMove!,
-                    color: ApexColors.sapphireBright,
+                  _BetterMoveHint(
+                    key: const ValueKey('review-coach-better-move'),
+                    move: insight.betterMove!,
+                    reason: insight.betterMoveReason,
                   ),
                 ],
                 if (insight.engineLinePreview != null) ...[
                   const SizedBox(height: 6),
                   _InlineHint(
+                    key: const ValueKey('review-coach-line-detail'),
                     icon: Icons.timeline_rounded,
                     label: 'Line',
                     value: insight.engineLinePreview!,
@@ -560,6 +559,7 @@ class _QualityChip extends StatelessWidget {
 
 class _InlineHint extends StatelessWidget {
   const _InlineHint({
+    super.key,
     required this.icon,
     required this.label,
     required this.value,
@@ -594,6 +594,76 @@ class _InlineHint extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _BetterMoveHint extends StatelessWidget {
+  const _BetterMoveHint({super.key, required this.move, this.reason});
+
+  final String move;
+  final String? reason;
+
+  @override
+  Widget build(BuildContext context) {
+    final cleanReason = reason?.trim();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: ApexColors.sapphireBright.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: ApexColors.sapphireBright.withValues(alpha: 0.28),
+          width: 0.6,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.north_east_rounded,
+            color: ApexColors.sapphireBright,
+            size: 15,
+          ),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Better: $move',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: ApexTypography.labelLarge.copyWith(
+                          color: ApexColors.textPrimary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (cleanReason != null && cleanReason.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    cleanReason,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: ApexTypography.bodyMedium.copyWith(
+                      color: ApexColors.textSecondary,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -738,7 +808,6 @@ class _ReviewActionBar extends StatelessWidget {
     required this.onMoves,
     required this.onExplain,
     required this.onBetter,
-    required this.onLine,
     required this.onFlip,
     required this.onSummary,
   });
@@ -750,7 +819,6 @@ class _ReviewActionBar extends StatelessWidget {
   final VoidCallback onMoves;
   final VoidCallback onExplain;
   final VoidCallback? onBetter;
-  final VoidCallback onLine;
   final VoidCallback onFlip;
   final VoidCallback onSummary;
 
@@ -833,7 +901,6 @@ class _ReviewActionBar extends StatelessWidget {
                       child: _CoachCommandOrb(
                         onExplain: onExplain,
                         onBetter: onBetter,
-                        onLine: onLine,
                         onFlip: onFlip,
                         onSummary: onSummary,
                       ),
@@ -884,14 +951,12 @@ class _CoachCommandOrb extends StatefulWidget {
   const _CoachCommandOrb({
     required this.onExplain,
     required this.onBetter,
-    required this.onLine,
     required this.onFlip,
     required this.onSummary,
   });
 
   final VoidCallback onExplain;
   final VoidCallback? onBetter;
-  final VoidCallback onLine;
   final VoidCallback onFlip;
   final VoidCallback onSummary;
 
@@ -945,7 +1010,6 @@ class _CoachCommandOrbState extends State<_CoachCommandOrb> {
                 onBetter: widget.onBetter == null
                     ? null
                     : () => _runCommand(widget.onBetter!),
-                onLine: () => _runCommand(widget.onLine),
                 onFlip: () => _runCommand(widget.onFlip),
                 onSummary: () => _runCommand(widget.onSummary),
               ),
@@ -1028,14 +1092,12 @@ class _CoachCommandMenu extends StatelessWidget {
   const _CoachCommandMenu({
     required this.onExplain,
     required this.onBetter,
-    required this.onLine,
     required this.onFlip,
     required this.onSummary,
   });
 
   final VoidCallback onExplain;
   final VoidCallback? onBetter;
-  final VoidCallback onLine;
   final VoidCallback onFlip;
   final VoidCallback onSummary;
 
@@ -1053,11 +1115,6 @@ class _CoachCommandMenu extends StatelessWidget {
           icon: Icons.north_east_rounded,
           onTap: onBetter!,
         ),
-      _CoachCommandAction(
-        label: 'Line',
-        icon: Icons.timeline_rounded,
-        onTap: onLine,
-      ),
       _CoachCommandAction(
         label: 'Flip',
         icon: Icons.screen_rotation_alt_rounded,
@@ -1182,6 +1239,7 @@ class _CoachCommandButton extends StatelessWidget {
 void _showBestMove(BuildContext context, ReviewBoardDisplayModel display) {
   final best = display.insight.betterMove;
   if (best == null) return;
+  final reason = display.insight.betterMoveReason;
   showModalBottomSheet<void>(
     context: context,
     backgroundColor: Colors.transparent,
@@ -1198,12 +1256,22 @@ void _showBestMove(BuildContext context, ReviewBoardDisplayModel display) {
           ),
           const SizedBox(height: 8),
           Text(
-            best,
+            'Better: $best',
             style: ApexTypography.headlineMedium.copyWith(
               color: ApexColors.textPrimary,
-              fontSize: 24,
+              fontSize: 22,
             ),
           ),
+          if (reason != null && reason.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              reason,
+              style: ApexTypography.bodyMedium.copyWith(
+                color: ApexColors.textSecondary,
+                fontSize: 13,
+              ),
+            ),
+          ],
         ],
       ),
     ),
@@ -1216,15 +1284,6 @@ void _showCoachExplain(BuildContext context) {
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     builder: (_) => const _CoachExplainSheet(),
-  );
-}
-
-void _showLineSheet(BuildContext context) {
-  showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (_) => const _LineSheet(),
   );
 }
 
@@ -1311,11 +1370,9 @@ class _CoachExplainSheet extends ConsumerWidget {
             ),
             if (insight.betterMove != null) ...[
               const SizedBox(height: 12),
-              _InlineHint(
-                icon: Icons.north_east_rounded,
-                label: 'Better',
-                value: 'Better was ${insight.betterMove}.',
-                color: ApexColors.sapphireBright,
+              _BetterMoveHint(
+                move: insight.betterMove!,
+                reason: insight.betterMoveReason,
               ),
             ],
             if (insight.engineLinePreview != null) ...[
@@ -1327,66 +1384,6 @@ class _CoachExplainSheet extends ConsumerWidget {
                 color: ApexColors.textTertiary,
               ),
             ],
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _LineSheet extends ConsumerWidget {
-  const _LineSheet();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final display = _displayFromReviewState(
-      ref.watch(reviewControllerProvider),
-    );
-    final insight = display?.insight;
-    return _GlassSheet(
-      child: Column(
-        key: const ValueKey('review-line-sheet'),
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Text(
-                'Line',
-                style: ApexTypography.titleMedium.copyWith(
-                  color: ApexColors.textPrimary,
-                ),
-              ),
-              const Spacer(),
-              IconButton(
-                tooltip: 'Close',
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close_rounded),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          if (insight?.engineLinePreview != null)
-            _SheetLinePreview(
-              label: 'Line',
-              value: insight!.engineLinePreview!,
-              color: ApexColors.sapphireBright,
-            )
-          else
-            Text(
-              'No line available.',
-              style: ApexTypography.bodyMedium.copyWith(
-                color: ApexColors.textTertiary,
-                fontSize: 13,
-              ),
-            ),
-          if (insight?.betterMove != null) ...[
-            const SizedBox(height: 8),
-            _SheetLinePreview(
-              label: 'Better',
-              value: insight!.betterMove!,
-              color: ApexColors.sapphireBright,
-            ),
           ],
         ],
       ),

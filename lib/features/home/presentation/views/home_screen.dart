@@ -21,6 +21,7 @@ import 'package:apex_chess/features/account/presentation/views/connect_account_s
 import 'package:apex_chess/features/apex_academy/presentation/views/apex_academy_screen.dart';
 import 'package:apex_chess/features/archives/data/archive_save_hook.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
+import 'package:apex_chess/features/archives/presentation/controllers/archive_controller.dart';
 import 'package:apex_chess/features/archives/presentation/views/archive_screen.dart';
 import 'package:apex_chess/features/global_dashboard/presentation/views/global_dashboard_screen.dart';
 import 'package:apex_chess/features/import_match/presentation/views/import_match_screen.dart';
@@ -28,9 +29,11 @@ import 'package:apex_chess/features/live_play/presentation/views/live_play_scree
 import 'package:apex_chess/features/mistake_vault/data/mistake_vault_save_hook.dart';
 import 'package:apex_chess/features/home/presentation/controllers/home_activity_controller.dart';
 import 'package:apex_chess/features/home/presentation/pgn_paste_display_state.dart';
+import 'package:apex_chess/features/pgn_review/domain/saved_review_lookup.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
 import 'package:apex_chess/features/pgn_review/domain/review_analysis_provider.dart';
 import 'package:apex_chess/features/pgn_review/presentation/views/review_summary_screen.dart';
+import 'package:apex_chess/features/pgn_review/presentation/widgets/already_reviewed_dialog.dart';
 import 'package:apex_chess/features/profile/presentation/views/profile_screen.dart';
 import 'package:apex_chess/features/profile_scanner/presentation/controllers/profile_scanner_controller.dart';
 import 'package:apex_chess/features/profile_scanner/presentation/views/profile_scanner_screen.dart';
@@ -173,6 +176,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     WidgetRef ref,
     _PgnPasteResult result,
   ) {
+    unawaited(_startLocalAnalysisFlow(context, ref, result));
+  }
+
+  Future<void> _startLocalAnalysisFlow(
+    BuildContext context,
+    WidgetRef ref,
+    _PgnPasteResult result,
+  ) async {
+    final savedReview = _openableSavedReviewForPgn(ref, result);
+    if (savedReview != null) {
+      final action = await showAlreadyReviewedDialog(
+        context: context,
+        savedReview: savedReview,
+        requestedProfile: result.profile,
+      );
+      if (!context.mounted || action == null) return;
+      if (action == AlreadyReviewedAction.preview) {
+        _previewSavedPgnReview(context, ref, result, savedReview);
+        return;
+      }
+    }
+    if (!context.mounted) return;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -184,6 +209,52 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         userHandle: result.userHandle,
       ),
     );
+  }
+
+  ArchivedGame? _openableSavedReviewForPgn(
+    WidgetRef ref,
+    _PgnPasteResult result,
+  ) {
+    final identity = const GameIdentityService().parsePgn(
+      result.pgn,
+      userHandle: result.userHandle,
+      selectedUserIsWhite: result.userIsWhite,
+    );
+    return findOpenableCanonicalSavedReview(
+      games: ref.read(archiveControllerProvider).games,
+      pgn: result.pgn,
+      white: identity.white,
+      black: identity.black,
+      result: identity.result,
+      playedAt: null,
+    );
+  }
+
+  void _previewSavedPgnReview(
+    BuildContext context,
+    WidgetRef ref,
+    _PgnPasteResult result,
+    ArchivedGame savedReview,
+  ) {
+    final timeline = savedReview.cachedTimeline;
+    if (timeline == null) return;
+    ref
+        .read(reviewControllerProvider.notifier)
+        .loadTimeline(
+          timeline,
+          userIsBlack: result.userIsWhite == false,
+          mode: _modeForSavedReview(savedReview),
+          userIsWhite: result.userIsWhite,
+        );
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const ReviewSummaryScreen()),
+    );
+  }
+
+  AnalysisMode _modeForSavedReview(ArchivedGame savedReview) {
+    return savedReview.analysisProfileId == 'fast_review'
+        ? AnalysisMode.quick
+        : AnalysisMode.deep;
   }
 }
 

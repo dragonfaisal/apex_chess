@@ -15,6 +15,7 @@ import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
 import 'package:apex_chess/features/pgn_review/presentation/views/review_summary_screen.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_platform_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -116,11 +117,8 @@ void main() {
         find.byKey(const ValueKey('summary-black-side-marker')),
         findsWidgets,
       );
-      // The summary is a long ListView on test surfaces — scroll the
-      // remaining sections into the viewport before asserting.
-      final keyMoments = find.text('KEY MOMENTS');
-      await tester.scrollUntilVisible(keyMoments, 200);
-      expect(keyMoments, findsOneWidget);
+      expect(find.byType(ApexPlatformBadge), findsNothing);
+      expect(find.text('KEY MOMENTS'), findsNothing);
       final phasePerf = find.text('PHASE PERFORMANCE');
       await tester.scrollUntilVisible(phasePerf, 200);
       expect(phasePerf, findsOneWidget);

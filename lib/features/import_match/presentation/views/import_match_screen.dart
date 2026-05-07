@@ -21,6 +21,7 @@ import 'package:apex_chess/features/account/domain/apex_account.dart';
 import 'package:apex_chess/features/account/presentation/controllers/account_controller.dart';
 import 'package:apex_chess/features/archives/data/archive_save_hook.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
+import 'package:apex_chess/features/archives/presentation/controllers/archive_controller.dart';
 import 'package:apex_chess/features/import_match/domain/imported_game.dart';
 import 'package:apex_chess/features/import_match/presentation/controllers/import_controller.dart';
 import 'package:apex_chess/features/import_match/presentation/models/import_discovery_display.dart';
@@ -28,11 +29,13 @@ import 'package:apex_chess/features/import_match/presentation/models/imported_ga
 import 'package:apex_chess/features/home/presentation/controllers/home_activity_controller.dart';
 import 'package:apex_chess/features/mistake_vault/data/mistake_vault_save_hook.dart';
 import 'package:apex_chess/features/import_match/presentation/controllers/recent_searches_controller.dart';
+import 'package:apex_chess/features/pgn_review/domain/saved_review_lookup.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
 import 'package:apex_chess/features/pgn_review/domain/review_analysis_provider.dart';
 import 'package:apex_chess/features/user_validation/presentation/username_validation_controller.dart';
 import 'package:apex_chess/features/user_validation/presentation/widgets/username_validation_pill.dart';
 import 'package:apex_chess/features/pgn_review/presentation/views/review_summary_screen.dart';
+import 'package:apex_chess/features/pgn_review/presentation/widgets/already_reviewed_dialog.dart';
 import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
 import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
@@ -1190,6 +1193,28 @@ class _GameCard extends ConsumerWidget {
     WidgetRef ref,
     AnalysisProfile profile,
   ) {
+    unawaited(_startAnalysisFlow(context, ref, profile));
+  }
+
+  Future<void> _startAnalysisFlow(
+    BuildContext context,
+    WidgetRef ref,
+    AnalysisProfile profile,
+  ) async {
+    final savedReview = _openableSavedReview(ref);
+    if (savedReview != null) {
+      final action = await showAlreadyReviewedDialog(
+        context: context,
+        savedReview: savedReview,
+        requestedProfile: profile,
+      );
+      if (!context.mounted || action == null) return;
+      if (action == AlreadyReviewedAction.preview) {
+        _previewSavedReview(context, ref, savedReview);
+        return;
+      }
+    }
+    if (!context.mounted) return;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -1208,6 +1233,53 @@ class _GameCard extends ConsumerWidget {
       ),
     );
   }
+
+  ArchivedGame? _openableSavedReview(WidgetRef ref) {
+    return findOpenableCanonicalSavedReview(
+      games: ref.read(archiveControllerProvider).games,
+      pgn: game.pgn,
+      white: game.whiteName,
+      black: game.blackName,
+      result: _archiveResultLabel,
+      playedAt: game.playedAt,
+    );
+  }
+
+  void _previewSavedReview(
+    BuildContext context,
+    WidgetRef ref,
+    ArchivedGame savedReview,
+  ) {
+    final timeline = savedReview.cachedTimeline;
+    if (timeline == null) return;
+    final userIsWhite = game.userColor == null
+        ? null
+        : game.userColor == PlayerColor.white;
+    ref
+        .read(reviewControllerProvider.notifier)
+        .loadTimeline(
+          timeline,
+          userIsBlack: userIsWhite == false,
+          mode: _modeForSavedReview(savedReview),
+          userIsWhite: userIsWhite,
+        );
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const ReviewSummaryScreen()),
+    );
+  }
+
+  AnalysisMode _modeForSavedReview(ArchivedGame savedReview) {
+    return savedReview.analysisProfileId == 'fast_review'
+        ? AnalysisMode.quick
+        : AnalysisMode.deep;
+  }
+
+  String get _archiveResultLabel => switch (game.result) {
+    GameResult.whiteWon => '1-0',
+    GameResult.blackWon => '0-1',
+    GameResult.draw => '1/2-1/2',
+    GameResult.unknown => '*',
+  };
 }
 
 class _SearchMatchPill extends StatelessWidget {

@@ -226,6 +226,75 @@ void main() {
     expect(state.visible.map((g) => g.id), ['match']);
   });
 
+  test('Archive visible records collapse duplicate Fast and Deep reviews', () {
+    const pgn = '''
+[Event "Duplicate"]
+[White "ApexUser"]
+[Black "RojoHijo"]
+[Result "1-0"]
+
+1. e4 e5 *
+''';
+    final state = ArchiveState(
+      games: ArchivedGame.collapseCanonical([
+        _game(
+          id: 'fast',
+          pgn: pgn,
+          analysisMode: AnalysisMode.quick,
+          analysisProfileId: 'fast_review',
+        ),
+        _game(
+          id: 'deep',
+          pgn: pgn,
+          analysisMode: AnalysisMode.deep,
+          analysisProfileId: 'deep_review',
+        ),
+      ]),
+    );
+
+    expect(state.visible, hasLength(1));
+    expect(state.visible.single.id, 'deep');
+    expect(state.visible.single.reviewModeLabel, 'Deep');
+  });
+
+  test('Archive filters still apply after duplicate collapse', () {
+    const pgn = '''
+[Event "Duplicate"]
+[White "ApexUser"]
+[Black "RojoHijo"]
+[Result "1-0"]
+
+1. e4 e5 *
+''';
+    final state = ArchiveState(
+      filters: const ArchiveFilters(
+        source: ArchiveSource.chessCom,
+        perspective: 'ApexUser',
+        color: ArchiveColorFilter.white,
+        result: ArchiveResultFilter.wins,
+      ),
+      games: ArchivedGame.collapseCanonical([
+        _game(
+          id: 'fast',
+          pgn: pgn,
+          source: ArchiveSource.chessCom,
+          analysisMode: AnalysisMode.quick,
+          analysisProfileId: 'fast_review',
+        ),
+        _game(
+          id: 'deep',
+          pgn: pgn,
+          source: ArchiveSource.chessCom,
+          analysisMode: AnalysisMode.deep,
+          analysisProfileId: 'deep_review',
+        ),
+        _game(id: 'wrong-source', source: ArchiveSource.lichess),
+      ]),
+    );
+
+    expect(state.visible.map((g) => g.id), ['deep']);
+  });
+
   testWidgets('Archive active chips render scoped labels', (tester) async {
     await _pumpArchive(
       tester,
@@ -311,6 +380,9 @@ ArchivedGame _game({
   String opening = 'Philidor Defense',
   String eco = 'C41',
   ArchiveSource source = ArchiveSource.chessCom,
+  String? pgn,
+  AnalysisMode analysisMode = AnalysisMode.deep,
+  String? analysisProfileId,
 }) {
   return ArchivedGame(
     id: id,
@@ -320,12 +392,23 @@ ArchivedGame _game({
     result: result,
     analyzedAt: DateTime(2026, 4, 21),
     depth: 18,
-    pgn: '1. e4 *',
+    pgn:
+        pgn ??
+        '''
+[Event "$id"]
+[White "$white"]
+[Black "$black"]
+[Result "$result"]
+
+1. e4 *
+''',
     qualityCounts: qualities,
     averageCpLoss: 18,
     totalPlies: 20,
     openingName: opening,
     ecoCode: eco,
+    analysisMode: analysisMode,
+    analysisProfileId: analysisProfileId,
   );
 }
 

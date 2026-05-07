@@ -29,22 +29,40 @@ void main() {
     expect(a, b);
   });
 
-  test('Fast and Deep archive identities are deterministic and distinct', () {
-    final fast = archiveIdForAnalysis(
-      pgn: _pgn,
-      analysisProfileId: AnalysisProfileId.fastReview,
-      providerId: 'local_offline',
-      engineVersion: 'local-test',
-    );
-    final deep = archiveIdForAnalysis(
-      pgn: _pgn,
-      analysisProfileId: AnalysisProfileId.deepReview,
-      providerId: 'local_offline',
-      engineVersion: 'local-test',
-    );
+  test(
+    'Fast and Deep cache identities are distinct but canonical key is shared',
+    () {
+      final fastCache = archiveIdForAnalysis(
+        pgn: _pgn,
+        analysisProfileId: AnalysisProfileId.fastReview,
+        providerId: 'local_offline',
+        engineVersion: 'local-test',
+      );
+      final deepCache = archiveIdForAnalysis(
+        pgn: _pgn,
+        analysisProfileId: AnalysisProfileId.deepReview,
+        providerId: 'local_offline',
+        engineVersion: 'local-test',
+      );
+      final fastArchive = ArchivedGame.canonicalKeyFor(
+        pgn: _pgn,
+        pgnHash: archiveIdForPgn(_pgn),
+        white: 'Alpha',
+        black: 'Beta',
+        result: '1-0',
+      );
+      final deepArchive = ArchivedGame.canonicalKeyFor(
+        pgn: _pgn,
+        pgnHash: archiveIdForPgn(_pgn),
+        white: 'Alpha',
+        black: 'Beta',
+        result: '1-0',
+      );
 
-    expect(fast, isNot(deep));
-  });
+      expect(fastCache, isNot(deepCache));
+      expect(fastArchive, deepArchive);
+    },
+  );
 
   testWidgets('saving same review twice upserts and keeps display fields', (
     tester,
@@ -85,6 +103,45 @@ void main() {
     expect(game.timeControl, '3 min');
     expect(game.cachedTimeline, isNotNull);
     expect(game.qualityCountsLive[MoveQuality.best], 1);
+  });
+
+  testWidgets('Fast then Deep same PGN shows one canonical saved review', (
+    tester,
+  ) async {
+    final saved = <String, ArchivedGame>{};
+
+    final fastId = await _saveWithWidgetRef(
+      tester,
+      saved,
+      timeline: _timeline(
+        analysisMode: 'quick',
+        analysisProfileId: 'fast_review',
+      ),
+      pgn: _pgn,
+      depth: 14,
+      source: ArchiveSource.pgn,
+      analysisMode: AnalysisMode.quick,
+    );
+    final deepId = await _saveWithWidgetRef(
+      tester,
+      saved,
+      timeline: _timeline(
+        analysisMode: 'deep',
+        analysisProfileId: 'deep_review',
+      ),
+      pgn: _pgn,
+      depth: 22,
+      source: ArchiveSource.pgn,
+      analysisMode: AnalysisMode.deep,
+    );
+
+    expect(fastId, deepId);
+    expect(ArchivedGame.collapseCanonical(saved.values), hasLength(1));
+    expect(
+      ArchivedGame.collapseCanonical(saved.values).single.reviewModeLabel,
+      'Deep',
+    );
+    expect(ArchivedGame.collapseCanonical(saved.values).single.depth, 22);
   });
 }
 
@@ -142,7 +199,10 @@ const _pgn = '''
 1. e4 *
 ''';
 
-AnalysisTimeline _timeline() {
+AnalysisTimeline _timeline({
+  String analysisMode = 'quick',
+  String analysisProfileId = 'fast_review',
+}) {
   return AnalysisTimeline(
     startingFen: _fen,
     moves: [
@@ -169,8 +229,8 @@ AnalysisTimeline _timeline() {
       'Opening': 'King Pawn',
     },
     winPercentages: const [52],
-    analysisMode: 'quick',
-    analysisProfileId: 'fast_review',
+    analysisMode: analysisMode,
+    analysisProfileId: analysisProfileId,
     providerId: 'local_offline',
     engineVersion: 'local-test',
     pgnHash: archiveIdForPgn(_pgn),

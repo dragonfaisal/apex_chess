@@ -10,7 +10,6 @@
 ///   ┌─ Result / opening / mode header
 ///   ├─ Accuracy pair (You / Opponent)
 ///   ├─ Counts strip (Best / Excellent / Mistake / Blunder / …)
-///   ├─ Highlights (key turning point, biggest mistake, best move)
 ///   ├─ Phase breakdown (opening / middle / endgame with weakness tag)
 ///   └─ CTA row: Review Moves · Save · Add to Academy · Re-analyze Deep
 library;
@@ -20,7 +19,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
-import 'package:apex_chess/core/domain/entities/move_analysis.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/core/domain/services/game_identity_service.dart';
 import 'package:apex_chess/core/domain/services/move_quality_display.dart';
@@ -28,7 +26,6 @@ import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/pgn_review/domain/review_summary.dart';
 import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
-import 'package:apex_chess/shared_ui/widgets/apex_platform_badge.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_player_avatar.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_side_marker.dart';
 
@@ -152,8 +149,6 @@ class _SummaryBody extends StatelessWidget {
             _PlayerCardsRow(summary: summary, players: players),
             const SizedBox(height: 16),
             _MoveQualityTable(counts: summary.counts, players: players),
-            const SizedBox(height: 16),
-            _HighlightsBlock(summary: summary),
             const SizedBox(height: 16),
             _PhaseBlock(summary: summary),
             const SizedBox(height: 20),
@@ -496,30 +491,19 @@ class _PlayerCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          Row(
-            children: [
-              ApexPlatformBadge(
-                platform: identity.identity.platform,
-                compact: true,
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  [
-                    identity.sideLabel,
-                    if (identity.rating != null && identity.rating!.isNotEmpty)
-                      identity.rating!,
-                    result,
-                  ].join(' · '),
-                  style: ApexTypography.bodyMedium.copyWith(
-                    color: accent,
-                    fontSize: 11,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
+          Text(
+            [
+              identity.sideLabel,
+              if (identity.rating != null && identity.rating!.isNotEmpty)
+                identity.rating!,
+              result,
+            ].join(' · '),
+            style: ApexTypography.bodyMedium.copyWith(
+              color: accent,
+              fontSize: 11,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 10),
           Text(
@@ -1180,156 +1164,6 @@ class _CountChip extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-// ── Highlights ─────────────────────────────────────────────────────
-
-class _HighlightsBlock extends StatelessWidget {
-  const _HighlightsBlock({required this.summary});
-
-  final ReviewSummary summary;
-
-  @override
-  Widget build(BuildContext context) {
-    final h = summary.highlights;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: ApexColors.cardSurface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: ApexColors.subtleBorder, width: 0.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'KEY MOMENTS',
-            style: ApexTypography.labelLarge.copyWith(
-              fontSize: 10,
-              letterSpacing: 1.6,
-              color: ApexColors.textTertiary,
-            ),
-          ),
-          const SizedBox(height: 10),
-          _HighlightRow(
-            label: 'Brilliant moment',
-            move: h.brilliantMoment,
-            emptyCopy: 'No Brilliant move in this game.',
-          ),
-          const SizedBox(height: 8),
-          _HighlightRow(
-            label: 'Best move',
-            move: h.bestUserMove,
-            emptyCopy: 'No standout best move — steady play.',
-          ),
-          const SizedBox(height: 8),
-          _HighlightRow(
-            label: 'Biggest mistake',
-            move: h.biggestMistake,
-            emptyCopy: 'No major mistake found.',
-          ),
-          const SizedBox(height: 8),
-          _HighlightRow(
-            label: 'Turning point',
-            move: h.keyTurningPoint,
-            emptyCopy: 'No decisive swing — balanced game.',
-          ),
-          if (h.checkmate != null) ...[
-            const SizedBox(height: 8),
-            _HighlightRow(label: 'Checkmate', move: h.checkmate, emptyCopy: ''),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _HighlightRow extends StatelessWidget {
-  const _HighlightRow({
-    required this.label,
-    required this.move,
-    required this.emptyCopy,
-  });
-
-  final String label;
-  final MoveAnalysis? move;
-  final String emptyCopy;
-
-  @override
-  Widget build(BuildContext context) {
-    if (move == null) {
-      return Row(
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: ApexTypography.bodyMedium.copyWith(
-                color: ApexColors.textTertiary,
-                fontSize: 11,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              emptyCopy,
-              style: ApexTypography.bodyMedium.copyWith(
-                color: ApexColors.textSecondary,
-                fontSize: 12,
-              ),
-            ),
-          ),
-        ],
-      );
-    }
-    final m = move!;
-    final moveNum = '${(m.ply ~/ 2) + 1}${m.ply.isEven ? '.' : '…'}';
-    final visibleLabel = MoveQualityDisplay.labelForMove(m);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 120,
-          child: Text(
-            label,
-            style: ApexTypography.bodyMedium.copyWith(
-              color: ApexColors.textTertiary,
-              fontSize: 11,
-            ),
-          ),
-        ),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  SvgPicture.asset(
-                    m.classification.svgAssetPath,
-                    width: 14,
-                    height: 14,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      '$moveNum ${m.san} — ${visibleLabel.label}',
-                      style: ApexTypography.bodyMedium.copyWith(
-                        color: visibleLabel.color,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }

@@ -300,24 +300,25 @@ class ArchiveState {
       }
       out.add(g);
     }
+    final collapsed = ArchivedGame.collapseCanonical(out);
     switch (filters.sort) {
       case ArchiveSort.newest:
-        out.sort((a, b) => b.analyzedAt.compareTo(a.analyzedAt));
+        collapsed.sort((a, b) => b.analyzedAt.compareTo(a.analyzedAt));
         break;
       case ArchiveSort.oldest:
-        out.sort((a, b) => a.analyzedAt.compareTo(b.analyzedAt));
+        collapsed.sort((a, b) => a.analyzedAt.compareTo(b.analyzedAt));
         break;
       case ArchiveSort.mostBrilliants:
-        out.sort((a, b) => b.brilliantCount.compareTo(a.brilliantCount));
+        collapsed.sort((a, b) => b.brilliantCount.compareTo(a.brilliantCount));
         break;
       case ArchiveSort.mostBlunders:
-        out.sort((a, b) => b.blunderCount.compareTo(a.blunderCount));
+        collapsed.sort((a, b) => b.blunderCount.compareTo(a.blunderCount));
         break;
       case ArchiveSort.highestAccuracy:
-        out.sort((a, b) => a.averageCpLoss.compareTo(b.averageCpLoss));
+        collapsed.sort((a, b) => a.averageCpLoss.compareTo(b.averageCpLoss));
         break;
     }
-    return out;
+    return collapsed;
   }
 
   int get totalBrilliants => games.fold(0, (s, g) => s + g.brilliantCount);
@@ -340,7 +341,7 @@ class ArchiveController extends Notifier<ArchiveState> {
   Future<void> _reload() async {
     try {
       final repo = await ref.read(archiveRepositoryProvider.future);
-      final all = repo.loadAll();
+      final all = ArchivedGame.collapseCanonical(repo.loadAll());
       state = state.copyWith(games: all, isLoading: false, clearError: true);
     } catch (e) {
       state = state.copyWith(
@@ -354,7 +355,11 @@ class ArchiveController extends Notifier<ArchiveState> {
 
   Future<void> save(ArchivedGame g) async {
     final repo = await ref.read(archiveRepositoryProvider.future);
-    await repo.save(g);
+    final sameGame = repo.loadAll().where(
+      (existing) => existing.canonicalGameKey == g.canonicalGameKey,
+    );
+    final canonical = ArchivedGame.collapseCanonical([g, ...sameGame]).first;
+    await repo.save(canonical);
     await _reload();
   }
 

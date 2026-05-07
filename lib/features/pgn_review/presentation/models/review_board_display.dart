@@ -11,6 +11,7 @@ import 'package:apex_chess/core/domain/entities/move_analysis.dart';
 import 'package:apex_chess/core/domain/services/coach_explanation_service.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/core/domain/services/move_quality_display.dart';
+import 'package:apex_chess/core/utils/move_explanation.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
 
@@ -269,6 +270,7 @@ class ReviewCoachInsightDisplay {
     required this.coachDetail,
     required this.quality,
     this.betterMove,
+    this.betterMoveReason,
     this.engineLinePreview,
     this.needsDeepScan = false,
   });
@@ -279,6 +281,7 @@ class ReviewCoachInsightDisplay {
   final String coachDetail;
   final ReviewMoveQualityChipDisplay quality;
   final String? betterMove;
+  final String? betterMoveReason;
   final String? engineLinePreview;
   final bool needsDeepScan;
 
@@ -316,16 +319,18 @@ class ReviewCoachInsightDisplay {
       ),
     );
     final quality = ReviewMoveQualityChipDisplay.fromMove(move);
+    final betterMove = _betterMoveLabel(move, explanation);
+    final currentMoveExplanation = _currentMoveExplanation(move, explanation);
     return ReviewCoachInsightDisplay(
       moveLabel: _moveNumberLabel(move.ply),
       san: move.san.isEmpty ? 'Move' : move.san,
-      explanation: _shortExplanation(
-        explanation.subline,
-        fallback: _fallbackForQuality(MoveQualityDisplay.labelForMove(move)),
-      ),
+      explanation: currentMoveExplanation,
       coachDetail: _coachDetailFor(move),
       quality: quality,
-      betterMove: explanation.betterMoveSan ?? _safeBetterMove(move),
+      betterMove: betterMove,
+      betterMoveReason: betterMove == null
+          ? null
+          : explanation.betterMoveReason ?? _safeBetterMoveReason(move),
       engineLinePreview: _linePreview(move),
       needsDeepScan: explanation.needsDeepScan,
     );
@@ -344,9 +349,34 @@ class ReviewCoachInsightDisplay {
     return null;
   }
 
-  static String? _safeBetterMove(MoveAnalysis move) {
+  static String? _betterMoveLabel(MoveAnalysis move, CoachExplanation text) {
     if (!ReviewBoardDisplayModel.shouldShowBetterMoveArrow(move)) return null;
-    return move.engineBestMoveSan;
+    final san = text.betterMoveSan ?? move.engineBestMoveSan;
+    if (san != null && san.trim().isNotEmpty) return san.trim();
+    final uci = move.engineBestMoveUci;
+    if (uci == null || uci.trim().isEmpty) return null;
+    return uci.trim();
+  }
+
+  static String? _safeBetterMoveReason(MoveAnalysis move) {
+    final reason = BetterMoveExplanation.compose(
+      bestMoveUci: move.engineBestMoveUci,
+      bestMoveSan: move.engineBestMoveSan,
+      playedQuality: move.classification,
+    )?.sentence;
+    return reason?.trim().isEmpty == true ? null : reason;
+  }
+
+  static String _currentMoveExplanation(
+    MoveAnalysis move,
+    CoachExplanation explanation,
+  ) {
+    final current = _coachDetailFor(move);
+    if (current.trim().isNotEmpty) return current;
+    return _shortExplanation(
+      explanation.subline,
+      fallback: _fallbackForQuality(MoveQualityDisplay.labelForMove(move)),
+    );
   }
 
   static String? _linePreview(MoveAnalysis move) {
@@ -493,7 +523,7 @@ class ReviewBoardDisplayModel {
 
   bool get canGoPrevious => currentPly > 0;
   bool get canGoNext => currentPly < totalPlies - 1;
-  bool get hasBestMove => currentMove?.engineBestMoveSan != null;
+  bool get hasBestMove => insight.betterMove != null;
 
   factory ReviewBoardDisplayModel.fromTimeline(
     AnalysisTimeline timeline, {
@@ -507,6 +537,12 @@ class ReviewBoardDisplayModel {
         : currentPly.clamp(0, timeline.totalPlies - 1).toInt();
     final move = timeline[safePly];
     final lastMove = _lastMoveFromUci(move?.uci);
+    final insight = ReviewCoachInsightDisplay.fromMove(
+      move,
+      timeline: timeline,
+      mode: mode,
+      userIsWhite: userIsWhite,
+    );
     return ReviewBoardDisplayModel(
       currentFen: move?.fenAfter ?? timeline.startingFen,
       currentMove: move,
@@ -524,12 +560,7 @@ class ReviewBoardDisplayModel {
         userIsWhite: userIsWhite,
       ),
       eval: ReviewEvalDisplay.fromMove(move),
-      insight: ReviewCoachInsightDisplay.fromMove(
-        move,
-        timeline: timeline,
-        mode: mode,
-        userIsWhite: userIsWhite,
-      ),
+      insight: insight,
       timeline: ReviewTimelinePlyDisplay.fromTimeline(
         timeline,
         activePly: safePly,
@@ -538,7 +569,7 @@ class ReviewBoardDisplayModel {
       selectedSquare: move?.targetSquare.isNotEmpty == true
           ? move!.targetSquare
           : lastMove?.$2,
-      bestMoveArrow: shouldShowBetterMoveArrow(move)
+      bestMoveArrow: insight.betterMove != null
           ? _arrowFromUci(move?.engineBestMoveUci)
           : null,
     );

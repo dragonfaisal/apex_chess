@@ -222,7 +222,31 @@ void main() {
     expect(insight.quality.label, 'Blunder');
     expect(insight.explanation.length, lessThanOrEqualTo(86));
     expect(insight.explanation.toLowerCase(), isNot(contains('stockfish')));
+    expect(insight.explanation, 'This gives the opponent a clear chance.');
     expect(insight.betterMove, 'Nf3');
+    expect(insight.betterMoveReason, 'Avoids the worst of the danger.');
+    expect(insight.betterMoveReason, isNot(insight.explanation));
+  });
+
+  test('current move explanation appears without a Better Move', () {
+    final insight = ReviewCoachInsightDisplay.fromMove(
+      _move(
+        ply: 0,
+        isWhite: true,
+        san: 'e4',
+        uci: 'e2e4',
+        quality: MoveQuality.best,
+        bestUci: 'e2e4',
+        bestSan: 'e4',
+      ),
+      timeline: _timeline(),
+      mode: AnalysisMode.deep,
+      userIsWhite: true,
+    );
+
+    expect(insight.explanation, 'This move keeps the advantage.');
+    expect(insight.betterMove, isNull);
+    expect(insight.betterMoveReason, isNull);
   });
 
   test('coach detail maps public qualities to safe explanations', () {
@@ -312,10 +336,89 @@ void main() {
       );
 
       expect(quietDisplay.bestMoveArrow, isNull);
+      expect(quietDisplay.insight.betterMove, isNull);
       expect(inaccuracyDisplay.bestMoveArrow, ('c7', 'c5'));
+      expect(inaccuracyDisplay.insight.betterMove, 'c5');
+      expect(
+        inaccuracyDisplay.insight.explanation,
+        'This move misses a stronger continuation.',
+      );
+      expect(
+        inaccuracyDisplay.insight.betterMoveReason,
+        'Stronger continuation.',
+      );
+      expect(
+        inaccuracyDisplay.insight.betterMoveReason,
+        isNot(inaccuracyDisplay.insight.explanation),
+      );
       expect(blunderDisplay.bestMoveArrow, ('g1', 'f3'));
+      expect(blunderDisplay.insight.betterMove, 'Nf3');
+      expect(
+        blunderDisplay.insight.betterMoveReason,
+        'Avoids the worst of the danger.',
+      );
     },
   );
+
+  test(
+    'Better Move hides for Best Brilliant and Great even with engine data',
+    () {
+      for (final quality in [
+        MoveQuality.best,
+        MoveQuality.brilliant,
+        MoveQuality.great,
+      ]) {
+        final display = ReviewBoardDisplayModel.fromTimeline(
+          AnalysisTimeline(
+            moves: [
+              _move(
+                ply: 0,
+                isWhite: true,
+                san: 'Nf3',
+                uci: 'g1f3',
+                quality: quality,
+                bestUci: 'd2d4',
+                bestSan: 'd4',
+              ),
+            ],
+            startingFen: _startFen,
+            headers: const {},
+            winPercentages: const [50],
+          ),
+          currentPly: 0,
+          flipped: false,
+          mode: AnalysisMode.deep,
+          userIsWhite: true,
+        );
+
+        expect(display.insight.explanation, startsWith('This move'));
+        expect(display.insight.betterMove, isNull);
+        expect(display.bestMoveArrow, isNull);
+      }
+    },
+  );
+
+  test('better move arrow is stable across review modes and orientation', () {
+    final fast = ReviewBoardDisplayModel.fromTimeline(
+      _timeline(),
+      currentPly: 1,
+      flipped: false,
+      mode: AnalysisMode.quick,
+      userIsWhite: true,
+    );
+    final deepFlipped = ReviewBoardDisplayModel.fromTimeline(
+      _timeline(),
+      currentPly: 1,
+      flipped: true,
+      mode: AnalysisMode.deep,
+      userIsWhite: true,
+    );
+
+    expect(fast.insight.betterMove, 'c5');
+    expect(deepFlipped.insight.betterMove, 'c5');
+    expect(fast.bestMoveArrow, ('c7', 'c5'));
+    expect(deepFlipped.bestMoveArrow, ('c7', 'c5'));
+  });
 
   test('review controller starts at first ply and respects boundaries', () {
     final container = ProviderContainer();

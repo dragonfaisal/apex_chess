@@ -387,6 +387,46 @@ void main() {
     expect(stats.gamesAnalyzed, 1);
   });
 
+  test('Stats Recent Scans collapses duplicate saved reviews by game key', () {
+    const pgn = '''
+[Event "Duplicate"]
+[White "ApexUser"]
+[Black "Opponent"]
+[Result "1-0"]
+
+1. e4 e5 *
+''';
+    final games = [
+      _game(
+        id: 'fast',
+        pgn: pgn,
+        acpl: 30,
+        analyzedAt: DateTime(2026, 5, 1),
+        analysisMode: AnalysisMode.quick,
+        analysisProfileId: 'fast_review',
+      ),
+      _game(
+        id: 'deep',
+        pgn: pgn,
+        acpl: 12,
+        analyzedAt: DateTime(2026, 5, 2),
+        analysisMode: AnalysisMode.deep,
+        analysisProfileId: 'deep_review',
+      ),
+    ];
+
+    final stats = buildDashboardStatsForTesting(games, perspective: 'ApexUser');
+    final recent = dashboardVisibleGamesForTesting(
+      games,
+      perspective: 'ApexUser',
+    );
+
+    expect(stats.gamesAnalyzed, 1);
+    expect(recent, hasLength(1));
+    expect(recent.single.id, 'deep');
+    expect(recent.single.reviewModeLabel, 'Deep');
+  });
+
   test('Player search state separates public profile from Apex stats', () {
     const public = ProfileStats(
       source: ProfileStatsSource.chessCom,
@@ -431,6 +471,9 @@ ArchivedGame _game({
   String? eco = 'C45',
   Map<MoveQuality, int> qualities = const {},
   ArchiveSource source = ArchiveSource.chessCom,
+  String? pgn,
+  AnalysisMode analysisMode = AnalysisMode.deep,
+  String? analysisProfileId,
 }) {
   return ArchivedGame(
     id: id,
@@ -440,11 +483,22 @@ ArchivedGame _game({
     result: result,
     analyzedAt: analyzedAt ?? DateTime(2026, 5, 1),
     depth: 18,
-    pgn: '1. e4 *',
+    pgn:
+        pgn ??
+        '''
+[Event "$id"]
+[White "$white"]
+[Black "$black"]
+[Result "$result"]
+
+1. e4 *
+''',
     qualityCounts: qualities,
     averageCpLoss: acpl,
     totalPlies: 40,
     openingName: opening,
     ecoCode: eco,
+    analysisMode: analysisMode,
+    analysisProfileId: analysisProfileId,
   );
 }
