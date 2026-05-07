@@ -6,6 +6,7 @@ import 'package:apex_chess/features/import_match/presentation/models/imported_ga
 import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_game_card.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_player_avatar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -92,10 +93,11 @@ void main() {
       expect(model.white.name, contains('VeryVeryLongWhite'));
       expect(model.black.name, contains('VeryVeryLongBlack'));
       expect(model.primaryMeta, contains('Extremely Long Opening Name'));
+      expect(model.moveCountLabel, '42 moves');
       expect(model.white.identity.displayUsername, contains('VeryVeryLong'));
     });
 
-    testWidgets('card surfaces use correct marker and single source label', (
+    testWidgets('card surfaces use markers chip and single source label', (
       tester,
     ) async {
       final model = _imported(
@@ -122,8 +124,32 @@ void main() {
         find.byKey(const ValueKey('apex-platform-chessCom-badge')),
         findsNothing,
       );
+      expect(find.byType(ApexPlayerAvatar), findsNothing);
+      expect(find.byType(ApexMoveCountChip), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('apex-move-count-chip')),
+        findsOneWidget,
+      );
+      final moveChip = tester.widget<Container>(
+        find.byKey(const ValueKey('apex-move-count-chip')),
+      );
+      final chipDecoration = moveChip.decoration! as BoxDecoration;
+      expect(
+        (chipDecoration.border! as Border).top.width,
+        lessThanOrEqualTo(0.6),
+      );
       expect(find.textContaining('Chess.com'), findsOneWidget);
+      expect(find.text('Won'), findsOneWidget);
       expect(find.text('YOU'), findsOneWidget);
+    });
+
+    test('result tones map to soft readable card tones', () {
+      expect(GameResultTone.won.color, ApexColors.emerald);
+      expect(GameResultTone.lost.color, ApexColors.rubyBright);
+      expect(GameResultTone.draw.color, ApexColors.sapphireBright);
+      expect(GameResultTone.won.cardTintAlpha, greaterThan(0));
+      expect(GameResultTone.lost.cardAccentAlpha, greaterThan(0));
+      expect(GameResultTone.draw.cardTintAlpha, lessThan(0.05));
     });
   });
 
@@ -139,10 +165,13 @@ void main() {
       expect(model.white.identity.platform, PlayerIdentityPlatform.chessCom);
       expect(model.white.identity.rating, '1500');
       expect(model.secondaryMeta, contains('Chess.com'));
+      expect(model.secondaryMeta, contains('Deep'));
+      expect(model.secondaryMeta, contains('76%'));
+      expect(model.moveCountLabel, '20 moves');
       expect(model.badges, contains('Blunder 3'));
     });
 
-    testWidgets('archive card does not repeat platform per player row', (
+    testWidgets('archive card has no row avatars and one source label', (
       tester,
     ) async {
       final model = _archived(
@@ -160,8 +189,29 @@ void main() {
         find.byKey(const ValueKey('apex-platform-chessCom-badge')),
         findsNothing,
       );
+      expect(find.byType(ApexPlayerAvatar), findsNothing);
+      expect(find.byType(ApexMoveCountChip), findsOneWidget);
       expect(find.textContaining('Chess.com'), findsOneWidget);
       expect(find.text('YOU'), findsOneWidget);
+    });
+
+    testWidgets('missing move count chip does not crash', (tester) async {
+      const model = ApexGameCardDisplayModel(
+        resultTone: GameResultTone.draw,
+        white: ApexGamePlayerDisplay(side: ApexPlayerSide.white, name: 'White'),
+        black: ApexGamePlayerDisplay(side: ApexPlayerSide.black, name: 'Black'),
+        primaryMeta: 'Opening not detected',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ApexTheme.dark,
+          home: Scaffold(body: ApexGameCard(model: model)),
+        ),
+      );
+
+      expect(find.byType(ApexMoveCountChip), findsNothing);
+      expect(find.text('Opening not detected'), findsOneWidget);
     });
   });
 }

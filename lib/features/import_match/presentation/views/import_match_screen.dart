@@ -483,7 +483,11 @@ class _ImportMatchScreenState extends ConsumerState<ImportMatchScreen> {
                   onRetry: _fetchMoreNow,
                 );
               }
-              return _GameCard(game: visibleGames[i]);
+              return _GameCard(
+                game: visibleGames[i],
+                filterQuery: _gameFilter,
+                connectedHandle: state.username,
+              );
             },
             separatorBuilder: (_, __) => const SizedBox(height: 12),
             itemCount: visibleGames.length + (isFiltering ? 0 : 1),
@@ -1135,15 +1139,26 @@ class _LoadedGamesFilterField extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _GameCard extends ConsumerWidget {
-  const _GameCard({required this.game});
+  const _GameCard({
+    required this.game,
+    required this.filterQuery,
+    required this.connectedHandle,
+  });
 
   final ImportedGame game;
+  final String filterQuery;
+  final String connectedHandle;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final matchLabel = game.localFilterMatchLabel(
+      filterQuery,
+      connectedHandle: connectedHandle,
+    );
     return ApexGameCard(
       model: game.toApexGameCardDisplay(),
       onTap: () => _openDepthPicker(context, ref),
+      trailing: matchLabel == null ? null : _SearchMatchPill(label: matchLabel),
       actions: [
         _ReviewModeAction(
           label: 'Fast',
@@ -1192,6 +1207,39 @@ class _GameCard extends ConsumerWidget {
         userIsWhite: game.userColor == null
             ? null
             : game.userColor == PlayerColor.white,
+      ),
+    );
+  }
+}
+
+class _SearchMatchPill extends StatelessWidget {
+  const _SearchMatchPill({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const ValueKey('import-search-match-pill'),
+      constraints: const BoxConstraints(maxWidth: 126),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: ApexColors.sapphire.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: ApexColors.sapphireBright.withValues(alpha: 0.22),
+          width: 0.55,
+        ),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: ApexTypography.bodyMedium.copyWith(
+          color: ApexColors.textTertiary,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }

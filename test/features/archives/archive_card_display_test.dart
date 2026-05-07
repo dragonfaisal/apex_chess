@@ -61,5 +61,25 @@ void main() {
     expect(model.white.identity.side, PlayerIdentitySide.white);
     expect(model.black.identity.isOpponent, isTrue);
     expect(model.white.identity.platform, PlayerIdentityPlatform.chessCom);
+    expect(model.primaryMeta, 'A00 Andersen Opening');
+    expect(model.moveCountLabel, '20 moves');
+    expect(model.secondaryMeta, contains('Chess.com'));
+    expect(model.secondaryMeta, contains('Deep'));
+    expect(model.secondaryMeta, contains('76%'));
+    expect(model.badges, ['Blunder 1']);
   });
+
+  test(
+    'archive saved review card includes source mode accuracy and counts',
+    () {
+      final model = game(
+        result: '1-0',
+      ).toApexGameCardDisplay(userHandle: 'apexuser');
+
+      expect(model.secondaryMeta, contains('Chess.com'));
+      expect(model.secondaryMeta, contains('Deep'));
+      expect(model.secondaryMeta, contains('76%'));
+      expect(model.badges, contains('Blunder 1'));
+    },
+  );
 }

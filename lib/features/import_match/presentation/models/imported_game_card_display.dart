@@ -25,6 +25,7 @@ extension ImportedGameCardDisplay on ImportedGame {
         platform: source.identityPlatform,
       ),
       primaryMeta: importOpeningLine,
+      moveCountLabel: '$moveCount moves',
       secondaryMeta: importSourceLine,
     );
   }
@@ -44,7 +45,7 @@ extension ImportedGameCardDisplay on ImportedGame {
     final opening = openingName == null || openingName!.trim().isEmpty
         ? ApexCopy.openingNotDetected
         : '${eco == null || eco!.trim().isEmpty ? '' : '${eco!.trim()} '}${openingName!.trim()}';
-    return '$opening · $moveCount moves';
+    return opening;
   }
 
   String get importSourceLine {

@@ -104,7 +104,7 @@ class _ArchiveScreenState extends ConsumerState<ArchiveScreen> {
     if (state.games.isEmpty) {
       return const _EmptyState(
         icon: Icons.inventory_2_outlined,
-        label: 'No saved reviews yet. Run a review and it will appear here.',
+        label: 'No saved reviews yet.',
       );
     }
     if (visible.isEmpty) {

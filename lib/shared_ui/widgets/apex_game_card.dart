@@ -11,7 +11,6 @@ import 'package:flutter/services.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
-import 'package:apex_chess/shared_ui/widgets/apex_player_avatar.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_side_marker.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
 
@@ -27,9 +26,23 @@ extension GameResultToneDisplay on GameResultTone {
 
   Color get color => switch (this) {
     GameResultTone.won => ApexColors.emerald,
-    GameResultTone.lost => ApexColors.blunder,
-    GameResultTone.draw => ApexColors.inaccuracy,
+    GameResultTone.lost => ApexColors.rubyBright,
+    GameResultTone.draw => ApexColors.sapphireBright,
     GameResultTone.unknown => ApexColors.sapphire,
+  };
+
+  double get cardAccentAlpha => switch (this) {
+    GameResultTone.won => 0.26,
+    GameResultTone.lost => 0.24,
+    GameResultTone.draw => 0.22,
+    GameResultTone.unknown => 0.20,
+  };
+
+  double get cardTintAlpha => switch (this) {
+    GameResultTone.won => 0.030,
+    GameResultTone.lost => 0.026,
+    GameResultTone.draw => 0.024,
+    GameResultTone.unknown => 0.018,
   };
 }
 
@@ -77,6 +90,7 @@ class ApexGameCardDisplayModel {
     required this.black,
     this.resultLabel,
     this.primaryMeta,
+    this.moveCountLabel,
     this.secondaryMeta,
     this.badges = const [],
   });
@@ -86,6 +100,7 @@ class ApexGameCardDisplayModel {
   final ApexGamePlayerDisplay white;
   final ApexGamePlayerDisplay black;
   final String? primaryMeta;
+  final String? moveCountLabel;
   final String? secondaryMeta;
   final List<String> badges;
 
@@ -140,85 +155,97 @@ class _ApexGameCardState extends State<ApexGameCard> {
         margin: null,
         borderRadius: radius,
         accentColor: accent,
-        accentAlpha: _pressed ? 0.46 : 0.24,
+        accentAlpha: _pressed ? 0.46 : tone.cardAccentAlpha,
         fillAlpha: widget.dense ? 0.40 : 0.46,
         showGlow: _pressed,
         glowIntensity: _pressed ? 0.24 : 0.0,
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: widget.onTap == null
-                ? null
-                : () {
-                    if (widget.enableHaptic) HapticFeedback.selectionClick();
-                    widget.onTap?.call();
-                  },
-            onTapDown: widget.onTap == null ? null : (_) => _setPressed(true),
-            onTapCancel: widget.onTap == null ? null : () => _setPressed(false),
-            onTapUp: widget.onTap == null ? null : (_) => _setPressed(false),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: accent.withValues(
+              alpha: _pressed ? tone.cardTintAlpha + 0.020 : tone.cardTintAlpha,
+            ),
             borderRadius: BorderRadius.circular(radius),
-            splashColor: accent.withValues(alpha: 0.12),
-            highlightColor: accent.withValues(alpha: 0.08),
-            child: Padding(
-              padding: padding,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      ApexResultChip(
-                        label: widget.model.resolvedResultLabel,
-                        tone: tone,
-                        active: _pressed,
-                      ),
-                      const Spacer(),
-                      if (widget.trailing != null) widget.trailing!,
-                    ],
-                  ),
-                  SizedBox(height: widget.dense ? 8 : 10),
-                  ApexPlayerSideRow(player: widget.model.white),
-                  SizedBox(height: widget.dense ? 5 : 6),
-                  ApexPlayerSideRow(player: widget.model.black),
-                  if (_hasMeta) ...[
-                    SizedBox(height: widget.dense ? 8 : 10),
-                    if (widget.model.primaryMeta != null)
-                      _MetaLine(
-                        text: widget.model.primaryMeta!,
-                        prominent: true,
-                        dense: widget.dense,
-                      ),
-                    if (widget.model.secondaryMeta != null) ...[
-                      const SizedBox(height: 3),
-                      _MetaLine(
-                        text: widget.model.secondaryMeta!,
-                        prominent: false,
-                        dense: widget.dense,
-                      ),
-                    ],
-                  ],
-                  if (widget.model.badges.isNotEmpty) ...[
-                    SizedBox(height: widget.dense ? 8 : 10),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 5,
-                      children: [
-                        for (final badge in widget.model.badges)
-                          _ApexCardBadge(label: badge, tone: tone),
-                      ],
-                    ),
-                  ],
-                  if (widget.actions.isNotEmpty) ...[
-                    const SizedBox(height: 12),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: widget.onTap == null
+                  ? null
+                  : () {
+                      if (widget.enableHaptic) HapticFeedback.selectionClick();
+                      widget.onTap?.call();
+                    },
+              onTapDown: widget.onTap == null ? null : (_) => _setPressed(true),
+              onTapCancel: widget.onTap == null
+                  ? null
+                  : () => _setPressed(false),
+              onTapUp: widget.onTap == null ? null : (_) => _setPressed(false),
+              borderRadius: BorderRadius.circular(radius),
+              splashColor: accent.withValues(alpha: 0.12),
+              highlightColor: accent.withValues(alpha: 0.08),
+              child: Padding(
+                padding: padding,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
                     Row(
                       children: [
-                        for (var i = 0; i < widget.actions.length; i++) ...[
-                          if (i > 0) const SizedBox(width: 8),
-                          Expanded(child: widget.actions[i]),
-                        ],
+                        ApexResultChip(
+                          label: widget.model.resolvedResultLabel,
+                          tone: tone,
+                          active: _pressed,
+                        ),
+                        const Spacer(),
+                        if (widget.trailing != null) widget.trailing!,
                       ],
                     ),
+                    SizedBox(height: widget.dense ? 8 : 10),
+                    ApexPlayerSideRow(player: widget.model.white),
+                    SizedBox(height: widget.dense ? 5 : 6),
+                    ApexPlayerSideRow(player: widget.model.black),
+                    if (_hasMeta) ...[
+                      SizedBox(height: widget.dense ? 8 : 10),
+                      if (widget.model.primaryMeta != null ||
+                          widget.model.moveCountLabel != null)
+                        _PrimaryMetaRow(
+                          text: widget.model.primaryMeta,
+                          moveCountLabel: widget.model.moveCountLabel,
+                          tone: tone,
+                          dense: widget.dense,
+                        ),
+                      if (widget.model.secondaryMeta != null) ...[
+                        const SizedBox(height: 3),
+                        _MetaLine(
+                          text: widget.model.secondaryMeta!,
+                          prominent: false,
+                          dense: widget.dense,
+                        ),
+                      ],
+                    ],
+                    if (widget.model.badges.isNotEmpty) ...[
+                      SizedBox(height: widget.dense ? 8 : 10),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 5,
+                        children: [
+                          for (final badge in widget.model.badges)
+                            _ApexCardBadge(label: badge, tone: tone),
+                        ],
+                      ),
+                    ],
+                    if (widget.actions.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          for (var i = 0; i < widget.actions.length; i++) ...[
+                            if (i > 0) const SizedBox(width: 8),
+                            Expanded(child: widget.actions[i]),
+                          ],
+                        ],
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),
@@ -228,7 +255,9 @@ class _ApexGameCardState extends State<ApexGameCard> {
   }
 
   bool get _hasMeta =>
-      widget.model.primaryMeta != null || widget.model.secondaryMeta != null;
+      widget.model.primaryMeta != null ||
+      widget.model.moveCountLabel != null ||
+      widget.model.secondaryMeta != null;
 }
 
 class ApexResultChip extends StatelessWidget {
@@ -291,12 +320,6 @@ class ApexPlayerSideRow extends StatelessWidget {
       children: [
         ApexSideMarker(side: player.side.markerSide, showLabel: true),
         const SizedBox(width: 8),
-        ApexPlayerAvatar(
-          identity: player.identity,
-          size: ApexPlayerAvatarSize.small,
-          showConnectedBadge: player.isUser,
-        ),
-        const SizedBox(width: 7),
         Expanded(
           child: Text(
             player.name.trim().isEmpty ? 'Unknown' : player.name.trim(),
@@ -356,6 +379,77 @@ extension on ApexPlayerSide {
     ApexPlayerSide.white => ApexSideMarkerSide.white,
     ApexPlayerSide.black => ApexSideMarkerSide.black,
   };
+}
+
+class _PrimaryMetaRow extends StatelessWidget {
+  const _PrimaryMetaRow({
+    required this.text,
+    required this.moveCountLabel,
+    required this.tone,
+    required this.dense,
+  });
+
+  final String? text;
+  final String? moveCountLabel;
+  final GameResultTone tone;
+  final bool dense;
+
+  @override
+  Widget build(BuildContext context) {
+    if (text == null || text!.trim().isEmpty) {
+      if (moveCountLabel == null || moveCountLabel!.trim().isEmpty) {
+        return const SizedBox.shrink();
+      }
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: ApexMoveCountChip(label: moveCountLabel!, tone: tone),
+      );
+    }
+    return Row(
+      children: [
+        Expanded(
+          child: _MetaLine(text: text!, prominent: true, dense: dense),
+        ),
+        if (moveCountLabel != null && moveCountLabel!.trim().isNotEmpty) ...[
+          const SizedBox(width: 8),
+          ApexMoveCountChip(label: moveCountLabel!, tone: tone),
+        ],
+      ],
+    );
+  }
+}
+
+class ApexMoveCountChip extends StatelessWidget {
+  const ApexMoveCountChip({super.key, required this.label, required this.tone});
+
+  final String label;
+  final GameResultTone tone;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = tone.color;
+    return Container(
+      key: const ValueKey('apex-move-count-chip'),
+      constraints: const BoxConstraints(maxWidth: 88),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.055),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.20), width: 0.55),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: ApexTypography.bodyMedium.copyWith(
+          color: ApexColors.textTertiary,
+          fontSize: 10.5,
+          fontWeight: FontWeight.w700,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
+      ),
+    );
+  }
 }
 
 class _MetaLine extends StatelessWidget {

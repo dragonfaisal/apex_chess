@@ -25,10 +25,14 @@ extension ArchivedGameCardDisplay on ArchivedGame {
         isUser: userIsBlack == true,
         platform: source.identityPlatform,
       ),
-      primaryMeta: '$openingLine · $moveCount moves',
+      primaryMeta: openingLine,
+      moveCountLabel: '$moveCount moves',
       secondaryMeta: [
         sourceLabel,
         reviewModeLabel,
+        archiveAccuracyLabel,
+        if (timeControl != null && timeControl!.trim().isNotEmpty)
+          timeControl!.trim(),
         relativePlayedAt,
       ].join(' · '),
       badges: archiveQualityBadges,
@@ -46,11 +50,16 @@ extension ArchivedGameCardDisplay on ArchivedGame {
 
   List<String> get archiveQualityBadges {
     return [
+      if (brilliantCount > 0) 'Brilliant $brilliantCount',
       if (missCount > 0) 'Miss $missCount',
       if (blunderCount > 0) 'Blunder $blunderCount',
-      if (brilliantCount > 0) 'Brilliant $brilliantCount',
       if (greatCount > 0) 'Great $greatCount',
     ];
+  }
+
+  String get archiveAccuracyLabel {
+    final accuracy = (100 - averageCpLoss).clamp(0, 100).toStringAsFixed(0);
+    return '$accuracy%';
   }
 }
 

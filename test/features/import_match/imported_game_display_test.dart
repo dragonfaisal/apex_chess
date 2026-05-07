@@ -136,10 +136,13 @@ void main() {
         display.white.name,
         display.black.name,
         display.primaryMeta,
+        display.moveCountLabel,
         display.secondaryMeta,
       ].whereType<String>().join(' ');
 
       expect(visibleCopy, contains('Won'));
+      expect(display.primaryMeta, 'C45 Scotch Game');
+      expect(display.moveCountLabel, '42 moves');
       expect(display.white.identity.isConnectedUser, isTrue);
       expect(display.white.identity.side, PlayerIdentitySide.white);
       expect(display.black.identity.isOpponent, isTrue);

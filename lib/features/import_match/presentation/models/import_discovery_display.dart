@@ -47,7 +47,7 @@ class ImportDiscoveryDisplay {
     ImportDiscoveryEmptyState.notFetched =>
       'Search a player to show recent games.',
     ImportDiscoveryEmptyState.noGames => ApexCopy.importEmpty,
-    ImportDiscoveryEmptyState.noLocalMatchCanSearchOlder => 'No local match',
+    ImportDiscoveryEmptyState.noLocalMatchCanSearchOlder => 'No games found',
     ImportDiscoveryEmptyState.searchingOlderGames =>
       ApexCopy.searchingOlderGames,
     ImportDiscoveryEmptyState.noMatchingGames => ApexCopy.noMatchingGames,
@@ -165,39 +165,72 @@ extension ImportedGameDiscoveryIndex on ImportedGame {
   static const int noLocalFilterMatch = 1 << 30;
 
   int localFilterRank(String query, {String? connectedHandle}) {
+    return _bestLocalFilterMatch(
+          query,
+          connectedHandle: connectedHandle,
+        )?.rank ??
+        noLocalFilterMatch;
+  }
+
+  String? localFilterMatchLabel(String query, {String? connectedHandle}) {
+    return _bestLocalFilterMatch(
+      query,
+      connectedHandle: connectedHandle,
+    )?.label;
+  }
+
+  _LocalFilterMatch? _bestLocalFilterMatch(
+    String query, {
+    String? connectedHandle,
+  }) {
     final q = query.trim().toLowerCase();
-    if (q.isEmpty) return 0;
+    if (q.isEmpty) return const _LocalFilterMatch(rank: 0);
     final fields = <_DiscoveryField>[
-      _DiscoveryField(opponentName, 0),
-      _DiscoveryField(whiteName, 4),
-      _DiscoveryField(blackName, 4),
-      _DiscoveryField(connectedHandle, 6),
-      _DiscoveryField(eco, 10),
-      _DiscoveryField(openingName, 12),
-      _DiscoveryField(userOutcomeLabel, 14),
-      _DiscoveryField(sourceLabel, 18),
-      _DiscoveryField(timeControl, 20),
-      _DiscoveryField('$moveCount moves', 22),
-      _DiscoveryField(moveCount.toString(), 24),
-      _DiscoveryField(relativeTime, 26),
-      _DiscoveryField(playedAt.toIso8601String(), 28),
+      _DiscoveryField(opponentName, 0, 'Opponent match'),
+      _DiscoveryField(whiteName, 4, 'Player match'),
+      _DiscoveryField(blackName, 4, 'Player match'),
+      _DiscoveryField(connectedHandle, 6, 'Player match'),
+      _DiscoveryField(eco, 10, 'ECO match'),
+      _DiscoveryField(openingName, 12, 'Opening match'),
+      _DiscoveryField(userOutcomeLabel, 14, 'Result match'),
+      _DiscoveryField(sourceLabel, 18, 'Source match'),
+      _DiscoveryField(timeControl, 20, 'Time match'),
+      _DiscoveryField('$moveCount moves', 22, 'Move count match'),
+      _DiscoveryField(moveCount.toString(), 24, 'Move count match'),
+      _DiscoveryField(relativeTime, 26, 'Date match'),
+      _DiscoveryField(playedAt.toIso8601String(), 28, 'Date match'),
     ];
-    var best = noLocalFilterMatch;
+    _LocalFilterMatch? best;
     for (final field in fields) {
       final value = field.value?.trim().toLowerCase();
       if (value == null || value.isEmpty) continue;
       if (value == q) {
-        best = best < field.weight ? best : field.weight;
+        final match = _LocalFilterMatch(rank: field.weight, label: field.label);
+        best = _betterMatch(best, match);
       } else if (value.startsWith(q)) {
-        final score = field.weight + 1;
-        best = best < score ? best : score;
+        final match = _LocalFilterMatch(
+          rank: field.weight + 1,
+          label: field.label,
+        );
+        best = _betterMatch(best, match);
       } else if (value.contains(q)) {
-        final score = field.weight + 3;
-        best = best < score ? best : score;
+        final match = _LocalFilterMatch(
+          rank: field.weight + 3,
+          label: field.label,
+        );
+        best = _betterMatch(best, match);
       }
     }
     return best;
   }
+}
+
+_LocalFilterMatch? _betterMatch(
+  _LocalFilterMatch? current,
+  _LocalFilterMatch candidate,
+) {
+  if (current == null) return candidate;
+  return current.rank <= candidate.rank ? current : candidate;
 }
 
 class _RankedGame {
@@ -213,8 +246,16 @@ class _RankedGame {
 }
 
 class _DiscoveryField {
-  const _DiscoveryField(this.value, this.weight);
+  const _DiscoveryField(this.value, this.weight, this.label);
 
   final String? value;
   final int weight;
+  final String label;
+}
+
+class _LocalFilterMatch {
+  const _LocalFilterMatch({required this.rank, this.label});
+
+  final int rank;
+  final String? label;
 }

@@ -93,6 +93,20 @@ void main() {
     );
   });
 
+  test('search match labels explain opponent opening and ECO matches', () {
+    final imported = _game(
+      id: 'scotch',
+      blackName: 'RojoHijo',
+      openingName: 'Scotch Game',
+      eco: 'C45',
+    );
+
+    expect(imported.localFilterMatchLabel('Rojo'), 'Opponent match');
+    expect(imported.localFilterMatchLabel('Scotch'), 'Opening match');
+    expect(imported.localFilterMatchLabel('C45'), 'ECO match');
+    expect(imported.localFilterMatchLabel('Chess.com'), 'Source match');
+  });
+
   test(
     'no local match exposes Search older games only when more pages exist',
     () {
@@ -105,6 +119,7 @@ void main() {
         display.emptyState,
         ImportDiscoveryEmptyState.noLocalMatchCanSearchOlder,
       );
+      expect(display.emptyLabel, 'No games found');
       expect(display.showSearchOlderAction, isTrue);
     },
   );
