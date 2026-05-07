@@ -125,6 +125,9 @@ class ApexCopy {
   // ── Error messages ─────────────────────────────────────────────────────
   static const String engineUnavailable = 'Apex Review could not be reached.';
   static const String analysisFailed = 'Review could not complete — try again.';
+  static const String couldNotOpenReview = 'Could not open review';
+  static const String savedReviewUnavailable = 'Saved review unavailable';
+  static const String invalidPgn = 'Invalid PGN';
 
   // ── Move-quality display labels ────────────────────────────────────────
   /// Premium labels for the seven classification tiers. Keep in sync with

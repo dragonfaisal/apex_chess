@@ -14,6 +14,7 @@ import 'package:apex_chess/features/account/presentation/controllers/account_con
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/archives/presentation/controllers/archive_controller.dart';
 import 'package:apex_chess/features/archives/presentation/views/archive_screen.dart';
+import 'package:apex_chess/features/pgn_review/domain/review_entry_contract.dart';
 import 'package:apex_chess/features/profile_stats/data/profile_stats_service.dart';
 import 'package:apex_chess/features/profile_stats/presentation/controllers/profile_stats_controller.dart';
 import 'package:apex_chess/features/global_dashboard/presentation/models/recent_scan_display.dart';
@@ -2067,11 +2068,11 @@ class _RecentRow extends ConsumerWidget {
     final cached = game.cachedTimeline;
     final userIsBlack = game.userIsBlackFor(perspective);
     final userIsWhite = userIsBlack == null ? null : !userIsBlack;
-    if (game.isCacheCurrent && cached != null && cached.moves.isNotEmpty) {
+    if (ReviewEntryContract.canOpenCachedReview(game)) {
       ref
           .read(reviewControllerProvider.notifier)
           .loadTimeline(
-            cached,
+            cached!,
             userIsBlack: userIsBlack ?? false,
             mode: game.analysisMode,
             userIsWhite: userIsWhite,
@@ -2086,9 +2087,7 @@ class _RecentRow extends ConsumerWidget {
       MaterialPageRoute<void>(
         builder: (_) => ArchiveScreen(
           initialFilters: ArchiveFilters(
-            search: game.ecoCode?.trim().isNotEmpty == true
-                ? game.ecoCode!.trim()
-                : (game.openingName ?? game.black),
+            search: ReviewEntryContract.archiveFallbackSearch(game),
           ),
         ),
       ),

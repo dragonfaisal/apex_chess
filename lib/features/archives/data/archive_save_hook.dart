@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/analysis_profile.dart';
 import 'package:apex_chess/core/domain/services/analysis_cache_key.dart';
+import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 
 import '../domain/archived_game.dart';
 import '../presentation/controllers/archive_controller.dart';
@@ -23,6 +24,28 @@ import '../presentation/controllers/archive_controller.dart';
 /// benign — latest analysis wins).
 String archiveIdForPgn(String pgn) {
   return stablePgnHash(pgn);
+}
+
+String archiveIdForAnalysis({
+  required String pgn,
+  required AnalysisProfileId analysisProfileId,
+  required String providerId,
+  required String engineVersion,
+  String? pgnHash,
+  int? classifierVersion,
+  int? tacticalVerifierVersion,
+  int? openingBookVersion,
+}) {
+  return buildAnalysisCacheKey(
+    pgnHash: pgnHash ?? stablePgnHash(pgn),
+    analysisProfileId: analysisProfileId,
+    providerId: providerId,
+    engineVersion: engineVersion,
+    classifierVersion: classifierVersion ?? kApexClassifierVersion,
+    tacticalVerifierVersion:
+        tacticalVerifierVersion ?? kApexTacticalVerifierVersion,
+    openingBookVersion: openingBookVersion ?? kApexOpeningBookVersion,
+  );
 }
 
 /// Fire-and-forget save. Returns the resulting id so callers can log it.
@@ -38,13 +61,15 @@ Future<String?> saveAnalysisToArchive({
   required ArchiveSource source,
   DateTime? playedAt,
   AnalysisMode analysisMode = AnalysisMode.deep,
+  String? timeControl,
 }) async {
   try {
     final profileId = AnalysisProfileId.fromWire(timeline.analysisProfileId);
     final pgnHash = timeline.pgnHash ?? stablePgnHash(pgn);
     final id =
         timeline.cacheKey ??
-        buildAnalysisCacheKey(
+        archiveIdForAnalysis(
+          pgn: pgn,
           pgnHash: pgnHash,
           analysisProfileId: profileId,
           providerId: timeline.providerId,
@@ -61,6 +86,7 @@ Future<String?> saveAnalysisToArchive({
       pgn: pgn,
       playedAt: playedAt,
       analysisMode: analysisMode,
+      timeControl: timeControl,
     );
     await ref.read(archiveControllerProvider.notifier).save(game);
     return id;

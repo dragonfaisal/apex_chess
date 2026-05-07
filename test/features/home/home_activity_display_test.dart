@@ -13,7 +13,7 @@ void main() {
     return container;
   }
 
-  test('PGN activity maps to PGN Ready only after success', () async {
+  test('PGN review completion does not create stale ready state', () async {
     final container = containerWithPrefs();
     await container.read(homeActivityControllerProvider.future);
 
@@ -31,14 +31,13 @@ void main() {
     final hero = HomeHeroDisplay.fromActivity(activity, now: DateTime.now());
 
     expect(activity.kind, HomeActivityKind.pgn);
-    expect(activity.lifecycle, HomeActivityLifecycle.inProgress);
-    expect(hero.type, HomeHeroType.pgnReady);
-    expect(hero.title, 'PGN Ready');
-    expect(hero.cta, 'Start');
-    expect(hero.actionIntent, HomeActionIntent.pastePgn);
+    expect(activity.lifecycle, HomeActivityLifecycle.completed);
+    expect(hero.type, HomeHeroType.genericStart);
+    expect(hero.title, 'Start Review');
+    expect(hero.actionIntent, HomeActionIntent.importGames);
   });
 
-  test('latest import maps to Latest Import only after success', () async {
+  test('import review completion does not create stale import state', () async {
     final container = containerWithPrefs();
     await container.read(homeActivityControllerProvider.future);
 
@@ -50,9 +49,9 @@ void main() {
     final hero = HomeHeroDisplay.fromActivity(activity, now: DateTime.now());
 
     expect(activity.kind, HomeActivityKind.importGame);
-    expect(activity.lifecycle, HomeActivityLifecycle.inProgress);
-    expect(hero.type, HomeHeroType.latestImport);
-    expect(hero.title, 'Latest Import');
+    expect(activity.lifecycle, HomeActivityLifecycle.completed);
+    expect(hero.type, HomeHeroType.genericStart);
+    expect(hero.title, 'Start Review');
     expect(hero.actionIntent, HomeActionIntent.importGames);
   });
 

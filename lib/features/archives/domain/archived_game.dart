@@ -394,6 +394,7 @@ class ArchivedGame {
     required String pgn,
     DateTime? playedAt,
     AnalysisMode analysisMode = AnalysisMode.deep,
+    String? timeControl,
   }) {
     final h = timeline.headers;
     return ArchivedGame(
@@ -423,7 +424,7 @@ class ArchivedGame {
       tacticalVerifierVersion: timeline.tacticalVerifierVersion,
       openingBookVersion: timeline.openingBookVersion,
       analysisSchemaVersion: timeline.analysisSchemaVersion,
-      timeControl: h['TimeControl'],
+      timeControl: timeControl ?? h['TimeControl'],
     );
   }
 

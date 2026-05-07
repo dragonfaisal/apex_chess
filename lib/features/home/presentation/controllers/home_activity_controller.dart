@@ -293,13 +293,14 @@ class HomeActivityController extends AsyncNotifier<HomeActivityState> {
     await _prefs!.setString(_updatedKey, updated.updatedAt!.toIso8601String());
   }
 
-  Future<void> recordPgnReview() =>
-      record(HomeActivityKind.pgn, lifecycle: HomeActivityLifecycle.inProgress);
+  /// Record only after the PGN review exists. Tapping Paste PGN must not
+  /// mutate Home into a fake "ready" state before analysis succeeds.
+  Future<void> recordPgnReview() => markCompleted(HomeActivityKind.pgn);
 
-  Future<void> recordImportReview() => record(
-    HomeActivityKind.importGame,
-    lifecycle: HomeActivityLifecycle.inProgress,
-  );
+  /// Record only after the imported review exists. Card taps open analysis but
+  /// do not mutate the Home hero until a review has been produced.
+  Future<void> recordImportReview() =>
+      markCompleted(HomeActivityKind.importGame);
 
   Future<void> recordReview() => record(
     HomeActivityKind.review,

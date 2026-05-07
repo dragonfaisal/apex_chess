@@ -1190,9 +1190,6 @@ class _GameCard extends ConsumerWidget {
     WidgetRef ref,
     AnalysisProfile profile,
   ) {
-    unawaited(
-      ref.read(homeActivityControllerProvider.notifier).recordImportReview(),
-    );
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -1204,6 +1201,7 @@ class _GameCard extends ConsumerWidget {
             ? ArchiveSource.chessCom
             : ArchiveSource.lichess,
         playedAt: game.playedAt,
+        timeControl: game.timeControl,
         userIsWhite: game.userColor == null
             ? null
             : game.userColor == PlayerColor.white,
@@ -1522,12 +1520,14 @@ class _ImportAnalysisDialog extends ConsumerStatefulWidget {
     required this.profile,
     required this.source,
     this.playedAt,
+    this.timeControl,
     this.userIsWhite,
   });
   final String pgn;
   final AnalysisProfile profile;
   final ArchiveSource source;
   final DateTime? playedAt;
+  final String? timeControl;
 
   /// Null when we don't know which colour the user played (PGN
   /// uploads). The Mistake Vault hook uses this to skip opponent plies.
@@ -1600,6 +1600,7 @@ class _ImportAnalysisDialogState extends ConsumerState<_ImportAnalysisDialog> {
         source: widget.source,
         playedAt: widget.playedAt,
         analysisMode: mode,
+        timeControl: widget.timeControl,
       );
       if (archiveId != null) {
         unawaited(

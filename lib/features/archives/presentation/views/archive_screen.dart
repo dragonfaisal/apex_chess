@@ -14,6 +14,7 @@ import 'package:apex_chess/features/account/presentation/controllers/account_con
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/archives/presentation/controllers/archive_controller.dart';
 import 'package:apex_chess/features/archives/presentation/models/archived_game_card_display.dart';
+import 'package:apex_chess/features/pgn_review/domain/review_entry_contract.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
 import 'package:apex_chess/features/pgn_review/domain/review_analysis_provider.dart';
 import 'package:apex_chess/features/pgn_review/presentation/views/review_summary_screen.dart';
@@ -148,11 +149,11 @@ class _ArchiveScreenState extends ConsumerState<ArchiveScreen> {
     // otherwise stay `null` so the coach copy falls back to the
     // unknown-side phrasing.
     final bool? userIsWhite = _userColorKnown(ref, game) ? !userIsBlack : null;
-    if (game.isCacheCurrent && cached != null && cached.moves.isNotEmpty) {
+    if (ReviewEntryContract.canOpenCachedReview(game)) {
       ref
           .read(reviewControllerProvider.notifier)
           .loadTimeline(
-            cached,
+            cached!,
             userIsBlack: userIsBlack,
             mode: _modeForProfile(game.analysisProfileId),
             userIsWhite: userIsWhite,
@@ -166,6 +167,15 @@ class _ArchiveScreenState extends ConsumerState<ArchiveScreen> {
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
     final toastBottomMargin = MediaQuery.paddingOf(context).bottom + 78;
+    if (game.pgn.trim().isEmpty) {
+      showApexGlassToastOnMessenger(
+        messenger,
+        bottomMargin: toastBottomMargin,
+        message: ApexCopy.savedReviewUnavailable,
+        type: ApexGlassToastType.warning,
+      );
+      return;
+    }
     showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -212,7 +222,8 @@ class _ArchiveScreenState extends ConsumerState<ArchiveScreen> {
       showApexGlassToastOnMessenger(
         messenger,
         bottomMargin: toastBottomMargin,
-        message: ApexCopy.tryAgain,
+        message: ApexCopy.couldNotOpenReview,
+        detail: ApexCopy.tryAgain,
         type: ApexGlassToastType.warning,
       );
     }

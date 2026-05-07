@@ -165,9 +165,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     );
     if (result == null) return;
     if (!context.mounted) return;
-    unawaited(
-      ref.read(homeActivityControllerProvider.notifier).recordPgnReview(),
-    );
     _startLocalAnalysis(context, ref, result);
   }
 
