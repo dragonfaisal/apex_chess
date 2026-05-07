@@ -14,9 +14,12 @@ import 'package:apex_chess/features/user_validation/presentation/username_valida
 import 'package:apex_chess/features/user_validation/presentation/widgets/username_validation_pill.dart';
 import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
+import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_platform_badge.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_snack.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_side_marker.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
 
 import '../../data/profile_scanner_service.dart';
@@ -278,13 +281,13 @@ class _InputCard extends StatelessWidget {
           Row(
             children: [
               _SourceToggle(
-                label: 'Chess.com',
+                platform: PlayerIdentityPlatform.chessCom,
                 selected: source == 'chess.com',
                 onTap: () => onSourceChanged('chess.com'),
               ),
               const SizedBox(width: 8),
               _SourceToggle(
-                label: 'Lichess',
+                platform: PlayerIdentityPlatform.lichess,
                 selected: source == 'lichess',
                 onTap: () => onSourceChanged('lichess'),
               ),
@@ -401,12 +404,12 @@ class _InputCard extends StatelessWidget {
 
 class _SourceToggle extends StatelessWidget {
   const _SourceToggle({
-    required this.label,
+    required this.platform,
     required this.selected,
     required this.onTap,
   });
 
-  final String label;
+  final PlayerIdentityPlatform platform;
   final bool selected;
   final VoidCallback onTap;
 
@@ -431,16 +434,10 @@ class _SourceToggle extends StatelessWidget {
             ),
           ),
           child: Center(
-            child: Text(
-              label,
-              style: ApexTypography.bodyMedium.copyWith(
-                color: selected
-                    ? ApexColors.sapphireBright
-                    : ApexColors.textTertiary,
-                fontSize: 12,
-                letterSpacing: 1.2,
-                fontWeight: FontWeight.w600,
-              ),
+            child: ApexPlatformBadge(
+              platform: platform,
+              compact: true,
+              selected: selected,
             ),
           ),
         ),
@@ -744,13 +741,28 @@ class _SuspicionCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          Text(
-            '${result.username}  ·  ${result.source}  ·  ${result.sampleSize} games',
-            style: ApexTypography.bodyMedium.copyWith(
-              color: ApexColors.textTertiary,
-              fontSize: 11,
-              letterSpacing: 1,
-            ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ApexPlatformBadge(
+                platform: PlayerIdentityPlatform.fromWire(result.source),
+                compact: true,
+              ),
+              const SizedBox(width: 7),
+              Flexible(
+                child: Text(
+                  '${result.username} · ${result.sampleSize} games',
+                  style: ApexTypography.bodyMedium.copyWith(
+                    color: ApexColors.textTertiary,
+                    fontSize: 11,
+                    letterSpacing: 0,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           Text(
@@ -915,15 +927,7 @@ class _SampleList extends StatelessWidget {
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      '${g.white}  vs  ${g.black}',
-                      style: ApexTypography.bodyMedium.copyWith(
-                        color: ApexColors.textPrimary,
-                        fontSize: 12,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    child: _SamplePlayers(white: g.white, black: g.black),
                   ),
                   const SizedBox(width: 8),
                   Text(
@@ -946,6 +950,54 @@ class _SampleList extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+class _SamplePlayers extends StatelessWidget {
+  const _SamplePlayers({required this.white, required this.black});
+
+  final String white;
+  final String black;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const ApexSideMarker(side: ApexSideMarkerSide.white, size: 12),
+        const SizedBox(width: 5),
+        Flexible(
+          child: Text(
+            white,
+            style: ApexTypography.bodyMedium.copyWith(
+              color: ApexColors.textPrimary,
+              fontSize: 12,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 5),
+          child: Text(
+            'vs',
+            style: TextStyle(color: ApexColors.textTertiary, fontSize: 11),
+          ),
+        ),
+        const ApexSideMarker(side: ApexSideMarkerSide.black, size: 12),
+        const SizedBox(width: 5),
+        Flexible(
+          child: Text(
+            black,
+            style: ApexTypography.bodyMedium.copyWith(
+              color: ApexColors.textPrimary,
+              fontSize: 12,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 }

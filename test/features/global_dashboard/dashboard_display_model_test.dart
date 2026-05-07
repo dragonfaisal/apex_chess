@@ -331,6 +331,62 @@ void main() {
     expect(dashboardHasNextPageForTesting(1, games.length), isFalse);
   });
 
+  test('Stats source filter distinguishes analyzed games by source', () {
+    final games = [
+      _game(id: 'chess', source: ArchiveSource.chessCom),
+      _game(id: 'lichess', source: ArchiveSource.lichess),
+      _game(id: 'pgn', source: ArchiveSource.pgn),
+    ];
+
+    expect(
+      buildDashboardStatsForTesting(
+        games,
+        source: ArchiveSource.chessCom,
+      ).gamesAnalyzed,
+      1,
+    );
+    expect(
+      buildDashboardStatsForTesting(
+        games,
+        source: ArchiveSource.lichess,
+      ).gamesAnalyzed,
+      1,
+    );
+    expect(
+      buildDashboardStatsForTesting(
+        games,
+        source: ArchiveSource.pgn,
+      ).gamesAnalyzed,
+      1,
+    );
+  });
+
+  test('Stats source filter combines with color filter using AND logic', () {
+    final games = [
+      _game(id: 'match', source: ArchiveSource.lichess, white: 'ApexUser'),
+      _game(
+        id: 'wrong-source',
+        source: ArchiveSource.chessCom,
+        white: 'ApexUser',
+      ),
+      _game(
+        id: 'wrong-side',
+        source: ArchiveSource.lichess,
+        white: 'Opponent',
+        black: 'ApexUser',
+      ),
+    ];
+
+    final stats = buildDashboardStatsForTesting(
+      games,
+      perspective: 'ApexUser',
+      filter: ColorPerspective.white,
+      source: ArchiveSource.lichess,
+    );
+
+    expect(stats.gamesAnalyzed, 1);
+  });
+
   test('Player search state separates public profile from Apex stats', () {
     const public = ProfileStats(
       source: ProfileStatsSource.chessCom,
@@ -374,10 +430,11 @@ ArchivedGame _game({
   String? opening = 'Scotch Game',
   String? eco = 'C45',
   Map<MoveQuality, int> qualities = const {},
+  ArchiveSource source = ArchiveSource.chessCom,
 }) {
   return ArchivedGame(
     id: id,
-    source: ArchiveSource.chessCom,
+    source: source,
     white: white,
     black: black,
     result: result,

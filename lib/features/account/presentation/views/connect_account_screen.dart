@@ -26,6 +26,7 @@ import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_platform_badge.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_snack.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
 
@@ -332,13 +333,13 @@ class _SourcePicker extends StatelessWidget {
     return Row(
       children: [
         _SourceChip(
-          label: ApexCopy.importSourceChessCom,
+          platform: PlayerIdentityPlatform.chessCom,
           selected: source == AccountSource.chessCom,
           onTap: () => onChanged(AccountSource.chessCom),
         ),
         const SizedBox(width: 10),
         _SourceChip(
-          label: ApexCopy.importSourceLichess,
+          platform: PlayerIdentityPlatform.lichess,
           selected: source == AccountSource.lichess,
           onTap: () => onChanged(AccountSource.lichess),
         ),
@@ -349,12 +350,12 @@ class _SourcePicker extends StatelessWidget {
 
 class _SourceChip extends StatelessWidget {
   const _SourceChip({
-    required this.label,
+    required this.platform,
     required this.selected,
     required this.onTap,
   });
 
-  final String label;
+  final PlayerIdentityPlatform platform;
   final bool selected;
   final VoidCallback onTap;
 
@@ -384,16 +385,8 @@ class _SourceChip extends StatelessWidget {
               width: 1,
             ),
           ),
-          child: Text(
-            label,
-            style: ApexTypography.labelLarge.copyWith(
-              fontSize: 12,
-              color: selected
-                  ? ApexColors.textOnAccent
-                  : ApexColors.textSecondary,
-              letterSpacing: 1.4,
-              fontWeight: FontWeight.w700,
-            ),
+          child: Center(
+            child: ApexPlatformBadge(platform: platform, selected: selected),
           ),
         ),
       ),

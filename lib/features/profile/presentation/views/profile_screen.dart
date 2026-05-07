@@ -22,6 +22,7 @@ import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_platform_badge.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_player_avatar.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
 
@@ -49,6 +50,8 @@ class ProfileScreen extends ConsumerWidget {
       });
     });
     final presence = ref.watch(connectionPresenceProvider);
+    final cachedAvatarUrl = ref.watch(accountAvatarUrlProvider).valueOrNull;
+    final liveAvatarUrl = statsAsync.valueOrNull?.avatarUrl;
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(gradient: ApexGradients.spaceCanvas),
@@ -74,6 +77,7 @@ class ProfileScreen extends ConsumerWidget {
                     _IdentityCard(
                       account: account,
                       showingSavedData: account != null && presence.isOffline,
+                      avatarUrl: liveAvatarUrl ?? cachedAvatarUrl,
                     ),
                     const SizedBox(height: 18),
                     if (account != null)
@@ -98,10 +102,15 @@ class ProfileScreen extends ConsumerWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _IdentityCard extends StatelessWidget {
-  const _IdentityCard({required this.account, required this.showingSavedData});
+  const _IdentityCard({
+    required this.account,
+    required this.showingSavedData,
+    required this.avatarUrl,
+  });
 
   final ApexAccount? account;
   final bool showingSavedData;
+  final String? avatarUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -110,6 +119,7 @@ class _IdentityCard extends StatelessWidget {
         ? PlayerIdentityDisplay.connected(
             username: account!.username,
             platform: PlayerIdentityPlatform.fromWire(account!.source.wire),
+            avatarUrl: avatarUrl,
             isCached: showingSavedData,
           )
         : PlayerIdentityDisplay.fromRaw(
@@ -132,7 +142,6 @@ class _IdentityCard extends StatelessWidget {
           ApexPlayerAvatar(
             identity: identity,
             size: ApexPlayerAvatarSize.large,
-            showPlatformBadge: connected,
             showConnectedBadge: connected,
           ),
           const SizedBox(width: 16),
@@ -154,23 +163,21 @@ class _IdentityCard extends StatelessWidget {
                   spacing: 6,
                   runSpacing: 6,
                   children: [
-                    _IdentityChip(
-                      label: connected
-                          ? identity.platformLabel
-                          : 'Connect below',
-                      color: accent,
-                    ),
+                    if (connected)
+                      ApexPlatformBadge(platform: identity.platform)
+                    else
+                      _IdentityChip(label: 'Connect below', color: accent),
                     if (connected)
                       _IdentityChip(
                         label: identity.statusLabel,
                         color: showingSavedData
-                            ? ApexColors.inaccuracy
+                            ? ApexColors.textTertiary
                             : ApexColors.sapphireBright,
                       ),
                     if (showingSavedData)
                       const _IdentityChip(
                         label: ApexCopy.showingSavedData,
-                        color: ApexColors.inaccuracy,
+                        color: ApexColors.textTertiary,
                       ),
                   ],
                 ),

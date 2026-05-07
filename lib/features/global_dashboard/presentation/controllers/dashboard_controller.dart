@@ -217,6 +217,10 @@ final dashboardColorFilterProvider = StateProvider<ColorPerspective>(
   (_) => ColorPerspective.all,
 );
 
+final dashboardSourceFilterProvider = StateProvider<ArchiveSource?>(
+  (_) => null,
+);
+
 final dashboardInlineNoticeProvider = StateProvider<String?>((_) => null);
 
 class DashboardStats {
@@ -452,7 +456,12 @@ final dashboardStatsProvider = Provider<DashboardStats>((ref) {
   final archive = ref.watch(archiveControllerProvider);
   final account = ref.watch(accountControllerProvider).valueOrNull;
   final filter = ref.watch(dashboardColorFilterProvider);
-  return _buildStats(archive.games, account?.username, filter);
+  final source = ref.watch(dashboardSourceFilterProvider);
+  return _buildStats(
+    _filterBySource(archive.games, source),
+    account?.username,
+    filter,
+  );
 });
 
 /// Baseline stats with no color filter. The view uses this to separate
@@ -467,18 +476,32 @@ final dashboardAllStatsProvider = Provider<DashboardStats>((ref) {
 /// Top openings for the active perspective. Sorted desc by total
 /// games played so the most-seen lines live at the top.
 final openingStatsProvider = Provider<List<OpeningStats>>((ref) {
-  final games = ref.watch(archiveControllerProvider).games;
+  final games = _filterBySource(
+    ref.watch(archiveControllerProvider).games,
+    ref.watch(dashboardSourceFilterProvider),
+  );
   final me = ref.watch(accountControllerProvider).valueOrNull?.username;
   final filter = ref.watch(dashboardColorFilterProvider);
   return _buildOpeningStats(games, me, filter);
 });
 
 final dashboardWeakSpotsProvider = Provider<List<WeakSpotDisplay>>((ref) {
-  final games = ref.watch(archiveControllerProvider).games;
+  final games = _filterBySource(
+    ref.watch(archiveControllerProvider).games,
+    ref.watch(dashboardSourceFilterProvider),
+  );
   final me = ref.watch(accountControllerProvider).valueOrNull?.username;
   final filter = ref.watch(dashboardColorFilterProvider);
   return _buildWeakSpots(games, me, filter);
 });
+
+List<ArchivedGame> _filterBySource(
+  List<ArchivedGame> games,
+  ArchiveSource? source,
+) {
+  if (source == null) return games;
+  return games.where((g) => g.source == source).toList();
+}
 
 /// Whether [g] is from the user's perspective according to [filter].
 /// Returns null when the game has no identifiable user side so the
@@ -908,28 +931,32 @@ DashboardStats buildDashboardStatsForTesting(
   List<ArchivedGame> games, {
   String? perspective,
   ColorPerspective filter = ColorPerspective.all,
-}) => _buildStats(games, perspective, filter);
+  ArchiveSource? source,
+}) => _buildStats(_filterBySource(games, source), perspective, filter);
 
 List<OpeningStats> buildOpeningStatsForTesting(
   List<ArchivedGame> games, {
   String? perspective,
   ColorPerspective filter = ColorPerspective.all,
-}) => _buildOpeningStats(games, perspective, filter);
+  ArchiveSource? source,
+}) => _buildOpeningStats(_filterBySource(games, source), perspective, filter);
 
 List<WeakSpotDisplay> buildWeakSpotsForTesting(
   List<ArchivedGame> games, {
   String? perspective,
   ColorPerspective filter = ColorPerspective.all,
-}) => _buildWeakSpots(games, perspective, filter);
+  ArchiveSource? source,
+}) => _buildWeakSpots(_filterBySource(games, source), perspective, filter);
 
 List<ArchivedGame> dashboardVisibleGamesForTesting(
   List<ArchivedGame> games, {
   String? perspective,
   ColorPerspective filter = ColorPerspective.all,
+  ArchiveSource? source,
   int page = 0,
 }) {
   final me = perspective?.toLowerCase();
-  final filtered = games.where((g) {
+  final filtered = _filterBySource(games, source).where((g) {
     final match = _gameMatchesColor(g: g, me: me, filter: filter);
     return match == true;
   }).toList();
@@ -963,11 +990,13 @@ final dashboardVisibleGamesProvider = Provider<List<ArchivedGame>>((ref) {
   final games = ref.watch(archiveControllerProvider).games;
   final account = ref.watch(accountControllerProvider).valueOrNull;
   final filter = ref.watch(dashboardColorFilterProvider);
+  final source = ref.watch(dashboardSourceFilterProvider);
   final page = ref.watch(dashboardPageProvider);
   return dashboardVisibleGamesForTesting(
     games,
     perspective: account?.username,
     filter: filter,
+    source: source,
     page: page,
   );
 });

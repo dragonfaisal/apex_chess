@@ -143,6 +143,33 @@ void main() {
     },
   );
 
+  test('Opponent Insights scans real opponent exact match', () async {
+    final service = _CountingScannerService();
+    final container = ProviderContainer(
+      overrides: [
+        profileScannerServiceProvider.overrideWithValue(service),
+        connectionReachabilityProbeProvider.overrideWithValue(
+          () async => NetworkAvailability.online,
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await container
+        .read(profileScannerControllerProvider.notifier)
+        .scan(
+          username: 'magnolia',
+          source: 'chess.com',
+          connectedUsername: 'ALFAISALpro',
+          connectedSource: 'chess.com',
+        );
+
+    final state = container.read(profileScannerControllerProvider);
+    expect(service.calls, 1);
+    expect(state.error, isNull);
+    expect(state.result, isNotNull);
+  });
+
   test('cancelled scan does not block re-entry reset', () async {
     final service = _SlowScannerService();
     final container = ProviderContainer(

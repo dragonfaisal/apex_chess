@@ -17,6 +17,7 @@ import 'package:apex_chess/features/pgn_review/presentation/models/review_board_
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_chess_board.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_player_avatar.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_side_marker.dart';
 import 'package:apex_chess/shared_ui/widgets/brilliant_glow.dart';
 
 bool shouldShowBetterMoveArrowForTesting(MoveAnalysis? move) =>
@@ -204,17 +205,30 @@ class _PlayerHeader extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      [
-                        player.sideLabel,
-                        if (player.rating != null) player.rating!,
-                      ].join(' · '),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: ApexTypography.bodyMedium.copyWith(
-                        color: ApexColors.textTertiary,
-                        fontSize: 11,
-                      ),
+                    Row(
+                      children: [
+                        ApexSideMarker(
+                          side: player.side == ReviewBoardSide.white
+                              ? ApexSideMarkerSide.white
+                              : ApexSideMarkerSide.black,
+                          size: 11,
+                        ),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Text(
+                            [
+                              player.sideLabel,
+                              if (player.rating != null) player.rating!,
+                            ].join(' · '),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: ApexTypography.bodyMedium.copyWith(
+                              color: ApexColors.textTertiary,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),

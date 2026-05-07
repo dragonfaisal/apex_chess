@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 
 import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_platform_badge.dart';
 
 enum ApexPlayerAvatarSize {
   small(26),
@@ -186,19 +187,10 @@ class _AvatarBadge extends StatelessWidget {
       child: Icon(
         showConnectedBadge || identity.isConnectedUser
             ? Icons.check_rounded
-            : _platformIcon(identity.platform),
+            : ApexPlatformBadge.iconFor(identity.platform),
         color: color,
         size: size * 0.66,
       ),
     );
-  }
-
-  static IconData _platformIcon(PlayerIdentityPlatform platform) {
-    return switch (platform) {
-      PlayerIdentityPlatform.chessCom => Icons.language_rounded,
-      PlayerIdentityPlatform.lichess => Icons.bolt_rounded,
-      PlayerIdentityPlatform.pgn => Icons.description_rounded,
-      PlayerIdentityPlatform.unknown => Icons.person_rounded,
-    };
   }
 }

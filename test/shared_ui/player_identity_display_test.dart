@@ -79,4 +79,18 @@ void main() {
       PlayerIdentityPlatform.unknown,
     );
   });
+
+  test('identity density rules keep card and tiny surfaces compact', () {
+    expect(ApexIdentityDensity.hero.showsPlatformBadge, isTrue);
+    expect(ApexIdentityDensity.hero.showsAvatar, isTrue);
+    expect(ApexIdentityDensity.hero.showsSideMarker, isFalse);
+
+    expect(ApexIdentityDensity.card.showsPlatformBadge, isFalse);
+    expect(ApexIdentityDensity.card.showsAvatar, isTrue);
+    expect(ApexIdentityDensity.card.showsSideMarker, isTrue);
+
+    expect(ApexIdentityDensity.tiny.showsPlatformBadge, isFalse);
+    expect(ApexIdentityDensity.tiny.showsAvatar, isFalse);
+    expect(ApexIdentityDensity.tiny.showsSideMarker, isTrue);
+  });
 }

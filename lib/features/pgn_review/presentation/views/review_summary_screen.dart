@@ -28,7 +28,9 @@ import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/pgn_review/domain/review_summary.dart';
 import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_platform_badge.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_player_avatar.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_side_marker.dart';
 
 import '../controllers/review_controller.dart';
 import 'review_screen.dart';
@@ -331,6 +333,8 @@ class _SummaryPlayerIdentity {
 
   String get sideLabel => isWhite ? 'White' : 'Black';
   String get compactFallback => isUser ? 'You' : 'Opp';
+  ApexSideMarkerSide get markerSide =>
+      isWhite ? ApexSideMarkerSide.white : ApexSideMarkerSide.black;
   PlayerIdentityDisplay get identity => PlayerIdentityDisplay.fromRaw(
     username: name,
     platform: PlayerIdentityPlatform.pgn,
@@ -345,56 +349,6 @@ class _SummaryPlayerIdentity {
     final trimmed = name.trim();
     if (trimmed.isEmpty || trimmed == sideLabel) return compactFallback;
     return trimmed;
-  }
-}
-
-class _SideMarker extends StatelessWidget {
-  const _SideMarker({required this.isWhite, this.size = 13});
-
-  final bool isWhite;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    final fill = isWhite ? const Color(0xFFF4F7FB) : const Color(0xFF05070D);
-    final stroke = isWhite
-        ? ApexColors.textPrimary.withAlpha(210)
-        : ApexColors.sapphireBright.withAlpha(120);
-    return Semantics(
-      label: isWhite ? 'White side' : 'Black side',
-      child: Container(
-        key: ValueKey(
-          isWhite ? 'summary-white-side-marker' : 'summary-black-side-marker',
-        ),
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: fill,
-          border: Border.all(color: stroke, width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: (isWhite ? Colors.white : ApexColors.sapphireBright)
-                  .withAlpha(isWhite ? 80 : 55),
-              blurRadius: 8,
-              spreadRadius: -3,
-            ),
-          ],
-        ),
-        child: Align(
-          alignment: Alignment.topLeft,
-          child: Container(
-            width: size * 0.34,
-            height: size * 0.34,
-            margin: EdgeInsets.all(size * 0.16),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.white.withAlpha(isWhite ? 145 : 42),
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }
 
@@ -520,7 +474,13 @@ class _PlayerCard extends StatelessWidget {
                 size: ApexPlayerAvatarSize.small,
                 showConnectedBadge: identity.isUser,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 7),
+              ApexSideMarker(
+                side: identity.markerSide,
+                size: 14,
+                keyPrefix: 'summary',
+              ),
+              const SizedBox(width: 7),
               Expanded(
                 child: Text(
                   identity.tableName,
@@ -536,19 +496,30 @@ class _PlayerCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          Text(
-            [
-              identity.sideLabel,
-              if (identity.rating != null && identity.rating!.isNotEmpty)
-                identity.rating!,
-              result,
-            ].join(' · '),
-            style: ApexTypography.bodyMedium.copyWith(
-              color: accent,
-              fontSize: 11,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+          Row(
+            children: [
+              ApexPlatformBadge(
+                platform: identity.identity.platform,
+                compact: true,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  [
+                    identity.sideLabel,
+                    if (identity.rating != null && identity.rating!.isNotEmpty)
+                      identity.rating!,
+                    result,
+                  ].join(' · '),
+                  style: ApexTypography.bodyMedium.copyWith(
+                    color: accent,
+                    fontSize: 11,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 10),
           Text(
@@ -874,7 +845,11 @@ class _CountHeader extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          _SideMarker(isWhite: identity.isWhite, size: compact ? 9 : 10),
+          ApexSideMarker(
+            side: identity.markerSide,
+            size: compact ? 9 : 10,
+            keyPrefix: 'summary',
+          ),
           const SizedBox(width: 4),
           Flexible(
             child: Text(

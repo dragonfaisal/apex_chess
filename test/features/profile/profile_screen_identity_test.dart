@@ -18,7 +18,7 @@ void main() {
     tester,
   ) async {
     final container = await _containerWithAccount(
-      stats: _stats(hasRatings: true),
+      statsLoader: () async => _stats(hasRatings: true),
       overrides: [
         connectionPresenceProvider.overrideWith(_OnlinePresenceController.new),
       ],
@@ -30,6 +30,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
 
     expect(find.text('ApexUser'), findsOneWidget);
+    expect(find.text('A'), findsOneWidget);
     expect(find.text('Chess.com'), findsOneWidget);
     expect(find.text(ApexCopy.connected), findsOneWidget);
     expect(find.text(ApexCopy.ratings.toUpperCase()), findsOneWidget);
@@ -40,7 +41,7 @@ void main() {
 
   testWidgets('cached profile state renders saved data copy', (tester) async {
     final container = await _containerWithAccount(
-      stats: _stats(hasRatings: false),
+      statsLoader: () async => _stats(hasRatings: false),
       overrides: [
         connectionPresenceProvider.overrideWith(_OfflinePresenceController.new),
       ],
@@ -54,24 +55,119 @@ void main() {
     expect(find.text(ApexCopy.showingSavedData), findsOneWidget);
     expect(find.text(ApexCopy.dashboardNoPublicData), findsOneWidget);
   });
+
+  testWidgets('offline cached avatar still displays safely', (tester) async {
+    final container = await _containerWithAccount(
+      statsLoader: () async => _stats(hasRatings: false),
+      cachedAvatarUrl: 'https://example.com/avatar.png',
+      overrides: [
+        connectionPresenceProvider.overrideWith(_OfflinePresenceController.new),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(_host(container));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(
+      find.byKey(const ValueKey('apex-avatar-network-apexuser')),
+      findsOneWidget,
+    );
+    expect(find.text(ApexCopy.showingSavedData), findsOneWidget);
+  });
+
+  testWidgets('ratings unavailable state is calm', (tester) async {
+    final container = await _containerWithAccount(
+      statsLoader: () async => _stats(hasRatings: false),
+      overrides: [
+        connectionPresenceProvider.overrideWith(_OnlinePresenceController.new),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(_host(container));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(find.text(ApexCopy.dashboardNoPublicData), findsOneWidget);
+    expect(find.text(ApexCopy.tryAgain), findsNothing);
+  });
+
+  testWidgets('long username is safe in profile hero', (tester) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final container = await _containerWithAccount(
+      username: 'VeryVeryLongConnectedUsernameThatShouldNotOverflowProfile',
+      statsLoader: () async => _stats(
+        hasRatings: false,
+        username: 'VeryVeryLongConnectedUsernameThatShouldNotOverflowProfile',
+      ),
+      overrides: [
+        connectionPresenceProvider.overrideWith(_OnlinePresenceController.new),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(_host(container));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('profile build does not repeatedly fetch live stats', (
+    tester,
+  ) async {
+    var fetches = 0;
+    final container = await _containerWithAccount(
+      statsLoader: () async {
+        fetches++;
+        return _stats(hasRatings: true);
+      },
+      overrides: [
+        connectionPresenceProvider.overrideWith(_OnlinePresenceController.new),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(_host(container));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pumpWidget(_host(container));
+    await tester.pump();
+
+    expect(fetches, 1);
+  });
 }
 
 Future<ProviderContainer> _containerWithAccount({
-  required ProfileStats stats,
+  required Future<ProfileStats> Function() statsLoader,
+  String username = 'ApexUser',
+  String? cachedAvatarUrl,
   List<Override> overrides = const [],
 }) async {
   SharedPreferences.setMockInitialValues({
     'apex.account.source': AccountSource.chessCom.wire,
-    'apex.account.username': 'ApexUser',
+    'apex.account.username': username,
     'apex.account.onboarding_seen': true,
   });
   final prefs = await SharedPreferences.getInstance();
+  final repo = AccountRepository(prefs: prefs);
+  if (cachedAvatarUrl != null) {
+    await repo.writeAvatarUrl(
+      ApexAccount(source: AccountSource.chessCom, username: username),
+      cachedAvatarUrl,
+    );
+  }
   final container = ProviderContainer(
     overrides: [
-      accountRepositoryProvider.overrideWithValue(
-        AccountRepository(prefs: prefs),
-      ),
-      liveProfileStatsProvider.overrideWith((ref) async => stats),
+      accountRepositoryProvider.overrideWithValue(repo),
+      liveProfileStatsProvider.overrideWith((ref) => statsLoader()),
       ...overrides,
     ],
   );
@@ -86,11 +182,11 @@ Widget _host(ProviderContainer container) {
   );
 }
 
-ProfileStats _stats({required bool hasRatings}) {
+ProfileStats _stats({required bool hasRatings, String username = 'ApexUser'}) {
   return ProfileStats(
     source: ProfileStatsSource.chessCom,
-    username: 'ApexUser',
-    displayName: 'ApexUser',
+    username: username,
+    displayName: username,
     buckets: hasRatings
         ? const [
             RatingBucket(

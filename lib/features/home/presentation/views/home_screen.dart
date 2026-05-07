@@ -40,9 +40,9 @@ import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
-import 'package:apex_chess/shared_ui/widgets/apex_connection_presence_badge.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_account_pill.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
-import 'package:apex_chess/shared_ui/widgets/apex_player_avatar.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_profile_avatar_button.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_snack.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
 
@@ -1540,7 +1540,7 @@ class _LocalAnalysisProgressDialogState
           timeline: timeline,
           pgn: widget.pgn,
           depth: depth,
-          source: ArchiveSource.pgn,
+          source: _archiveSourceForPgn(widget.pgn),
           analysisMode: mode,
         );
         if (archiveId != null) {
@@ -1646,6 +1646,11 @@ class _LocalAnalysisProgressDialogState
   }
 }
 
+ArchiveSource _archiveSourceForPgn(String pgn) {
+  final tags = const GameIdentityService().parseTags(pgn);
+  return ArchiveSource.fromPgnSite(tags['Site']);
+}
+
 // ── Account strip (top of home) ─────────────────────────────────────────
 //
 // Connected state: shows the source label + handle next to a "Switch
@@ -1714,61 +1719,24 @@ class _AccountStrip extends ConsumerWidget {
     final identity = PlayerIdentityDisplay.connected(
       username: account!.username,
       platform: PlayerIdentityPlatform.fromWire(account!.source.wire),
+      avatarUrl: ref.watch(accountAvatarUrlProvider).valueOrNull,
       isCached: presence.isOffline,
     );
     return Row(
       children: [
         // Verified-handle chip — also tappable as a quick portal to the
         // dedicated Profile screen (live ratings + logout cascade).
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(10),
-            onTap: openProfile,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(10),
-                color: ApexColors.emerald.withValues(alpha: 0.12),
-                border: Border.all(
-                  color: ApexColors.emerald.withValues(alpha: 0.4),
-                  width: 0.8,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ApexPlayerAvatar(
-                    identity: identity,
-                    size: ApexPlayerAvatarSize.small,
-                    showConnectedBadge: true,
-                  ),
-                  const SizedBox(width: 6),
-                  ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: MediaQuery.sizeOf(context).width * 0.52,
-                    ),
-                    child: Text(
-                      '${identity.platformLabel} · ${identity.displayUsername}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: ApexTypography.bodyMedium.copyWith(
-                        color: ApexColors.textPrimary,
-                        fontSize: 11,
-                        letterSpacing: 0,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+        ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.sizeOf(context).width * 0.62,
           ),
+          child: ApexAccountPill(identity: identity, onTap: openProfile),
         ),
         const Spacer(),
-        ApexConnectionPresenceBadge(
+        ApexProfileAvatarButton(
+          identity: identity,
           presence: presence,
-          size: 40,
+          size: 42,
           tooltip: 'Profile',
           onTap: openProfile,
         ),

@@ -30,5 +30,12 @@ final liveProfileStatsProvider = FutureProvider<ProfileStats?>((ref) async {
     AccountSource.chessCom => ProfileStatsSource.chessCom,
     AccountSource.lichess => ProfileStatsSource.lichess,
   };
-  return service.fetch(source: source, username: account.username);
+  final stats = await service.fetch(source: source, username: account.username);
+  if (stats.avatarUrl != null) {
+    await ref
+        .read(accountRepositoryProvider)
+        .writeAvatarUrl(account, stats.avatarUrl);
+    ref.invalidate(accountAvatarUrlProvider);
+  }
+  return stats;
 });

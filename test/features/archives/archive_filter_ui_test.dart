@@ -149,6 +149,83 @@ void main() {
     expect(state.visible.map((g) => g.id), ['black-blunder']);
   });
 
+  test('Archive source filter Chess.com shows only Chess.com games', () {
+    final state = ArchiveState(
+      filters: const ArchiveFilters(source: ArchiveSource.chessCom),
+      games: [
+        _game(id: 'chess', source: ArchiveSource.chessCom),
+        _game(id: 'lichess', source: ArchiveSource.lichess),
+        _game(id: 'pgn', source: ArchiveSource.pgn),
+      ],
+    );
+
+    expect(state.visible.map((g) => g.id), ['chess']);
+  });
+
+  test('Archive source filter Lichess shows only Lichess games', () {
+    final state = ArchiveState(
+      filters: const ArchiveFilters(source: ArchiveSource.lichess),
+      games: [
+        _game(id: 'chess', source: ArchiveSource.chessCom),
+        _game(id: 'lichess', source: ArchiveSource.lichess),
+        _game(id: 'pgn', source: ArchiveSource.pgn),
+      ],
+    );
+
+    expect(state.visible.map((g) => g.id), ['lichess']);
+  });
+
+  test('Archive source filter PGN shows only PGN games', () {
+    final state = ArchiveState(
+      filters: const ArchiveFilters(source: ArchiveSource.pgn),
+      games: [
+        _game(id: 'chess', source: ArchiveSource.chessCom),
+        _game(id: 'lichess', source: ArchiveSource.lichess),
+        _game(id: 'pgn', source: ArchiveSource.pgn),
+      ],
+    );
+
+    expect(state.visible.map((g) => g.id), ['pgn']);
+  });
+
+  test('Archive source filter combines with side result and quality', () {
+    final state = ArchiveState(
+      filters: const ArchiveFilters(
+        source: ArchiveSource.lichess,
+        perspective: 'ApexUser',
+        color: ArchiveColorFilter.white,
+        result: ArchiveResultFilter.wins,
+        quality: ArchiveQualityFilter.blunder,
+      ),
+      games: [
+        _game(
+          id: 'match',
+          source: ArchiveSource.lichess,
+          white: 'ApexUser',
+          result: '1-0',
+          qualities: const {MoveQuality.blunder: 1},
+        ),
+        _game(
+          id: 'wrong-source',
+          source: ArchiveSource.chessCom,
+          white: 'ApexUser',
+          result: '1-0',
+          qualities: const {MoveQuality.blunder: 1},
+        ),
+        _game(
+          id: 'wrong-side',
+          source: ArchiveSource.lichess,
+          white: 'Opponent',
+          black: 'ApexUser',
+          result: '0-1',
+          qualities: const {MoveQuality.blunder: 1},
+        ),
+      ],
+    );
+
+    expect(state.visible.map((g) => g.id), ['match']);
+  });
+
   testWidgets('Archive active chips render scoped labels', (tester) async {
     await _pumpArchive(
       tester,
@@ -186,6 +263,24 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('Archive active source chip renders source label', (
+    tester,
+  ) async {
+    await _pumpArchive(
+      tester,
+      ArchiveState(
+        filters: const ArchiveFilters(source: ArchiveSource.pgn),
+        games: [_game(source: ArchiveSource.pgn)],
+      ),
+    );
+
+    expect(find.text('PGN'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('archive_filter_pgn_selected')),
+      findsOneWidget,
+    );
+  });
 }
 
 Future<void> _pumpArchive(WidgetTester tester, ArchiveState state) async {
@@ -215,10 +310,11 @@ ArchivedGame _game({
   Map<MoveQuality, int> qualities = const {MoveQuality.blunder: 1},
   String opening = 'Philidor Defense',
   String eco = 'C41',
+  ArchiveSource source = ArchiveSource.chessCom,
 }) {
   return ArchivedGame(
     id: id,
-    source: ArchiveSource.chessCom,
+    source: source,
     white: white,
     black: black,
     result: result,

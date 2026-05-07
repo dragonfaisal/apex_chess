@@ -398,7 +398,7 @@ class _FilterBar extends ConsumerWidget {
     null => 'All sources',
     ArchiveSource.chessCom => 'Chess.com',
     ArchiveSource.lichess => 'Lichess',
-    ArchiveSource.pgn => 'PGN paste',
+    ArchiveSource.pgn => 'PGN',
   };
 
   String _modeLabel(ArchiveModeFilter m) => switch (m) {

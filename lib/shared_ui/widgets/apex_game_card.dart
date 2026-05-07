@@ -12,6 +12,7 @@ import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_player_avatar.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_side_marker.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
 
 enum GameResultTone { won, lost, draw, unknown }
@@ -288,22 +289,8 @@ class ApexPlayerSideRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        _SideMarker(side: player.side),
+        ApexSideMarker(side: player.side.markerSide, showLabel: true),
         const SizedBox(width: 8),
-        SizedBox(
-          width: 42,
-          child: Text(
-            player.sideLabel,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: ApexTypography.bodyMedium.copyWith(
-              color: ApexColors.textTertiary,
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-        const SizedBox(width: 6),
         ApexPlayerAvatar(
           identity: player.identity,
           size: ApexPlayerAvatarSize.small,
@@ -364,52 +351,11 @@ class ApexPlayerSideRow extends StatelessWidget {
   }
 }
 
-class _SideMarker extends StatelessWidget {
-  const _SideMarker({required this.side});
-
-  final ApexPlayerSide side;
-
-  @override
-  Widget build(BuildContext context) {
-    final isWhite = side == ApexPlayerSide.white;
-    final fill = isWhite ? Colors.white : ApexColors.trueBlack;
-    final rim = isWhite
-        ? ApexColors.sapphireGlow.withValues(alpha: 0.75)
-        : ApexColors.sapphireBright.withValues(alpha: 0.42);
-    return Container(
-      width: 16,
-      height: 16,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: RadialGradient(
-          center: const Alignment(-0.35, -0.45),
-          radius: 0.9,
-          colors: isWhite
-              ? [Colors.white, const Color(0xFFDDE8FF)]
-              : [const Color(0xFF2B3658), ApexColors.trueBlack],
-        ),
-        border: Border.all(color: rim, width: 0.8),
-        boxShadow: [
-          BoxShadow(
-            color: (isWhite ? Colors.white : ApexColors.sapphireBright)
-                .withValues(alpha: isWhite ? 0.28 : 0.20),
-            blurRadius: 10,
-            spreadRadius: -4,
-          ),
-        ],
-      ),
-      child: Center(
-        child: Container(
-          width: 5,
-          height: 5,
-          decoration: BoxDecoration(
-            color: fill.withValues(alpha: isWhite ? 0.8 : 0.9),
-            shape: BoxShape.circle,
-          ),
-        ),
-      ),
-    );
-  }
+extension on ApexPlayerSide {
+  ApexSideMarkerSide get markerSide => switch (this) {
+    ApexPlayerSide.white => ApexSideMarkerSide.white,
+    ApexPlayerSide.black => ApexSideMarkerSide.black,
+  };
 }
 
 class _MetaLine extends StatelessWidget {

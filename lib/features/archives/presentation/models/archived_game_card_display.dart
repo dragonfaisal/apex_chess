@@ -26,7 +26,11 @@ extension ArchivedGameCardDisplay on ArchivedGame {
         platform: source.identityPlatform,
       ),
       primaryMeta: '$openingLine · $moveCount moves',
-      secondaryMeta: [reviewModeLabel, relativePlayedAt].join(' · '),
+      secondaryMeta: [
+        sourceLabel,
+        reviewModeLabel,
+        relativePlayedAt,
+      ].join(' · '),
       badges: archiveQualityBadges,
     );
   }

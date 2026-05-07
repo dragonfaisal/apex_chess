@@ -56,6 +56,19 @@ enum PlayerIdentitySourceStatus {
   final String label;
 }
 
+/// Display density contract for player identity surfaces.
+///
+/// Hero identity can show avatar, platform, username, and status. Card
+/// identity keeps side marker, compact avatar, username, rating, and YOU.
+/// Tiny identity stays to a marker/initials-scale cue.
+enum ApexIdentityDensity { hero, card, tiny }
+
+extension ApexIdentityDensityRules on ApexIdentityDensity {
+  bool get showsPlatformBadge => this == ApexIdentityDensity.hero;
+  bool get showsAvatar => this != ApexIdentityDensity.tiny;
+  bool get showsSideMarker => this != ApexIdentityDensity.hero;
+}
+
 @immutable
 class PlayerIdentityDisplay {
   const PlayerIdentityDisplay({

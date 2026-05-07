@@ -54,6 +54,14 @@ enum ArchiveSource {
 
   static ArchiveSource fromWire(String s) =>
       values.firstWhere((v) => v.wire == s, orElse: () => ArchiveSource.pgn);
+
+  static ArchiveSource fromPgnSite(String? site) {
+    final value = site?.trim().toLowerCase();
+    if (value == null || value.isEmpty) return ArchiveSource.pgn;
+    if (value.contains('chess.com')) return ArchiveSource.chessCom;
+    if (value.contains('lichess.org')) return ArchiveSource.lichess;
+    return ArchiveSource.pgn;
+  }
 }
 
 /// Immutable, serialisable record of one analyzed game.

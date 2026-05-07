@@ -6,6 +6,8 @@
 /// counts and W/D/L when the provider surfaces them (Chess.com exposes
 /// them per category; Lichess exposes per-perf aggregates via
 /// `api/user/{u}` plus a separate `api/user/{u}/perf/{perf}`).
+/// Public avatar/profile image URLs are carried through when the same
+/// public profile payloads expose them.
 ///
 /// This is deliberately thin — no caching, no retries, no token auth —
 /// so it can be wired into a `FutureProvider.family` that fires once a
@@ -63,6 +65,7 @@ class ProfileStats {
     required this.username,
     required this.displayName,
     required this.buckets,
+    this.avatarUrl,
   });
 
   factory ProfileStats.unknown({
@@ -73,12 +76,14 @@ class ProfileStats {
     username: username,
     displayName: username,
     buckets: const [],
+    avatarUrl: null,
   );
 
   final ProfileStatsSource source;
   final String username;
   final String displayName;
   final List<RatingBucket> buckets;
+  final String? avatarUrl;
 
   bool get hasData => buckets.any((b) => b.rating != null || b.total > 0);
 
@@ -200,15 +205,17 @@ class ProfileStatsService {
       );
     }
 
+    final profile = await _fetchChessComProfile(u);
     return ProfileStats(
       source: ProfileStatsSource.chessCom,
       username: u,
-      displayName: u,
+      displayName: profile.displayName ?? u,
       buckets: [
         parse('chess_bullet', 'Bullet'),
         parse('chess_blitz', 'Blitz'),
         parse('chess_rapid', 'Rapid'),
       ],
+      avatarUrl: profile.avatarUrl,
     );
   }
 
@@ -267,6 +274,7 @@ class ProfileStatsService {
       source: ProfileStatsSource.lichess,
       username: u,
       displayName: (body['username'] as String?) ?? u,
+      avatarUrl: _avatarUrlFromMap(body),
       buckets: [
         RatingBucket(
           label: 'Bullet',
@@ -296,4 +304,73 @@ class ProfileStatsService {
   }
 
   void dispose() => _client.close();
+
+  Future<_PublicProfileImage> _fetchChessComProfile(String u) async {
+    try {
+      final uri = Uri.parse('https://api.chess.com/pub/player/$u');
+      final res = await _client
+          .get(uri, headers: apexJsonHeaders)
+          .timeout(_timeout);
+      if (res.statusCode != 200) return const _PublicProfileImage();
+      final body = json.decode(res.body) as Map<String, dynamic>;
+      return _PublicProfileImage(
+        displayName: _cleanOptional(body['username'] as String?),
+        avatarUrl: _avatarUrlFromMap(body),
+      );
+    } catch (_) {
+      return const _PublicProfileImage();
+    }
+  }
+
+  static String? _avatarUrlFromMap(Map<String, dynamic> body) {
+    final topLevel = _firstUrl(body, const [
+      'avatar',
+      'avatarUrl',
+      'avatar_url',
+      'profileImage',
+      'profile_image',
+      'image',
+    ]);
+    if (topLevel != null) return topLevel;
+    final profile = body['profile'];
+    if (profile is Map<String, dynamic>) {
+      return _firstUrl(profile, const [
+        'avatar',
+        'avatarUrl',
+        'avatar_url',
+        'profileImage',
+        'profile_image',
+        'image',
+      ]);
+    }
+    return null;
+  }
+
+  static String? _firstUrl(Map<String, dynamic> body, List<String> keys) {
+    for (final key in keys) {
+      final value = _cleanUrl(body[key] as String?);
+      if (value != null) return value;
+    }
+    return null;
+  }
+
+  static String? _cleanOptional(String? raw) {
+    final value = raw?.trim();
+    return value == null || value.isEmpty ? null : value;
+  }
+
+  static String? _cleanUrl(String? raw) {
+    final value = _cleanOptional(raw);
+    if (value == null) return null;
+    final uri = Uri.tryParse(value);
+    if (uri == null || !uri.hasScheme) return null;
+    return value;
+  }
+}
+
+class _PublicProfileImage {
+  const _PublicProfileImage({this.displayName, this.avatarUrl});
+
+  final String? displayName;
+  final String? avatarUrl;
 }

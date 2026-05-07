@@ -25,6 +25,7 @@ import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_game_card.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_platform_badge.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_player_avatar.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
 
@@ -205,8 +206,10 @@ class _DashboardBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final activeFilter = ref.watch(dashboardColorFilterProvider);
+    final activeSource = ref.watch(dashboardSourceFilterProvider);
     final filterOnlyEmpty =
-        !stats.hasData && activeFilter != ColorPerspective.all;
+        !stats.hasData &&
+        (activeFilter != ColorPerspective.all || activeSource != null);
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
@@ -228,11 +231,13 @@ class _DashboardBody extends ConsumerWidget {
           const _PlayerSearchCard(),
           const SizedBox(height: 14),
           const _ColorFilterBar(),
+          const SizedBox(height: 8),
+          const _SourceFilterBar(),
           const SizedBox(height: 12),
           const _DashboardInlineNotice(),
           const SizedBox(height: 12),
           if (filterOnlyEmpty)
-            _FilterEmptyNotice(filter: activeFilter)
+            _FilterEmptyNotice(filter: activeFilter, source: activeSource)
           else ...[
             _AnalyzedSectionLabel(stats: stats),
             const SizedBox(height: 10),
@@ -257,9 +262,10 @@ class _DashboardBody extends ConsumerWidget {
 }
 
 class _FilterEmptyNotice extends StatelessWidget {
-  const _FilterEmptyNotice({required this.filter});
+  const _FilterEmptyNotice({required this.filter, required this.source});
 
   final ColorPerspective filter;
+  final ArchiveSource? source;
 
   @override
   Widget build(BuildContext context) {
@@ -268,6 +274,11 @@ class _FilterEmptyNotice extends StatelessWidget {
       ColorPerspective.black => 'Black',
       ColorPerspective.all => 'All',
     };
+    final sourceLabel = _dashboardSourceLabel(source);
+    final scope = source == null ? label : '$label · $sourceLabel';
+    final hint = source == null
+        ? 'Switch to All to view your analyzed games.'
+        : 'Switch filters to view your analyzed games.';
     return GlassPanel(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       accentColor: ApexColors.sapphireBright,
@@ -285,7 +296,7 @@ class _FilterEmptyNotice extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'No $label reviews yet.',
+                  'No $scope reviews yet.',
                   style: ApexTypography.bodyMedium.copyWith(
                     color: ApexColors.textPrimary,
                     fontWeight: FontWeight.w700,
@@ -294,7 +305,7 @@ class _FilterEmptyNotice extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Switch to All to view your analyzed games.',
+                  hint,
                   style: ApexTypography.bodyMedium.copyWith(
                     color: ApexColors.textTertiary,
                     fontSize: 11.5,
@@ -360,6 +371,78 @@ class _ColorFilterBar extends ConsumerWidget {
     );
   }
 }
+
+class _SourceFilterBar extends ConsumerWidget {
+  const _SourceFilterBar();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final active = ref.watch(dashboardSourceFilterProvider);
+    return GlassPanel(
+      padding: const EdgeInsets.all(4),
+      accentColor: ApexColors.textSecondary,
+      accentAlpha: 0.18,
+      child: Row(
+        children: [
+          for (final source in const <ArchiveSource?>[
+            null,
+            ArchiveSource.chessCom,
+            ArchiveSource.lichess,
+            ArchiveSource.pgn,
+          ])
+            Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  ref.read(dashboardSourceFilterProvider.notifier).state =
+                      source;
+                },
+                child: Container(
+                  key: ValueKey(
+                    'dashboard_source_${source?.wire ?? 'all'}_${active == source ? 'selected' : 'normal'}',
+                  ),
+                  margin: const EdgeInsets.all(2),
+                  padding: const EdgeInsets.symmetric(vertical: 9),
+                  decoration: BoxDecoration(
+                    color: active == source
+                        ? ApexColors.nebula.withValues(alpha: 0.82)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: active == source
+                          ? ApexColors.sapphireBright.withValues(alpha: 0.42)
+                          : Colors.transparent,
+                      width: 0.6,
+                    ),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    _dashboardSourceLabel(source).toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: ApexTypography.bodyMedium.copyWith(
+                      color: active == source
+                          ? ApexColors.sapphireBright
+                          : ApexColors.textTertiary,
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.6,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+String _dashboardSourceLabel(ArchiveSource? source) => switch (source) {
+  null => 'All sources',
+  ArchiveSource.chessCom => 'Chess.com',
+  ArchiveSource.lichess => 'Lichess',
+  ArchiveSource.pgn => 'PGN',
+};
 
 // ── Profile Stats card ────────────────────────────────────────────────
 
@@ -520,13 +603,13 @@ class _PlayerSearchCardState extends ConsumerState<_PlayerSearchCard> {
           Row(
             children: [
               _SearchSourceChip(
-                label: ApexCopy.importSourceChessCom,
+                platform: PlayerIdentityPlatform.chessCom,
                 selected: state.source == ProfileStatsSource.chessCom,
                 onTap: () => notifier.setSource(ProfileStatsSource.chessCom),
               ),
               const SizedBox(width: 8),
               _SearchSourceChip(
-                label: ApexCopy.importSourceLichess,
+                platform: PlayerIdentityPlatform.lichess,
                 selected: state.source == ProfileStatsSource.lichess,
                 onTap: () => notifier.setSource(ProfileStatsSource.lichess),
               ),
@@ -612,12 +695,12 @@ class _PlayerSearchCardState extends ConsumerState<_PlayerSearchCard> {
 
 class _SearchSourceChip extends StatelessWidget {
   const _SearchSourceChip({
-    required this.label,
+    required this.platform,
     required this.selected,
     required this.onTap,
   });
 
-  final String label;
+  final PlayerIdentityPlatform platform;
   final bool selected;
   final VoidCallback onTap;
 
@@ -642,15 +725,10 @@ class _SearchSourceChip extends StatelessWidget {
               width: 0.7,
             ),
           ),
-          child: Text(
-            label,
-            style: ApexTypography.bodyMedium.copyWith(
-              color: selected
-                  ? ApexColors.sapphireBright
-                  : ApexColors.textTertiary,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-            ),
+          child: ApexPlatformBadge(
+            platform: platform,
+            compact: true,
+            selected: selected,
           ),
         ),
       ),
@@ -673,6 +751,7 @@ class _SearchedPlayerDashboard extends ConsumerWidget {
       username: stats.displayName,
       platform: stats.source.identityPlatform,
       rating: _firstRating(stats),
+      avatarUrl: stats.avatarUrl,
       isConnectedUser: isConnectedAccount,
       status: PlayerIdentitySourceStatus.publicProfile,
     );
@@ -810,18 +889,28 @@ class _SearchedPlayerIdentity extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  [
-                    identity.platformLabel,
-                    ApexCopy.publicAccount,
-                    if (identity.hasKnownRating) identity.rating!,
-                  ].join(' · '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: ApexTypography.bodyMedium.copyWith(
-                    color: ApexColors.textTertiary,
-                    fontSize: 11,
-                  ),
+                Row(
+                  children: [
+                    ApexPlatformBadge(
+                      platform: identity.platform,
+                      compact: true,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        [
+                          ApexCopy.publicAccount,
+                          if (identity.hasKnownRating) identity.rating!,
+                        ].join(' · '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: ApexTypography.bodyMedium.copyWith(
+                          color: ApexColors.textTertiary,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -895,14 +984,18 @@ void _openStatsArchiveIntent(
   }
   final perspective = ref.read(dashboardStatsProvider).perspective;
   final scope = ref.read(dashboardColorFilterProvider);
+  final source = ref.read(dashboardSourceFilterProvider);
   ref.read(dashboardInlineNoticeProvider.notifier).state = null;
+  final filters = intent.toArchiveFilters(
+    perspective: perspective,
+    scope: scope,
+  );
   Navigator.of(context).push(
     MaterialPageRoute<void>(
       builder: (_) => ArchiveScreen(
-        initialFilters: intent.toArchiveFilters(
-          perspective: perspective,
-          scope: scope,
-        ),
+        initialFilters: source == null
+            ? filters
+            : filters.copyWith(source: source),
       ),
     ),
   );

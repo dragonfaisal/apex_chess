@@ -4,7 +4,9 @@ import 'package:apex_chess/features/archives/presentation/models/archived_game_c
 import 'package:apex_chess/features/import_match/domain/imported_game.dart';
 import 'package:apex_chess/features/import_match/presentation/models/imported_game_card_display.dart';
 import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
+import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_game_card.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -92,6 +94,37 @@ void main() {
       expect(model.primaryMeta, contains('Extremely Long Opening Name'));
       expect(model.white.identity.displayUsername, contains('VeryVeryLong'));
     });
+
+    testWidgets('card surfaces use correct marker and single source label', (
+      tester,
+    ) async {
+      final model = _imported(
+        result: GameResult.whiteWon,
+        userColor: PlayerColor.white,
+      ).toApexGameCardDisplay();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ApexTheme.dark,
+          home: Scaffold(body: ApexGameCard(model: model)),
+        ),
+      );
+
+      expect(
+        find.byKey(const ValueKey('apex-white-side-marker')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('apex-black-side-marker')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('apex-platform-chessCom-badge')),
+        findsNothing,
+      );
+      expect(find.textContaining('Chess.com'), findsOneWidget);
+      expect(find.text('YOU'), findsOneWidget);
+    });
   });
 
   group('ApexGameCardDisplayModel archive mapping', () {
@@ -105,7 +138,30 @@ void main() {
       expect(model.black.isUser, isFalse);
       expect(model.white.identity.platform, PlayerIdentityPlatform.chessCom);
       expect(model.white.identity.rating, '1500');
+      expect(model.secondaryMeta, contains('Chess.com'));
       expect(model.badges, contains('Blunder 3'));
+    });
+
+    testWidgets('archive card does not repeat platform per player row', (
+      tester,
+    ) async {
+      final model = _archived(
+        result: '1-0',
+      ).toApexGameCardDisplay(userHandle: 'apexuser');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ApexTheme.dark,
+          home: Scaffold(body: ApexGameCard(model: model)),
+        ),
+      );
+
+      expect(
+        find.byKey(const ValueKey('apex-platform-chessCom-badge')),
+        findsNothing,
+      );
+      expect(find.textContaining('Chess.com'), findsOneWidget);
+      expect(find.text('YOU'), findsOneWidget);
     });
   });
 }

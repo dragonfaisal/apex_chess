@@ -20,14 +20,20 @@ final logoutServiceProvider = Provider<LogoutService>((ref) {
 /// whether to show the Connect Account onboarding screen.
 final accountControllerProvider =
     AsyncNotifierProvider<AccountController, ApexAccount?>(
-  AccountController.new,
-);
+      AccountController.new,
+    );
 
 /// Tracks whether the first-launch onboarding screen has already been
 /// presented. Set whenever the user connects or explicitly taps Skip;
 /// never reset — the Switch Account flow navigates manually.
 final onboardingSeenProvider = FutureProvider<bool>((ref) async {
   return ref.read(accountRepositoryProvider).hasSeenOnboarding();
+});
+
+final accountAvatarUrlProvider = FutureProvider<String?>((ref) async {
+  final account = ref.watch(accountControllerProvider).valueOrNull;
+  if (account == null) return null;
+  return ref.read(accountRepositoryProvider).readAvatarUrl(account);
 });
 
 class AccountController extends AsyncNotifier<ApexAccount?> {
