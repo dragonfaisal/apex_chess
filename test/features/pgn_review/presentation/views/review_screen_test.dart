@@ -468,9 +468,9 @@ void main() {
       find.byKey(const ValueKey('review-bottom-player-header')),
     );
 
-    expect(boardFrameSize.width, greaterThan(300));
-    expect(boardFrameSize.height, greaterThan(300));
-    expect(evalBarSize.width, lessThanOrEqualTo(22));
+    expect(boardFrameSize.width, greaterThan(318));
+    expect(boardFrameSize.height, greaterThan(318));
+    expect(evalBarSize.width, lessThanOrEqualTo(18));
     expect(evalLabelSize.width, greaterThan(0));
     expect(evalLabelSize.height, greaterThan(0));
     expect(topHeaderSize.height, lessThanOrEqualTo(42));
@@ -483,6 +483,7 @@ void main() {
       ),
     );
     expect(evalLabel.data, isNotEmpty);
+    expect(evalLabel.data, contains('%'));
     expect(find.text('This move keeps the advantage.'), findsOneWidget);
 
     container.read(reviewControllerProvider.notifier).jumpTo(1);
@@ -496,5 +497,41 @@ void main() {
     await _pumpReview(tester);
     expect(find.byKey(const ValueKey('review-board-section')), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('very small Android layout keeps board readable', (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    container
+        .read(reviewControllerProvider.notifier)
+        .loadTimeline(
+          _timeline(thirdSan: 'Qxd8+VeryLongSANThatShouldTruncate??'),
+          userIsWhite: true,
+        );
+
+    await tester.pumpWidget(_host(container));
+    await _pumpReview(tester);
+
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const ValueKey('review-board-section')), findsOneWidget);
+    expect(find.byKey(const ValueKey('review-coach-insight')), findsOneWidget);
+
+    final boardFrameSize = tester.getSize(
+      find.byKey(const ValueKey('review-board-frame')),
+    );
+    final evalBarSize = tester.getSize(
+      find.byKey(const ValueKey('review-eval-bar')),
+    );
+
+    expect(boardFrameSize.width, greaterThanOrEqualTo(276));
+    expect(boardFrameSize.height, greaterThanOrEqualTo(276));
+    expect(evalBarSize.width, lessThanOrEqualTo(18));
   });
 }

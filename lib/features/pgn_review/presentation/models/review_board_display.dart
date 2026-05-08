@@ -138,6 +138,7 @@ class ReviewEvalDisplay {
   const ReviewEvalDisplay({
     required this.whiteShare,
     required this.label,
+    required this.percentageLabel,
     required this.advantageLabel,
     required this.isKnown,
   });
@@ -145,6 +146,7 @@ class ReviewEvalDisplay {
   /// White share of the vertical bar, 0..1.
   final double whiteShare;
   final String label;
+  final String percentageLabel;
   final String advantageLabel;
   final bool isKnown;
 
@@ -157,6 +159,7 @@ class ReviewEvalDisplay {
       return const ReviewEvalDisplay(
         whiteShare: 0.5,
         label: '-',
+        percentageLabel: '50%',
         advantageLabel: 'Equal',
         isKnown: false,
       );
@@ -168,6 +171,7 @@ class ReviewEvalDisplay {
       return ReviewEvalDisplay(
         whiteShare: whiteShare,
         label: 'M${mate.abs()}',
+        percentageLabel: whiteShare == 1.0 ? '100%' : '0%',
         advantageLabel: mate > 0 ? 'White' : 'Black',
         isKnown: true,
       );
@@ -182,6 +186,7 @@ class ReviewEvalDisplay {
     return ReviewEvalDisplay(
       whiteShare: share,
       label: label,
+      percentageLabel: '${(share * 100).round()}%',
       advantageLabel: share > 0.54
           ? 'White'
           : share < 0.46

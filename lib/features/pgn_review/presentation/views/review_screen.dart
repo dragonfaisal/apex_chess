@@ -25,9 +25,9 @@ bool shouldShowBetterMoveArrowForTesting(MoveAnalysis? move) =>
     ReviewBoardDisplayModel.shouldShowBetterMoveArrow(move);
 
 const double _reviewHorizontalPadding = 8;
-const double _evalBarWidth = 20;
-const double _evalBarGap = 5;
-const double _boardFramePadding = 5;
+const double _evalBarWidth = 16;
+const double _evalBarGap = 4;
+const double _boardFramePadding = 4;
 
 class ReviewScreen extends ConsumerWidget {
   const ReviewScreen({super.key});
@@ -87,10 +87,15 @@ class ReviewScreen extends ConsumerWidget {
                   _evalBarWidth -
                   _evalBarGap -
                   (_boardFramePadding * 2);
-              final boardMaxFromHeight = constraints.maxHeight * 0.56;
+              final heightShare = constraints.maxHeight < 620 ? 0.58 : 0.62;
+              final boardMaxFromHeight = constraints.maxHeight * heightShare;
+              final boardFloor = math.min(
+                190.0,
+                math.max(120.0, boardMaxFromWidth),
+              );
               final boardSize = math
                   .min(boardMaxFromWidth, boardMaxFromHeight)
-                  .clamp(180.0, 560.0)
+                  .clamp(boardFloor, 590.0)
                   .toDouble();
               final boardSectionWidth =
                   boardSize +
@@ -109,12 +114,17 @@ class ReviewScreen extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _PlayerHeader(
-                      key: const ValueKey('review-top-player-header'),
-                      player: display.topPlayer,
-                      compact: true,
+                    Center(
+                      child: SizedBox(
+                        width: boardSectionWidth,
+                        child: _PlayerHeader(
+                          key: const ValueKey('review-top-player-header'),
+                          player: display.topPlayer,
+                          compact: true,
+                        ),
+                      ),
                     ),
-                    const SizedBox(height: 5),
+                    const SizedBox(height: 4),
                     Center(
                       child: SizedBox(
                         width: boardSectionWidth,
@@ -124,12 +134,18 @@ class ReviewScreen extends ConsumerWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 5),
-                    _PlayerHeader(
-                      key: const ValueKey('review-bottom-player-header'),
-                      player: display.bottomPlayer,
+                    const SizedBox(height: 4),
+                    Center(
+                      child: SizedBox(
+                        width: boardSectionWidth,
+                        child: _PlayerHeader(
+                          key: const ValueKey('review-bottom-player-header'),
+                          player: display.bottomPlayer,
+                          compact: true,
+                        ),
+                      ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 7),
                     _CoachInsightPanel(display: display),
                   ],
                 ),
@@ -192,19 +208,19 @@ class _PlayerHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(10),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: Container(
           padding: EdgeInsets.symmetric(
-            horizontal: 8,
-            vertical: compact ? 5 : 6,
+            horizontal: 7,
+            vertical: compact ? 4 : 5,
           ),
           decoration: BoxDecoration(
-            color: ApexColors.cardSurface.withValues(alpha: 0.68),
-            borderRadius: BorderRadius.circular(12),
+            color: ApexColors.cardSurface.withValues(alpha: 0.58),
+            borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: ApexColors.stardustLine.withValues(alpha: 0.62),
+              color: ApexColors.stardustLine.withValues(alpha: 0.50),
               width: 0.6,
             ),
           ),
@@ -215,14 +231,14 @@ class _PlayerHeader extends StatelessWidget {
                 size: ApexPlayerAvatarSize.small,
                 showConnectedBadge: player.isUser,
               ),
-              const SizedBox(width: 7),
+              const SizedBox(width: 6),
               ApexSideMarker(
                 side: player.side == ReviewBoardSide.white
                     ? ApexSideMarkerSide.white
                     : ApexSideMarkerSide.black,
-                size: 10,
+                size: 9,
               ),
-              const SizedBox(width: 5),
+              const SizedBox(width: 4),
               Expanded(
                 child: Text(
                   [
@@ -234,7 +250,7 @@ class _PlayerHeader extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: ApexTypography.titleMedium.copyWith(
                     color: ApexColors.textPrimary,
-                    fontSize: 12,
+                    fontSize: 11.5,
                     height: 1.1,
                   ),
                 ),
@@ -260,10 +276,10 @@ class _MiniChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
       decoration: BoxDecoration(
         color: ApexColors.sapphire.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: BorderRadius.circular(6),
         border: Border.all(
           color: ApexColors.sapphireBright.withValues(alpha: 0.42),
           width: 0.5,
@@ -273,7 +289,7 @@ class _MiniChip extends StatelessWidget {
         label,
         style: ApexTypography.labelLarge.copyWith(
           color: ApexColors.sapphireBright,
-          fontSize: 9,
+          fontSize: 8.5,
         ),
       ),
     );
@@ -363,128 +379,164 @@ class _VerticalEvalBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      key: const ValueKey('review-eval-bar'),
-      width: _evalBarWidth,
-      height: height,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(9),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                ApexColors.spaceVoid.withValues(alpha: 0.95),
-                ApexColors.deepCyan.withValues(alpha: 0.74),
-                ApexColors.trueBlack.withValues(alpha: 0.92),
-              ],
-            ),
-            border: Border.all(
-              color: ApexColors.sapphireBright.withValues(alpha: 0.34),
-              width: 0.6,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: ApexColors.sapphireBright.withValues(alpha: 0.12),
-                blurRadius: 14,
-                spreadRadius: -5,
-              ),
-            ],
-          ),
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: TweenAnimationBuilder<double>(
-                  tween: Tween<double>(end: display.whiteShare),
-                  duration: ApexMotion.normal,
-                  curve: ApexMotion.standard,
-                  builder: (context, share, _) {
-                    return LayoutBuilder(
-                      builder: (context, constraints) {
-                        final height = constraints.maxHeight * share;
-                        return Align(
-                          alignment: flipped
-                              ? Alignment.topCenter
-                              : Alignment.bottomCenter,
-                          child: SizedBox(
-                            height: height,
-                            width: constraints.maxWidth,
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: flipped
-                                      ? Alignment.bottomCenter
-                                      : Alignment.topCenter,
-                                  end: flipped
+    return Semantics(
+      label:
+          '${display.advantageLabel} advantage, ${display.percentageLabel} white win chance',
+      child: SizedBox(
+        key: const ValueKey('review-eval-bar'),
+        width: _evalBarWidth,
+        height: height,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned.fill(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        ApexColors.spaceVoid.withValues(alpha: 0.98),
+                        ApexColors.nebula.withValues(alpha: 0.88),
+                        ApexColors.trueBlack.withValues(alpha: 0.96),
+                      ],
+                    ),
+                    border: Border.all(
+                      color: ApexColors.sapphireBright.withValues(alpha: 0.32),
+                      width: 0.55,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: ApexColors.sapphireBright.withValues(
+                          alpha: 0.10,
+                        ),
+                        blurRadius: 12,
+                        spreadRadius: -5,
+                      ),
+                    ],
+                  ),
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: TweenAnimationBuilder<double>(
+                          tween: Tween<double>(end: display.whiteShare),
+                          duration: ApexMotion.normal,
+                          curve: ApexMotion.standard,
+                          builder: (context, share, _) {
+                            return LayoutBuilder(
+                              builder: (context, constraints) {
+                                final fillHeight =
+                                    constraints.maxHeight * share;
+                                return Align(
+                                  alignment: flipped
                                       ? Alignment.topCenter
                                       : Alignment.bottomCenter,
-                                  colors: [
-                                    ApexColors.auroraSoft.withValues(
-                                      alpha: 0.95,
+                                  child: SizedBox(
+                                    height: fillHeight,
+                                    width: constraints.maxWidth,
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          begin: flipped
+                                              ? Alignment.bottomCenter
+                                              : Alignment.topCenter,
+                                          end: flipped
+                                              ? Alignment.topCenter
+                                              : Alignment.bottomCenter,
+                                          colors: [
+                                            ApexColors.textPrimary.withValues(
+                                              alpha: 0.96,
+                                            ),
+                                            ApexColors.sapphireGlow.withValues(
+                                              alpha: 0.88,
+                                            ),
+                                            ApexColors.sapphireBright
+                                                .withValues(alpha: 0.68),
+                                          ],
+                                        ),
+                                      ),
                                     ),
-                                    ApexColors.sapphireBright.withValues(
-                                      alpha: 0.92,
-                                    ),
-                                    ApexColors.sapphire.withValues(alpha: 0.78),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-              Positioned(
-                left: 0,
-                right: 0,
-                top: (height / 2) - 0.5,
-                child: Divider(
-                  height: 1,
-                  color: ApexColors.sapphireBright.withValues(alpha: 0.34),
-                ),
-              ),
-              Align(
-                alignment: Alignment.center,
-                child: RotatedBox(
-                  quarterTurns: 3,
-                  child: Container(
-                    key: const ValueKey('review-eval-label'),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 5,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: ApexColors.nebula.withValues(alpha: 0.88),
-                      borderRadius: BorderRadius.circular(7),
-                      border: Border.all(
-                        color: ApexColors.sapphireBright.withValues(
-                          alpha: 0.26,
+                                  ),
+                                );
+                              },
+                            );
+                          },
                         ),
-                        width: 0.5,
                       ),
-                    ),
-                    child: Text(
-                      display.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: ApexTypography.monoEval.copyWith(
-                        color: display.isEqual
-                            ? ApexColors.textSecondary
-                            : display.whiteBetter
-                            ? ApexColors.textPrimary
-                            : ApexColors.textPrimary,
-                        fontSize: 10,
-                        height: 1.1,
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        top: (height / 2) - 0.5,
+                        child: Divider(
+                          height: 1,
+                          color: ApexColors.sapphireBright.withValues(
+                            alpha: 0.34,
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
               ),
-            ],
+            ),
+            Align(
+              alignment: Alignment.center,
+              child: _EvalPercentPill(display: display),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EvalPercentPill extends StatelessWidget {
+  const _EvalPercentPill({required this.display});
+
+  final ReviewEvalDisplay display;
+
+  @override
+  Widget build(BuildContext context) {
+    final background = display.whiteBetter
+        ? ApexColors.textPrimary
+        : display.blackBetter
+        ? ApexColors.trueBlack
+        : ApexColors.nebula;
+    final foreground = display.whiteBetter
+        ? ApexColors.trueBlack
+        : ApexColors.textPrimary;
+    return RotatedBox(
+      quarterTurns: 3,
+      child: Container(
+        key: const ValueKey('review-eval-label'),
+        constraints: const BoxConstraints(minWidth: 34),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: background.withValues(alpha: display.isEqual ? 0.90 : 0.96),
+          borderRadius: BorderRadius.circular(7),
+          border: Border.all(
+            color: ApexColors.sapphireBright.withValues(alpha: 0.38),
+            width: 0.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: ApexColors.trueBlack.withValues(alpha: 0.22),
+              blurRadius: 8,
+              spreadRadius: -4,
+            ),
+          ],
+        ),
+        child: Text(
+          display.percentageLabel,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: ApexTypography.monoEval.copyWith(
+            color: foreground,
+            fontSize: 10,
+            height: 1.1,
           ),
         ),
       ),
@@ -502,19 +554,19 @@ class _CoachInsightPanel extends StatelessWidget {
     final insight = display.insight;
     return ClipRRect(
       key: const ValueKey('review-coach-insight'),
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(14),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
         child: AnimatedContainer(
           duration: ApexMotion.normal,
           curve: ApexMotion.standard,
-          padding: const EdgeInsets.fromLTRB(11, 10, 11, 11),
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 9),
           decoration: BoxDecoration(
-            color: ApexColors.cardSurface.withValues(alpha: 0.76),
-            borderRadius: BorderRadius.circular(16),
+            color: ApexColors.cardSurface.withValues(alpha: 0.62),
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: insight.quality.color.withValues(alpha: 0.42),
-              width: 0.7,
+              color: insight.quality.color.withValues(alpha: 0.34),
+              width: 0.6,
             ),
           ),
           child: AnimatedSwitcher(
@@ -527,7 +579,7 @@ class _CoachInsightPanel extends StatelessWidget {
                 Row(
                   children: [
                     _QualityChip(display: insight.quality),
-                    const SizedBox(width: 7),
+                    const SizedBox(width: 6),
                     Expanded(
                       child: Text(
                         '${insight.moveLabel} ${insight.san}',
@@ -535,24 +587,24 @@ class _CoachInsightPanel extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: ApexTypography.titleMedium.copyWith(
                           color: ApexColors.textPrimary,
-                          fontSize: 14,
+                          fontSize: 13,
                         ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 5),
                 Text(
                   insight.explanation,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: ApexTypography.bodyMedium.copyWith(
                     color: ApexColors.textSecondary,
-                    fontSize: 11.5,
+                    fontSize: 11,
                   ),
                 ),
                 if (insight.betterMove != null) ...[
-                  const SizedBox(height: 7),
+                  const SizedBox(height: 6),
                   _BetterMoveHint(
                     key: const ValueKey('review-coach-better-move'),
                     move: insight.betterMove!,
@@ -560,7 +612,7 @@ class _CoachInsightPanel extends StatelessWidget {
                   ),
                 ],
                 if (insight.engineLinePreview != null) ...[
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 5),
                   _InlineHint(
                     key: const ValueKey('review-coach-line-detail'),
                     icon: Icons.timeline_rounded,
@@ -570,7 +622,7 @@ class _CoachInsightPanel extends StatelessWidget {
                   ),
                 ],
                 if (insight.needsDeepScan) ...[
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 5),
                   _InlineHint(
                     icon: Icons.radar_rounded,
                     label: 'Deep',
@@ -595,11 +647,11 @@ class _QualityChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
       decoration: BoxDecoration(
-        color: display.color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(9),
-        border: Border.all(color: display.color.withValues(alpha: 0.5)),
+        color: display.color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: display.color.withValues(alpha: 0.42)),
       ),
       child: Text(
         display.marker.isEmpty
@@ -607,7 +659,7 @@ class _QualityChip extends StatelessWidget {
             : '${display.label} ${display.marker}',
         style: ApexTypography.labelLarge.copyWith(
           color: display.color,
-          fontSize: 10.5,
+          fontSize: 10,
         ),
       ),
     );
@@ -632,11 +684,14 @@ class _InlineHint extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, color: color, size: 14),
+        Icon(icon, color: color, size: 13),
         const SizedBox(width: 5),
         Text(
           label,
-          style: ApexTypography.labelLarge.copyWith(color: color, fontSize: 11),
+          style: ApexTypography.labelLarge.copyWith(
+            color: color,
+            fontSize: 10.5,
+          ),
         ),
         const SizedBox(width: 6),
         Expanded(
@@ -646,7 +701,7 @@ class _InlineHint extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: ApexTypography.bodyMedium.copyWith(
               color: ApexColors.textSecondary,
-              fontSize: 12,
+              fontSize: 11,
             ),
           ),
         ),
@@ -665,10 +720,10 @@ class _BetterMoveHint extends StatelessWidget {
   Widget build(BuildContext context) {
     final cleanReason = reason?.trim();
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
         color: ApexColors.sapphireBright.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: ApexColors.sapphireBright.withValues(alpha: 0.28),
           width: 0.6,
@@ -680,7 +735,7 @@ class _BetterMoveHint extends StatelessWidget {
           const Icon(
             Icons.north_east_rounded,
             color: ApexColors.sapphireBright,
-            size: 14,
+            size: 13,
           ),
           const SizedBox(width: 6),
           Expanded(
@@ -697,7 +752,7 @@ class _BetterMoveHint extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: ApexTypography.labelLarge.copyWith(
                           color: ApexColors.textPrimary,
-                          fontSize: 11.5,
+                          fontSize: 11,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -712,7 +767,7 @@ class _BetterMoveHint extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: ApexTypography.bodyMedium.copyWith(
                       color: ApexColors.textSecondary,
-                      fontSize: 10.5,
+                      fontSize: 10,
                     ),
                   ),
                 ],

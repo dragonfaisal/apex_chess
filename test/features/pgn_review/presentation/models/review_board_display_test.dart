@@ -148,24 +148,17 @@ void main() {
   });
 
   test('eval display maps positive negative equal mate and missing values', () {
-    expect(
-      ReviewEvalDisplay.fromMove(
-        _move(ply: 0, isWhite: true, san: 'e4', uci: 'e2e4', scoreCpAfter: 120),
-      ).advantageLabel,
-      'White',
+    final whiteEval = ReviewEvalDisplay.fromMove(
+      _move(ply: 0, isWhite: true, san: 'e4', uci: 'e2e4', scoreCpAfter: 120),
     );
-    expect(
-      ReviewEvalDisplay.fromMove(
-        _move(
-          ply: 1,
-          isWhite: false,
-          san: 'e5',
-          uci: 'e7e5',
-          scoreCpAfter: -120,
-        ),
-      ).advantageLabel,
-      'Black',
+    final blackEval = ReviewEvalDisplay.fromMove(
+      _move(ply: 1, isWhite: false, san: 'e5', uci: 'e7e5', scoreCpAfter: -120),
     );
+
+    expect(whiteEval.advantageLabel, 'White');
+    expect(whiteEval.percentageLabel, endsWith('%'));
+    expect(blackEval.advantageLabel, 'Black');
+    expect(blackEval.percentageLabel, endsWith('%'));
     expect(
       ReviewEvalDisplay.fromMove(
         _move(ply: 0, isWhite: true, san: 'Nf3', uci: 'g1f3', scoreCpAfter: 0),
@@ -179,6 +172,7 @@ void main() {
       1.0,
     );
     expect(ReviewEvalDisplay.fromMove(null).isKnown, isFalse);
+    expect(ReviewEvalDisplay.fromMove(null).percentageLabel, '50%');
   });
 
   test('each public move quality maps to chip label and marker', () {
