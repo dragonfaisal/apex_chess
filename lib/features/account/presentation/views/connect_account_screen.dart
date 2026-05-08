@@ -59,6 +59,7 @@ class _ConnectAccountScreenState extends ConsumerState<ConnectAccountScreen> {
   AccountSource _source = AccountSource.chessCom;
   UsernameValidationController? _validation;
   bool _busy = false;
+  String? _justConnectedKey;
 
   @override
   void initState() {
@@ -124,17 +125,19 @@ class _ConnectAccountScreenState extends ConsumerState<ConnectAccountScreen> {
     unawaited(ref.read(connectionPresenceProvider.notifier).checkNow());
     setState(() => _busy = true);
     try {
+      final connectedKey = _accountKey(_source, name);
       await ref
           .read(accountControllerProvider.notifier)
           .connect(ApexAccount(source: _source, username: name));
       if (!mounted) return;
+      setState(() => _justConnectedKey = connectedKey);
       // Phase A audit § 7: connect used to silently leave the user on
       // this screen when the backend failed. Surface success briefly
       // (so the user knows the connect worked) and call onComplete to
       // pop back automatically.
       showApexGlassToast(
         context,
-        message: ApexCopy.synced,
+        message: ApexCopy.connected,
         detail: name,
         type: ApexGlassToastType.success,
       );
@@ -161,11 +164,13 @@ class _ConnectAccountScreenState extends ConsumerState<ConnectAccountScreen> {
   Widget build(BuildContext context) {
     final state = _ensureValidation().value;
     final existingAccount = ref.watch(accountControllerProvider).valueOrNull;
+    final inputKey = _accountKey(_source, _textController.text);
     final isExactConnectedAccount =
         existingAccount != null &&
-        existingAccount.source == _source &&
-        PlayerIdentityDisplay.normalizeUsername(existingAccount.username) ==
-            PlayerIdentityDisplay.normalizeUsername(_textController.text);
+        _accountKey(existingAccount.source, existingAccount.username) ==
+            inputKey;
+    final isJustConnectedAccount =
+        isExactConnectedAccount && _justConnectedKey == inputKey;
     final isPublicProfileFound =
         !isExactConnectedAccount &&
         state.existence == UsernameExistence.exists &&
@@ -284,7 +289,10 @@ class _ConnectAccountScreenState extends ConsumerState<ConnectAccountScreen> {
                           ),
                         ),
                       ),
-                      if (isExactConnectedAccount) ...[
+                      if (isJustConnectedAccount) ...[
+                        const SizedBox(height: 8),
+                        const _ConnectedNotice(),
+                      ] else if (isExactConnectedAccount) ...[
                         const SizedBox(height: 8),
                         const _ConnectedAccountNotice(),
                       ] else if (isPublicProfileFound) ...[
@@ -326,6 +334,10 @@ class _ConnectAccountScreenState extends ConsumerState<ConnectAccountScreen> {
         ),
       ),
     );
+  }
+
+  String _accountKey(AccountSource source, String username) {
+    return '${source.wire}:${PlayerIdentityDisplay.normalizeUsername(username)}';
   }
 }
 
@@ -540,37 +552,66 @@ class _ConnectedAccountNotice extends StatelessWidget {
   }
 }
 
+class _ConnectedNotice extends StatelessWidget {
+  const _ConnectedNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return const _AccountStateNotice(
+      key: ValueKey('connect-connected-notice'),
+      icon: Icons.verified_user_outlined,
+      label: ApexCopy.connected,
+      color: ApexColors.sapphireBright,
+    );
+  }
+}
+
 class _PublicProfileFoundNotice extends StatelessWidget {
   const _PublicProfileFoundNotice();
 
   @override
   Widget build(BuildContext context) {
+    return const _AccountStateNotice(
+      key: ValueKey('connect-public-profile-found'),
+      icon: Icons.check_circle_outline_rounded,
+      label: ApexCopy.verified,
+      color: ApexColors.best,
+    );
+  }
+}
+
+class _AccountStateNotice extends StatelessWidget {
+  const _AccountStateNotice({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      key: const ValueKey('connect-public-profile-found'),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: ApexColors.best.withValues(alpha: 0.10),
+        color: color.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: ApexColors.best.withValues(alpha: 0.28),
-          width: 0.7,
-        ),
+        border: Border.all(color: color.withValues(alpha: 0.28), width: 0.7),
       ),
       child: Row(
         children: [
-          const Icon(
-            Icons.check_circle_outline_rounded,
-            color: ApexColors.best,
-            size: 16,
-          ),
+          Icon(icon, color: color, size: 16),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              ApexCopy.profileFound,
+              label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: ApexTypography.bodyMedium.copyWith(
-                color: ApexColors.best,
+                color: color,
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
               ),

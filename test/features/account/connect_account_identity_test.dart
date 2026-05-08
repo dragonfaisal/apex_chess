@@ -27,17 +27,31 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.text(ApexCopy.connectedAccountNotice), findsOneWidget);
-    expect(find.text(ApexCopy.profileFound), findsNothing);
+    expect(
+      find.byKey(const ValueKey('connect-public-profile-found')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('connect-connected-notice')),
+      findsNothing,
+    );
 
     await tester.enterText(find.byType(TextField), 'Apex');
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.text(ApexCopy.connectedAccountNotice), findsNothing);
-    expect(find.text(ApexCopy.profileFound), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('connect-connected-notice')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('connect-public-profile-found')),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('no connected account valid lookup shows public profile found', (
+  testWidgets('no connected account valid lookup shows verified', (
     tester,
   ) async {
     final container = await _containerWithoutAccount();
@@ -50,7 +64,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.text(ApexCopy.connectedAccountNotice), findsNothing);
-    expect(find.text(ApexCopy.profileFound), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('connect-connected-notice')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('connect-public-profile-found')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('selected Chess.com tab is visibly active', (tester) async {
@@ -104,12 +125,23 @@ void main() {
     await tester.enterText(find.byType(TextField), 'ApexUser');
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
-    expect(find.text(ApexCopy.profileFound), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('connect-public-profile-found')),
+      findsOneWidget,
+    );
     expect(find.text(ApexCopy.connectedAccountNotice), findsNothing);
+    expect(
+      find.byKey(const ValueKey('connect-connected-notice')),
+      findsNothing,
+    );
 
     await tester.tap(find.byKey(const ValueKey('connect-account-cta')));
     await tester.pump();
     expect(find.text(ApexCopy.connectedAccountNotice), findsNothing);
+    expect(
+      find.byKey(const ValueKey('connect-connected-notice')),
+      findsNothing,
+    );
 
     final loader = tester.widget<ApexPulseLoader>(
       find.descendant(
@@ -122,8 +154,15 @@ void main() {
     repo.complete();
     await tester.pump();
     await tester.pump();
-    expect(find.text(ApexCopy.profileFound), findsNothing);
-    expect(find.text(ApexCopy.connectedAccountNotice), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('connect-public-profile-found')),
+      findsNothing,
+    );
+    expect(find.text(ApexCopy.connectedAccountNotice), findsNothing);
+    expect(
+      find.byKey(const ValueKey('connect-connected-notice')),
+      findsOneWidget,
+    );
   });
 }
 

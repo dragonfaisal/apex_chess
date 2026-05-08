@@ -1158,23 +1158,50 @@ class _GameCard extends ConsumerWidget {
       filterQuery,
       connectedHandle: connectedHandle,
     );
+    final plan = _modePlan(ref);
+    final primaryActions =
+        plan.canAnalyzeOnlineFast || plan.canAnalyzeOnlineDeep
+        ? [
+            if (plan.canAnalyzeOnlineFast)
+              _ReviewModeAction(
+                label: 'Online Fast',
+                icon: Icons.flash_on_rounded,
+                onTap: () =>
+                    _startAnalysis(context, ref, AnalysisProfile.fastReview),
+              ),
+            if (plan.canAnalyzeOnlineDeep)
+              _ReviewModeAction(
+                label: 'Online Deep',
+                icon: Icons.auto_awesome_rounded,
+                onTap: () =>
+                    _startAnalysis(context, ref, AnalysisProfile.deepReview),
+              ),
+          ]
+        : [
+            _ReviewModeAction(
+              label: 'Offline',
+              icon: Icons.offline_bolt_rounded,
+              onTap: () =>
+                  _startAnalysis(context, ref, AnalysisProfile.offlineReview),
+            ),
+          ];
     return ApexGameCard(
       model: game.toApexGameCardDisplay(),
       onTap: () => _openDepthPicker(context, ref),
       trailing: matchLabel == null ? null : _SearchMatchPill(label: matchLabel),
-      actions: [
-        _ReviewModeAction(
-          label: 'Fast',
-          icon: Icons.flash_on_rounded,
-          onTap: () => _startAnalysis(context, ref, AnalysisProfile.fastReview),
-        ),
-        _ReviewModeAction(
-          label: 'Deep',
-          icon: Icons.auto_awesome_rounded,
-          onTap: () => _startAnalysis(context, ref, AnalysisProfile.deepReview),
-        ),
-      ],
+      actions: primaryActions,
     );
+  }
+
+  ReviewModeRoutingPlan _modePlan(WidgetRef ref) {
+    final pipeline = ref.watch(reviewAnalysisPipelineProvider).valueOrNull;
+    final isOnline = !ref.watch(connectionPresenceProvider).isOffline;
+    return pipeline?.modePlan(isOnline: isOnline) ??
+        ReviewModeRoutingPlan.build(
+          isOnline: isOnline,
+          onlineFastConfigured: false,
+          onlineDeepConfigured: false,
+        );
   }
 
   Future<void> _openDepthPicker(BuildContext context, WidgetRef ref) async {
@@ -1214,6 +1241,7 @@ class _GameCard extends ConsumerWidget {
         return;
       }
     }
+    if (!_canAnalyzeProfile(context, ref, profile)) return;
     if (!context.mounted) return;
     showDialog(
       context: context,
@@ -1232,6 +1260,34 @@ class _GameCard extends ConsumerWidget {
             : game.userColor == PlayerColor.white,
       ),
     );
+  }
+
+  bool _canAnalyzeProfile(
+    BuildContext context,
+    WidgetRef ref,
+    AnalysisProfile profile,
+  ) {
+    final pipeline = ref.read(reviewAnalysisPipelineProvider).valueOrNull;
+    final plan =
+        pipeline?.modePlan(
+          isOnline: !ref.read(connectionPresenceProvider).isOffline,
+        ) ??
+        ReviewModeRoutingPlan.build(
+          isOnline: !ref.read(connectionPresenceProvider).isOffline,
+          onlineFastConfigured: false,
+          onlineDeepConfigured: false,
+        );
+    final option = plan.optionFor(profile);
+    if (option.available) return true;
+    showApexGlassToast(
+      context,
+      message: option.unavailableMessage ?? ApexCopy.serviceUnavailable,
+      detail: profile.id == AnalysisProfileId.offlineReview
+          ? null
+          : ApexCopy.useOfflineReview,
+      type: ApexGlassToastType.warning,
+    );
+    return false;
   }
 
   ArchivedGame? _openableSavedReview(WidgetRef ref) {
@@ -1402,11 +1458,15 @@ class _EmptyState extends StatelessWidget {
 // Review profile picker.
 // ─────────────────────────────────────────────────────────────────────────────
 
-class DepthPickerDialog extends StatelessWidget {
-  const DepthPickerDialog({super.key});
+class DepthPickerDialog extends ConsumerWidget {
+  const DepthPickerDialog({super.key, this.planOverride});
+
+  final ReviewModeRoutingPlan? planOverride;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final plan = planOverride ?? _buildPlan(ref);
+    final options = plan.pickerOptions;
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
       child: GlassPanel.dialog(
@@ -1430,49 +1490,84 @@ class DepthPickerDialog extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 18),
-            _DepthOption(
-              label: ApexCopy.depthFastLabel,
-              tag: ApexCopy.depthFastTag,
-              blurb: ApexCopy.depthFastBlurb,
-              icon: Icons.flash_on_rounded,
-              accent: ApexColors.electricBlue,
-              onTap: () =>
-                  Navigator.of(context).pop(AnalysisProfile.fastReview),
-            ),
-            const SizedBox(height: 12),
-            _DepthOption(
-              label: ApexCopy.depthDeepLabel,
-              tag: ApexCopy.depthDeepTag,
-              blurb: ApexCopy.depthDeepBlurb,
-              icon: Icons.auto_awesome_rounded,
-              accent: ApexColors.sapphire,
-              onTap: () =>
-                  Navigator.of(context).pop(AnalysisProfile.deepReview),
-            ),
-            const SizedBox(height: 12),
-            _DepthOption(
-              label: ApexCopy.depthOfflineLabel,
-              tag: ApexCopy.depthOfflineTag,
-              blurb: ApexCopy.depthOfflineBlurb,
-              icon: Icons.offline_bolt_rounded,
-              accent: ApexColors.aurora,
-              onTap: () =>
-                  Navigator.of(context).pop(AnalysisProfile.offlineReview),
-            ),
+            for (final option in options) ...[
+              _DepthOption(
+                key: ValueKey('review-mode-${option.profile?.id.wire}'),
+                label: option.label,
+                tag: option.available
+                    ? _tagForProfile(option.profile)
+                    : 'Unavailable',
+                blurb: option.available
+                    ? _blurbForProfile(option.profile)
+                    : option.unavailableMessage ?? ApexCopy.serviceUnavailable,
+                icon: _iconForProfile(option.profile),
+                accent: _accentForProfile(option.profile),
+                enabled: option.available,
+                onTap: option.profile == null
+                    ? null
+                    : () => Navigator.of(context).pop(option.profile),
+              ),
+              if (option != options.last) const SizedBox(height: 12),
+            ],
           ],
         ),
       ),
     );
   }
+
+  ReviewModeRoutingPlan _buildPlan(WidgetRef ref) {
+    final isOnline = !ref.watch(connectionPresenceProvider).isOffline;
+    final pipeline = ref.watch(reviewAnalysisPipelineProvider).valueOrNull;
+    return pipeline?.modePlan(isOnline: isOnline) ??
+        ReviewModeRoutingPlan.build(
+          isOnline: isOnline,
+          onlineFastConfigured: false,
+          onlineDeepConfigured: false,
+        );
+  }
+
+  static String _tagForProfile(AnalysisProfile? profile) =>
+      switch (profile?.id) {
+        AnalysisProfileId.fastReview => ApexCopy.depthFastTag,
+        AnalysisProfileId.deepReview => ApexCopy.depthDeepTag,
+        AnalysisProfileId.offlineReview => ApexCopy.depthOfflineTag,
+        null => 'Saved',
+      };
+
+  static String _blurbForProfile(AnalysisProfile? profile) =>
+      switch (profile?.id) {
+        AnalysisProfileId.fastReview => ApexCopy.depthFastBlurb,
+        AnalysisProfileId.deepReview => ApexCopy.depthDeepBlurb,
+        AnalysisProfileId.offlineReview => ApexCopy.depthOfflineBlurb,
+        null => ApexCopy.showingSavedData,
+      };
+
+  static IconData _iconForProfile(AnalysisProfile? profile) =>
+      switch (profile?.id) {
+        AnalysisProfileId.fastReview => Icons.flash_on_rounded,
+        AnalysisProfileId.deepReview => Icons.auto_awesome_rounded,
+        AnalysisProfileId.offlineReview => Icons.offline_bolt_rounded,
+        null => Icons.bookmark_added_rounded,
+      };
+
+  static Color _accentForProfile(AnalysisProfile? profile) =>
+      switch (profile?.id) {
+        AnalysisProfileId.fastReview => ApexColors.electricBlue,
+        AnalysisProfileId.deepReview => ApexColors.sapphire,
+        AnalysisProfileId.offlineReview => ApexColors.aurora,
+        null => ApexColors.sapphireBright,
+      };
 }
 
 class _DepthOption extends StatelessWidget {
   const _DepthOption({
+    super.key,
     required this.label,
     required this.tag,
     required this.blurb,
     required this.icon,
     required this.accent,
+    required this.enabled,
     required this.onTap,
   });
 
@@ -1481,22 +1576,26 @@ class _DepthOption extends StatelessWidget {
   final String blurb;
   final IconData icon;
   final Color accent;
-  final VoidCallback onTap;
+  final bool enabled;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
+    final effectiveAccent = enabled ? accent : ApexColors.textTertiary;
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
+        onTap: enabled ? onTap : null,
         borderRadius: BorderRadius.circular(14),
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: ApexColors.elevatedSurface.withValues(alpha: 0.6),
+            color: ApexColors.elevatedSurface.withValues(
+              alpha: enabled ? 0.6 : 0.36,
+            ),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: accent.withValues(alpha: 0.35),
+              color: effectiveAccent.withValues(alpha: enabled ? 0.35 : 0.20),
               width: 0.6,
             ),
           ),
@@ -1507,10 +1606,12 @@ class _DepthOption extends StatelessWidget {
                 height: 38,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.18),
+                  color: effectiveAccent.withValues(
+                    alpha: enabled ? 0.18 : 0.10,
+                  ),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(icon, color: accent, size: 20),
+                child: Icon(icon, color: effectiveAccent, size: 20),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -1530,7 +1631,9 @@ class _DepthOption extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: ApexTypography.labelLarge.copyWith(
-                              color: ApexColors.textPrimary,
+                              color: enabled
+                                  ? ApexColors.textPrimary
+                                  : ApexColors.textSecondary,
                               letterSpacing: 1.4,
                               fontSize: 14,
                             ),
@@ -1543,13 +1646,15 @@ class _DepthOption extends StatelessWidget {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: accent.withValues(alpha: 0.14),
+                            color: effectiveAccent.withValues(alpha: 0.14),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
                             tag,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: ApexTypography.monoEval.copyWith(
-                              color: accent,
+                              color: effectiveAccent,
                               fontSize: 10,
                             ),
                           ),
@@ -1570,10 +1675,11 @@ class _DepthOption extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 6),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: accent.withValues(alpha: 0.8),
-              ),
+              if (enabled)
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: accent.withValues(alpha: 0.8),
+                ),
             ],
           ),
         ),
@@ -1693,6 +1799,8 @@ class _ImportAnalysisDialogState extends ConsumerState<_ImportAnalysisDialog> {
       setState(() => _done = true);
     } on LocalAnalysisException catch (e) {
       if (mounted) setState(() => _error = e.userMessage);
+    } on ReviewProviderUnavailableException catch (e) {
+      if (mounted) setState(() => _error = e.message);
     } catch (_) {
       if (mounted) setState(() => _error = ApexCopy.analysisFailed);
     }

@@ -197,6 +197,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         return;
       }
     }
+    if (!_canAnalyzeProfile(context, ref, result.profile)) return;
     if (!context.mounted) return;
     showDialog(
       context: context,
@@ -209,6 +210,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         userHandle: result.userHandle,
       ),
     );
+  }
+
+  bool _canAnalyzeProfile(
+    BuildContext context,
+    WidgetRef ref,
+    AnalysisProfile profile,
+  ) {
+    final pipeline = ref.read(reviewAnalysisPipelineProvider).valueOrNull;
+    final plan =
+        pipeline?.modePlan(
+          isOnline: !ref.read(connectionPresenceProvider).isOffline,
+        ) ??
+        ReviewModeRoutingPlan.build(
+          isOnline: !ref.read(connectionPresenceProvider).isOffline,
+          onlineFastConfigured: false,
+          onlineDeepConfigured: false,
+        );
+    final option = plan.optionFor(profile);
+    if (option.available) return true;
+    showApexGlassToast(
+      context,
+      message: option.unavailableMessage ?? ApexCopy.serviceUnavailable,
+      detail: profile.id == AnalysisProfileId.offlineReview
+          ? null
+          : ApexCopy.useOfflineReview,
+      type: ApexGlassToastType.warning,
+    );
+    return false;
   }
 
   ArchivedGame? _openableSavedReviewForPgn(
@@ -1090,36 +1119,51 @@ class _PerspectiveSelector extends StatelessWidget {
   }
 }
 
-class _ReviewModeButtons extends StatelessWidget {
+class _ReviewModeButtons extends ConsumerWidget {
   const _ReviewModeButtons({required this.onSelected});
 
   final ValueChanged<AnalysisProfile> onSelected;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pipeline = ref.watch(reviewAnalysisPipelineProvider).valueOrNull;
+    final isOnline = !ref.watch(connectionPresenceProvider).isOffline;
+    final plan =
+        pipeline?.modePlan(isOnline: isOnline) ??
+        ReviewModeRoutingPlan.build(
+          isOnline: isOnline,
+          onlineFastConfigured: false,
+          onlineDeepConfigured: false,
+        );
+    final options = plan.pickerOptions;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _DialogPrimaryAction(
-          label: 'Fast Review',
-          icon: Icons.flash_on_rounded,
-          onTap: () => onSelected(AnalysisProfile.fastReview),
-        ),
-        const SizedBox(height: 10),
-        _DialogPrimaryAction(
-          label: 'Deep Review',
-          icon: Icons.auto_awesome_rounded,
-          onTap: () => onSelected(AnalysisProfile.deepReview),
-        ),
-        const SizedBox(height: 10),
-        _DialogPrimaryAction(
-          label: 'Offline Review',
-          icon: Icons.offline_bolt_rounded,
-          onTap: () => onSelected(AnalysisProfile.offlineReview),
-        ),
+        for (final option in options) ...[
+          _DialogPrimaryAction(
+            label: option.label,
+            detail: option.available
+                ? null
+                : option.unavailableMessage ?? ApexCopy.serviceUnavailable,
+            icon: _iconForProfile(option.profile),
+            enabled: option.available,
+            onTap: option.profile == null
+                ? null
+                : () => onSelected(option.profile!),
+          ),
+          if (option != options.last) const SizedBox(height: 10),
+        ],
       ],
     );
   }
+
+  static IconData _iconForProfile(AnalysisProfile? profile) =>
+      switch (profile?.id) {
+        AnalysisProfileId.fastReview => Icons.flash_on_rounded,
+        AnalysisProfileId.deepReview => Icons.auto_awesome_rounded,
+        AnalysisProfileId.offlineReview => Icons.offline_bolt_rounded,
+        null => Icons.bookmark_added_rounded,
+      };
 }
 
 class _SideChip extends StatelessWidget {
@@ -1179,38 +1223,84 @@ class _SideChip extends StatelessWidget {
 class _DialogPrimaryAction extends StatelessWidget {
   const _DialogPrimaryAction({
     required this.label,
+    this.detail,
     required this.icon,
+    this.enabled = true,
     required this.onTap,
   });
 
   final String label;
+  final String? detail;
   final IconData icon;
-  final VoidCallback onTap;
+  final bool enabled;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
+        onTap: enabled ? onTap : null,
         borderRadius: BorderRadius.circular(14),
         child: Ink(
-          height: 52,
+          height: detail == null ? 52 : 60,
           decoration: BoxDecoration(
-            gradient: ApexGradients.sapphire,
+            gradient: enabled
+                ? ApexGradients.sapphire
+                : LinearGradient(
+                    colors: [
+                      ApexColors.deepSpace.withValues(alpha: 0.66),
+                      ApexColors.elevatedSurface.withValues(alpha: 0.42),
+                    ],
+                  ),
             borderRadius: BorderRadius.circular(14),
+            border: enabled
+                ? null
+                : Border.all(
+                    color: ApexColors.subtleBorder.withValues(alpha: 0.72),
+                    width: 0.7,
+                  ),
           ),
           child: Center(
             child: Row(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(icon, color: ApexColors.textPrimary, size: 20),
+                Icon(
+                  icon,
+                  color: enabled
+                      ? ApexColors.textPrimary
+                      : ApexColors.textTertiary,
+                  size: 20,
+                ),
                 const SizedBox(width: 10),
-                Text(
-                  label,
-                  style: ApexTypography.labelLarge.copyWith(
-                    color: ApexColors.textPrimary,
-                    letterSpacing: 2,
+                Flexible(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: ApexTypography.labelLarge.copyWith(
+                          color: enabled
+                              ? ApexColors.textPrimary
+                              : ApexColors.textSecondary,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                      if (detail != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          detail!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: ApexTypography.bodyMedium.copyWith(
+                            color: ApexColors.textTertiary,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ],
@@ -1634,6 +1724,8 @@ class _LocalAnalysisProgressDialogState
       }
     } on LocalAnalysisException catch (e) {
       if (mounted) setState(() => _error = e.userMessage);
+    } on ReviewProviderUnavailableException catch (e) {
+      if (mounted) setState(() => _error = e.message);
     } catch (e) {
       if (mounted) setState(() => _error = ApexCopy.analysisFailed);
     }

@@ -107,18 +107,18 @@ class ApexCopy {
 
   // ── Depth picker ───────────────────────────────────────────────────────
   static const String depthPickerTitle = 'REVIEW MODE';
-  static const String depthFastLabel = 'Fast Review';
-  static const String depthFastTag = 'Fast';
-  static const String depthFastBlurb =
-      'A fast read of the game for everyday review.';
-  static const String depthDeepLabel = 'Deep Review';
-  static const String depthDeepTag = 'Deep';
-  static const String depthDeepBlurb =
-      'Stronger tactical verification for important games.';
+  static const String depthFastLabel = 'Online Fast';
+  static const String depthFastTag = 'Online';
+  static const String depthFastBlurb = 'Fast internet-backed review.';
+  static const String depthDeepLabel = 'Online Deep';
+  static const String depthDeepTag = 'Online';
+  static const String depthDeepBlurb = 'Stronger internet-backed review.';
   static const String depthOfflineLabel = 'Offline Review';
   static const String depthOfflineTag = 'Offline';
   static const String depthOfflineBlurb =
       'Runs on this device and may be slower.';
+  static const String onlineReviewUnavailable = 'Online review unavailable';
+  static const String useOfflineReview = 'Use Offline Review';
 
   static String scanHeader(int depth) =>
       depth <= 16 ? depthFastLabel : depthDeepLabel;

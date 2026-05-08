@@ -158,6 +158,183 @@ class ReviewProviderUnavailableException implements Exception {
   String toString() => message;
 }
 
+enum ReviewProviderKind {
+  cached,
+  offlineLocal,
+  onlineFast,
+  onlineDeep,
+  unavailable,
+  serviceIssue,
+  unsupported,
+}
+
+enum ReviewModeUnavailableReason {
+  none,
+  offline,
+  onlineProviderUnavailable,
+  localUnavailable,
+  serviceIssue,
+  unsupported,
+}
+
+String reviewProviderModeLabelFor(AnalysisProfileId id) => switch (id) {
+  AnalysisProfileId.fastReview => 'Online Fast',
+  AnalysisProfileId.deepReview => 'Online Deep',
+  AnalysisProfileId.offlineReview => 'Offline Review',
+};
+
+class ReviewModeAvailability {
+  const ReviewModeAvailability({
+    required this.kind,
+    required this.profile,
+    required this.label,
+    required this.available,
+    this.unavailableReason = ReviewModeUnavailableReason.none,
+    this.savedReview,
+  });
+
+  final ReviewProviderKind kind;
+  final AnalysisProfile? profile;
+  final String label;
+  final bool available;
+  final ReviewModeUnavailableReason unavailableReason;
+  final ArchivedGame? savedReview;
+
+  bool get isAlreadySaved => savedReview != null;
+
+  bool get canPreviewExistingReview {
+    final timeline = savedReview?.cachedTimeline;
+    return savedReview != null &&
+        savedReview!.isCacheCurrent &&
+        timeline != null &&
+        timeline.moves.isNotEmpty;
+  }
+
+  bool get canAnalyzeOffline =>
+      available && kind == ReviewProviderKind.offlineLocal;
+
+  bool get canAnalyzeOnlineFast =>
+      available && kind == ReviewProviderKind.onlineFast;
+
+  bool get canAnalyzeOnlineDeep =>
+      available && kind == ReviewProviderKind.onlineDeep;
+
+  String? get unavailableMessage => switch (unavailableReason) {
+    ReviewModeUnavailableReason.none => null,
+    ReviewModeUnavailableReason.offline => 'Online review unavailable',
+    ReviewModeUnavailableReason.onlineProviderUnavailable =>
+      'Online review unavailable',
+    ReviewModeUnavailableReason.localUnavailable =>
+      'Offline review unavailable',
+    ReviewModeUnavailableReason.serviceIssue => 'Service unavailable',
+    ReviewModeUnavailableReason.unsupported => 'Unsupported',
+  };
+}
+
+class ReviewModeRoutingPlan {
+  const ReviewModeRoutingPlan({
+    required this.isOnline,
+    required this.saved,
+    required this.onlineFast,
+    required this.onlineDeep,
+    required this.offline,
+  });
+
+  factory ReviewModeRoutingPlan.build({
+    required bool isOnline,
+    required bool onlineFastConfigured,
+    required bool onlineDeepConfigured,
+    bool offlineSupported = true,
+    ArchivedGame? savedReview,
+    bool onlineServiceIssue = false,
+  }) {
+    final saved = ReviewModeAvailability(
+      kind: savedReview == null
+          ? ReviewProviderKind.unavailable
+          : ReviewProviderKind.cached,
+      profile: savedReview?.analysisProfile,
+      label: 'Saved Review',
+      available: savedReview != null,
+      savedReview: savedReview,
+    );
+    final onlineIssueReason = onlineServiceIssue
+        ? ReviewModeUnavailableReason.serviceIssue
+        : (isOnline
+              ? ReviewModeUnavailableReason.onlineProviderUnavailable
+              : ReviewModeUnavailableReason.offline);
+    final onlineIssueKind = onlineServiceIssue
+        ? ReviewProviderKind.serviceIssue
+        : ReviewProviderKind.unavailable;
+    final fastAvailable =
+        isOnline && onlineFastConfigured && !onlineServiceIssue;
+    final deepAvailable =
+        isOnline && onlineDeepConfigured && !onlineServiceIssue;
+    return ReviewModeRoutingPlan(
+      isOnline: isOnline,
+      saved: saved,
+      onlineFast: ReviewModeAvailability(
+        kind: fastAvailable ? ReviewProviderKind.onlineFast : onlineIssueKind,
+        profile: AnalysisProfile.fastReview,
+        label: reviewProviderModeLabelFor(AnalysisProfileId.fastReview),
+        available: fastAvailable,
+        unavailableReason: fastAvailable
+            ? ReviewModeUnavailableReason.none
+            : onlineIssueReason,
+      ),
+      onlineDeep: ReviewModeAvailability(
+        kind: deepAvailable ? ReviewProviderKind.onlineDeep : onlineIssueKind,
+        profile: AnalysisProfile.deepReview,
+        label: reviewProviderModeLabelFor(AnalysisProfileId.deepReview),
+        available: deepAvailable,
+        unavailableReason: deepAvailable
+            ? ReviewModeUnavailableReason.none
+            : onlineIssueReason,
+      ),
+      offline: ReviewModeAvailability(
+        kind: offlineSupported
+            ? ReviewProviderKind.offlineLocal
+            : ReviewProviderKind.unsupported,
+        profile: AnalysisProfile.offlineReview,
+        label: reviewProviderModeLabelFor(AnalysisProfileId.offlineReview),
+        available: offlineSupported,
+        unavailableReason: offlineSupported
+            ? ReviewModeUnavailableReason.none
+            : ReviewModeUnavailableReason.localUnavailable,
+      ),
+    );
+  }
+
+  final bool isOnline;
+  final ReviewModeAvailability saved;
+  final ReviewModeAvailability onlineFast;
+  final ReviewModeAvailability onlineDeep;
+  final ReviewModeAvailability offline;
+
+  bool get isAlreadySaved => saved.isAlreadySaved;
+
+  bool get canPreviewExistingReview => saved.canPreviewExistingReview;
+
+  bool get canAnalyzeOffline => offline.canAnalyzeOffline;
+
+  bool get canAnalyzeOnlineFast => onlineFast.canAnalyzeOnlineFast;
+
+  bool get canAnalyzeOnlineDeep => onlineDeep.canAnalyzeOnlineDeep;
+
+  ReviewModeAvailability optionFor(AnalysisProfile profile) =>
+      switch (profile.id) {
+        AnalysisProfileId.fastReview => onlineFast,
+        AnalysisProfileId.deepReview => onlineDeep,
+        AnalysisProfileId.offlineReview => offline,
+      };
+
+  bool canAnalyze(AnalysisProfile profile) => optionFor(profile).available;
+
+  List<ReviewModeAvailability> get pickerOptions {
+    if (!isOnline) return [offline];
+    return [onlineFast, onlineDeep, offline];
+  }
+}
+
 class OnlineFastReviewProvider extends _UnconfiguredOnlineProvider {
   const OnlineFastReviewProvider() : super('online_fast_stub');
 }
@@ -180,9 +357,7 @@ abstract class _UnconfiguredOnlineProvider extends ReviewAnalysisProvider {
 
   @override
   Future<GameReviewResult> analyzeGame(GameReviewRequest request) {
-    throw const ReviewProviderUnavailableException(
-      'Online review provider is not configured.',
-    );
+    throw const ReviewProviderUnavailableException('Online review unavailable');
   }
 }
 
@@ -283,10 +458,22 @@ class GameReviewPipeline {
     if (profile.id == AnalysisProfileId.offlineReview) {
       return _offlineProvider;
     }
-    final online = profile.id == AnalysisProfileId.fastReview
+    return profile.id == AnalysisProfileId.fastReview
         ? _fastProvider
         : _deepProvider;
-    return online.isConfigured ? online : _offlineProvider;
+  }
+
+  ReviewModeRoutingPlan modePlan({
+    required bool isOnline,
+    ArchivedGame? savedReview,
+  }) {
+    return ReviewModeRoutingPlan.build(
+      isOnline: isOnline,
+      onlineFastConfigured: _fastProvider.isConfigured,
+      onlineDeepConfigured: _deepProvider.isConfigured,
+      offlineSupported: _offlineProvider.isConfigured,
+      savedReview: savedReview,
+    );
   }
 
   Future<GameReviewResult> analyzeGame(GameReviewRequest request) async {

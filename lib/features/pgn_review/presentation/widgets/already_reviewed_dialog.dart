@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'package:apex_chess/core/domain/entities/analysis_profile.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
+import 'package:apex_chess/features/pgn_review/domain/review_analysis_provider.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
 
@@ -36,6 +37,9 @@ class AlreadyReviewedDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final savedModeLabel = reviewProviderModeLabelFor(
+      savedReview.analysisProfile.id,
+    );
     return Dialog(
       key: const ValueKey('already-reviewed-dialog'),
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
@@ -73,14 +77,14 @@ class AlreadyReviewedDialog extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              'Saved mode: ${savedReview.reviewModeLabel}',
+              'Saved mode: $savedModeLabel',
               key: const ValueKey('already-reviewed-current-mode'),
               style: ApexTypography.bodyMedium.copyWith(
                 color: ApexColors.textSecondary,
                 fontSize: 13,
               ),
             ),
-            if (_requestedLabel != savedReview.reviewModeLabel) ...[
+            if (_requestedLabel != savedModeLabel) ...[
               const SizedBox(height: 4),
               Text(
                 'Selected: $_requestedLabel',
@@ -137,8 +141,14 @@ class AlreadyReviewedDialog extends StatelessWidget {
   }
 
   String get _requestedLabel => switch (requestedProfile.id) {
-    AnalysisProfileId.fastReview => 'Fast',
-    AnalysisProfileId.offlineReview => 'Offline',
-    AnalysisProfileId.deepReview => 'Deep',
+    AnalysisProfileId.fastReview => reviewProviderModeLabelFor(
+      AnalysisProfileId.fastReview,
+    ),
+    AnalysisProfileId.offlineReview => reviewProviderModeLabelFor(
+      AnalysisProfileId.offlineReview,
+    ),
+    AnalysisProfileId.deepReview => reviewProviderModeLabelFor(
+      AnalysisProfileId.deepReview,
+    ),
   };
 }
