@@ -44,10 +44,10 @@ class AccountController extends AsyncNotifier<ApexAccount?> {
   }
 
   Future<void> connect(ApexAccount account) async {
-    state = AsyncData(account);
     final repo = ref.read(accountRepositoryProvider);
     await repo.write(account);
     await repo.markOnboardingSeen();
+    state = AsyncData(account);
     ref.invalidate(onboardingSeenProvider);
   }
 

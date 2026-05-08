@@ -353,6 +353,8 @@ class ReviewCoachInsightDisplay {
     if (!ReviewBoardDisplayModel.shouldShowBetterMoveArrow(move)) return null;
     final san = text.betterMoveSan ?? move.engineBestMoveSan;
     if (san != null && san.trim().isNotEmpty) return san.trim();
+    final lineFirstMove = _lineFirstMove(move);
+    if (lineFirstMove != null) return lineFirstMove;
     final uci = move.engineBestMoveUci;
     if (uci == null || uci.trim().isEmpty) return null;
     return uci.trim();
@@ -385,6 +387,13 @@ class ReviewCoachInsightDisplay {
     final san = firstLine.moveSan ?? firstLine.pvMoves.take(3).join(' ');
     final trimmed = san.trim();
     return trimmed.isEmpty ? null : trimmed;
+  }
+
+  static String? _lineFirstMove(MoveAnalysis move) {
+    final line = _linePreview(move);
+    if (line == null) return null;
+    final first = line.split(RegExp(r'\s+')).first.trim();
+    return first.isEmpty ? null : first;
   }
 
   static String _shortExplanation(String raw, {required String fallback}) {
@@ -585,7 +594,8 @@ class ReviewBoardDisplayModel {
       MoveQuality.best ||
       MoveQuality.book ||
       MoveQuality.forced => false,
-      MoveQuality.excellent || MoveQuality.good => false,
+      MoveQuality.excellent ||
+      MoveQuality.good ||
       MoveQuality.inaccuracy ||
       MoveQuality.mistake ||
       MoveQuality.missedWin ||

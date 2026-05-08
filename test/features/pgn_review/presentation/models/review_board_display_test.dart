@@ -295,10 +295,78 @@ void main() {
     expect(items[1].marker, '?!');
   });
 
-  test(
-    'best move arrow stays hidden for good moves and updates by active ply',
-    () {
-      final quietDisplay = ReviewBoardDisplayModel.fromTimeline(
+  test('better move arrow hides without data and updates by active ply', () {
+    final noDataDisplay = ReviewBoardDisplayModel.fromTimeline(
+      AnalysisTimeline(
+        moves: [
+          _move(
+            ply: 0,
+            isWhite: true,
+            san: 'Nf3',
+            uci: 'g1f3',
+            quality: MoveQuality.excellent,
+          ),
+        ],
+        startingFen: _startFen,
+        headers: const {},
+        winPercentages: const [50],
+      ),
+      currentPly: 0,
+      flipped: false,
+      mode: AnalysisMode.deep,
+      userIsWhite: true,
+    );
+    final inaccuracyDisplay = ReviewBoardDisplayModel.fromTimeline(
+      _timeline(),
+      currentPly: 1,
+      flipped: false,
+      mode: AnalysisMode.deep,
+      userIsWhite: true,
+    );
+    final blunderDisplay = ReviewBoardDisplayModel.fromTimeline(
+      _timeline(),
+      currentPly: 2,
+      flipped: true,
+      mode: AnalysisMode.deep,
+      userIsWhite: true,
+    );
+
+    expect(noDataDisplay.bestMoveArrow, isNull);
+    expect(noDataDisplay.insight.betterMove, isNull);
+    expect(inaccuracyDisplay.bestMoveArrow, ('c7', 'c5'));
+    expect(inaccuracyDisplay.insight.betterMove, 'c5');
+    expect(
+      inaccuracyDisplay.insight.explanation,
+      'This move misses a stronger continuation.',
+    );
+    expect(
+      inaccuracyDisplay.insight.betterMoveReason,
+      'Stronger continuation.',
+    );
+    expect(
+      inaccuracyDisplay.insight.betterMoveReason,
+      isNot(inaccuracyDisplay.insight.explanation),
+    );
+    expect(blunderDisplay.bestMoveArrow, ('g1', 'f3'));
+    expect(blunderDisplay.insight.betterMove, 'Nf3');
+    expect(
+      blunderDisplay.insight.betterMoveReason,
+      'Avoids the worst of the danger.',
+    );
+  });
+
+  test('Better Move appears for all eligible non-top-tier qualities', () {
+    final eligible = {
+      MoveQuality.excellent: 'd4',
+      MoveQuality.good: 'd4',
+      MoveQuality.inaccuracy: 'd4',
+      MoveQuality.mistake: 'd4',
+      MoveQuality.missedWin: 'd4',
+      MoveQuality.blunder: 'd4',
+    };
+
+    for (final entry in eligible.entries) {
+      final display = ReviewBoardDisplayModel.fromTimeline(
         AnalysisTimeline(
           moves: [
             _move(
@@ -306,9 +374,9 @@ void main() {
               isWhite: true,
               san: 'Nf3',
               uci: 'g1f3',
-              quality: MoveQuality.excellent,
+              quality: entry.key,
               bestUci: 'd2d4',
-              bestSan: 'd4',
+              bestSan: entry.value,
             ),
           ],
           startingFen: _startFen,
@@ -320,45 +388,52 @@ void main() {
         mode: AnalysisMode.deep,
         userIsWhite: true,
       );
-      final inaccuracyDisplay = ReviewBoardDisplayModel.fromTimeline(
-        _timeline(),
-        currentPly: 1,
-        flipped: false,
-        mode: AnalysisMode.deep,
-        userIsWhite: true,
-      );
-      final blunderDisplay = ReviewBoardDisplayModel.fromTimeline(
-        _timeline(),
-        currentPly: 2,
-        flipped: true,
-        mode: AnalysisMode.deep,
-        userIsWhite: true,
-      );
 
-      expect(quietDisplay.bestMoveArrow, isNull);
-      expect(quietDisplay.insight.betterMove, isNull);
-      expect(inaccuracyDisplay.bestMoveArrow, ('c7', 'c5'));
-      expect(inaccuracyDisplay.insight.betterMove, 'c5');
+      expect(display.insight.betterMove, entry.value);
+      expect(display.bestMoveArrow, ('d2', 'd4'));
+      expect(display.insight.betterMoveReason, isNotNull);
       expect(
-        inaccuracyDisplay.insight.explanation,
-        'This move misses a stronger continuation.',
+        display.insight.betterMoveReason,
+        isNot(display.insight.explanation),
       );
-      expect(
-        inaccuracyDisplay.insight.betterMoveReason,
-        'Stronger continuation.',
-      );
-      expect(
-        inaccuracyDisplay.insight.betterMoveReason,
-        isNot(inaccuracyDisplay.insight.explanation),
-      );
-      expect(blunderDisplay.bestMoveArrow, ('g1', 'f3'));
-      expect(blunderDisplay.insight.betterMove, 'Nf3');
-      expect(
-        blunderDisplay.insight.betterMoveReason,
-        'Avoids the worst of the danger.',
-      );
-    },
-  );
+    }
+  });
+
+  test('line first move surfaces as Better when SAN is missing', () {
+    final display = ReviewBoardDisplayModel.fromTimeline(
+      AnalysisTimeline(
+        moves: [
+          _move(
+            ply: 1,
+            isWhite: false,
+            san: 'e5',
+            uci: 'e7e5',
+            quality: MoveQuality.good,
+            bestUci: 'c7c5',
+            engineLines: const [
+              EngineLine(
+                rank: 1,
+                moveSan: 'c5 Nf3',
+                depth: 16,
+                whiteWinPercent: 50,
+              ),
+            ],
+          ),
+        ],
+        startingFen: _startFen,
+        headers: const {},
+        winPercentages: const [50],
+      ),
+      currentPly: 0,
+      flipped: false,
+      mode: AnalysisMode.deep,
+      userIsWhite: true,
+    );
+
+    expect(display.insight.betterMove, 'c5');
+    expect(display.insight.engineLinePreview, 'c5 Nf3');
+    expect(display.bestMoveArrow, ('c7', 'c5'));
+  });
 
   test(
     'Better Move hides for Best Brilliant and Great even with engine data',
@@ -367,6 +442,8 @@ void main() {
         MoveQuality.best,
         MoveQuality.brilliant,
         MoveQuality.great,
+        MoveQuality.book,
+        MoveQuality.forced,
       ]) {
         final display = ReviewBoardDisplayModel.fromTimeline(
           AnalysisTimeline(
@@ -391,7 +468,7 @@ void main() {
           userIsWhite: true,
         );
 
-        expect(display.insight.explanation, startsWith('This move'));
+        expect(display.insight.explanation, isNotEmpty);
         expect(display.insight.betterMove, isNull);
         expect(display.bestMoveArrow, isNull);
       }

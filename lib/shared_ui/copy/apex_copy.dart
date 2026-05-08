@@ -44,6 +44,7 @@ class ApexCopy {
   static const String profile = 'Profile';
   static const String connected = 'Connected';
   static const String verified = 'Verified';
+  static const String profileFound = 'Profile found';
   static const String notFound = 'Not found';
   static const String noProfileFound = 'No profile found';
   static const String offline = 'Offline';

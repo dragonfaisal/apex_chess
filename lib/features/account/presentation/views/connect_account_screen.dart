@@ -166,6 +166,10 @@ class _ConnectAccountScreenState extends ConsumerState<ConnectAccountScreen> {
         existingAccount.source == _source &&
         PlayerIdentityDisplay.normalizeUsername(existingAccount.username) ==
             PlayerIdentityDisplay.normalizeUsername(_textController.text);
+    final isPublicProfileFound =
+        !isExactConnectedAccount &&
+        state.existence == UsernameExistence.exists &&
+        _textController.text.trim().isNotEmpty;
     final canConnect =
         !_busy &&
         state.existence == UsernameExistence.exists &&
@@ -283,6 +287,9 @@ class _ConnectAccountScreenState extends ConsumerState<ConnectAccountScreen> {
                       if (isExactConnectedAccount) ...[
                         const SizedBox(height: 8),
                         const _ConnectedAccountNotice(),
+                      ] else if (isPublicProfileFound) ...[
+                        const SizedBox(height: 8),
+                        const _PublicProfileFoundNotice(),
                       ],
                       const SizedBox(height: 14),
                       _ConnectCta(
@@ -522,6 +529,48 @@ class _ConnectedAccountNotice extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: ApexTypography.bodyMedium.copyWith(
                 color: ApexColors.sapphireBright,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PublicProfileFoundNotice extends StatelessWidget {
+  const _PublicProfileFoundNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const ValueKey('connect-public-profile-found'),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: ApexColors.best.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: ApexColors.best.withValues(alpha: 0.28),
+          width: 0.7,
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.check_circle_outline_rounded,
+            color: ApexColors.best,
+            size: 16,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              ApexCopy.profileFound,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: ApexTypography.bodyMedium.copyWith(
+                color: ApexColors.best,
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
               ),

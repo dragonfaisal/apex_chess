@@ -27,12 +27,30 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.text(ApexCopy.connectedAccountNotice), findsOneWidget);
+    expect(find.text(ApexCopy.profileFound), findsNothing);
 
     await tester.enterText(find.byType(TextField), 'Apex');
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.text(ApexCopy.connectedAccountNotice), findsNothing);
+    expect(find.text(ApexCopy.profileFound), findsOneWidget);
+  });
+
+  testWidgets('no connected account valid lookup shows public profile found', (
+    tester,
+  ) async {
+    final container = await _containerWithoutAccount();
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(_host(container));
+    await tester.pump();
+    await tester.enterText(find.byType(TextField), 'ApexUser');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.text(ApexCopy.connectedAccountNotice), findsNothing);
+    expect(find.text(ApexCopy.profileFound), findsOneWidget);
   });
 
   testWidgets('selected Chess.com tab is visibly active', (tester) async {
@@ -86,8 +104,12 @@ void main() {
     await tester.enterText(find.byType(TextField), 'ApexUser');
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text(ApexCopy.profileFound), findsOneWidget);
+    expect(find.text(ApexCopy.connectedAccountNotice), findsNothing);
+
     await tester.tap(find.byKey(const ValueKey('connect-account-cta')));
     await tester.pump();
+    expect(find.text(ApexCopy.connectedAccountNotice), findsNothing);
 
     final loader = tester.widget<ApexPulseLoader>(
       find.descendant(
@@ -99,6 +121,9 @@ void main() {
 
     repo.complete();
     await tester.pump();
+    await tester.pump();
+    expect(find.text(ApexCopy.profileFound), findsNothing);
+    expect(find.text(ApexCopy.connectedAccountNotice), findsOneWidget);
   });
 }
 
