@@ -7,6 +7,7 @@ library;
 
 import 'package:apex_chess/core/domain/entities/analysis_profile.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
+import 'package:apex_chess/features/pgn_review/domain/analysis_contract.dart';
 
 enum ReviewEntryKind { importedGame, pastedPgn, savedReview }
 
@@ -78,6 +79,22 @@ class ReviewEntryContract {
   static bool canOpenCachedReview(ArchivedGame game) {
     final timeline = game.cachedTimeline;
     return game.isCacheCurrent && timeline != null && timeline.moves.isNotEmpty;
+  }
+
+  static AnalysisReviewResult savedReviewResult(
+    ArchivedGame? game, {
+    bool? userIsWhite,
+  }) {
+    if (game == null || !canOpenCachedReview(game)) {
+      return AnalysisReviewResult.unavailable(
+        mode: AnalysisReviewMode.cached,
+        providerKind: AnalysisProviderKind.cached,
+        reason: AnalysisFailureReason.savedReviewMissing,
+      );
+    }
+    return AnalysisReviewResult.cachedHit(
+      CanonicalAnalysisPayload.fromArchivedGame(game, userIsWhite: userIsWhite),
+    );
   }
 
   static String archiveFallbackSearch(ArchivedGame game) {

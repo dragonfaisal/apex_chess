@@ -142,7 +142,6 @@ class _ArchiveScreenState extends ConsumerState<ArchiveScreen> {
     // spawning the engine. Phase A audit: stale-cache invalidation —
     // when the classifier brain has changed under our feet, force a
     // re-scan rather than show counts produced by the old brain.
-    final cached = game.cachedTimeline;
     final userIsBlack = _userIsBlack(ref, game);
     // `userIsWhite` for the coach service: if the archive row knows
     // which colour the user played, pass the opposite of `userIsBlack`;
@@ -150,10 +149,15 @@ class _ArchiveScreenState extends ConsumerState<ArchiveScreen> {
     // unknown-side phrasing.
     final bool? userIsWhite = _userColorKnown(ref, game) ? !userIsBlack : null;
     if (ReviewEntryContract.canOpenCachedReview(game)) {
+      final payload = ReviewEntryContract.savedReviewResult(
+        game,
+        userIsWhite: userIsWhite,
+      ).payload;
+      if (payload == null) return;
       ref
           .read(reviewControllerProvider.notifier)
-          .loadTimeline(
-            cached!,
+          .loadPayload(
+            payload,
             userIsBlack: userIsBlack,
             mode: _modeForProfile(game.analysisProfileId),
             userIsWhite: userIsWhite,
@@ -192,14 +196,23 @@ class _ArchiveScreenState extends ConsumerState<ArchiveScreen> {
       );
       final timeline = result.timeline;
       final mode = _modeForProfile(game.analysisProfileId);
-      ref
-          .read(reviewControllerProvider.notifier)
-          .loadTimeline(
-            timeline,
-            userIsBlack: userIsBlack,
-            mode: mode,
-            userIsWhite: userIsWhite,
-          );
+      final payload = result.analysisResult?.payload;
+      final controller = ref.read(reviewControllerProvider.notifier);
+      if (payload != null) {
+        controller.loadPayload(
+          payload,
+          userIsBlack: userIsBlack,
+          mode: mode,
+          userIsWhite: userIsWhite,
+        );
+      } else {
+        controller.loadTimeline(
+          timeline,
+          userIsBlack: userIsBlack,
+          mode: mode,
+          userIsWhite: userIsWhite,
+        );
+      }
       // Persist the freshly-computed timeline back onto the archive
       // record so the *next* reopen is instant — even when the user's
       // archive predates Phase 6 and was originally saved without a

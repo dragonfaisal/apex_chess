@@ -5,6 +5,8 @@
 /// consistent.
 library;
 
+import 'package:apex_chess/features/pgn_review/domain/analysis_contract.dart';
+
 class ApexCopy {
   ApexCopy._();
 
@@ -118,6 +120,7 @@ class ApexCopy {
   static const String depthOfflineBlurb =
       'Runs on this device and may be slower.';
   static const String onlineReviewUnavailable = 'Online review unavailable';
+  static const String offlineReviewUnavailable = 'Offline review unavailable';
   static const String useOfflineReview = 'Use Offline Review';
 
   static String scanHeader(int depth) =>
@@ -129,6 +132,24 @@ class ApexCopy {
   static const String couldNotOpenReview = 'Could not open review';
   static const String savedReviewUnavailable = 'Saved review unavailable';
   static const String invalidPgn = 'Invalid PGN';
+  static const String providerUnavailable = 'Provider unavailable';
+  static const String reviewCancelled = 'Review cancelled';
+
+  static String analysisFailure(AnalysisFailureReason reason) =>
+      switch (reason) {
+        AnalysisFailureReason.none => '',
+        AnalysisFailureReason.providerNotConfigured => onlineReviewUnavailable,
+        AnalysisFailureReason.offlineLocalUnavailable =>
+          offlineReviewUnavailable,
+        AnalysisFailureReason.serviceUnavailable => providerUnavailable,
+        AnalysisFailureReason.invalidPgn => invalidPgn,
+        AnalysisFailureReason.savedReviewMissing => savedReviewUnavailable,
+        AnalysisFailureReason.timeout => tryAgain,
+        AnalysisFailureReason.partialData => showingSavedData,
+        AnalysisFailureReason.unsupported => providerUnavailable,
+        AnalysisFailureReason.cancelled => reviewCancelled,
+        AnalysisFailureReason.unknown => providerUnavailable,
+      };
 
   // ── Move-quality display labels ────────────────────────────────────────
   /// Premium labels for the seven classification tiers. Keep in sync with

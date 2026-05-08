@@ -30,6 +30,7 @@ import 'package:apex_chess/features/home/presentation/controllers/home_activity_
 import 'package:apex_chess/features/mistake_vault/data/mistake_vault_save_hook.dart';
 import 'package:apex_chess/features/import_match/presentation/controllers/recent_searches_controller.dart';
 import 'package:apex_chess/features/pgn_review/domain/saved_review_lookup.dart';
+import 'package:apex_chess/features/pgn_review/domain/review_entry_contract.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
 import 'package:apex_chess/features/pgn_review/domain/review_analysis_provider.dart';
 import 'package:apex_chess/features/user_validation/presentation/username_validation_controller.dart';
@@ -1306,15 +1307,18 @@ class _GameCard extends ConsumerWidget {
     WidgetRef ref,
     ArchivedGame savedReview,
   ) {
-    final timeline = savedReview.cachedTimeline;
-    if (timeline == null) return;
     final userIsWhite = game.userColor == null
         ? null
         : game.userColor == PlayerColor.white;
+    final payload = ReviewEntryContract.savedReviewResult(
+      savedReview,
+      userIsWhite: userIsWhite,
+    ).payload;
+    if (payload == null) return;
     ref
         .read(reviewControllerProvider.notifier)
-        .loadTimeline(
-          timeline,
+        .loadPayload(
+          payload,
           userIsBlack: userIsWhite == false,
           mode: _modeForSavedReview(savedReview),
           userIsWhite: userIsWhite,
@@ -1761,14 +1765,23 @@ class _ImportAnalysisDialogState extends ConsumerState<_ImportAnalysisDialog> {
       // review screen. `userIsWhite == false` means the imported game's
       // user is the Black side; `null` falls back to White-at-bottom for
       // raw PGN imports where user colour is unknowable.
-      ref
-          .read(reviewControllerProvider.notifier)
-          .loadTimeline(
-            timeline,
-            userIsBlack: widget.userIsWhite == false,
-            mode: mode,
-            userIsWhite: widget.userIsWhite,
-          );
+      final payload = result.analysisResult?.payload;
+      final controller = ref.read(reviewControllerProvider.notifier);
+      if (payload != null) {
+        controller.loadPayload(
+          payload,
+          userIsBlack: widget.userIsWhite == false,
+          mode: mode,
+          userIsWhite: widget.userIsWhite,
+        );
+      } else {
+        controller.loadTimeline(
+          timeline,
+          userIsBlack: widget.userIsWhite == false,
+          mode: mode,
+          userIsWhite: widget.userIsWhite,
+        );
+      }
       // Fire-and-forget save — failures never block the review flow.
       final archiveId = await saveAnalysisToArchive(
         ref: ref,

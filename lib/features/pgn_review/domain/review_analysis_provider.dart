@@ -12,6 +12,7 @@ import 'package:apex_chess/core/domain/services/analysis_cache_key.dart';
 import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/features/archives/data/archive_repository.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
+import 'package:apex_chess/features/pgn_review/domain/analysis_contract.dart';
 import 'package:apex_chess/features/pgn_review/domain/review_summary.dart';
 import 'package:apex_chess/infrastructure/engine/composite_game_analyzer.dart';
 
@@ -31,6 +32,23 @@ class GameReviewRequest {
   final bool? userIsWhite;
   final String? userHandle;
   final ReviewProgress? onProgress;
+
+  AnalysisReviewMode get requestedMode =>
+      AnalysisReviewMode.fromProfile(profile);
+
+  AnalysisReviewRequest toContract({
+    bool allowReanalysis = false,
+    DateTime? requestedAt,
+  }) {
+    return AnalysisReviewRequest.fromPgn(
+      pgn: pgn,
+      requestedMode: requestedMode,
+      allowReanalysis: allowReanalysis,
+      requestedAt: requestedAt,
+      userIsWhite: userIsWhite,
+      userHandle: userHandle,
+    );
+  }
 }
 
 class AnalysisRunMetadata {
@@ -105,6 +123,7 @@ class GameReviewResult {
     required this.metadata,
     required this.telemetry,
     required this.fromCache,
+    this.analysisResult,
   });
 
   final AnalysisTimeline timeline;
@@ -112,6 +131,7 @@ class GameReviewResult {
   final AnalysisRunMetadata metadata;
   final AnalysisTelemetry telemetry;
   final bool fromCache;
+  final AnalysisReviewResult? analysisResult;
 }
 
 abstract class ReviewAnalysisProvider {
@@ -150,6 +170,26 @@ abstract class ReviewAnalysisProvider {
   }
 }
 
+extension AnalysisRunMetadataContract on AnalysisRunMetadata {
+  AnalysisProviderMetadata toContractMetadata({String? sourceId}) {
+    return AnalysisProviderMetadata(
+      analysisProfileId: analysisProfileId,
+      providerId: providerId,
+      engineVersion: engineVersion,
+      classifierVersion: classifierVersion,
+      tacticalVerifierVersion: tacticalVerifierVersion,
+      openingBookVersion: openingBookVersion,
+      depth: depth,
+      movetimeMs: movetimeMs,
+      multipv: multipv,
+      candidateVerificationEnabled: candidateVerificationEnabled,
+      pgnHash: pgnHash,
+      cacheKey: cacheKey,
+      sourceId: sourceId,
+    );
+  }
+}
+
 class ReviewProviderUnavailableException implements Exception {
   const ReviewProviderUnavailableException(this.message);
   final String message;
@@ -158,15 +198,7 @@ class ReviewProviderUnavailableException implements Exception {
   String toString() => message;
 }
 
-enum ReviewProviderKind {
-  cached,
-  offlineLocal,
-  onlineFast,
-  onlineDeep,
-  unavailable,
-  serviceIssue,
-  unsupported,
-}
+typedef ReviewProviderKind = AnalysisProviderKind;
 
 enum ReviewModeUnavailableReason {
   none,
@@ -221,13 +253,21 @@ class ReviewModeAvailability {
 
   String? get unavailableMessage => switch (unavailableReason) {
     ReviewModeUnavailableReason.none => null,
-    ReviewModeUnavailableReason.offline => 'Online review unavailable',
+    _ => failureReason.safeCopy,
+  };
+
+  AnalysisFailureReason get failureReason => switch (unavailableReason) {
+    ReviewModeUnavailableReason.none => AnalysisFailureReason.none,
+    ReviewModeUnavailableReason.offline =>
+      AnalysisFailureReason.providerNotConfigured,
     ReviewModeUnavailableReason.onlineProviderUnavailable =>
-      'Online review unavailable',
+      AnalysisFailureReason.providerNotConfigured,
     ReviewModeUnavailableReason.localUnavailable =>
-      'Offline review unavailable',
-    ReviewModeUnavailableReason.serviceIssue => 'Service unavailable',
-    ReviewModeUnavailableReason.unsupported => 'Unsupported',
+      AnalysisFailureReason.offlineLocalUnavailable,
+    ReviewModeUnavailableReason.serviceIssue =>
+      AnalysisFailureReason.serviceUnavailable,
+    ReviewModeUnavailableReason.unsupported =>
+      AnalysisFailureReason.unsupported,
   };
 }
 
@@ -422,12 +462,22 @@ class LocalOfflineReviewProvider extends ReviewAnalysisProvider {
       averageDepthReached: request.profile.localDepth.toDouble(),
       engineCallsCount: enriched.totalPlies + 1 + (verified * 2),
     );
+    final payload = CanonicalAnalysisPayload.fromTimeline(
+      timeline: enriched,
+      pgn: request.pgn,
+      source: AnalysisGameSource.fromPgn(request.pgn),
+      modeUsed: AnalysisReviewMode.offlineLocal,
+      providerKind: AnalysisProviderKind.offlineLocal,
+      userIsWhite: request.userIsWhite,
+      providerMetadata: metadata.toContractMetadata(),
+    );
     return GameReviewResult(
       timeline: enriched,
       summary: summary,
       metadata: metadata,
       telemetry: telemetry,
       fromCache: false,
+      analysisResult: AnalysisReviewResult.completed(payload),
     );
   }
 
@@ -476,6 +526,36 @@ class GameReviewPipeline {
     );
   }
 
+  Future<AnalysisReviewResult> analyzeContract(
+    GameReviewRequest request,
+  ) async {
+    final provider = providerFor(request.profile);
+    if (!provider.isConfigured) {
+      return AnalysisReviewResult.unavailable(
+        mode: request.requestedMode,
+        providerKind: request.requestedMode.providerKind,
+        reason: _unconfiguredReasonFor(request.requestedMode),
+      );
+    }
+    try {
+      final result = await analyzeGame(request);
+      return result.analysisResult ??
+          _contractResultFromGameReview(request: request, result: result);
+    } on TimeoutException {
+      return AnalysisReviewResult.failed(
+        mode: request.requestedMode,
+        providerKind: request.requestedMode.providerKind,
+        reason: AnalysisFailureReason.timeout,
+      );
+    } on ReviewProviderUnavailableException {
+      return AnalysisReviewResult.unavailable(
+        mode: request.requestedMode,
+        providerKind: request.requestedMode.providerKind,
+        reason: _unconfiguredReasonFor(request.requestedMode),
+      );
+    }
+  }
+
   Future<GameReviewResult> analyzeGame(GameReviewRequest request) async {
     final provider = providerFor(request.profile);
     final metadata = provider.metadataFor(request);
@@ -502,6 +582,22 @@ class GameReviewPipeline {
           engineCallsCount: 0,
         ),
         fromCache: true,
+        analysisResult: AnalysisReviewResult.cachedHit(
+          CanonicalAnalysisPayload.fromTimeline(
+            timeline: timeline,
+            pgn: cached.pgn,
+            source: AnalysisGameSource.fromArchiveSource(cached.source),
+            modeUsed: AnalysisReviewMode.cached,
+            providerKind: AnalysisProviderKind.cached,
+            status: AnalysisProviderStatus.cachedHit,
+            userIsWhite: request.userIsWhite,
+            playedAt: cached.playedAt,
+            createdAt: cached.analyzedAt,
+            updatedAt: cached.analyzedAt,
+            timeControl: cached.timeControl,
+            providerMetadata: metadata.toContractMetadata(),
+          ),
+        ),
       );
       _logTelemetry(result.telemetry);
       return result;
@@ -509,6 +605,40 @@ class GameReviewPipeline {
     final result = await provider.analyzeGame(request);
     _logTelemetry(result.telemetry);
     return result;
+  }
+
+  AnalysisReviewResult _contractResultFromGameReview({
+    required GameReviewRequest request,
+    required GameReviewResult result,
+  }) {
+    final status = result.fromCache
+        ? AnalysisProviderStatus.cachedHit
+        : AnalysisProviderStatus.completed;
+    final mode = result.fromCache
+        ? AnalysisReviewMode.cached
+        : request.requestedMode;
+    final kind = result.fromCache
+        ? AnalysisProviderKind.cached
+        : request.requestedMode.providerKind;
+    final payload = CanonicalAnalysisPayload.fromTimeline(
+      timeline: result.timeline,
+      pgn: request.pgn,
+      source: AnalysisGameSource.fromPgn(request.pgn),
+      modeUsed: mode,
+      providerKind: kind,
+      status: status,
+      userIsWhite: request.userIsWhite,
+      providerMetadata: result.metadata.toContractMetadata(),
+    );
+    return result.fromCache
+        ? AnalysisReviewResult.cachedHit(payload)
+        : AnalysisReviewResult.completed(payload);
+  }
+
+  AnalysisFailureReason _unconfiguredReasonFor(AnalysisReviewMode mode) {
+    return mode == AnalysisReviewMode.offlineLocal
+        ? AnalysisFailureReason.offlineLocalUnavailable
+        : AnalysisFailureReason.providerNotConfigured;
   }
 
   bool _isCurrentCachedResult(

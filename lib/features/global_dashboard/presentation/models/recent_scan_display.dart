@@ -3,6 +3,7 @@ library;
 
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/archives/presentation/models/archived_game_card_display.dart';
+import 'package:apex_chess/features/pgn_review/domain/analysis_contract.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_game_card.dart';
 
 class RecentScanDisplay {
@@ -20,22 +21,33 @@ class RecentScanDisplay {
   String get subtitle => summary;
 
   factory RecentScanDisplay.fromGame(ArchivedGame game, {String? perspective}) {
-    final accuracy = (100 - game.averageCpLoss)
-        .clamp(0, 100)
-        .toStringAsFixed(0);
-    final moveCount = (game.totalPlies / 2).ceil();
+    final payload = CanonicalAnalysisPayload.fromArchivedGame(game);
+    return RecentScanDisplay.fromPayload(
+      payload,
+      game: game,
+      perspective: perspective,
+    );
+  }
+
+  factory RecentScanDisplay.fromPayload(
+    CanonicalAnalysisPayload payload, {
+    required ArchivedGame game,
+    String? perspective,
+  }) {
     final base = game.toApexGameCardDisplay(userHandle: perspective);
     return RecentScanDisplay(
       card: ApexGameCardDisplayModel(
         resultTone: base.resultTone,
         white: base.white,
         black: base.black,
-        primaryMeta: '$accuracy% · ${game.reviewModeLabel}',
-        moveCountLabel: '$moveCount moves',
-        secondaryMeta: '${game.sourceLabel} · ${game.relativePlayedAt}',
+        primaryMeta: '${payload.accuracyLabel}% · ${payload.reviewModeLabel}',
+        moveCountLabel: '${payload.moveCount} moves',
+        secondaryMeta: '${payload.sourceLabel} · ${game.relativePlayedAt}',
       ),
-      accuracy: accuracy,
-      summary: '$accuracy% · ${game.reviewModeLabel} · $moveCount moves',
+      accuracy: payload.accuracyLabel,
+      summary:
+          '${payload.accuracyLabel}% · '
+          '${payload.reviewModeLabel} · ${payload.moveCount} moves',
     );
   }
 }

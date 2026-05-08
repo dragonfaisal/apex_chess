@@ -30,6 +30,7 @@ import 'package:apex_chess/features/mistake_vault/data/mistake_vault_save_hook.d
 import 'package:apex_chess/features/home/presentation/controllers/home_activity_controller.dart';
 import 'package:apex_chess/features/home/presentation/pgn_paste_display_state.dart';
 import 'package:apex_chess/features/pgn_review/domain/saved_review_lookup.dart';
+import 'package:apex_chess/features/pgn_review/domain/review_entry_contract.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
 import 'package:apex_chess/features/pgn_review/domain/review_analysis_provider.dart';
 import 'package:apex_chess/features/pgn_review/presentation/views/review_summary_screen.dart';
@@ -265,12 +266,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     _PgnPasteResult result,
     ArchivedGame savedReview,
   ) {
-    final timeline = savedReview.cachedTimeline;
-    if (timeline == null) return;
+    final payload = ReviewEntryContract.savedReviewResult(
+      savedReview,
+      userIsWhite: result.userIsWhite,
+    ).payload;
+    if (payload == null) return;
     ref
         .read(reviewControllerProvider.notifier)
-        .loadTimeline(
-          timeline,
+        .loadPayload(
+          payload,
           userIsBlack: result.userIsWhite == false,
           mode: _modeForSavedReview(savedReview),
           userIsWhite: result.userIsWhite,
@@ -1676,20 +1680,29 @@ class _LocalAnalysisProgressDialogState
           : AnalysisMode.deep;
       final depth = result.metadata.depth;
       if (mounted) {
-        ref
-            .read(reviewControllerProvider.notifier)
-            .loadTimeline(
-              timeline,
-              // Auto-flip the board if the user told us they played
-              // Black. Unknown-side PGNs keep White at the bottom.
-              userIsBlack: widget.userIsWhite == false,
-              // Phase 20.1: thread the analysis mode and the user's
-              // colour so the coach card can attribute "Allowed
-              // forced mate" correctly and surface the "Needs Deep
-              // Scan" chip on Quick-mode ambiguous plies.
-              mode: mode,
-              userIsWhite: widget.userIsWhite,
-            );
+        final payload = result.analysisResult?.payload;
+        final controller = ref.read(reviewControllerProvider.notifier);
+        if (payload != null) {
+          controller.loadPayload(
+            payload,
+            userIsBlack: widget.userIsWhite == false,
+            mode: mode,
+            userIsWhite: widget.userIsWhite,
+          );
+        } else {
+          controller.loadTimeline(
+            timeline,
+            // Auto-flip the board if the user told us they played
+            // Black. Unknown-side PGNs keep White at the bottom.
+            userIsBlack: widget.userIsWhite == false,
+            // Phase 20.1: thread the analysis mode and the user's
+            // colour so the coach card can attribute "Allowed
+            // forced mate" correctly and surface the "Needs Deep
+            // Scan" chip on Quick-mode ambiguous plies.
+            mode: mode,
+            userIsWhite: widget.userIsWhite,
+          );
+        }
         // Archive save is awaited so we have the id to hand the
         // Mistake Vault hook; both are still best-effort and never
         // block the review flow on failure.

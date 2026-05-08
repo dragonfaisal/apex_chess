@@ -14,14 +14,13 @@ import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/analysis_profile.dart';
 import 'package:apex_chess/core/domain/services/analysis_cache_key.dart';
 import 'package:apex_chess/core/domain/services/analysis_versions.dart';
+import 'package:apex_chess/features/pgn_review/domain/analysis_contract.dart';
 
 import '../domain/archived_game.dart';
 import '../presentation/controllers/archive_controller.dart';
 
-/// Stable id derived from the PGN text. Uses Dart's built-in
-/// `String.hashCode` rather than `crypto.sha1` to avoid pulling a new
-/// dependency for what is effectively a de-dup key (collisions are
-/// benign — latest analysis wins).
+/// Stable id derived from the PGN text. Uses the shared FNV cache hash so
+/// archive and analysis identity stay aligned without a crypto dependency.
 String archiveIdForPgn(String pgn) {
   return stablePgnHash(pgn);
 }
@@ -64,30 +63,67 @@ Future<String?> saveAnalysisToArchive({
   String? timeControl,
 }) async {
   try {
-    final pgnHash = timeline.pgnHash ?? stablePgnHash(pgn);
-    final headers = timeline.headers;
-    final id = ArchivedGame.canonicalKeyFor(
-      pgn: pgn,
-      pgnHash: pgnHash,
-      white: headers['White'] ?? 'White',
-      black: headers['Black'] ?? 'Black',
-      result: headers['Result'] ?? '*',
-      playedAt: playedAt,
-    );
-    final game = ArchivedGame.fromTimeline(
+    final payload = CanonicalAnalysisPayload.fromTimeline(
       timeline: timeline,
-      id: id,
-      source: source,
-      depth: depth,
       pgn: pgn,
+      source: AnalysisGameSource.fromArchiveSource(source),
+      modeUsed: _reviewModeForTimeline(timeline, analysisMode),
+      providerKind: _providerKindForTimeline(timeline, analysisMode),
       playedAt: playedAt,
-      analysisMode: analysisMode,
       timeControl: timeControl,
     );
+    final game = archivedGameFromAnalysisPayload(
+      payload,
+      depth: depth,
+      source: source,
+      analysisMode: analysisMode,
+    );
     await ref.read(archiveControllerProvider.notifier).save(game);
-    return id;
+    return game.id;
   } catch (_) {
     // Archive save is best-effort — never block the review flow.
     return null;
   }
 }
+
+ArchivedGame archivedGameFromAnalysisPayload(
+  CanonicalAnalysisPayload payload, {
+  required int depth,
+  ArchiveSource? source,
+  AnalysisMode? analysisMode,
+}) {
+  final timeline = payload.timeline;
+  if (timeline == null) {
+    throw StateError('Analysis payload has no timeline');
+  }
+  return ArchivedGame.fromTimeline(
+    timeline: timeline,
+    id: payload.canonicalGameKey,
+    source: source ?? payload.source.archiveSource,
+    depth: depth,
+    pgn: payload.pgn ?? '',
+    playedAt: payload.playedAt,
+    analysisMode: analysisMode ?? payload.reviewBoardMode,
+    timeControl: payload.timeControl,
+  );
+}
+
+AnalysisReviewMode _reviewModeForTimeline(
+  AnalysisTimeline timeline,
+  AnalysisMode fallback,
+) {
+  final profileId = AnalysisProfileId.fromWire(timeline.analysisProfileId);
+  if (profileId == AnalysisProfileId.offlineReview) {
+    return AnalysisReviewMode.offlineLocal;
+  }
+  if (profileId == AnalysisProfileId.fastReview) {
+    return AnalysisReviewMode.onlineFast;
+  }
+  if (fallback == AnalysisMode.quick) return AnalysisReviewMode.onlineFast;
+  return AnalysisReviewMode.onlineDeep;
+}
+
+AnalysisProviderKind _providerKindForTimeline(
+  AnalysisTimeline timeline,
+  AnalysisMode fallback,
+) => _reviewModeForTimeline(timeline, fallback).providerKind;

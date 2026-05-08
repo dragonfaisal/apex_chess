@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/domain/entities/analysis_timeline.dart';
 import '../../../../core/domain/entities/move_analysis.dart';
 import '../../../../features/archives/domain/archived_game.dart';
+import '../../domain/analysis_contract.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // State
@@ -173,6 +174,29 @@ class ReviewController extends Notifier<ReviewState> {
       // inverse is a safe default. `null` remains reachable when a
       // PGN paste deliberately picks "Unknown side".
       userIsWhite: userIsWhite ?? (userIsBlack ? false : null),
+    );
+  }
+
+  void loadPayload(
+    CanonicalAnalysisPayload payload, {
+    bool userIsBlack = false,
+    AnalysisMode? mode,
+    bool? userIsWhite,
+    int initialPly = 0,
+  }) {
+    final timeline = payload.timeline;
+    if (timeline == null || timeline.moves.isEmpty) {
+      state = ReviewState(
+        error: AnalysisFailureReason.savedReviewMissing.safeCopy,
+      );
+      return;
+    }
+    loadTimeline(
+      timeline,
+      userIsBlack: userIsBlack,
+      mode: mode ?? payload.reviewBoardMode,
+      userIsWhite: userIsWhite ?? payload.userIsWhite,
+      initialPly: initialPly,
     );
   }
 
