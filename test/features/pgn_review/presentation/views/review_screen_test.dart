@@ -448,5 +448,53 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.byKey(const ValueKey('review-board-section')), findsOneWidget);
+    expect(find.byKey(const ValueKey('review-board-frame')), findsOneWidget);
+    expect(find.byKey(const ValueKey('review-eval-bar')), findsOneWidget);
+    expect(find.byKey(const ValueKey('review-eval-label')), findsOneWidget);
+
+    final boardFrameSize = tester.getSize(
+      find.byKey(const ValueKey('review-board-frame')),
+    );
+    final evalBarSize = tester.getSize(
+      find.byKey(const ValueKey('review-eval-bar')),
+    );
+    final evalLabelSize = tester.getSize(
+      find.byKey(const ValueKey('review-eval-label')),
+    );
+    final topHeaderSize = tester.getSize(
+      find.byKey(const ValueKey('review-top-player-header')),
+    );
+    final bottomHeaderSize = tester.getSize(
+      find.byKey(const ValueKey('review-bottom-player-header')),
+    );
+
+    expect(boardFrameSize.width, greaterThan(300));
+    expect(boardFrameSize.height, greaterThan(300));
+    expect(evalBarSize.width, lessThanOrEqualTo(22));
+    expect(evalLabelSize.width, greaterThan(0));
+    expect(evalLabelSize.height, greaterThan(0));
+    expect(topHeaderSize.height, lessThanOrEqualTo(42));
+    expect(bottomHeaderSize.height, lessThanOrEqualTo(44));
+
+    final evalLabel = tester.widget<Text>(
+      find.descendant(
+        of: find.byKey(const ValueKey('review-eval-label')),
+        matching: find.byType(Text),
+      ),
+    );
+    expect(evalLabel.data, isNotEmpty);
+    expect(find.text('This move keeps the advantage.'), findsOneWidget);
+
+    container.read(reviewControllerProvider.notifier).jumpTo(1);
+    await _pumpReview(tester);
+    expect(
+      find.byKey(const ValueKey('review-coach-better-move')),
+      findsOneWidget,
+    );
+
+    container.read(reviewControllerProvider.notifier).toggleFlip();
+    await _pumpReview(tester);
+    expect(find.byKey(const ValueKey('review-board-section')), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

@@ -4,6 +4,7 @@
 /// coach copy, eval, and navigation all come from [ReviewController].
 library;
 
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -22,6 +23,11 @@ import 'package:apex_chess/shared_ui/widgets/brilliant_glow.dart';
 
 bool shouldShowBetterMoveArrowForTesting(MoveAnalysis? move) =>
     ReviewBoardDisplayModel.shouldShowBetterMoveArrow(move);
+
+const double _reviewHorizontalPadding = 8;
+const double _evalBarWidth = 20;
+const double _evalBarGap = 5;
+const double _boardFramePadding = 5;
 
 class ReviewScreen extends ConsumerWidget {
   const ReviewScreen({super.key});
@@ -74,14 +80,32 @@ class ReviewScreen extends ConsumerWidget {
         child: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final boardMaxFromHeight = constraints.maxHeight * 0.47;
-              final boardSize = (constraints.maxWidth - 74)
-                  .clamp(240.0, boardMaxFromHeight.clamp(260.0, 520.0))
+              final maxSectionWidth =
+                  constraints.maxWidth - (_reviewHorizontalPadding * 2);
+              final boardMaxFromWidth =
+                  maxSectionWidth -
+                  _evalBarWidth -
+                  _evalBarGap -
+                  (_boardFramePadding * 2);
+              final boardMaxFromHeight = constraints.maxHeight * 0.56;
+              final boardSize = math
+                  .min(boardMaxFromWidth, boardMaxFromHeight)
+                  .clamp(180.0, 560.0)
                   .toDouble();
+              final boardSectionWidth =
+                  boardSize +
+                  _evalBarWidth +
+                  _evalBarGap +
+                  (_boardFramePadding * 2);
 
               return SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 18),
+                padding: const EdgeInsets.fromLTRB(
+                  _reviewHorizontalPadding,
+                  6,
+                  _reviewHorizontalPadding,
+                  18,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -90,19 +114,22 @@ class ReviewScreen extends ConsumerWidget {
                       player: display.topPlayer,
                       compact: true,
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 5),
                     Center(
                       child: SizedBox(
-                        width: boardSize + 38,
-                        child: _BoardWithEval(display: display),
+                        width: boardSectionWidth,
+                        child: _BoardWithEval(
+                          display: display,
+                          boardSize: boardSize,
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 5),
                     _PlayerHeader(
                       key: const ValueKey('review-bottom-player-header'),
                       player: display.bottomPlayer,
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 8),
                     _CoachInsightPanel(display: display),
                   ],
                 ),
@@ -165,17 +192,17 @@ class _PlayerHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(12),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: Container(
           padding: EdgeInsets.symmetric(
-            horizontal: 10,
-            vertical: compact ? 7 : 8,
+            horizontal: 8,
+            vertical: compact ? 5 : 6,
           ),
           decoration: BoxDecoration(
             color: ApexColors.cardSurface.withValues(alpha: 0.68),
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: ApexColors.stardustLine.withValues(alpha: 0.62),
               width: 0.6,
@@ -185,51 +212,31 @@ class _PlayerHeader extends StatelessWidget {
             children: [
               ApexPlayerAvatar(
                 identity: player.identity,
-                size: ApexPlayerAvatarSize.medium,
+                size: ApexPlayerAvatarSize.small,
                 showConnectedBadge: player.isUser,
               ),
-              const SizedBox(width: 9),
+              const SizedBox(width: 7),
+              ApexSideMarker(
+                side: player.side == ReviewBoardSide.white
+                    ? ApexSideMarkerSide.white
+                    : ApexSideMarkerSide.black,
+                size: 10,
+              ),
+              const SizedBox(width: 5),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      player.username,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: ApexTypography.titleMedium.copyWith(
-                        color: ApexColors.textPrimary,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        ApexSideMarker(
-                          side: player.side == ReviewBoardSide.white
-                              ? ApexSideMarkerSide.white
-                              : ApexSideMarkerSide.black,
-                          size: 11,
-                        ),
-                        const SizedBox(width: 5),
-                        Expanded(
-                          child: Text(
-                            [
-                              player.sideLabel,
-                              if (player.rating != null) player.rating!,
-                            ].join(' · '),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: ApexTypography.bodyMedium.copyWith(
-                              color: ApexColors.textTertiary,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                child: Text(
+                  [
+                    player.username,
+                    player.sideLabel,
+                    if (player.rating != null) player.rating!,
+                  ].join(' · '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: ApexTypography.titleMedium.copyWith(
+                    color: ApexColors.textPrimary,
+                    fontSize: 12,
+                    height: 1.1,
+                  ),
                 ),
               ),
               if (player.isUser) const _MiniChip(label: 'YOU'),
@@ -253,10 +260,10 @@ class _MiniChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
         color: ApexColors.sapphire.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(7),
         border: Border.all(
           color: ApexColors.sapphireBright.withValues(alpha: 0.42),
           width: 0.5,
@@ -266,7 +273,7 @@ class _MiniChip extends StatelessWidget {
         label,
         style: ApexTypography.labelLarge.copyWith(
           color: ApexColors.sapphireBright,
-          fontSize: 10,
+          fontSize: 9,
         ),
       ),
     );
@@ -274,26 +281,34 @@ class _MiniChip extends StatelessWidget {
 }
 
 class _BoardWithEval extends StatelessWidget {
-  const _BoardWithEval({required this.display});
+  const _BoardWithEval({required this.display, required this.boardSize});
 
   final ReviewBoardDisplayModel display;
+  final double boardSize;
 
   @override
   Widget build(BuildContext context) {
     final currentMove = display.currentMove;
     return Row(
       key: const ValueKey('review-board-section'),
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        _VerticalEvalBar(display: display.eval, flipped: display.flipped),
-        const SizedBox(width: 8),
-        Expanded(
+        _VerticalEvalBar(
+          display: display.eval,
+          flipped: display.flipped,
+          height: boardSize + (_boardFramePadding * 2),
+        ),
+        const SizedBox(width: _evalBarGap),
+        SizedBox(
+          key: const ValueKey('review-board-frame'),
+          width: boardSize + (_boardFramePadding * 2),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(18),
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
               child: Container(
-                padding: const EdgeInsets.all(7),
+                padding: const EdgeInsets.all(_boardFramePadding),
                 decoration: BoxDecoration(
                   color: ApexColors.nebula.withValues(alpha: 0.72),
                   borderRadius: BorderRadius.circular(18),
@@ -336,25 +351,46 @@ class _BoardWithEval extends StatelessWidget {
 }
 
 class _VerticalEvalBar extends StatelessWidget {
-  const _VerticalEvalBar({required this.display, required this.flipped});
+  const _VerticalEvalBar({
+    required this.display,
+    required this.flipped,
+    required this.height,
+  });
 
   final ReviewEvalDisplay display;
   final bool flipped;
+  final double height;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 30,
-      height: 248,
+      key: const ValueKey('review-eval-bar'),
+      width: _evalBarWidth,
+      height: height,
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(9),
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: ApexColors.trueBlack.withValues(alpha: 0.92),
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                ApexColors.spaceVoid.withValues(alpha: 0.95),
+                ApexColors.deepCyan.withValues(alpha: 0.74),
+                ApexColors.trueBlack.withValues(alpha: 0.92),
+              ],
+            ),
             border: Border.all(
-              color: ApexColors.subtleBorder.withValues(alpha: 0.8),
+              color: ApexColors.sapphireBright.withValues(alpha: 0.34),
               width: 0.6,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: ApexColors.sapphireBright.withValues(alpha: 0.12),
+                blurRadius: 14,
+                spreadRadius: -5,
+              ),
+            ],
           ),
           child: Stack(
             children: [
@@ -377,11 +413,20 @@ class _VerticalEvalBar extends StatelessWidget {
                             child: DecoratedBox(
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
+                                  begin: flipped
+                                      ? Alignment.bottomCenter
+                                      : Alignment.topCenter,
+                                  end: flipped
+                                      ? Alignment.topCenter
+                                      : Alignment.bottomCenter,
                                   colors: [
-                                    Colors.white.withValues(alpha: 0.96),
-                                    Colors.white.withValues(alpha: 0.68),
+                                    ApexColors.auroraSoft.withValues(
+                                      alpha: 0.95,
+                                    ),
+                                    ApexColors.sapphireBright.withValues(
+                                      alpha: 0.92,
+                                    ),
+                                    ApexColors.sapphire.withValues(alpha: 0.78),
                                   ],
                                 ),
                               ),
@@ -393,35 +438,47 @@ class _VerticalEvalBar extends StatelessWidget {
                   },
                 ),
               ),
-              const Positioned(
+              Positioned(
                 left: 0,
                 right: 0,
-                top: 123.5,
-                child: Divider(height: 1, color: ApexColors.sapphireDeep),
+                top: (height / 2) - 0.5,
+                child: Divider(
+                  height: 1,
+                  color: ApexColors.sapphireBright.withValues(alpha: 0.34),
+                ),
               ),
               Align(
                 alignment: Alignment.center,
                 child: RotatedBox(
                   quarterTurns: 3,
                   child: Container(
+                    key: const ValueKey('review-eval-label'),
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 7,
-                      vertical: 3,
+                      horizontal: 5,
+                      vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: ApexColors.nebula.withValues(alpha: 0.82),
-                      borderRadius: BorderRadius.circular(8),
+                      color: ApexColors.nebula.withValues(alpha: 0.88),
+                      borderRadius: BorderRadius.circular(7),
+                      border: Border.all(
+                        color: ApexColors.sapphireBright.withValues(
+                          alpha: 0.26,
+                        ),
+                        width: 0.5,
+                      ),
                     ),
                     child: Text(
                       display.label,
                       maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: ApexTypography.monoEval.copyWith(
                         color: display.isEqual
                             ? ApexColors.textSecondary
                             : display.whiteBetter
-                            ? Colors.white
+                            ? ApexColors.textPrimary
                             : ApexColors.textPrimary,
-                        fontSize: 11,
+                        fontSize: 10,
+                        height: 1.1,
                       ),
                     ),
                   ),
@@ -451,7 +508,7 @@ class _CoachInsightPanel extends StatelessWidget {
         child: AnimatedContainer(
           duration: ApexMotion.normal,
           curve: ApexMotion.standard,
-          padding: const EdgeInsets.all(13),
+          padding: const EdgeInsets.fromLTRB(11, 10, 11, 11),
           decoration: BoxDecoration(
             color: ApexColors.cardSurface.withValues(alpha: 0.76),
             borderRadius: BorderRadius.circular(16),
@@ -470,7 +527,7 @@ class _CoachInsightPanel extends StatelessWidget {
                 Row(
                   children: [
                     _QualityChip(display: insight.quality),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 7),
                     Expanded(
                       child: Text(
                         '${insight.moveLabel} ${insight.san}',
@@ -478,24 +535,24 @@ class _CoachInsightPanel extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: ApexTypography.titleMedium.copyWith(
                           color: ApexColors.textPrimary,
-                          fontSize: 15,
+                          fontSize: 14,
                         ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Text(
                   insight.explanation,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: ApexTypography.bodyMedium.copyWith(
                     color: ApexColors.textSecondary,
-                    fontSize: 12,
+                    fontSize: 11.5,
                   ),
                 ),
                 if (insight.betterMove != null) ...[
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 7),
                   _BetterMoveHint(
                     key: const ValueKey('review-coach-better-move'),
                     move: insight.betterMove!,
@@ -538,10 +595,10 @@ class _QualityChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
         color: display.color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(9),
         border: Border.all(color: display.color.withValues(alpha: 0.5)),
       ),
       child: Text(
@@ -550,7 +607,7 @@ class _QualityChip extends StatelessWidget {
             : '${display.label} ${display.marker}',
         style: ApexTypography.labelLarge.copyWith(
           color: display.color,
-          fontSize: 11,
+          fontSize: 10.5,
         ),
       ),
     );
@@ -608,7 +665,7 @@ class _BetterMoveHint extends StatelessWidget {
   Widget build(BuildContext context) {
     final cleanReason = reason?.trim();
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
       decoration: BoxDecoration(
         color: ApexColors.sapphireBright.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
@@ -623,9 +680,9 @@ class _BetterMoveHint extends StatelessWidget {
           const Icon(
             Icons.north_east_rounded,
             color: ApexColors.sapphireBright,
-            size: 15,
+            size: 14,
           ),
-          const SizedBox(width: 7),
+          const SizedBox(width: 6),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -640,7 +697,7 @@ class _BetterMoveHint extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: ApexTypography.labelLarge.copyWith(
                           color: ApexColors.textPrimary,
-                          fontSize: 12,
+                          fontSize: 11.5,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -655,7 +712,7 @@ class _BetterMoveHint extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: ApexTypography.bodyMedium.copyWith(
                       color: ApexColors.textSecondary,
-                      fontSize: 11,
+                      fontSize: 10.5,
                     ),
                   ),
                 ],
