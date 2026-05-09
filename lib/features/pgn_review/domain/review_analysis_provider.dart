@@ -143,6 +143,12 @@ abstract class ReviewAnalysisProvider {
 
   Future<GameReviewResult> analyzeGame(GameReviewRequest request);
 
+  Future<AnalysisReviewResult?> analyzeContractRequest(
+    GameReviewRequest request,
+  ) async {
+    return null;
+  }
+
   AnalysisRunMetadata metadataFor(GameReviewRequest request) {
     final pgnHash = stablePgnHash(request.pgn);
     final profile = request.profile;
@@ -537,6 +543,8 @@ class GameReviewPipeline {
         reason: _unconfiguredReasonFor(request.requestedMode),
       );
     }
+    final providerContract = await provider.analyzeContractRequest(request);
+    if (providerContract != null) return providerContract;
     try {
       final result = await analyzeGame(request);
       return result.analysisResult ??
