@@ -15,6 +15,11 @@ class OnlineReviewProviderConfig {
     this.isMock = false,
     this.engineVersion = 'online-unconfigured',
     this.maxPollAttempts = 6,
+    this.baseUrl,
+    this.apiKey,
+    this.requestTimeout = const Duration(seconds: 10),
+    this.pollInterval = Duration.zero,
+    this.overallTimeout = const Duration(seconds: 45),
   });
 
   final String providerId;
@@ -23,11 +28,56 @@ class OnlineReviewProviderConfig {
   final bool isMock;
   final String engineVersion;
   final int maxPollAttempts;
+  final String? baseUrl;
+  final String? apiKey;
+  final Duration requestTimeout;
+  final Duration pollInterval;
+  final Duration overallTimeout;
+
+  bool get hasApiKey => apiKey != null && apiKey!.trim().isNotEmpty;
 
   static const unavailable = OnlineReviewProviderConfig(
     providerId: 'online_unconfigured',
     displayName: 'Online Review',
   );
+
+  factory OnlineReviewProviderConfig.fromEnvironment(AnalysisReviewMode mode) {
+    const baseUrl = String.fromEnvironment('APEX_ONLINE_REVIEW_BASE_URL');
+    const apiKey = String.fromEnvironment('APEX_ONLINE_REVIEW_API_KEY');
+    const requestTimeoutMs = int.fromEnvironment(
+      'APEX_ONLINE_REVIEW_REQUEST_TIMEOUT_MS',
+      defaultValue: 10000,
+    );
+    const pollIntervalMs = int.fromEnvironment(
+      'APEX_ONLINE_REVIEW_POLL_INTERVAL_MS',
+      defaultValue: 500,
+    );
+    const overallTimeoutMs = int.fromEnvironment(
+      'APEX_ONLINE_REVIEW_OVERALL_TIMEOUT_MS',
+      defaultValue: 45000,
+    );
+    const maxPollAttempts = int.fromEnvironment(
+      'APEX_ONLINE_REVIEW_MAX_POLL_ATTEMPTS',
+      defaultValue: 60,
+    );
+    final configured = baseUrl.trim().isNotEmpty;
+    return OnlineReviewProviderConfig(
+      providerId: mode == AnalysisReviewMode.onlineFast
+          ? 'apex_backend_online_fast'
+          : 'apex_backend_online_deep',
+      displayName: mode == AnalysisReviewMode.onlineFast
+          ? 'Apex Online Fast'
+          : 'Apex Online Deep',
+      isConfigured: configured,
+      engineVersion: configured ? 'apex-backend-http' : 'online-unconfigured',
+      maxPollAttempts: maxPollAttempts,
+      baseUrl: configured ? baseUrl : null,
+      apiKey: apiKey.trim().isEmpty ? null : apiKey,
+      requestTimeout: Duration(milliseconds: requestTimeoutMs),
+      pollInterval: Duration(milliseconds: pollIntervalMs),
+      overallTimeout: Duration(milliseconds: overallTimeoutMs),
+    );
+  }
 }
 
 class OnlineReviewSubmitRequest {
@@ -222,10 +272,12 @@ class OnlineReviewCacheLookupRequest {
   const OnlineReviewCacheLookupRequest({
     required this.gameKey,
     required this.requestedMode,
+    this.analysisRequest,
   });
 
   final String gameKey;
   final AnalysisReviewMode requestedMode;
+  final AnalysisReviewRequest? analysisRequest;
 }
 
 enum OnlineReviewCacheLookupStatus {

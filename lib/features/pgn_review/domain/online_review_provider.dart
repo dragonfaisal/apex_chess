@@ -119,6 +119,7 @@ class OnlineReviewAnalysisProvider extends ReviewAnalysisProvider {
       OnlineReviewCacheLookupRequest(
         gameKey: analysisRequest.canonicalGameKey,
         requestedMode: mode,
+        analysisRequest: analysisRequest,
       ),
     );
     final cachedResult = cached.toAnalysisResult();
@@ -150,7 +151,12 @@ class OnlineReviewAnalysisProvider extends ReviewAnalysisProvider {
     );
     if (snapshot.status.isTerminal) return snapshot.toAnalysisResult();
 
+    final sw = Stopwatch()..start();
     for (var i = 0; i < onlineProvider.config.maxPollAttempts; i++) {
+      if (sw.elapsed >= onlineProvider.config.overallTimeout) break;
+      if (i > 0 && onlineProvider.config.pollInterval > Duration.zero) {
+        await Future<void>.delayed(onlineProvider.config.pollInterval);
+      }
       snapshot = await onlineProvider.getJob(submit.jobId!);
       if (snapshot.status.isTerminal) {
         return snapshot.toAnalysisResult();

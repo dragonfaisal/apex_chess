@@ -11,9 +11,15 @@
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 
+import 'package:apex_chess/core/domain/entities/analysis_profile.dart';
 import 'package:apex_chess/core/infrastructure/engine/engine.dart';
 import 'package:apex_chess/features/archives/data/archive_repository.dart';
+import 'package:apex_chess/features/pgn_review/domain/analysis_contract.dart';
+import 'package:apex_chess/features/pgn_review/domain/http_online_review_provider.dart';
+import 'package:apex_chess/features/pgn_review/domain/online_review_api_contract.dart';
+import 'package:apex_chess/features/pgn_review/domain/online_review_provider.dart';
 import 'package:apex_chess/features/pgn_review/domain/review_analysis_provider.dart';
 import 'package:apex_chess/features/user_validation/data/username_validator.dart';
 import 'package:apex_chess/infrastructure/api/cloud_eval_service.dart';
@@ -120,6 +126,40 @@ final gameAnalyzerProvider = Provider<CompositeGameAnalyzer>((ref) {
   return CompositeGameAnalyzer(cloud: cloud, local: local);
 });
 
+final onlineReviewHttpClientProvider = Provider<http.Client>((ref) {
+  final client = http.Client();
+  ref.onDispose(client.close);
+  return client;
+});
+
+final onlineFastReviewProvider = Provider<OnlineReviewProvider>((ref) {
+  final config = OnlineReviewProviderConfig.fromEnvironment(
+    AnalysisReviewMode.onlineFast,
+  );
+  if (!config.isConfigured) {
+    return DisabledOnlineReviewProvider(config: config);
+  }
+  return HttpOnlineReviewProvider(
+    mode: AnalysisReviewMode.onlineFast,
+    config: config,
+    httpClient: ref.watch(onlineReviewHttpClientProvider),
+  );
+});
+
+final onlineDeepReviewProvider = Provider<OnlineReviewProvider>((ref) {
+  final config = OnlineReviewProviderConfig.fromEnvironment(
+    AnalysisReviewMode.onlineDeep,
+  );
+  if (!config.isConfigured) {
+    return DisabledOnlineReviewProvider(config: config);
+  }
+  return HttpOnlineReviewProvider(
+    mode: AnalysisReviewMode.onlineDeep,
+    config: config,
+    httpClient: ref.watch(onlineReviewHttpClientProvider),
+  );
+});
+
 /// Shared review pipeline. All analysis entry points should call this instead
 /// of directly invoking a screen-local analyzer.
 final reviewAnalysisPipelineProvider = FutureProvider<GameReviewPipeline>((
@@ -128,8 +168,14 @@ final reviewAnalysisPipelineProvider = FutureProvider<GameReviewPipeline>((
   final analyzer = ref.watch(gameAnalyzerProvider);
   final cache = await ArchiveRepository.open();
   return GameReviewPipeline(
-    fastProvider: const OnlineFastReviewProvider(),
-    deepProvider: const OnlineDeepReviewProvider(),
+    fastProvider: OnlineReviewAnalysisProvider(
+      onlineProvider: ref.watch(onlineFastReviewProvider),
+      profile: AnalysisProfile.fastReview,
+    ),
+    deepProvider: OnlineReviewAnalysisProvider(
+      onlineProvider: ref.watch(onlineDeepReviewProvider),
+      profile: AnalysisProfile.deepReview,
+    ),
     offlineProvider: LocalOfflineReviewProvider(analyzer),
     cacheRepository: cache,
   );
