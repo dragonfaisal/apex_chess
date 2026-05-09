@@ -437,6 +437,8 @@ class HttpOnlineReviewProvider extends OnlineReviewProvider {
       final afterCp = (move['evalAfterCp'] as num?)?.toInt();
       final winBefore = EvaluationAnalyzer.calculateWinPercentage(cp: beforeCp);
       final winAfter = EvaluationAnalyzer.calculateWinPercentage(cp: afterCp);
+      final whiteDelta = winAfter - winBefore;
+      final moverDelta = isWhite ? whiteDelta : -whiteDelta;
       final uci =
           _clean(move['playedMoveUci']) ??
           _clean(move['uci']) ??
@@ -451,7 +453,7 @@ class HttpOnlineReviewProvider extends OnlineReviewProvider {
           targetSquare: uci.length >= 4 ? uci.substring(2, 4) : '',
           winPercentBefore: winBefore,
           winPercentAfter: winAfter,
-          deltaW: winAfter - winBefore,
+          deltaW: moverDelta,
           isWhiteMove: isWhite,
           classification: _qualityFromWire(move['quality']?.toString()),
           playedEqualsPv1:

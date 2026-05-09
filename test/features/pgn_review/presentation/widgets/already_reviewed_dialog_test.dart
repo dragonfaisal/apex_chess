@@ -37,8 +37,8 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Already reviewed'), findsOneWidget);
-      expect(find.text('Saved mode: Online Fast'), findsOneWidget);
-      expect(find.text('Selected: Online Deep'), findsOneWidget);
+      expect(find.text('Saved mode: Fast'), findsOneWidget);
+      expect(find.text('Selected: Deep'), findsOneWidget);
       expect(find.text('Preview'), findsOneWidget);
       expect(find.text('Analyze anyway'), findsOneWidget);
       expect(

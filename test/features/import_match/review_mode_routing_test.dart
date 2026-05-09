@@ -35,12 +35,14 @@ void main() {
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Online Fast'), findsOneWidget);
-    expect(find.text('Online Deep'), findsOneWidget);
+    expect(find.text('Fast'), findsOneWidget);
+    expect(find.text('Deep'), findsOneWidget);
+    expect(find.text('Online Fast'), findsNothing);
+    expect(find.text('Online Deep'), findsNothing);
     expect(find.text('Online review unavailable'), findsNWidgets(2));
     expect(find.text('Offline Review'), findsOneWidget);
 
-    await tester.tap(find.text('Online Fast'));
+    await tester.tap(find.text('Fast'));
     await tester.pumpAndSettle();
     expect(selected, isNull);
 
@@ -62,8 +64,8 @@ void main() {
       ),
     );
 
-    expect(find.text('Online Fast'), findsNothing);
-    expect(find.text('Online Deep'), findsNothing);
+    expect(find.text('Fast'), findsNothing);
+    expect(find.text('Deep'), findsNothing);
     expect(find.text('Offline Review'), findsOneWidget);
   });
 }

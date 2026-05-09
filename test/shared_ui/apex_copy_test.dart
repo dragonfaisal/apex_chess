@@ -3,6 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('ApexCopy keeps public labels short and avoids old hype labels', () {
+    expect(ApexCopy.depthFastLabel, 'Fast');
+    expect(ApexCopy.depthDeepLabel, 'Deep');
+
     const publicCopy = [
       ApexCopy.importTitle,
       ApexCopy.archivesTitle,

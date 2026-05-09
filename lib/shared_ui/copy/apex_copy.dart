@@ -109,10 +109,10 @@ class ApexCopy {
 
   // ── Depth picker ───────────────────────────────────────────────────────
   static const String depthPickerTitle = 'REVIEW MODE';
-  static const String depthFastLabel = 'Online Fast';
+  static const String depthFastLabel = 'Fast';
   static const String depthFastTag = 'Online';
   static const String depthFastBlurb = 'Fast internet-backed review.';
-  static const String depthDeepLabel = 'Online Deep';
+  static const String depthDeepLabel = 'Deep';
   static const String depthDeepTag = 'Online';
   static const String depthDeepBlurb = 'Stronger internet-backed review.';
   static const String depthOfflineLabel = 'Offline Review';

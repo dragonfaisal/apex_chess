@@ -1165,14 +1165,14 @@ class _GameCard extends ConsumerWidget {
         ? [
             if (plan.canAnalyzeOnlineFast)
               _ReviewModeAction(
-                label: 'Online Fast',
+                label: 'Fast',
                 icon: Icons.flash_on_rounded,
                 onTap: () =>
                     _startAnalysis(context, ref, AnalysisProfile.fastReview),
               ),
             if (plan.canAnalyzeOnlineDeep)
               _ReviewModeAction(
-                label: 'Online Deep',
+                label: 'Deep',
                 icon: Icons.auto_awesome_rounded,
                 onTap: () =>
                     _startAnalysis(context, ref, AnalysisProfile.deepReview),
@@ -1180,7 +1180,7 @@ class _GameCard extends ConsumerWidget {
           ]
         : [
             _ReviewModeAction(
-              label: 'Offline',
+              label: 'Offline Review',
               icon: Icons.offline_bolt_rounded,
               onTap: () =>
                   _startAnalysis(context, ref, AnalysisProfile.offlineReview),

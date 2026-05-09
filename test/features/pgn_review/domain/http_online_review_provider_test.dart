@@ -6,6 +6,9 @@ import 'package:apex_chess/features/pgn_review/domain/http_online_review_provide
 import 'package:apex_chess/features/pgn_review/domain/online_review_api_contract.dart';
 import 'package:apex_chess/features/pgn_review/domain/online_review_provider.dart';
 import 'package:apex_chess/features/pgn_review/domain/review_analysis_provider.dart';
+import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
+import 'package:apex_chess/features/pgn_review/presentation/models/review_board_display.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -78,8 +81,7 @@ void main() {
 
     expect(result.status, AnalysisProviderStatus.completed);
     expect(result.mode, AnalysisReviewMode.onlineFast);
-    expect(result.payload!.timeline!.moves, hasLength(2));
-    expect(result.payload!.providerMetadata.engineVersion, 'mock-v1');
+    _expectRicherPayload(result.payload!, mode: AnalysisReviewMode.onlineFast);
     expect(offline.calls, 0);
   });
 
@@ -114,6 +116,7 @@ void main() {
     expect(result.status, AnalysisProviderStatus.cachedHit);
     expect(result.payload!.modeUsed, AnalysisReviewMode.onlineDeep);
     expect(result.payload!.timeline!.analysisProfileId, 'deep_review');
+    _expectRicherPayload(result.payload!, mode: AnalysisReviewMode.onlineDeep);
     expect(postCount, 0);
   });
 
@@ -131,7 +134,10 @@ void main() {
     final response = await provider.submitReview(_submitRequest());
 
     expect(response.status, OnlineReviewJobStatus.completed);
-    expect(response.result!.payload.timeline!.moves, hasLength(2));
+    _expectRicherPayload(
+      response.result!.payload,
+      mode: AnalysisReviewMode.onlineFast,
+    );
     expect(response.result!.payload.modeUsed, AnalysisReviewMode.onlineFast);
   });
 
@@ -352,13 +358,54 @@ http.Response _jsonResponse(Map<String, Object?> body, {int statusCode = 200}) {
   );
 }
 
+void _expectRicherPayload(
+  CanonicalAnalysisPayload payload, {
+  required AnalysisReviewMode mode,
+}) {
+  final timeline = payload.timeline!;
+  expect(payload.modeUsed, mode);
+  expect(payload.white.name, 'Alpha');
+  expect(payload.white.rating, '1500');
+  expect(payload.black.name, 'Beta');
+  expect(payload.black.rating, '1510');
+  expect(payload.result, '1-0');
+  expect(payload.openingName, 'Mock Opening');
+  expect(payload.ecoCode, 'A00');
+  expect(timeline.moves, hasLength(6));
+  expect(timeline.totalPlies, 6);
+  expect(timeline.headers['White'], 'Alpha');
+  expect(timeline.headers['Black'], 'Beta');
+  expect(timeline.headers['WhiteElo'], '1500');
+  expect(timeline.headers['BlackElo'], '1510');
+  expect(payload.averageCpLoss, greaterThan(0));
+  expect(payload.providerMetadata.engineVersion, 'mock-v2');
+
+  final board = ReviewBoardDisplayModel.fromTimeline(
+    timeline,
+    currentPly: 0,
+    flipped: false,
+    mode: payload.reviewBoardMode,
+    userIsWhite: true,
+  );
+  expect(board.bottomPlayer.username, 'Alpha');
+  expect(board.topPlayer.username, 'Beta');
+  expect(board.timeline, hasLength(6));
+
+  final container = ProviderContainer();
+  addTearDown(container.dispose);
+  container
+      .read(reviewControllerProvider.notifier)
+      .loadPayload(payload, userIsWhite: true);
+  expect(container.read(reviewControllerProvider).totalPlies, 6);
+}
+
 Map<String, Object?> _queued({String mode = 'onlineFast'}) => {
   'jobId': 'job-1',
   'status': 'queued',
   'mode': mode,
   'gameKey': 'game-v1-backend',
   'cached': false,
-  'progress': {'totalMoves': 2, 'analyzedMoves': 0},
+  'progress': {'totalMoves': 6, 'analyzedMoves': 0},
 };
 
 Map<String, Object?> _running({String mode = 'onlineFast'}) => {
@@ -367,7 +414,7 @@ Map<String, Object?> _running({String mode = 'onlineFast'}) => {
   'mode': mode,
   'gameKey': 'game-v1-backend',
   'cached': false,
-  'progress': {'totalMoves': 2, 'analyzedMoves': 1},
+  'progress': {'totalMoves': 6, 'analyzedMoves': 3},
 };
 
 Map<String, Object?> _completed({
@@ -379,7 +426,7 @@ Map<String, Object?> _completed({
   'mode': mode,
   'gameKey': gameKey,
   'cached': false,
-  'progress': {'totalMoves': 2, 'analyzedMoves': 2},
+  'progress': {'totalMoves': 6, 'analyzedMoves': 6},
   'analysis': _analysis(mode: mode, gameKey: gameKey),
 };
 
@@ -398,7 +445,7 @@ Map<String, Object?> _analysis({
   'result': '1-0',
   'opening': 'Mock Opening',
   'eco': 'A00',
-  'moveQualityCounts': {'book': 1, 'good': 1},
+  'moveQualityCounts': {'book': 2, 'good': 2, 'excellent': 1, 'inaccuracy': 1},
   'timeline': [
     {
       'ply': 1,
@@ -436,13 +483,83 @@ Map<String, Object?> _analysis({
       'isBookMove': false,
       'comment': 'Mock better move field.',
     },
+    {
+      'ply': 3,
+      'moveNumber': 2,
+      'side': 'white',
+      'san': 'Nf3',
+      'uci': 'g1f3',
+      'playedMoveSan': 'Nf3',
+      'playedMoveUci': 'g1f3',
+      'quality': 'good',
+      'evalBeforeCp': 31,
+      'evalAfterCp': 18,
+      'evalLossCp': 13,
+      'bestMoveSan': 'Nc3',
+      'bestMoveUci': 'b1c3',
+      'isBookMove': false,
+      'comment': 'This move keeps the game playable.',
+    },
+    {
+      'ply': 4,
+      'moveNumber': 2,
+      'side': 'black',
+      'san': 'd6',
+      'uci': 'd7d6',
+      'playedMoveSan': 'd6',
+      'playedMoveUci': 'd7d6',
+      'quality': 'excellent',
+      'evalBeforeCp': 18,
+      'evalAfterCp': 22,
+      'evalLossCp': 4,
+      'bestMoveSan': 'd6',
+      'bestMoveUci': 'd7d6',
+      'isBookMove': false,
+      'comment': 'Mock review entry.',
+    },
+    {
+      'ply': 5,
+      'moveNumber': 3,
+      'side': 'white',
+      'san': 'd4',
+      'uci': 'd2d4',
+      'playedMoveSan': 'd4',
+      'playedMoveUci': 'd2d4',
+      'quality': 'good',
+      'evalBeforeCp': 22,
+      'evalAfterCp': 12,
+      'evalLossCp': 10,
+      'bestMoveSan': 'Bb5+',
+      'bestMoveUci': 'f1b5',
+      'isBookMove': false,
+      'comment': 'This move keeps the game playable.',
+    },
+    {
+      'ply': 6,
+      'moveNumber': 3,
+      'side': 'black',
+      'san': 'cxd4',
+      'uci': 'c5d4',
+      'playedMoveSan': 'cxd4',
+      'playedMoveUci': 'c5d4',
+      'quality': 'inaccuracy',
+      'evalBeforeCp': 12,
+      'evalAfterCp': 82,
+      'evalLossCp': 70,
+      'bestMoveSan': 'e5',
+      'bestMoveUci': 'e7e5',
+      'betterMoveSan': 'e5',
+      'betterMoveUci': 'e7e5',
+      'isBookMove': false,
+      'comment': 'Better: e5 - improves the line.',
+    },
   ],
   'createdAt': '2026-05-09T16:00:00Z',
   'updatedAt': '2026-05-09T16:00:01Z',
   'providerMetadata': {
     'provider': 'mock',
     'engine': 'none',
-    'analysisVersion': 'mock-v1',
+    'analysisVersion': 'mock-v2',
     'contractVersion': 'v2',
     'generatedByMock': true,
   },
@@ -452,7 +569,9 @@ const _pgn = '''
 [Site "https://www.chess.com/game/live/999"]
 [White "Alpha"]
 [Black "Beta"]
+[WhiteElo "1500"]
+[BlackElo "1510"]
 [Result "1-0"]
 
-1. e4 c5 1-0
+1. e4 c5 2. Nf3 d6 3. d4 cxd4 1-0
 ''';

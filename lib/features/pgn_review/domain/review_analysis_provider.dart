@@ -216,8 +216,8 @@ enum ReviewModeUnavailableReason {
 }
 
 String reviewProviderModeLabelFor(AnalysisProfileId id) => switch (id) {
-  AnalysisProfileId.fastReview => 'Online Fast',
-  AnalysisProfileId.deepReview => 'Online Deep',
+  AnalysisProfileId.fastReview => 'Fast',
+  AnalysisProfileId.deepReview => 'Deep',
   AnalysisProfileId.offlineReview => 'Offline Review',
 };
 
