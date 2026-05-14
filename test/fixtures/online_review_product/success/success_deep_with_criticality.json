@@ -1,0 +1,104 @@
+{
+  "ok": true,
+  "contractVersion": "online-review-product-v1",
+  "gameKey": "game-v1-fake",
+  "mode": "onlineDeep",
+  "status": "completed",
+  "headers": {
+    "event": null,
+    "site": null,
+    "date": null,
+    "round": null,
+    "white": "Faisal",
+    "black": "Opponent",
+    "whiteElo": null,
+    "blackElo": null,
+    "result": "*",
+    "eco": null,
+    "opening": null
+  },
+  "summary": {
+    "totalPlies": 1,
+    "analyzedMoves": 1,
+    "failedMoves": 0,
+    "qualityCounts": {
+      "best": 0,
+      "excellent": 0,
+      "good": 0,
+      "inaccuracy": 0,
+      "mistake": 1,
+      "blunder": 0,
+      "unclassified": 0
+    },
+    "bestMoveCount": 0,
+    "inaccuracyCount": 0,
+    "mistakeCount": 1,
+    "blunderCount": 0,
+    "criticalMoveCount": 1,
+    "averageCpLoss": 60.0,
+    "averageExpectedPointsLoss": 0.2,
+    "maxCpLoss": 60,
+    "maxExpectedPointsLoss": 0.2,
+    "accuracy": null,
+    "acpl": null
+  },
+  "moves": [
+    {
+      "ply": 2,
+      "moveNumber": 1,
+      "side": "black",
+      "san": "c5",
+      "uci": "c7c5",
+      "quality": "mistake",
+      "confidence": "low",
+      "cpLoss": 60,
+      "expectedPointsLoss": 0.2,
+      "beforeFen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+      "afterFen": "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2",
+      "engineBestMove": "e7e5",
+      "playedMatchesEngineBest": false,
+      "betterMove": {
+        "moveUci": "e7e5",
+        "san": null,
+        "source": "enginePrimary",
+        "confidence": "low"
+      },
+      "engineLine": {
+        "depth": 3,
+        "bestMoveUci": "e7e5",
+        "pv": [
+          "e7e5",
+          "g8f6"
+        ],
+        "score": {
+          "scoreType": "cp",
+          "value": 20,
+          "whiteCentipawns": -20,
+          "moverCentipawns": 20,
+          "mate": null
+        },
+        "multiPvCount": 3
+      },
+      "criticalityLevel": "high",
+      "isCritical": true,
+      "isTacticalCandidate": false,
+      "hasMateWarning": false,
+      "warnings": [
+        "lowConfidence",
+        "reanalysisUnavailable"
+      ]
+    }
+  ],
+  "providerMetadata": {
+    "provider": "stockfish-local",
+    "engine": "stockfish",
+    "analysisVersion": "review-draft-v1",
+    "classifierVersion": "base-draft-v1",
+    "productContractVersion": "online-review-product-v1",
+    "mode": "onlineDeep",
+    "targetDepthTier": "deep",
+    "isExecutionHintOnly": true
+  },
+  "debug": null,
+  "error": null
+}

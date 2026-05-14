@@ -1,0 +1,39 @@
+{
+  "defaultForbiddenKeys": [
+    "classifierMergeBackPolicy",
+    "classifierMergeBackSimulation",
+    "classifierMergeBackReadiness",
+    "classifierMergeBackApproval",
+    "classifierExperimentLedger",
+    "classifierLedgerStorageContract",
+    "classifierLedgerSchemaReviewContract",
+    "classifierLedgerSchemaApprovalValidation",
+    "classifierLedgerMigrationGovernanceHandoff",
+    "reanalysisEnvelope",
+    "reanalysisExecution",
+    "reanalysisShadow",
+    "mergeProposal",
+    "classifierV2DryRun",
+    "classifierV2Eligibility",
+    "multiPvBefore",
+    "multiPvAfter",
+    "engineAlternatives"
+  ],
+  "debugAllowedStringOnly": [
+    "reanalysisEnvelope",
+    "reanalysisExecution",
+    "reanalysisShadowSummary",
+    "mergeProposalSummary",
+    "classifierV2DryRunSummary",
+    "classifierV2EligibilitySummary",
+    "classifierMergeBackPolicySummary",
+    "classifierMergeBackSimulationReport",
+    "classifierMergeBackReadiness",
+    "classifierMergeBackApproval",
+    "classifierExperimentLedger",
+    "classifierLedgerStorageContract",
+    "classifierLedgerSchemaReviewContract",
+    "classifierLedgerSchemaApprovalValidation",
+    "classifierLedgerMigrationGovernanceHandoff"
+  ]
+}

@@ -1,0 +1,113 @@
+{
+  "ok": true,
+  "contractVersion": "online-review-product-v1",
+  "gameKey": "game-v1-7d9f0825b0f5a8b283cdf5ba528196649a5c93223993b7450d4307001e5b3858",
+  "mode": "onlineFast",
+  "status": "partial",
+  "headers": {
+    "event": null,
+    "site": null,
+    "date": "????.??.??",
+    "round": null,
+    "white": "Faisal",
+    "black": "Opponent",
+    "whiteElo": null,
+    "blackElo": null,
+    "result": "*",
+    "eco": null,
+    "opening": null
+  },
+  "summary": {
+    "totalPlies": 2,
+    "analyzedMoves": 0,
+    "failedMoves": 2,
+    "qualityCounts": {
+      "best": 0,
+      "excellent": 0,
+      "good": 0,
+      "inaccuracy": 0,
+      "mistake": 0,
+      "blunder": 0,
+      "unclassified": 2
+    },
+    "bestMoveCount": 0,
+    "inaccuracyCount": 0,
+    "mistakeCount": 0,
+    "blunderCount": 0,
+    "criticalMoveCount": 0,
+    "averageCpLoss": null,
+    "averageExpectedPointsLoss": null,
+    "maxCpLoss": null,
+    "maxExpectedPointsLoss": null,
+    "accuracy": null,
+    "acpl": null
+  },
+  "moves": [
+    {
+      "ply": 1,
+      "moveNumber": 1,
+      "side": "white",
+      "san": "e4",
+      "uci": "e2e4",
+      "quality": "unclassified",
+      "confidence": "unknown",
+      "cpLoss": null,
+      "expectedPointsLoss": null,
+      "beforeFen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "afterFen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+      "engineBestMove": null,
+      "playedMatchesEngineBest": false,
+      "betterMove": null,
+      "engineLine": null,
+      "criticalityLevel": "medium",
+      "isCritical": false,
+      "isTacticalCandidate": false,
+      "hasMateWarning": false,
+      "warnings": [
+        "engineDataIncomplete",
+        "lowConfidence",
+        "reanalysisUnavailable",
+        "partialAnalysis"
+      ]
+    },
+    {
+      "ply": 2,
+      "moveNumber": 1,
+      "side": "black",
+      "san": "c5",
+      "uci": "c7c5",
+      "quality": "unclassified",
+      "confidence": "unknown",
+      "cpLoss": null,
+      "expectedPointsLoss": null,
+      "beforeFen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+      "afterFen": "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+      "engineBestMove": null,
+      "playedMatchesEngineBest": false,
+      "betterMove": null,
+      "engineLine": null,
+      "criticalityLevel": "medium",
+      "isCritical": false,
+      "isTacticalCandidate": false,
+      "hasMateWarning": false,
+      "warnings": [
+        "engineDataIncomplete",
+        "lowConfidence",
+        "reanalysisUnavailable",
+        "partialAnalysis"
+      ]
+    }
+  ],
+  "providerMetadata": {
+    "provider": "stockfish-local",
+    "engine": "stockfish",
+    "analysisVersion": "review-draft-v1",
+    "classifierVersion": "base-draft-v1",
+    "productContractVersion": "online-review-product-v1",
+    "mode": "onlineFast",
+    "targetDepthTier": "fast",
+    "isExecutionHintOnly": true
+  },
+  "debug": null,
+  "error": null
+}

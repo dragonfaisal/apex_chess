@@ -1,0 +1,234 @@
+{
+  "contractVersion": "online-review-product-v1",
+  "models": {
+    "OnlineReviewProductResponse": {
+      "requiredNonNull": [
+        "ok",
+        "contractVersion",
+        "mode",
+        "status",
+        "summary",
+        "moves",
+        "providerMetadata"
+      ],
+      "requiredNullable": [
+        "gameKey",
+        "headers",
+        "debug",
+        "error"
+      ],
+      "optional": [],
+      "listAlwaysPresent": [
+        "moves"
+      ],
+      "enum": {
+        "mode": [
+          "onlineFast",
+          "onlineDeep",
+          "dev"
+        ],
+        "status": [
+          "completed",
+          "partial",
+          "failed"
+        ]
+      }
+    },
+    "OnlineReviewSummary": {
+      "requiredNonNull": [
+        "totalPlies",
+        "analyzedMoves",
+        "failedMoves",
+        "qualityCounts",
+        "bestMoveCount",
+        "inaccuracyCount",
+        "mistakeCount",
+        "blunderCount",
+        "criticalMoveCount"
+      ],
+      "requiredNullable": [
+        "averageCpLoss",
+        "averageExpectedPointsLoss",
+        "maxCpLoss",
+        "maxExpectedPointsLoss",
+        "accuracy",
+        "acpl"
+      ],
+      "optional": [],
+      "mapAlwaysPresent": [
+        "qualityCounts"
+      ],
+      "enum": {
+        "qualityCounts.keys": [
+          "best",
+          "excellent",
+          "good",
+          "inaccuracy",
+          "mistake",
+          "blunder",
+          "unclassified"
+        ]
+      }
+    },
+    "OnlineReviewMove": {
+      "requiredNonNull": [
+        "ply",
+        "moveNumber",
+        "side",
+        "quality",
+        "confidence",
+        "criticalityLevel",
+        "isCritical",
+        "isTacticalCandidate",
+        "hasMateWarning",
+        "warnings"
+      ],
+      "requiredNullable": [
+        "san",
+        "uci",
+        "cpLoss",
+        "expectedPointsLoss",
+        "beforeFen",
+        "afterFen",
+        "engineBestMove",
+        "playedMatchesEngineBest",
+        "betterMove",
+        "engineLine"
+      ],
+      "optional": [],
+      "listAlwaysPresent": [
+        "warnings"
+      ],
+      "enum": {
+        "quality": [
+          "best",
+          "excellent",
+          "good",
+          "inaccuracy",
+          "mistake",
+          "blunder",
+          "unclassified"
+        ],
+        "confidence": [
+          "high",
+          "medium",
+          "low",
+          "unknown"
+        ],
+        "criticalityLevel": [
+          "none",
+          "low",
+          "medium",
+          "high",
+          "critical"
+        ],
+        "side": [
+          "white",
+          "black"
+        ]
+      }
+    },
+    "OnlineReviewBetterMove": {
+      "requiredNonNull": [
+        "source",
+        "confidence"
+      ],
+      "requiredNullable": [
+        "moveUci",
+        "san"
+      ],
+      "optional": [],
+      "enum": {
+        "confidence": [
+          "high",
+          "medium",
+          "low",
+          "unknown"
+        ]
+      }
+    },
+    "OnlineReviewEngineLine": {
+      "requiredNonNull": [
+        "pv",
+        "multiPvCount"
+      ],
+      "requiredNullable": [
+        "depth",
+        "bestMoveUci",
+        "score"
+      ],
+      "optional": [],
+      "listAlwaysPresent": [
+        "pv"
+      ]
+    },
+    "OnlineReviewScore": {
+      "requiredNonNull": [
+        "scoreType"
+      ],
+      "requiredNullable": [
+        "value",
+        "whiteCentipawns",
+        "moverCentipawns",
+        "mate"
+      ],
+      "optional": []
+    },
+    "OnlineReviewProviderMetadata": {
+      "requiredNonNull": [
+        "provider",
+        "engine",
+        "analysisVersion",
+        "classifierVersion",
+        "productContractVersion",
+        "mode",
+        "targetDepthTier",
+        "isExecutionHintOnly"
+      ],
+      "requiredNullable": [],
+      "optional": [],
+      "enum": {
+        "mode": [
+          "onlineFast",
+          "onlineDeep",
+          "dev"
+        ],
+        "targetDepthTier": [
+          "fast",
+          "deep",
+          "dev"
+        ]
+      }
+    },
+    "OnlineReviewDebugEnvelope": {
+      "requiredNonNull": [
+        "enabled",
+        "sourceEndpoint",
+        "omittedInternalSections"
+      ],
+      "requiredNullable": [
+        "internalGameKey",
+        "internalSafetySummary"
+      ],
+      "optional": [],
+      "listAlwaysPresent": [
+        "omittedInternalSections"
+      ]
+    },
+    "SafeError": {
+      "requiredNonNull": [
+        "code",
+        "message"
+      ],
+      "requiredNullable": [],
+      "optional": []
+    }
+  },
+  "warningStrings": [
+    "engineDataIncomplete",
+    "lowConfidence",
+    "mateSensitive",
+    "reanalysisUnavailable",
+    "partialAnalysis"
+  ]
+}

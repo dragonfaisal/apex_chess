@@ -1,0 +1,49 @@
+{
+  "ok": false,
+  "contractVersion": "online-review-product-v1",
+  "gameKey": null,
+  "mode": "onlineFast",
+  "status": "failed",
+  "headers": null,
+  "summary": {
+    "totalPlies": 0,
+    "analyzedMoves": 0,
+    "failedMoves": 0,
+    "qualityCounts": {
+      "best": 0,
+      "excellent": 0,
+      "good": 0,
+      "inaccuracy": 0,
+      "mistake": 0,
+      "blunder": 0,
+      "unclassified": 0
+    },
+    "bestMoveCount": 0,
+    "inaccuracyCount": 0,
+    "mistakeCount": 0,
+    "blunderCount": 0,
+    "criticalMoveCount": 0,
+    "averageCpLoss": null,
+    "averageExpectedPointsLoss": null,
+    "maxCpLoss": null,
+    "maxExpectedPointsLoss": null,
+    "accuracy": null,
+    "acpl": null
+  },
+  "moves": [],
+  "providerMetadata": {
+    "provider": "stockfish-local",
+    "engine": "stockfish",
+    "analysisVersion": "review-draft-v1",
+    "classifierVersion": "base-draft-v1",
+    "productContractVersion": "online-review-product-v1",
+    "mode": "onlineFast",
+    "targetDepthTier": "fast",
+    "isExecutionHintOnly": true
+  },
+  "debug": null,
+  "error": {
+    "code": "invalidPgn",
+    "message": "Invalid PGN"
+  }
+}
