@@ -15,8 +15,9 @@ mapping, with no HTTP calls, provider activation, caching, persistence, or UI.
 `ApexOnlineReviewRequest` objects and receive repository results that expose
 `ApexOnlineReview` domain models rather than transport DTOs. The repository now
 has fixture-backed test support and an HTTP implementation behind the same
-boundary; the HTTP path is configurable and is not yet activated in provider or
-UI flows.
+boundary, plus a conservative selection factory. The default remains disabled
+until a later provider/UI activation phase, and HTTP selection requires an
+explicit base URI rather than a hardcoded live endpoint.
 
 The domain layer intentionally does not model backend review-draft internals,
 governance, storage, schema, reanalysis, Classifier V2, or merge-proposal
