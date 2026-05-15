@@ -43,6 +43,12 @@ data only. Future widgets should watch that provider instead of reaching into
 controller, use-case, repository, or DTO layers directly; the seam is still
 dormant and not user-facing.
 
+`onlineReviewProductActionsProvider` is the matching presentation action seam.
+Future UI should read from `onlineReviewProductViewModelProvider` and submit,
+retry, or reset through this facade instead of calling controller methods
+directly. The facade is still dormant from visible screens, and the default path
+remains disabled.
+
 The domain layer intentionally does not model backend review-draft internals,
 governance, storage, schema, reanalysis, Classifier V2, or merge-proposal
 objects. Debug data remains compact and limited to omitted section names plus a
