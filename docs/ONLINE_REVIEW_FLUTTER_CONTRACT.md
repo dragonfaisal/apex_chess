@@ -37,6 +37,12 @@ and compact debug data. Future UI should consume that view model rather than raw
 controller, use-case, repository, or DTO internals. No widgets or user-facing
 activation are part of this layer.
 
+`onlineReviewProductViewModelProvider` is now the screen-ready seam for future
+UI. It watches controller state, applies the mapper, and exposes presentation
+data only. Future widgets should watch that provider instead of reaching into
+controller, use-case, repository, or DTO layers directly; the seam is still
+dormant and not user-facing.
+
 The domain layer intentionally does not model backend review-draft internals,
 governance, storage, schema, reanalysis, Classifier V2, or merge-proposal
 objects. Debug data remains compact and limited to omitted section names plus a

@@ -5,6 +5,8 @@
 /// or Flutter UI classes.
 library;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'package:apex_chess/features/pgn_review/application/online_review_product_controller.dart';
 import 'package:apex_chess/features/pgn_review/application/online_review_product_use_case.dart';
 import 'package:apex_chess/features/pgn_review/domain/online_review_product_domain.dart';
@@ -429,3 +431,15 @@ class _FailurePresentation {
   final String messageKey;
   final OnlineReviewProductNoticeSeverity severity;
 }
+
+final onlineReviewProductViewModelMapperProvider =
+    Provider<OnlineReviewProductViewModelMapper>((ref) {
+      return const OnlineReviewProductViewModelMapper();
+    });
+
+final onlineReviewProductViewModelProvider =
+    Provider<OnlineReviewProductViewModel>((ref) {
+      final controllerState = ref.watch(onlineReviewProductControllerProvider);
+      final mapper = ref.watch(onlineReviewProductViewModelMapperProvider);
+      return mapper.fromControllerState(controllerState);
+    });
