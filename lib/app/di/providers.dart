@@ -15,12 +15,16 @@ import 'package:http/http.dart' as http;
 
 import 'package:apex_chess/core/domain/entities/analysis_profile.dart';
 import 'package:apex_chess/core/infrastructure/engine/engine.dart';
+import 'package:apex_chess/core/network/apex_http_client.dart';
 import 'package:apex_chess/features/archives/data/archive_repository.dart';
 import 'package:apex_chess/features/pgn_review/domain/analysis_contract.dart';
 import 'package:apex_chess/features/pgn_review/domain/http_online_review_provider.dart';
 import 'package:apex_chess/features/pgn_review/domain/online_review_api_contract.dart';
+import 'package:apex_chess/features/pgn_review/domain/online_review_product_adapter.dart';
+import 'package:apex_chess/features/pgn_review/domain/online_review_product_repository.dart';
 import 'package:apex_chess/features/pgn_review/domain/online_review_provider.dart';
 import 'package:apex_chess/features/pgn_review/domain/review_analysis_provider.dart';
+import 'package:apex_chess/features/pgn_review/infrastructure/online_review_product_repository_factory.dart';
 import 'package:apex_chess/features/user_validation/data/username_validator.dart';
 import 'package:apex_chess/infrastructure/api/cloud_eval_service.dart';
 import 'package:apex_chess/infrastructure/api/cloud_game_analyzer.dart';
@@ -131,6 +135,42 @@ final onlineReviewHttpClientProvider = Provider<http.Client>((ref) {
   ref.onDispose(client.close);
   return client;
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Online Review product repository — registered, but disabled by default
+// ─────────────────────────────────────────────────────────────────────────────
+
+final onlineReviewRepositoryConfigProvider =
+    Provider<OnlineReviewRepositoryConfig>((ref) {
+      return OnlineReviewRepositoryConfig.disabled();
+    });
+
+final onlineReviewProductAdapterProvider = Provider<OnlineReviewProductAdapter>(
+  (ref) {
+    return const OnlineReviewProductAdapter();
+  },
+);
+
+final onlineReviewProductHttpClientProvider = Provider<ApexHttpClient>((ref) {
+  final client = PackageApexHttpClient();
+  ref.onDispose(client.close);
+  return client;
+});
+
+final onlineReviewProductRepositoryProvider =
+    Provider<OnlineReviewProductRepository>((ref) {
+      final config = ref.watch(onlineReviewRepositoryConfigProvider);
+      final httpClient =
+          config.mode == OnlineReviewRepositoryMode.http &&
+              config.baseUri != null
+          ? ref.watch(onlineReviewProductHttpClientProvider)
+          : null;
+      return OnlineReviewRepositoryFactory.create(
+        config,
+        httpClient: httpClient,
+        adapter: ref.watch(onlineReviewProductAdapterProvider),
+      );
+    });
 
 final onlineFastReviewProvider = Provider<OnlineReviewProvider>((ref) {
   final config = OnlineReviewProviderConfig.fromEnvironment(

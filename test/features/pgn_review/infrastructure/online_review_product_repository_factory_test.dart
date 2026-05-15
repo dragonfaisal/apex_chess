@@ -175,21 +175,20 @@ void main() {
       expect(source, isNot(contains('C:\\apex_chess_backend')));
     });
 
-    test(
-      'app provider graph does not activate the new repository boundary yet',
-      () {
-        final providers = File('lib/app/di/providers.dart').readAsStringSync();
+    test('app provider graph registers but does not consume the boundary yet', () {
+      final providers = File('lib/app/di/providers.dart').readAsStringSync();
+      final pipelineStart = providers.indexOf(
+        'final reviewAnalysisPipelineProvider',
+      );
+      final pipelineSource = providers.substring(pipelineStart);
 
-        expect(
-          providers,
-          isNot(contains('online_review_product_repository_factory')),
-        );
-        expect(
-          providers,
-          isNot(contains('http_online_review_product_repository.dart')),
-        );
-      },
-    );
+      expect(providers, contains('online_review_product_repository_factory'));
+      expect(providers, contains('onlineReviewProductRepositoryProvider'));
+      expect(
+        pipelineSource,
+        isNot(contains('onlineReviewProductRepositoryProvider')),
+      );
+    });
   });
 }
 
