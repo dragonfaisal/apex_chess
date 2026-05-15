@@ -49,6 +49,12 @@ retry, or reset through this facade instead of calling controller methods
 directly. The facade is still dormant from visible screens, and the default path
 remains disabled.
 
+`OnlineReviewProductShell` is now the first guarded UI composition layer over
+those seams. It renders presentation-safe idle/loading/success/failure states
+and delegates submit, retry, and reset back through the actions facade. The
+shell is not wired into main navigation; future full UI should keep using the
+same read/write seams.
+
 The domain layer intentionally does not model backend review-draft internals,
 governance, storage, schema, reanalysis, Classifier V2, or merge-proposal
 objects. Debug data remains compact and limited to omitted section names plus a
