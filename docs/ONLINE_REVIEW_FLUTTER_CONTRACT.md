@@ -25,6 +25,12 @@ state/UI layers. Future app-facing flows should call the use-case instead of
 transport DTOs or HTTP repositories directly. The registered default path still
 resolves to disabled behavior until a later explicit feature-activation phase.
 
+`OnlineReviewProductController` now wraps the use-case with a non-UI async state
+model for future screens. Future UI should consume controller state rather than
+calling DTOs, repositories, or HTTP implementations directly. The controller is
+registered but remains dormant from visible app flows while the default path is
+still disabled.
+
 The domain layer intentionally does not model backend review-draft internals,
 governance, storage, schema, reanalysis, Classifier V2, or merge-proposal
 objects. Debug data remains compact and limited to omitted section names plus a
@@ -33,4 +39,4 @@ small safety summary.
 Current fixtures live in `test/fixtures/online_review_product/`. Future Online
 Fast/Deep integration should parse backend JSON into DTOs first, then adapt DTOs
 into `ApexOnlineReview`, then return that domain model through the repository
-boundary and application use-case.
+boundary, application use-case, and controller state.
