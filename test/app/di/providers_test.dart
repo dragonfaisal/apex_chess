@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:apex_chess/app/di/providers.dart';
 import 'package:apex_chess/core/network/apex_http_client.dart';
+import 'package:apex_chess/features/pgn_review/application/online_review_product_use_case.dart';
 import 'package:apex_chess/features/pgn_review/domain/online_review_product_adapter.dart';
 import 'package:apex_chess/features/pgn_review/domain/online_review_product_domain.dart';
 import 'package:apex_chess/features/pgn_review/domain/online_review_product_repository.dart';
@@ -152,15 +153,60 @@ void main() {
     });
   });
 
+  group('Online Review product use-case provider', () {
+    test('default graph resolves disabled use-case behavior', () async {
+      final client = _RecordingHttpClient(
+        (_, _, _, _) async =>
+            _fixtureResponse('success/success_fast_minimal.json'),
+      );
+      final container = ProviderContainer(
+        overrides: [
+          onlineReviewProductHttpClientProvider.overrideWithValue(client),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final useCase = container.read(onlineReviewProductUseCaseProvider);
+      final result = await useCase.analyze(request);
+
+      expect(useCase, isA<OnlineReviewProductUseCase>());
+      expect(result.isFailure, isTrue);
+      expect(result.failure!.code, 'onlineReviewDisabled');
+      expect(result.failure!.source, 'disabled');
+      expect(client.calls, 0);
+    });
+
+    test('repository override flows through the use-case provider', () async {
+      final container = ProviderContainer(
+        overrides: [
+          onlineReviewProductRepositoryProvider.overrideWithValue(
+            const _FakeOnlineReviewProductRepository(),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final result = await container
+          .read(onlineReviewProductUseCaseProvider)
+          .analyze(request);
+
+      expect(result.isSuccess, isTrue);
+      expect(result.review!.mode, ApexOnlineReviewMode.onlineFast);
+      expect(result.review!.summary.totalPlies, 0);
+    });
+  });
+
   group('Provider registration boundaries', () {
-    test('DI file stays UI-free, backend-path free, and repository-facing', () {
+    test('DI file stays UI-free, backend-path free, and domain-facing', () {
       final source = File('lib/app/di/providers.dart').readAsStringSync();
 
       expect(source, isNot(contains('package:flutter/material.dart')));
       expect(source, isNot(contains('package:flutter/widgets.dart')));
       expect(source, isNot(contains('C:\\apex_chess_backend')));
       expect(source, contains('onlineReviewProductRepositoryProvider'));
+      expect(source, contains('onlineReviewProductUseCaseProvider'));
       expect(source, contains('Provider<OnlineReviewProductRepository>'));
+      expect(source, contains('Provider<OnlineReviewProductUseCase>'));
       expect(
         source,
         isNot(contains('Provider<OnlineReviewProductResponseDto>')),
@@ -179,6 +225,10 @@ void main() {
         expect(
           pipelineSource,
           isNot(contains('onlineReviewProductRepositoryProvider')),
+        );
+        expect(
+          pipelineSource,
+          isNot(contains('onlineReviewProductUseCaseProvider')),
         );
         expect(pipelineSource, contains('LocalOfflineReviewProvider'));
       },

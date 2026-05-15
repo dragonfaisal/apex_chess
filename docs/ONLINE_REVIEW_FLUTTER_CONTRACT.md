@@ -20,6 +20,11 @@ dependency graph, but the default provider mode remains disabled until a later
 provider/UI activation phase. HTTP selection requires an explicit base URI
 rather than a hardcoded live endpoint.
 
+`OnlineReviewProductUseCase` now wraps that repository boundary for future
+state/UI layers. Future app-facing flows should call the use-case instead of
+transport DTOs or HTTP repositories directly. The registered default path still
+resolves to disabled behavior until a later explicit feature-activation phase.
+
 The domain layer intentionally does not model backend review-draft internals,
 governance, storage, schema, reanalysis, Classifier V2, or merge-proposal
 objects. Debug data remains compact and limited to omitted section names plus a
@@ -28,4 +33,4 @@ small safety summary.
 Current fixtures live in `test/fixtures/online_review_product/`. Future Online
 Fast/Deep integration should parse backend JSON into DTOs first, then adapt DTOs
 into `ApexOnlineReview`, then return that domain model through the repository
-boundary.
+boundary and application use-case.

@@ -17,6 +17,7 @@ import 'package:apex_chess/core/domain/entities/analysis_profile.dart';
 import 'package:apex_chess/core/infrastructure/engine/engine.dart';
 import 'package:apex_chess/core/network/apex_http_client.dart';
 import 'package:apex_chess/features/archives/data/archive_repository.dart';
+import 'package:apex_chess/features/pgn_review/application/online_review_product_use_case.dart';
 import 'package:apex_chess/features/pgn_review/domain/analysis_contract.dart';
 import 'package:apex_chess/features/pgn_review/domain/http_online_review_provider.dart';
 import 'package:apex_chess/features/pgn_review/domain/online_review_api_contract.dart';
@@ -171,6 +172,14 @@ final onlineReviewProductRepositoryProvider =
         adapter: ref.watch(onlineReviewProductAdapterProvider),
       );
     });
+
+final onlineReviewProductUseCaseProvider = Provider<OnlineReviewProductUseCase>(
+  (ref) {
+    return OnlineReviewProductUseCase(
+      repository: ref.watch(onlineReviewProductRepositoryProvider),
+    );
+  },
+);
 
 final onlineFastReviewProvider = Provider<OnlineReviewProvider>((ref) {
   final config = OnlineReviewProviderConfig.fromEnvironment(
