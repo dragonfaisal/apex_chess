@@ -31,6 +31,12 @@ calling DTOs, repositories, or HTTP implementations directly. The controller is
 registered but remains dormant from visible app flows while the default path is
 still disabled.
 
+`OnlineReviewProductViewModelMapper` now turns controller state into a
+presentation-safe view model with stable keys, summary rows, move rows, notices,
+and compact debug data. Future UI should consume that view model rather than raw
+controller, use-case, repository, or DTO internals. No widgets or user-facing
+activation are part of this layer.
+
 The domain layer intentionally does not model backend review-draft internals,
 governance, storage, schema, reanalysis, Classifier V2, or merge-proposal
 objects. Debug data remains compact and limited to omitted section names plus a
@@ -39,4 +45,4 @@ small safety summary.
 Current fixtures live in `test/fixtures/online_review_product/`. Future Online
 Fast/Deep integration should parse backend JSON into DTOs first, then adapt DTOs
 into `ApexOnlineReview`, then return that domain model through the repository
-boundary, application use-case, and controller state.
+boundary, application use-case, controller state, and presentation view model.
