@@ -55,6 +55,11 @@ and delegates submit, retry, and reset back through the actions facade. The
 shell is not wired into main navigation; future full UI should keep using the
 same read/write seams.
 
+`OnlineReviewProductDevHarness` adds an explicit dev/test activation seam for
+the shell. The feature gate is disabled by default, the shell stays non-public
+unless the harness is deliberately enabled, and enabling that harness remains
+separate from enabling any HTTP repository configuration.
+
 The domain layer intentionally does not model backend review-draft internals,
 governance, storage, schema, reanalysis, Classifier V2, or merge-proposal
 objects. Debug data remains compact and limited to omitted section names plus a
