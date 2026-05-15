@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:apex_chess/app/di/providers.dart';
 import 'package:apex_chess/core/network/apex_http_client.dart';
 import 'package:apex_chess/features/pgn_review/application/online_review_product_use_case.dart';
+import 'package:apex_chess/features/pgn_review/application/online_review_runtime_gate.dart';
 import 'package:apex_chess/features/pgn_review/domain/online_review_product_domain.dart';
 import 'package:apex_chess/features/pgn_review/domain/online_review_product_repository.dart';
 import 'package:apex_chess/features/pgn_review/infrastructure/online_review_product_repository_factory.dart';
@@ -21,6 +22,10 @@ void main() {
       final config = container.read(onlineReviewShellFeatureConfigProvider);
       expect(config.mode, OnlineReviewShellActivationMode.disabled);
       expect(config.isEnabled, isFalse);
+
+      final decision = container.read(onlineReviewActivationDecisionProvider);
+      expect(decision.mode, OnlineReviewRuntimeMode.disabled);
+      expect(decision.canUseDebugHarness, isFalse);
     });
 
     testWidgets('default harness render stays disabled and hides the shell', (
@@ -43,6 +48,10 @@ void main() {
     testWidgets('enabled override exposes the guarded shell', (tester) async {
       final container = _enabledContainer();
       addTearDown(container.dispose);
+
+      final decision = container.read(onlineReviewActivationDecisionProvider);
+      expect(decision.mode, OnlineReviewRuntimeMode.devHarness);
+      expect(decision.canUseDebugHarness, isTrue);
 
       await tester.pumpWidget(_host(container: container));
       await tester.pumpAndSettle();
@@ -186,8 +195,8 @@ ProviderContainer _enabledContainer({
 }) {
   return ProviderContainer(
     overrides: [
-      onlineReviewShellFeatureConfigProvider.overrideWithValue(
-        const OnlineReviewShellFeatureConfig.devHarness(),
+      onlineReviewRuntimeGateConfigProvider.overrideWithValue(
+        const OnlineReviewRuntimeGateConfig.devHarness(),
       ),
       ...extraOverrides,
     ],

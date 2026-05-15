@@ -60,6 +60,12 @@ the shell. The feature gate is disabled by default, the shell stays non-public
 unless the harness is deliberately enabled, and enabling that harness remains
 separate from enabling any HTTP repository configuration.
 
+`OnlineReviewRuntimeGateConfig` and `OnlineReviewActivationDecision` now define
+the runtime activation policy. UI visibility, HTTP enablement, base URI
+presence, debug harness access, and public availability are separate decisions.
+The default remains disabled, a backend base URI must be explicit, and no public
+activation is added.
+
 The domain layer intentionally does not model backend review-draft internals,
 governance, storage, schema, reanalysis, Classifier V2, or merge-proposal
 objects. Debug data remains compact and limited to omitted section names plus a

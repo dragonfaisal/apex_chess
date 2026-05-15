@@ -8,6 +8,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:apex_chess/features/pgn_review/application/online_review_runtime_gate.dart';
 import 'package:apex_chess/features/pgn_review/domain/online_review_product_domain.dart';
 import 'package:apex_chess/features/pgn_review/presentation/online_review_product_shell.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
@@ -16,22 +17,45 @@ import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
 enum OnlineReviewShellActivationMode { disabled, devHarness }
 
 class OnlineReviewShellFeatureConfig {
-  const OnlineReviewShellFeatureConfig._(this.mode);
+  const OnlineReviewShellFeatureConfig._(this.mode, {required this.reasonCode});
 
   const OnlineReviewShellFeatureConfig.disabled()
-    : this._(OnlineReviewShellActivationMode.disabled);
+    : this._(
+        OnlineReviewShellActivationMode.disabled,
+        reasonCode: 'onlineReviewDisabled',
+      );
 
   const OnlineReviewShellFeatureConfig.devHarness()
-    : this._(OnlineReviewShellActivationMode.devHarness);
+    : this._(
+        OnlineReviewShellActivationMode.devHarness,
+        reasonCode: 'onlineReviewDevHarness',
+      );
+
+  factory OnlineReviewShellFeatureConfig.fromDecision(
+    OnlineReviewActivationDecision decision,
+  ) {
+    if (decision.canShowShell && decision.canUseDebugHarness) {
+      return OnlineReviewShellFeatureConfig._(
+        OnlineReviewShellActivationMode.devHarness,
+        reasonCode: decision.reasonCode,
+      );
+    }
+    return OnlineReviewShellFeatureConfig._(
+      OnlineReviewShellActivationMode.disabled,
+      reasonCode: decision.reasonCode,
+    );
+  }
 
   final OnlineReviewShellActivationMode mode;
+  final String reasonCode;
 
   bool get isEnabled => mode == OnlineReviewShellActivationMode.devHarness;
 }
 
 final onlineReviewShellFeatureConfigProvider =
     Provider<OnlineReviewShellFeatureConfig>((ref) {
-      return const OnlineReviewShellFeatureConfig.disabled();
+      final decision = ref.watch(onlineReviewActivationDecisionProvider);
+      return OnlineReviewShellFeatureConfig.fromDecision(decision);
     });
 
 class OnlineReviewProductDevHarness extends ConsumerWidget {
