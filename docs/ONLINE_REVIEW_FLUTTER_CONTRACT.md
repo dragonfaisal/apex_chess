@@ -114,6 +114,20 @@ pass, the hard safety verdict passes, the default mode remains disabled, and
 the report includes no real backend URLs. Passing this check is verification
 only; it does not activate Online Review or make any route user-facing.
 
+PRs touching Online Review runtime gates, environment config, repository
+activation, shell visibility, public preview logic, or backend base URI handling
+must reference this smoke command in the PR checklist. For PRs unrelated to
+Online Review, the checklist items may be marked N/A in the PR description.
+
+### Future CI adoption plan
+
+1. Phase 1: PR checklist requires the smoke command manually.
+2. Phase 2: When a repo CI convention exists, add the smoke command as a
+   pre-build verification step.
+3. Phase 3: Before staging or public preview, require the smoke command,
+   focused `test/features/pgn_review/` tests, and source guardrails proving no
+   real backend URLs or activation flags were added.
+
 The domain layer intentionally does not model backend review-draft internals,
 governance, storage, schema, reanalysis, Classifier V2, or merge-proposal
 objects. Debug data remains compact and limited to omitted section names plus a

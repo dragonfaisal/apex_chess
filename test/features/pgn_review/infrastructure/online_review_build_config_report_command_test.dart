@@ -140,6 +140,97 @@ void main() {
       );
     });
 
+    test('PR template references the smoke command and safety checklist', () {
+      final source = _singleLine(_prTemplateSource());
+
+      expect(source, contains('## Online Review Safety'));
+      expect(
+        source,
+        contains('dart run tool/online_review_build_config_report.dart'),
+      );
+      expect(source, contains('allPassed == true'));
+      expect(source, contains('hardSafetyPassed == true'));
+      expect(source, contains('does not enable live HTTP by default'));
+      expect(
+        source,
+        contains('public or user-facing without an explicit approved phase'),
+      );
+      expect(
+        source,
+        contains('Shell visibility and HTTP enablement remain separate'),
+      );
+      expect(source, contains('Base URI remains explicit and gated'));
+      expect(source, contains('For PRs unrelated to Online Review'));
+      expect(source, contains('N/A'));
+    });
+
+    test('PR template stays verification-only and URL-free', () {
+      const loopbackHost =
+          'local'
+          'host';
+      const loopbackIp =
+          '127.0.'
+          '0.1';
+      const emulatorHost =
+          '10.0.'
+          '2.2';
+      const productionHostHint =
+          'api.'
+          'apex';
+      const dashedProductHost =
+          'apex-'
+          'chess';
+      const compactProductHost =
+          'apex'
+          'chess';
+      const apiKeyHint =
+          'apex_online_review_'
+          'api_key';
+      const privateValueToken =
+          'sec'
+          'ret';
+      final source = _prTemplateSource().toLowerCase();
+
+      expect(source, isNot(contains(loopbackHost)));
+      expect(source, isNot(contains(loopbackIp)));
+      expect(source, isNot(contains(emulatorHost)));
+      expect(source, isNot(contains(productionHostHint)));
+      expect(source, isNot(contains(dashedProductHost)));
+      expect(source, isNot(contains(compactProductHost)));
+      expect(source, isNot(contains(apiKeyHint)));
+      expect(source, isNot(contains(privateValueToken)));
+      expect(source, isNot(contains('apex_online_review_base_uri')));
+      expect(source, isNot(contains('apex_online_review_allow_http=true')));
+      expect(
+        source,
+        isNot(contains('apex_online_review_allow_public_entry=true')),
+      );
+      expect(source, isNot(contains('deploy')));
+      expect(source, isNot(contains('publish')));
+      expect(source, isNot(contains('upload-artifact')));
+      expect(source, isNot(contains('build apk')));
+      expect(source, isNot(contains('release.apk')));
+      expect(source, isNot(contains('signing')));
+    });
+
+    test('contract docs include the future CI adoption plan', () {
+      final source = _singleLine(_contractDocSource());
+
+      expect(source, contains('### Future CI adoption plan'));
+      expect(
+        source,
+        contains('Phase 1: PR checklist requires the smoke command manually'),
+      );
+      expect(source, contains('Phase 2: When a repo CI convention exists'));
+      expect(source, contains('Phase 3: Before staging or public preview'));
+      expect(
+        source,
+        contains('dart run tool/online_review_build_config_report.dart'),
+      );
+      expect(source, contains('test/features/pgn_review/'));
+      expect(source, contains('no real backend URLs or activation flags'));
+    });
+
     test(
       'online review CI workflow hooks stay verification-only if present',
       () {
@@ -237,6 +328,14 @@ String _toolSource() {
 
 String _contractDocSource() {
   return File('docs/ONLINE_REVIEW_FLUTTER_CONTRACT.md').readAsStringSync();
+}
+
+String _prTemplateSource() {
+  return File('.github/PULL_REQUEST_TEMPLATE.md').readAsStringSync();
+}
+
+String _singleLine(String source) {
+  return source.replaceAll(RegExp(r'\s+'), ' ');
 }
 
 List<String> _onlineReviewWorkflowSources() {
