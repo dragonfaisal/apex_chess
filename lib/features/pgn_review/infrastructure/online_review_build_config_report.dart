@@ -230,6 +230,12 @@ String renderOnlineReviewBuildConfigReportMarkdown(
   return buffer.toString();
 }
 
+int onlineReviewBuildConfigReportExitCode(
+  OnlineReviewBuildConfigReport report,
+) {
+  return report.allPassed && report.hardSafetyPassed ? 0 : 1;
+}
+
 OnlineReviewBuildConfigScenarioSummary _summaryFor(
   OnlineReviewBuildConfigVerificationResult result,
   OnlineReviewBuildConfigScenario scenario,

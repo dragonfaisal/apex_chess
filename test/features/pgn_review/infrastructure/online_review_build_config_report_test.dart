@@ -164,6 +164,7 @@ void main() {
 
       expect(report.allPassed, isFalse);
       expect(report.hardSafetyPassed, isFalse);
+      expect(onlineReviewBuildConfigReportExitCode(report), 1);
       expect(report.failedScenarios, 1);
       expect(
         report.items.where(

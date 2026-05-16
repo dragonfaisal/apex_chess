@@ -5,7 +5,7 @@
 /// repositories, HTTP clients, routes, or widgets.
 library;
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 enum OnlineReviewRuntimeMode {
   disabled,
