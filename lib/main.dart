@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
+import 'app/di/providers.dart';
 import 'features/account/presentation/controllers/account_controller.dart';
 import 'features/account/presentation/views/connect_account_screen.dart';
 import 'features/archives/data/archive_repository.dart';
@@ -40,7 +41,12 @@ Future<void> main() async {
     () async {
       WidgetsFlutterBinding.ensureInitialized();
       await _bootstrapHive();
-      runApp(const ProviderScope(child: ApexChessApp()));
+      runApp(
+        ProviderScope(
+          overrides: apexDefaultProviderOverrides(),
+          child: const ApexChessApp(),
+        ),
+      );
     },
     (error, stack) {
       developer.log(

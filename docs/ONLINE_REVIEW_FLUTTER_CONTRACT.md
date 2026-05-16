@@ -66,6 +66,20 @@ presence, debug harness access, and public availability are separate decisions.
 The default remains disabled, a backend base URI must be explicit, and no public
 activation is added.
 
+`OnlineReviewRuntimeConfigAdapter` can now build runtime gate config from safe
+environment/config inputs. The app root reads Dart build defines through a thin
+bridge, but an empty environment still resolves to the same disabled runtime
+config. A backend base URI must be supplied explicitly, HTTP still requires its
+own explicit gate, and shell visibility/debug harness access remain separate
+from transport selection. Public activation still does not exist.
+
+Non-production dev harness example, with no backend transport enabled:
+
+```sh
+flutter run --dart-define=APEX_ONLINE_REVIEW_MODE=devHarness \
+  --dart-define=APEX_ONLINE_REVIEW_ALLOW_DEBUG_HARNESS=true
+```
+
 The domain layer intentionally does not model backend review-draft internals,
 governance, storage, schema, reanalysis, Classifier V2, or merge-proposal
 objects. Debug data remains compact and limited to omitted section names plus a

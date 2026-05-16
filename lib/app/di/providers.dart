@@ -18,6 +18,7 @@ import 'package:apex_chess/core/infrastructure/engine/engine.dart';
 import 'package:apex_chess/core/network/apex_http_client.dart';
 import 'package:apex_chess/features/archives/data/archive_repository.dart';
 import 'package:apex_chess/features/pgn_review/application/online_review_product_use_case.dart';
+import 'package:apex_chess/features/pgn_review/application/online_review_runtime_gate.dart';
 import 'package:apex_chess/features/pgn_review/domain/analysis_contract.dart';
 import 'package:apex_chess/features/pgn_review/domain/http_online_review_provider.dart';
 import 'package:apex_chess/features/pgn_review/domain/online_review_api_contract.dart';
@@ -25,7 +26,9 @@ import 'package:apex_chess/features/pgn_review/domain/online_review_product_adap
 import 'package:apex_chess/features/pgn_review/domain/online_review_product_repository.dart';
 import 'package:apex_chess/features/pgn_review/domain/online_review_provider.dart';
 import 'package:apex_chess/features/pgn_review/domain/review_analysis_provider.dart';
+import 'package:apex_chess/features/pgn_review/infrastructure/online_review_runtime_config_adapter.dart';
 import 'package:apex_chess/features/pgn_review/infrastructure/online_review_product_repository_factory.dart';
+import 'package:apex_chess/features/pgn_review/infrastructure/online_review_runtime_repository_config.dart';
 import 'package:apex_chess/features/user_validation/data/username_validator.dart';
 import 'package:apex_chess/infrastructure/api/cloud_eval_service.dart';
 import 'package:apex_chess/infrastructure/api/cloud_game_analyzer.dart';
@@ -141,9 +144,23 @@ final onlineReviewHttpClientProvider = Provider<http.Client>((ref) {
 // Online Review product repository — registered, but disabled by default
 // ─────────────────────────────────────────────────────────────────────────────
 
+final onlineReviewRuntimeEnvironmentConfigProvider =
+    Provider<OnlineReviewRuntimeGateConfig>((ref) {
+      return onlineReviewRuntimeGateConfigFromEnvironment();
+    });
+
+List<Override> apexDefaultProviderOverrides() {
+  return [
+    onlineReviewRuntimeGateConfigProvider.overrideWith(
+      (ref) => ref.watch(onlineReviewRuntimeEnvironmentConfigProvider),
+    ),
+  ];
+}
+
 final onlineReviewRepositoryConfigProvider =
     Provider<OnlineReviewRepositoryConfig>((ref) {
-      return OnlineReviewRepositoryConfig.disabled();
+      final decision = ref.watch(onlineReviewActivationDecisionProvider);
+      return onlineReviewRepositoryConfigFromActivationDecision(decision);
     });
 
 final onlineReviewProductAdapterProvider = Provider<OnlineReviewProductAdapter>(

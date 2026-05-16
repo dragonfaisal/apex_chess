@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:apex_chess/app/di/providers.dart';
 import 'package:apex_chess/core/network/apex_http_client.dart';
 import 'package:apex_chess/features/pgn_review/application/online_review_product_use_case.dart';
+import 'package:apex_chess/features/pgn_review/application/online_review_runtime_gate.dart';
 import 'package:apex_chess/features/pgn_review/domain/online_review_product_adapter.dart';
 import 'package:apex_chess/features/pgn_review/domain/online_review_product_domain.dart';
 import 'package:apex_chess/features/pgn_review/domain/online_review_product_repository.dart';
@@ -15,6 +16,91 @@ void main() {
     pgn: '1. e4 *',
     mode: ApexOnlineReviewMode.onlineFast,
   );
+
+  group('Online Review runtime environment providers', () {
+    test(
+      'default app provider graph remains disabled with no build defines',
+      () {
+        final client = _RecordingHttpClient(
+          (_, _, _, _) async =>
+              _fixtureResponse('success/success_fast_minimal.json'),
+        );
+        final container = ProviderContainer(
+          overrides: [
+            ...apexDefaultProviderOverrides(),
+            onlineReviewProductHttpClientProvider.overrideWithValue(client),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final environmentConfig = container.read(
+          onlineReviewRuntimeEnvironmentConfigProvider,
+        );
+        final decision = container.read(onlineReviewActivationDecisionProvider);
+        final repositoryConfig = container.read(
+          onlineReviewRepositoryConfigProvider,
+        );
+
+        expect(environmentConfig.mode, OnlineReviewRuntimeMode.disabled);
+        expect(decision.mode, OnlineReviewRuntimeMode.disabled);
+        expect(decision.canUseHttp, isFalse);
+        expect(repositoryConfig.mode, OnlineReviewRepositoryMode.disabled);
+        expect(client.calls, 0);
+      },
+    );
+
+    test(
+      'runtime config override still drives deterministic repository config',
+      () {
+        final container = ProviderContainer(
+          overrides: [
+            onlineReviewRuntimeGateConfigProvider.overrideWithValue(
+              OnlineReviewRuntimeGateConfig.staging(
+                allowHttp: true,
+                baseUri: Uri.parse('https://example.test'),
+              ),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final first = container.read(onlineReviewActivationDecisionProvider);
+        final second = container.read(onlineReviewActivationDecisionProvider);
+        final repositoryConfig = container.read(
+          onlineReviewRepositoryConfigProvider,
+        );
+
+        expect(first.reasonCode, 'onlineReviewStaging');
+        expect(first.canUseHttp, isTrue);
+        expect(second.reasonCode, first.reasonCode);
+        expect(second.canUseHttp, first.canUseHttp);
+        expect(repositoryConfig.mode, OnlineReviewRepositoryMode.http);
+        expect(repositoryConfig.baseUri, Uri.parse('https://example.test'));
+      },
+    );
+
+    test('reading environment config provider has no HTTP side effects', () {
+      final client = _RecordingHttpClient(
+        (_, _, _, _) async =>
+            _fixtureResponse('success/success_fast_minimal.json'),
+      );
+      final container = ProviderContainer(
+        overrides: [
+          onlineReviewProductHttpClientProvider.overrideWithValue(client),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final config = container.read(
+        onlineReviewRuntimeEnvironmentConfigProvider,
+      );
+      final decision = container.read(onlineReviewActivationDecisionProvider);
+
+      expect(config.mode, OnlineReviewRuntimeMode.disabled);
+      expect(decision.mode, OnlineReviewRuntimeMode.disabled);
+      expect(client.calls, 0);
+    });
+  });
 
   group('Online Review product repository providers', () {
     test(
