@@ -80,6 +80,14 @@ flutter run --dart-define=APEX_ONLINE_REVIEW_MODE=devHarness \
   --dart-define=APEX_ONLINE_REVIEW_ALLOW_DEBUG_HARNESS=true
 ```
 
+`OnlineReviewBuildConfigMatrix` defines deterministic verification scenarios for
+disabled, dev harness, staging, internal tester, and public preview policy
+shapes. It checks expected runtime config, activation decisions, repository
+mode, warnings, and unsafe combinations using placeholder `.example.test`
+values only. This matrix is a safety/governance layer for future build
+configuration work; it does not activate public navigation, supply real backend
+URLs, or make Online Review user-facing.
+
 The domain layer intentionally does not model backend review-draft internals,
 governance, storage, schema, reanalysis, Classifier V2, or merge-proposal
 objects. Debug data remains compact and limited to omitted section names plus a
