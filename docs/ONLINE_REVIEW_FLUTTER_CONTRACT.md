@@ -95,6 +95,15 @@ a hard safety verdict. The report is observability for configuration hygiene
 only; it does not read live build defines, provide real URLs, activate Online
 Review, or change runtime behavior.
 
+`OnlineReviewStagingBackendReadiness` defines the next readiness contract for
+future staging/backend work. It is pure and readiness-only: it consumes an
+activation decision, repository config, and smoke report verdict, then returns
+typed status, blockers, warnings, and a stable developer next step. Staging or
+internal tester modes are considered ready only when an explicit HTTPS base URI,
+the HTTP gate, repository HTTP config, and smoke report safety verdict all
+agree. Public preview is not staging-ready in this phase, and readiness output
+records only a redacted host fingerprint rather than a full backend URL.
+
 ## Build-mode safety verification
 
 The CI/developer smoke report command is:
