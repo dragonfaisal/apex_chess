@@ -95,6 +95,8 @@ a hard safety verdict. The report is observability for configuration hygiene
 only; it does not read live build defines, provide real URLs, activate Online
 Review, or change runtime behavior.
 
+## Build-mode safety verification
+
 The CI/developer smoke report command is:
 
 ```sh
@@ -105,6 +107,12 @@ The command prints the deterministic Markdown report and exits non-zero if the
 matrix or hard safety checks fail. It does not read live build defines,
 instantiate providers or HTTP clients, activate Online Review, or include real
 backend URLs.
+
+This check is required before any staging backend, internal tester, or public
+preview configuration work. The expected current result is that all scenarios
+pass, the hard safety verdict passes, the default mode remains disabled, and
+the report includes no real backend URLs. Passing this check is verification
+only; it does not activate Online Review or make any route user-facing.
 
 The domain layer intentionally does not model backend review-draft internals,
 governance, storage, schema, reanalysis, Classifier V2, or merge-proposal

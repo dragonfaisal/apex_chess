@@ -39,7 +39,7 @@ void main() {
       }
     });
 
-    test('output contains no local endpoints, production URLs, or secrets', () {
+    test('output contains no local endpoints, production URLs, or keys', () {
       const loopbackHost =
           'local'
           'host';
@@ -58,7 +58,7 @@ void main() {
       const compactProductHost =
           'apex'
           'chess';
-      const secretToken =
+      const privateValueToken =
           'sec'
           'ret';
       const apiKeyHint =
@@ -75,11 +75,100 @@ void main() {
       expect(output, isNot(contains(dashedProductHost)));
       expect(output, isNot(contains(compactProductHost)));
       expect(output, isNot(contains(apiKeyHint)));
-      expect(output, isNot(contains(secretToken)));
+      expect(output, isNot(contains(privateValueToken)));
     });
   });
 
   group('Online Review build config report command guardrails', () {
+    test('contract docs reference the required safety checklist command', () {
+      final source = _contractDocSource();
+
+      expect(source, contains('## Build-mode safety verification'));
+      expect(
+        source,
+        contains('dart run tool/online_review_build_config_report.dart'),
+      );
+      expect(source, contains('required before any staging backend'));
+      expect(source, contains('all scenarios'));
+      expect(source, contains('pass, the hard safety verdict passes'));
+      expect(source, contains('hard safety verdict passes'));
+      expect(source, contains('default mode remains disabled'));
+      expect(source, contains('no real backend URLs'));
+      expect(source, contains('does not activate Online Review'));
+    });
+
+    test('contract docs keep the safety checklist non-live', () {
+      const loopbackHost =
+          'local'
+          'host';
+      const loopbackIp =
+          '127.0.'
+          '0.1';
+      const emulatorHost =
+          '10.0.'
+          '2.2';
+      const productionHostHint =
+          'api.'
+          'apex';
+      const dashedProductHost =
+          'apex-'
+          'chess';
+      const compactProductHost =
+          'apex'
+          'chess';
+      const apiKeyHint =
+          'apex_online_review_'
+          'api_key';
+      const privateValueToken =
+          'sec'
+          'ret';
+      final source = _contractDocSource().toLowerCase();
+
+      expect(source, isNot(contains(loopbackHost)));
+      expect(source, isNot(contains(loopbackIp)));
+      expect(source, isNot(contains(emulatorHost)));
+      expect(source, isNot(contains(productionHostHint)));
+      expect(source, isNot(contains(dashedProductHost)));
+      expect(source, isNot(contains(compactProductHost)));
+      expect(source, isNot(contains(apiKeyHint)));
+      expect(source, isNot(contains(privateValueToken)));
+      expect(source, isNot(contains('apex_online_review_base_uri=')));
+      expect(source, isNot(contains('apex_online_review_allow_http=true')));
+      expect(
+        source,
+        isNot(contains('apex_online_review_allow_public_entry=true')),
+      );
+    });
+
+    test(
+      'online review CI workflow hooks stay verification-only if present',
+      () {
+        for (final source in _onlineReviewWorkflowSources()) {
+          final lowerSource = source.toLowerCase();
+
+          expect(
+            source,
+            contains('dart run tool/online_review_build_config_report.dart'),
+          );
+          expect(lowerSource, isNot(contains('deploy')));
+          expect(lowerSource, isNot(contains('publish')));
+          expect(lowerSource, isNot(contains('upload-artifact')));
+          expect(lowerSource, isNot(contains('build apk')));
+          expect(lowerSource, isNot(contains('release.apk')));
+          expect(lowerSource, isNot(contains('signing')));
+          expect(lowerSource, isNot(contains('apex_online_review_base_uri')));
+          expect(
+            lowerSource,
+            isNot(contains('apex_online_review_allow_http=true')),
+          );
+          expect(
+            lowerSource,
+            isNot(contains('apex_online_review_allow_public_entry=true')),
+          );
+        }
+      },
+    );
+
     test('tool source wires stdout and report exit code only', () {
       final source = _toolSource();
 
@@ -144,4 +233,31 @@ void main() {
 
 String _toolSource() {
   return File('tool/online_review_build_config_report.dart').readAsStringSync();
+}
+
+String _contractDocSource() {
+  return File('docs/ONLINE_REVIEW_FLUTTER_CONTRACT.md').readAsStringSync();
+}
+
+List<String> _onlineReviewWorkflowSources() {
+  final directory = Directory('.github/workflows');
+  if (!directory.existsSync()) {
+    return const [];
+  }
+  return [
+    for (final entity in directory.listSync(recursive: true))
+      if (entity is File && _isWorkflowFile(entity.path))
+        if (_isOnlineReviewWorkflow(entity)) entity.readAsStringSync(),
+  ];
+}
+
+bool _isWorkflowFile(String path) {
+  final lowerPath = path.toLowerCase();
+  return lowerPath.endsWith('.yml') || lowerPath.endsWith('.yaml');
+}
+
+bool _isOnlineReviewWorkflow(File file) {
+  final source = file.readAsStringSync();
+  return source.contains('online_review_build_config_report') ||
+      source.contains('Online Review');
 }
