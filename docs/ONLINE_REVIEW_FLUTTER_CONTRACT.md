@@ -88,6 +88,13 @@ values only. This matrix is a safety/governance layer for future build
 configuration work; it does not activate public navigation, supply real backend
 URLs, or make Online Review user-facing.
 
+`OnlineReviewBuildConfigReport` renders a deterministic build-mode smoke report
+from that matrix for developer and future CI inspection. It summarizes scenario
+pass/fail counts, shell/HTTP/debug/public gates, repository mode, warnings, and
+a hard safety verdict. The report is observability for configuration hygiene
+only; it does not read live build defines, provide real URLs, activate Online
+Review, or change runtime behavior.
+
 The domain layer intentionally does not model backend review-draft internals,
 governance, storage, schema, reanalysis, Classifier V2, or merge-proposal
 objects. Debug data remains compact and limited to omitted section names plus a
