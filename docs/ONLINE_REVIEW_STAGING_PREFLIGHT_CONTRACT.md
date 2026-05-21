@@ -102,6 +102,29 @@ Rendered output never prints the full backend address. It records only a
 redacted fingerprint and safe typed blockers or warnings. This dry-run is a
 precondition for a future manual preflight phase; it is not that phase.
 
+## Manual Preflight Approval Plan
+
+The manual preflight approval plan is a fake-client-only gate for future work.
+It consumes the private staging config dry-run result and an optional preflight
+result produced by fixture-backed fake-client simulation. The plan builder does
+not construct transport clients, does not connect to a backend, and does not
+send analysis requests.
+
+Before any future real manual preflight can be considered, a developer must
+complete all of these steps:
+
+1. Pass `dart run tool/online_review_build_config_report.dart`.
+2. Pass `dart run tool/online_review_staging_readiness_report.dart --all-scenarios`.
+3. Pass `dart run tool/online_review_staging_readiness_report.dart --private-config-dry-run`.
+4. Pass fake-client preflight fixture simulation against the staging preflight
+   contract.
+5. Record explicit approval for a future manual preflight phase.
+
+This phase does not approve real network preflight. Real backend connection
+remains forbidden, full backend addresses remain out of source and output, and
+analysis remains blocked until a later activation phase explicitly integrates
+preflight success.
+
 ## Private Staging Opt-In Plan
 
 1. Run `dart run tool/online_review_build_config_report.dart`; all scenarios
@@ -112,11 +135,13 @@ precondition for a future manual preflight phase; it is not that phase.
    `dart run tool/online_review_staging_readiness_report.dart --scenario=stagingPlaceholderReady`.
 4. Evaluate any future private staging config with
    `dart run tool/online_review_staging_readiness_report.dart --private-config-dry-run`.
-5. Supply any future private staging base URI only through explicit local or
+5. Pass the fake-client manual preflight approval plan before any future real
+   manual preflight request.
+6. Supply any future private staging base URI only through explicit local or
    build configuration outside committed source.
-6. Manually invoke preflight only in a future explicit phase after readiness
+7. Manually invoke preflight only in a future explicit phase after readiness
    is staging or internal-tester ready.
-7. Keep Online Review analysis requests blocked until preflight success is
+8. Keep Online Review analysis requests blocked until preflight success is
    integrated into a later activation plan.
 
 No real URL may be committed. No public activation exists. Private staging use

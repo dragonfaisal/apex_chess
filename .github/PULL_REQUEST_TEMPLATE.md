@@ -28,6 +28,8 @@ description.
 - [ ] If this PR touches private staging config dry-run evaluation, I ran the
   focused evaluator tests and kept private config env-only, redacted, and
   non-activating.
+- [ ] If this PR touches manual preflight approval planning, I ran the focused
+  manual preflight plan tests and kept it fake-client-only.
 - [ ] The smoke report passed with `allPassed == true` and
   `hardSafetyPassed == true`.
 - [ ] This PR does not add hardcoded loopback, emulator, staging, or production

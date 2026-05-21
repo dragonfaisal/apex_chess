@@ -201,6 +201,12 @@ That contract defines the allowed response fields, forbidden PGN, user, auth,
 engine, and review payload content, compatibility failure mapping, and the
 gated steps required before any future private staging server can be evaluated.
 
+`OnlineReviewManualPreflightPlan` defines the next fake-client-only approval
+gate for a future manual preflight phase. It consumes private dry-run readiness
+and fixture-backed fake preflight results, then reports typed blockers,
+warnings, and the next required step. It does not approve real network
+preflight, call a backend, send analysis requests, or activate Online Review.
+
 PRs touching Online Review runtime gates, environment config, repository
 activation, shell visibility, public preview logic, or backend base URI handling
 must reference this smoke command in the PR checklist. For PRs unrelated to
