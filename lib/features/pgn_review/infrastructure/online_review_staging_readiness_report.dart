@@ -105,12 +105,26 @@ OnlineReviewStagingReadinessReport buildOnlineReviewStagingReadinessReport({
 }
 
 String renderOnlineReviewStagingReadinessReportMarkdown(
-  OnlineReviewStagingReadinessReport report,
-) {
+  OnlineReviewStagingReadinessReport report, {
+  String? scenarioId,
+  String? scenarioDescription,
+}) {
   final readiness = report.readiness;
   final buffer = StringBuffer()
     ..writeln('# Online Review Staging Readiness Report')
-    ..writeln()
+    ..writeln();
+
+  if (scenarioId != null) {
+    buffer.writeln('* Scenario ID: `$scenarioId`');
+  }
+  if (scenarioDescription != null) {
+    buffer.writeln('* Scenario description: $scenarioDescription');
+  }
+  if (scenarioId != null || scenarioDescription != null) {
+    buffer.writeln();
+  }
+
+  buffer
     ..writeln('* Version: `${report.version}`')
     ..writeln('* Smoke report version: `${report.smokeReportVersion}`')
     ..writeln('* Readiness status: ${report.statusLabel}')

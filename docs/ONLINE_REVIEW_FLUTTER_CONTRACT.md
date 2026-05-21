@@ -144,6 +144,17 @@ developer step. It does not connect to a backend and does not print full backend
 URLs. The current default disabled/not-ready result is expected and safe;
 future staging/internal readiness still requires explicit safe configuration.
 
+The same command can evaluate named, safe placeholder scenarios:
+
+```sh
+dart run tool/online_review_staging_readiness_report.dart --scenario=stagingPlaceholderReady
+```
+
+Scenario evaluation is deterministic and fixture-only. It uses predefined
+scenario IDs, does not accept arbitrary URLs, does not read live build defines,
+does not connect to a backend, and does not print full backend URLs. Real
+staging URLs are still not part of this repo.
+
 PRs touching Online Review runtime gates, environment config, repository
 activation, shell visibility, public preview logic, or backend base URI handling
 must reference this smoke command in the PR checklist. For PRs unrelated to
