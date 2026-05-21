@@ -104,6 +104,13 @@ the HTTP gate, repository HTTP config, and smoke report safety verdict all
 agree. Public preview is not staging-ready in this phase, and readiness output
 records only a redacted host fingerprint rather than a full backend URL.
 
+`OnlineReviewStagingReadinessReport` renders that readiness contract for
+developer and future CI inspection. It reports readiness status, runtime mode,
+HTTP gate state, repository mode, redacted base URI fingerprint, blockers,
+warnings, smoke verdict, and the required next step. It does not connect to a
+backend, read live build defines, print full backend URLs, or activate Online
+Review. The default disabled/not-ready report is expected and safe.
+
 ## Build-mode safety verification
 
 The CI/developer smoke report command is:
@@ -122,6 +129,20 @@ preview configuration work. The expected current result is that all scenarios
 pass, the hard safety verdict passes, the default mode remains disabled, and
 the report includes no real backend URLs. Passing this check is verification
 only; it does not activate Online Review or make any route user-facing.
+
+### Staging readiness report
+
+The staging readiness report command is:
+
+```sh
+dart run tool/online_review_staging_readiness_report.dart
+```
+
+The command is developer/CI-facing. It reports staging/internal readiness,
+blockers, warnings, redacted base URI fingerprint, smoke verdict, and the next
+developer step. It does not connect to a backend and does not print full backend
+URLs. The current default disabled/not-ready result is expected and safe;
+future staging/internal readiness still requires explicit safe configuration.
 
 PRs touching Online Review runtime gates, environment config, repository
 activation, shell visibility, public preview logic, or backend base URI handling

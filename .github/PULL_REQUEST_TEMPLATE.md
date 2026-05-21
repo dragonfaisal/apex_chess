@@ -17,6 +17,8 @@ description.
   activation policy, repository selection, shell visibility,
   public-preview logic, or backend base URI handling, I ran:
   `dart run tool/online_review_build_config_report.dart`
+- [ ] If this PR touches Online Review staging readiness, I also ran:
+  `dart run tool/online_review_staging_readiness_report.dart`
 - [ ] The smoke report passed with `allPassed == true` and
   `hardSafetyPassed == true`.
 - [ ] This PR does not add hardcoded loopback, emulator, staging, or production

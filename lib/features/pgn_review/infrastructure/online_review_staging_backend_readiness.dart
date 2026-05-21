@@ -193,7 +193,10 @@ List<OnlineReviewStagingReadinessBlocker> _readinessBlockers(
   if (!smokeReport.hardSafetyPassed) {
     blockers.add(OnlineReviewStagingReadinessBlocker.hardSafetyFailed);
   }
-  if (smokeReport.dangerousScenarios > 0) {
+  final isBackendReadinessCandidate =
+      isOnlineReviewStagingEligibleMode(mode) ||
+      mode == OnlineReviewRuntimeMode.publicPreview;
+  if (smokeReport.dangerousScenarios > 0 && isBackendReadinessCandidate) {
     blockers.add(OnlineReviewStagingReadinessBlocker.dangerousScenarioPresent);
   }
   if (!_repositoryMatchesDecision(decision, repositoryConfig)) {
