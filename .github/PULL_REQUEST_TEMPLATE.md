@@ -21,7 +21,7 @@ description.
   `dart run tool/online_review_staging_readiness_report.dart`
 - [ ] If this PR touches Online Review staging scenario/readiness logic, I also
   ran:
-  `dart run tool/online_review_staging_readiness_report.dart --scenario=stagingPlaceholderReady`
+  `dart run tool/online_review_staging_readiness_report.dart --all-scenarios`
 - [ ] The smoke report passed with `allPassed == true` and
   `hardSafetyPassed == true`.
 - [ ] This PR does not add hardcoded loopback, emulator, staging, or production

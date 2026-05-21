@@ -2,17 +2,25 @@ import 'dart:io' as io;
 
 import 'package:apex_chess/features/pgn_review/infrastructure/online_review_staging_config_scenarios.dart';
 import 'package:apex_chess/features/pgn_review/infrastructure/online_review_staging_readiness_report.dart';
+import 'package:apex_chess/features/pgn_review/infrastructure/online_review_staging_scenario_summary.dart';
 
 void main(List<String> args) {
-  final scenarioArg = _scenarioArgument(args);
-  if (!scenarioArg.isValid) {
+  final request = _commandRequest(args);
+  if (!request.isValid) {
     io.stderr.writeln('Unknown Online Review staging readiness argument.');
-    io.stderr.writeln('Use --scenario=<id> with one of: $_scenarioNames.');
+    io.stderr.writeln('Use no arguments, --all-scenarios, or --scenario=<id>.');
     io.exitCode = 64;
     return;
   }
 
-  final scenarioName = scenarioArg.scenarioName;
+  if (request.allScenarios) {
+    final summary = buildOnlineReviewStagingScenarioSummary();
+    io.stdout.write(renderOnlineReviewStagingScenarioSummaryMarkdown(summary));
+    io.exitCode = onlineReviewStagingScenarioSummaryExitCode(summary);
+    return;
+  }
+
+  final scenarioName = request.scenarioName;
   if (scenarioName == null) {
     final report = buildDefaultOnlineReviewStagingReadinessReport();
     io.stdout.write(renderOnlineReviewStagingReadinessReportMarkdown(report));
@@ -41,28 +49,48 @@ void main(List<String> args) {
 }
 
 const _scenarioFlag = '--scenario=';
+const _allScenariosFlag = '--all-scenarios';
 
-class _ScenarioArgument {
-  const _ScenarioArgument.defaultReport() : isValid = true, scenarioName = null;
-  const _ScenarioArgument.invalid() : isValid = false, scenarioName = null;
-  const _ScenarioArgument.scenario(this.scenarioName) : isValid = true;
+class _CommandRequest {
+  const _CommandRequest.defaultReport()
+    : isValid = true,
+      allScenarios = false,
+      scenarioName = null;
+  const _CommandRequest.allScenarios()
+    : isValid = true,
+      allScenarios = true,
+      scenarioName = null;
+  const _CommandRequest.invalid()
+    : isValid = false,
+      allScenarios = false,
+      scenarioName = null;
+  const _CommandRequest.scenario(this.scenarioName)
+    : isValid = true,
+      allScenarios = false;
 
   final bool isValid;
+  final bool allScenarios;
   final String? scenarioName;
 }
 
-_ScenarioArgument _scenarioArgument(List<String> args) {
+_CommandRequest _commandRequest(List<String> args) {
   if (args.isEmpty) {
-    return const _ScenarioArgument.defaultReport();
+    return const _CommandRequest.defaultReport();
   }
-  if (args.length != 1 || !args.single.startsWith(_scenarioFlag)) {
-    return const _ScenarioArgument.invalid();
+  if (args.length != 1) {
+    return const _CommandRequest.invalid();
+  }
+  if (args.single == _allScenariosFlag) {
+    return const _CommandRequest.allScenarios();
+  }
+  if (!args.single.startsWith(_scenarioFlag)) {
+    return const _CommandRequest.invalid();
   }
   final value = args.single.substring(_scenarioFlag.length).trim();
   if (value.isEmpty) {
-    return const _ScenarioArgument.invalid();
+    return const _CommandRequest.invalid();
   }
-  return _ScenarioArgument.scenario(value);
+  return _CommandRequest.scenario(value);
 }
 
 String get _scenarioNames {

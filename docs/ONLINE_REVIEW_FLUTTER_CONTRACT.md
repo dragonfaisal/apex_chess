@@ -155,6 +155,18 @@ scenario IDs, does not accept arbitrary URLs, does not read live build defines,
 does not connect to a backend, and does not print full backend URLs. Real
 staging URLs are still not part of this repo.
 
+The controlled scenario matrix can be verified in one CI-safe command:
+
+```sh
+dart run tool/online_review_staging_readiness_report.dart --all-scenarios
+```
+
+The all-scenario summary verifies every named placeholder readiness scenario,
+including expected ready and expected blocked shapes. It is fixture-only, does
+not accept arbitrary URLs, does not read live build defines, does not connect
+to a backend, and exits non-zero only when scenario expectations or safety
+invariants fail.
+
 PRs touching Online Review runtime gates, environment config, repository
 activation, shell visibility, public preview logic, or backend base URI handling
 must reference this smoke command in the PR checklist. For PRs unrelated to
