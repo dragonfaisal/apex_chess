@@ -25,6 +25,9 @@ description.
 - [ ] If this PR touches Online Review staging preflight transport,
   compatibility fixtures, or contract docs, I ran the focused preflight tests
   and kept default HTTP disabled.
+- [ ] If this PR touches private staging config dry-run evaluation, I ran the
+  focused evaluator tests and kept private config env-only, redacted, and
+  non-activating.
 - [ ] The smoke report passed with `allPassed == true` and
   `hardSafetyPassed == true`.
 - [ ] This PR does not add hardcoded loopback, emulator, staging, or production

@@ -167,6 +167,18 @@ not accept arbitrary URLs, does not read live build defines, does not connect
 to a backend, and exits non-zero only when scenario expectations or safety
 invariants fail.
 
+The same tool also has a private staging config dry-run mode:
+
+```sh
+dart run tool/online_review_staging_readiness_report.dart --private-config-dry-run
+```
+
+That mode reads only explicit non-committed private environment values,
+redacts the supplied backend address to a safe fingerprint, and checks whether
+runtime mode, HTTP gate, repository config, smoke report, and staging
+readiness align. It does not connect to a backend, call preflight, or activate
+Online Review.
+
 ### Staging transport preflight
 
 `OnlineReviewStagingPreflight` defines a dormant future transport preflight
