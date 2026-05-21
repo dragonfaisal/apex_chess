@@ -167,6 +167,22 @@ not accept arbitrary URLs, does not read live build defines, does not connect
 to a backend, and exits non-zero only when scenario expectations or safety
 invariants fail.
 
+### Staging transport preflight
+
+`OnlineReviewStagingPreflight` defines a dormant future transport preflight
+contract for staging/internal tester backends. It is not called by default and
+does not activate Online Review. Before any future analysis request is allowed,
+the preflight must verify that staging readiness has already passed, then check
+that the backend reports
+`online-review-staging-preflight-v1` and supports
+`online-review-product-v1`.
+
+The placeholder endpoint policy is
+`/analysis/dev/online-review-product/preflight`. It carries no PGN, user IDs,
+auth tokens, engine output, analytics, or review payload. The current Flutter
+implementation is fake-client tested only; a future backend must implement the
+matching contract before any real staging activation phase.
+
 PRs touching Online Review runtime gates, environment config, repository
 activation, shell visibility, public preview logic, or backend base URI handling
 must reference this smoke command in the PR checklist. For PRs unrelated to
