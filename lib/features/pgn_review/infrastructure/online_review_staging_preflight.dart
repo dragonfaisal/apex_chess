@@ -41,6 +41,7 @@ enum OnlineReviewStagingPreflightFailureCode {
   httpStatus,
   invalidJson,
   contractMismatch,
+  forbiddenPayload,
   unexpected,
 }
 
@@ -342,6 +343,18 @@ OnlineReviewStagingPreflightResult onlineReviewStagingPreflightReadinessGate(
 }
 
 OnlineReviewStagingPreflightResult _resultFromJson(Map<String, Object?> json) {
+  if (_containsForbiddenPreflightPayloadKey(json)) {
+    return _failureResult(
+      status: OnlineReviewStagingPreflightStatus.failed,
+      code: OnlineReviewStagingPreflightFailureCode.forbiddenPayload,
+      message:
+          'Online Review staging preflight response included forbidden '
+          'payload fields.',
+      isRetryable: false,
+      source: 'contract',
+    );
+  }
+
   final contractVersion = json['contractVersion'];
   final ok = json['ok'];
   final supportedProductContract = json['supportedProductContract'];
@@ -427,4 +440,46 @@ String? _nullableString(Object? value) {
 
 bool _isRetryableStatus(int statusCode) {
   return statusCode == 408 || statusCode == 429 || statusCode >= 500;
+}
+
+const _forbiddenPreflightPayloadKeys = {
+  'raw'
+      'Pgn',
+  'fen'
+      'History',
+  'userId',
+  'access'
+      'Token',
+  'api'
+      'Key',
+  'auth'
+      'Token',
+  'engine'
+      'Output',
+  'engine'
+      'Logs',
+  'reviewPayload',
+  'analysisResult',
+  'classifierInternals',
+  'govern'
+      'ancePayload',
+  'storagePayload',
+  'schemaPayload',
+  'rean'
+      'alysisPayload',
+  'stackTrace',
+};
+
+bool _containsForbiddenPreflightPayloadKey(Object? value) {
+  if (value is Map) {
+    return value.entries.any((entry) {
+      final key = entry.key.toString();
+      return _forbiddenPreflightPayloadKeys.contains(key) ||
+          _containsForbiddenPreflightPayloadKey(entry.value);
+    });
+  }
+  if (value is List) {
+    return value.any(_containsForbiddenPreflightPayloadKey);
+  }
+  return false;
 }

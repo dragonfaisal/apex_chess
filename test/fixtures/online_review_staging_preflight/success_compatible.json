@@ -1,0 +1,9 @@
+{
+  "contractVersion": "online-review-staging-preflight-v1",
+  "ok": true,
+  "backendName": "Apex Online Review",
+  "backendVersion": "test-placeholder",
+  "supportedProductContract": "online-review-product-v1",
+  "serverTime": "2026-01-01T00:00:00Z",
+  "warnings": []
+}

@@ -183,6 +183,12 @@ auth tokens, engine output, analytics, or review payload. The current Flutter
 implementation is fake-client tested only; a future backend must implement the
 matching contract before any real staging activation phase.
 
+Backend-owned preflight compatibility fixtures and the private staging opt-in
+plan are documented in `docs/ONLINE_REVIEW_STAGING_PREFLIGHT_CONTRACT.md`.
+That contract defines the allowed response fields, forbidden PGN, user, auth,
+engine, and review payload content, compatibility failure mapping, and the
+gated steps required before any future private staging server can be evaluated.
+
 PRs touching Online Review runtime gates, environment config, repository
 activation, shell visibility, public preview logic, or backend base URI handling
 must reference this smoke command in the PR checklist. For PRs unrelated to
