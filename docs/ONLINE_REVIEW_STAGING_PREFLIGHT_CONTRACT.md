@@ -137,8 +137,9 @@ The allowed future command shape is:
 dart run tool/online_review_manual_preflight.dart --real-network --i-understand-this-is-private-staging
 ```
 
-That command file does not exist yet. A separate future phase is required
-before any real manual network preflight can run.
+That command file is implemented only as a private, manual, env-only preflight
+tool. It is not part of app DI, navigation, public UI, or Online Review
+analysis activation.
 
 Future real preflight input policy:
 
@@ -151,7 +152,8 @@ Future real preflight input policy:
 - CI secrets are not an input source in this phase.
 - Public preview configuration is forbidden for private staging preflight.
 
-Before the future command may exist, all of these checks must pass:
+Before the command may perform a real preflight network call, all of these
+checks must pass:
 
 1. `dart run tool/online_review_build_config_report.dart`
 2. `dart run tool/online_review_staging_readiness_report.dart --all-scenarios`
@@ -159,11 +161,81 @@ Before the future command may exist, all of these checks must pass:
 4. Fake-client preflight fixture simulation.
 5. Manual preflight plan approval for a future manual preflight phase.
 6. Real preflight design review approval for the future command design.
-7. A separate future implementation phase with no default activation.
+7. The manual real-network preflight command implementation remains
+   non-default, env-only, and private.
 
 Analysis remains blocked until a later activation phase integrates preflight
 success. Full backend URLs must not appear in source, docs, tests, logs, or
 output.
+
+## Manual Real-Network Preflight Command
+
+The manual real-network preflight command is:
+
+```sh
+dart run tool/online_review_manual_preflight.dart --real-network --i-understand-this-is-private-staging
+```
+
+The command is private and manual only. It can run only when every prior gate
+passes and the developer supplies these explicit, non-committed environment
+variables:
+
+- `APEX_PRIVATE_ONLINE_REVIEW_MODE`
+- `APEX_PRIVATE_ONLINE_REVIEW_BASE_URI`
+- `APEX_PRIVATE_ONLINE_REVIEW_ALLOW_HTTP`
+- `APEX_PRIVATE_ONLINE_REVIEW_REAL_PREFLIGHT_APPROVAL`
+
+The approval value must equal exactly:
+
+```text
+I_UNDERSTAND_THIS_IS_PRIVATE_STAGING_PREFLIGHT_ONLY
+```
+
+Input policy:
+
+- No command-line URL arguments are accepted.
+- No real URL appears in source, docs, tests, fixtures, or examples.
+- No committed environment file is read.
+- CI secrets are not an input source in this phase.
+- Only `staging` and `internalTester` modes can proceed.
+- The base URI must be HTTPS, non-loopback, non-emulator, non-wildcard, and
+  origin-only.
+- Public preview is rejected.
+
+Before constructing the HTTP client, the command requires:
+
+1. Build config report passes with `allPassed` and `hardSafetyPassed`.
+2. All-scenarios readiness summary passes expectations and hard safety.
+3. Private staging config dry-run can proceed.
+4. Fake-client preflight compatibility simulation passes.
+5. Manual preflight plan approves future manual preflight.
+6. Real preflight design review approves the command design.
+7. The exact private approval environment value is present.
+
+If any gate fails, no HTTP client is constructed and no network call is made.
+After all gates pass, the command performs only the staging preflight POST and
+validates `online-review-staging-preflight-v1` plus
+`online-review-product-v1`. It sends no PGN, FEN, user data, auth token, engine
+data, review payload, analytics, or analysis request.
+
+Output policy:
+
+- The full backend URL is never printed.
+- The base URI is rendered only as `scheme=https;host=<redacted-host>`.
+- Backend name, backend version, and warnings are printed only when they pass
+  safe-string filtering.
+- Raw response bodies, stack traces, path, query, fragment, userinfo, tokens,
+  PGN, FEN, engine output, and review payload content are not printed.
+- Preflight success does not activate Online Review and does not unlock
+  analysis by itself.
+
+Exit codes:
+
+- `0`: preflight succeeded and the backend is compatible.
+- `2`: preflight ran but failed or returned an incompatible contract.
+- `64`: usage error, missing flags, unknown flags, or unsafe CLI URL input.
+- `70`: safety gate failed before network.
+- `74`: network or timeout failure.
 
 ## Private Staging Opt-In Plan
 
@@ -175,16 +247,16 @@ output.
    `dart run tool/online_review_staging_readiness_report.dart --scenario=stagingPlaceholderReady`.
 4. Evaluate any future private staging config with
    `dart run tool/online_review_staging_readiness_report.dart --private-config-dry-run`.
-5. Pass the fake-client manual preflight approval plan before any future real
-   manual preflight request.
-6. Pass the real-network manual preflight design review before a future real
-   command is implemented.
+5. Pass the fake-client manual preflight approval plan before any real manual
+   preflight request.
+6. Pass the real-network manual preflight design review before the manual
+   command can execute network.
 7. Supply any future private staging base URI only through explicit local or
    build configuration outside committed source.
-8. Manually invoke preflight only in a future explicit phase after readiness
-   is staging or internal-tester ready.
+8. Manually invoke preflight only through the explicit env-only command after
+   readiness is staging or internal-tester ready.
 9. Keep Online Review analysis requests blocked until preflight success is
    integrated into a later activation plan.
 
 No real URL may be committed. No public activation exists. Private staging use
-is future work, not part of the current Flutter runtime path.
+is not part of the current Flutter runtime path.

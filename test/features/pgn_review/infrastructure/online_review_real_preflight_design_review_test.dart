@@ -188,7 +188,7 @@ void main() {
       );
     });
 
-    test('required checks include every precondition and future phase', () {
+    test('required checks include every precondition and command policy', () {
       final review = _approvedReview();
       final checks = review.requiredChecks.join('\n');
 
@@ -198,8 +198,8 @@ void main() {
       expect(checks, contains('Fake-client preflight fixture simulation'));
       expect(checks, contains('Manual preflight plan'));
       expect(checks, contains('Real preflight design review'));
-      expect(checks, contains('Separate future phase'));
-      expect(checks, contains('no default activation'));
+      expect(checks, contains('Manual real-network preflight command'));
+      expect(checks, contains('no-default-activation'));
     });
 
     test('allowed input sources are environment-only and non-committed', () {
@@ -328,10 +328,10 @@ void main() {
       },
     );
 
-    test('no real manual preflight command file exists yet', () {
+    test('manual preflight command file exists as explicit tool only', () {
       expect(
         File('tool/online_review_manual_preflight.dart').existsSync(),
-        isFalse,
+        isTrue,
       );
     });
 
@@ -368,17 +368,14 @@ void main() {
         preflightDocs,
         contains('Command-line URL arguments are forbidden'),
       );
-      expect(
-        preflightDocs,
-        contains('does not approve real network execution'),
-      );
+      expect(preflightDocs, contains('Manual Real-Network Preflight Command'));
       expect(
         flutterContract,
         contains('OnlineReviewRealPreflightDesignReview'),
       );
-      expect(flutterContract, contains('design-only gate'));
+      expect(flutterContract, contains('design-review gate'));
       expect(prTemplate, contains('real preflight design review'));
-      expect(prTemplate, contains('real network execution unimplemented'));
+      expect(prTemplate, contains('manual real-network preflight command'));
     });
   });
 }

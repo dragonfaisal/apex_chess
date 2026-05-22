@@ -1,7 +1,7 @@
-/// Design-only approval review for a future real-network Online Review
-/// manual preflight command.
+/// Design approval review for the manual real-network Online Review preflight
+/// command.
 ///
-/// This contract approves only a future command design. It never constructs
+/// This contract approves only the command design. It never constructs
 /// transport clients, executes commands, reads environment values, connects to
 /// a backend, or sends analysis requests.
 library;
@@ -166,7 +166,8 @@ const onlineReviewRealPreflightRequiredChecks = [
   'Fake-client preflight fixture simulation passes.',
   'Manual preflight plan approves future manual preflight.',
   'Real preflight design review approves future command design.',
-  'Separate future phase implements the command with no default activation.',
+  'Manual real-network preflight command remains private, env-only, and '
+      'no-default-activation.',
 ];
 
 String renderOnlineReviewRealPreflightDesignReviewMarkdown(
@@ -247,8 +248,8 @@ String renderOnlineReviewRealPreflightDesignReviewMarkdown(
     ..writeln()
     ..writeln('## Safety Notes')
     ..writeln()
-    ..writeln('* This phase performs no network call.')
-    ..writeln('* This phase does not create the real preflight command.')
+    ..writeln('* This review performs no network call.')
+    ..writeln('* This review does not execute the manual preflight command.')
     ..writeln('* Analysis requests remain blocked.')
     ..writeln(
       '* Full backend URLs must not appear in source, docs, tests, logs, or '
@@ -358,8 +359,8 @@ String _requiredNextStep(
   if (status ==
       OnlineReviewRealPreflightDesignReviewStatus
           .approvedForFutureRealPreflightDesign) {
-    return 'Future command design is approved; implement real network '
-        'preflight only in a separate phase with no default activation.';
+    return 'Command design is approved; real preflight may run only through '
+        'the explicit env-only manual command after every gate passes.';
   }
   return 'Complete private dry-run, fake-client manual preflight approval, '
       'and explicit design approval before any future command design proceeds.';

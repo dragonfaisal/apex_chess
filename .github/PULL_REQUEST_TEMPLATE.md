@@ -32,6 +32,9 @@ description.
   manual preflight plan tests and kept it fake-client-only.
 - [ ] If this PR touches real preflight design review, I ran the focused design
   review tests and kept real network execution unimplemented.
+- [ ] If this PR touches the manual real-network preflight command, I ran the
+  focused command tests and kept it private, env-only, no-default-HTTP, and
+  URL-redacted.
 - [ ] The smoke report passed with `allPassed == true` and
   `hardSafetyPassed == true`.
 - [ ] This PR does not add hardcoded loopback, emulator, staging, or production
