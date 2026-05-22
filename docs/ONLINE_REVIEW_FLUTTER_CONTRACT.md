@@ -207,6 +207,12 @@ and fixture-backed fake preflight results, then reports typed blockers,
 warnings, and the next required step. It does not approve real network
 preflight, call a backend, send analysis requests, or activate Online Review.
 
+`OnlineReviewRealPreflightDesignReview` defines the design-only gate for a
+future real-network manual preflight command. It documents env-only private
+input policy, forbidden URL inputs, required checks, and typed blockers. It
+does not create the real command, approve execution now, call a backend, or
+activate Online Review.
+
 PRs touching Online Review runtime gates, environment config, repository
 activation, shell visibility, public preview logic, or backend base URI handling
 must reference this smoke command in the PR checklist. For PRs unrelated to
