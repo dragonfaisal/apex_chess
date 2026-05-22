@@ -38,6 +38,9 @@ description.
 - [ ] If this PR touches the manual preflight runbook or result review, I ran
   the focused result-review tests and kept raw URLs, private values, and command
   output out of stored summaries.
+- [ ] If this PR touches the result-review command or controlled execution
+  checklist, I ran the focused result-review command tests and kept it review
+  only with no raw output, backend calls, or analysis activation.
 - [ ] The smoke report passed with `allPassed == true` and
   `hardSafetyPassed == true`.
 - [ ] This PR does not add hardcoded loopback, emulator, staging, or production

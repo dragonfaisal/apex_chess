@@ -233,6 +233,11 @@ runbook and safe-to-share rules live in
 `docs/ONLINE_REVIEW_STAGING_PREFLIGHT_CONTRACT.md`. Compatible preflight review
 still does not unlock analysis.
 
+`tool/online_review_manual_preflight_result_review.dart` makes that review
+operational for developer use. It accepts only a local temporary output file or
+stdin plus a numeric manual-command exit code, renders the redacted review
+summary, and never runs preflight or connects to a backend.
+
 PRs touching Online Review runtime gates, environment config, repository
 activation, shell visibility, public preview logic, or backend base URI handling
 must reference this smoke command in the PR checklist. For PRs unrelated to

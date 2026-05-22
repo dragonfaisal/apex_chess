@@ -314,6 +314,55 @@ is compatible with the current Flutter preflight contract. It does not activate
 Online Review analysis, enable UI, register app DI, permit public preview,
 approve analysis requests, or relax any runtime gate.
 
+## Redacted Manual Preflight Result Review Command
+
+The result-review command reviews already-produced manual preflight command
+output. It does not run preflight, does not connect to a backend, does not read
+private environment variables, and does not store or render raw terminal output.
+
+Preferred local-file usage:
+
+```powershell
+dart run tool/online_review_manual_preflight_result_review.dart --input-file=<temporary-local-output.md> --exit-code=0
+```
+
+Optional stdin usage:
+
+```powershell
+dart run tool/online_review_manual_preflight_result_review.dart --stdin --exit-code=0
+```
+
+The `--exit-code` value must be the numeric exit code from the manual preflight
+command. The input file must be a temporary local text file; raw terminal output
+must not be committed to source, docs, fixtures, PR templates, or CI artifacts.
+Command-line URLs are rejected. The review command must never be used as a way
+to pass backend addresses.
+
+The rendered review summary includes only status, shareability, compatibility,
+safe contract fields, safe backend name/version if present, blockers, warnings,
+and next step. It rejects output containing full URLs, private environment
+values, raw response bodies, stack traces, tokens, API keys, PGN, FEN, engine
+output, review payloads, or analysis payloads.
+
+Before sharing any result:
+
+1. Run the result-review command.
+2. Confirm safeToShareSummary is true.
+3. Share only the review summary, not raw output.
+4. Confirm `unlocksAnalysis` remains false.
+
+Exit codes:
+
+- `0`: reviewed output is safe to share and compatible.
+- `2`: reviewed output is safe but incompatible, network-failed, or
+  safety-failed.
+- `64`: usage error or unsafe input mode/path.
+- `70`: unsafe output detected; raw output must not be shared.
+
+Compatible result review confirms backend preflight compatibility only. It does
+not activate Online Review, unlock analysis, approve public preview, or relax
+runtime gates.
+
 ## Private Staging Opt-In Plan
 
 1. Run `dart run tool/online_review_build_config_report.dart`; all scenarios
