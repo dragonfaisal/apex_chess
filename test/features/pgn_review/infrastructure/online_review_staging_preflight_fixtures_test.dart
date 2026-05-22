@@ -203,8 +203,11 @@ void main() {
       final docs =
           '${_preflightDocs()}\n'
           '${File('docs/ONLINE_REVIEW_FLUTTER_CONTRACT.md').readAsStringSync()}';
+      final urls = RegExp(
+        r'https?://[^\s"`]+',
+      ).allMatches(docs).map((match) => match.group(0)).toSet();
 
-      expect(docs, isNot(contains('https://')));
+      expect(urls, {'https://private-staging.example.test'});
       expect(docs, isNot(contains('http://')));
       expect(docs, isNot(contains('localhost')));
       expect(docs, isNot(contains('127.0.0.1')));

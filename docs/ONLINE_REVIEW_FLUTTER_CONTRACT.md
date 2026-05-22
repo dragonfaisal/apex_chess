@@ -224,6 +224,15 @@ constructing any HTTP client. It posts only to the staging preflight endpoint,
 renders a redacted compatibility report, and does not activate Online Review UI
 or analysis.
 
+`OnlineReviewManualPreflightResultReview` defines the safe review shape for a
+future manual preflight command result. It reviews already-produced command
+output only, never reruns the command, never stores raw stdout or stderr, and
+rejects summaries that contain full URLs, tokens, raw bodies, stack traces,
+PGN/FEN, engine output, review payloads, or analysis payload markers. The
+runbook and safe-to-share rules live in
+`docs/ONLINE_REVIEW_STAGING_PREFLIGHT_CONTRACT.md`. Compatible preflight review
+still does not unlock analysis.
+
 PRs touching Online Review runtime gates, environment config, repository
 activation, shell visibility, public preview logic, or backend base URI handling
 must reference this smoke command in the PR checklist. For PRs unrelated to

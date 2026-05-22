@@ -237,6 +237,83 @@ Exit codes:
 - `70`: safety gate failed before network.
 - `74`: network or timeout failure.
 
+## First Controlled Private Staging Preflight Runbook
+
+This runbook prepares the first future controlled private staging preflight
+attempt. It is an operational procedure only. Do not run a real preflight from
+repo validation or public CI.
+
+Preconditions:
+
+- `dart run tool/online_review_build_config_report.dart` passes.
+- `dart run tool/online_review_staging_readiness_report.dart --all-scenarios`
+  passes.
+- `dart run tool/online_review_staging_readiness_report.dart --private-config-dry-run`
+  passes with private local environment values.
+- Fake-client manual preflight approval plan passes.
+- Real preflight design review exists and approves the command design.
+- The private staging backend implements
+  `online-review-staging-preflight-v1` and supports
+  `online-review-product-v1`.
+
+PowerShell private environment setup, using placeholders only:
+
+```powershell
+$env:APEX_PRIVATE_ONLINE_REVIEW_MODE="staging"
+$env:APEX_PRIVATE_ONLINE_REVIEW_ALLOW_HTTP="true"
+$env:APEX_PRIVATE_ONLINE_REVIEW_BASE_URI="https://private-staging.example.test"
+$env:APEX_PRIVATE_ONLINE_REVIEW_REAL_PREFLIGHT_APPROVAL="I_UNDERSTAND_THIS_IS_PRIVATE_STAGING_PREFLIGHT_ONLY"
+```
+
+Required safety checks:
+
+```powershell
+dart run tool/online_review_build_config_report.dart
+dart run tool/online_review_staging_readiness_report.dart --all-scenarios
+dart run tool/online_review_staging_readiness_report.dart --private-config-dry-run
+```
+
+Manual preflight command:
+
+```powershell
+dart run tool/online_review_manual_preflight.dart --real-network --i-understand-this-is-private-staging
+```
+
+Environment cleanup after the run:
+
+```powershell
+Remove-Item Env:\APEX_PRIVATE_ONLINE_REVIEW_MODE
+Remove-Item Env:\APEX_PRIVATE_ONLINE_REVIEW_ALLOW_HTTP
+Remove-Item Env:\APEX_PRIVATE_ONLINE_REVIEW_BASE_URI
+Remove-Item Env:\APEX_PRIVATE_ONLINE_REVIEW_REAL_PREFLIGHT_APPROVAL
+```
+
+Safe-to-share result rules:
+
+- Share only the redacted Markdown report summary or the redacted result-review
+  summary.
+- Share status, exit code, safe contract versions, safe backend name/version,
+  safe warnings, and `scheme=https;host=<redacted-host>`.
+- Do not share full URLs, private environment values, raw response bodies,
+  stack traces, tokens, API keys, PGN, FEN, engine output, review payloads, or
+  analysis payloads.
+- Do not share terminal history or shell screenshots that include private
+  environment values.
+
+Result review meaning:
+
+- Exit `0`: compatible backend preflight only.
+- Exit `2`: incompatible backend or failed preflight contract.
+- Exit `64` or `70`: usage or safety-gate failure before network.
+- Exit `74`: network or timeout failure.
+- Unsafe output means the result must not be shared until redacted and
+  investigated.
+
+A successful preflight means only that the private backend preflight endpoint
+is compatible with the current Flutter preflight contract. It does not activate
+Online Review analysis, enable UI, register app DI, permit public preview,
+approve analysis requests, or relax any runtime gate.
+
 ## Private Staging Opt-In Plan
 
 1. Run `dart run tool/online_review_build_config_report.dart`; all scenarios
