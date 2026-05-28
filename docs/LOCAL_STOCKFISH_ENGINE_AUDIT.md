@@ -10,6 +10,8 @@ Phase 30E status: Android proof execution remains blocked in this workspace. `fl
 
 Phase 30F status: owner-provided S22 Ultra Android proof is now consolidated with the separate clean packaging proof. The local FFI bridge is provisionally approved for the Phase 30G scheduler prototype, not final production architecture.
 
+Phase 30G status: the first pure local smart scheduler prototype now exists as a budgeted planning layer. It does not add UI, backend work, persistence, official accuracy, ACPL, or final move labels.
+
 ## Current Reality
 
 - Apex has a real local Stockfish integration path: Dart `StockfishEngine` -> worker isolate -> FFI -> `libstockfish_bridge`.
@@ -385,7 +387,9 @@ Summary:
 
 ## Phase 30G Recommendation
 
-Proceed to `Phase 30G - Local Smart Scheduler Prototype v1` with strict limits.
+Scheduler design: [LOCAL_SMART_SCHEDULER.md](LOCAL_SMART_SCHEDULER.md).
+
+Phase 30G implemented a pure planning layer with strict limits.
 
 Allowed:
 
@@ -401,3 +405,5 @@ Still not allowed:
 - backend/server/preflight work;
 - persistence/cache/database work;
 - public UI activation.
+
+Phase 30H should add a thin executor around this planning model while keeping all engine calls behind `LocalEvalService` and preserving the classifier/accuracy layers unchanged.

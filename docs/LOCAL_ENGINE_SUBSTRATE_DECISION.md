@@ -67,7 +67,7 @@ If scheduler prototyping exposes lifecycle instability, queue contamination, nat
 
 Current recommendation:
 
-- Short term: start the Phase 30G scheduler prototype with strict local-only budgets and no classifier/accuracy work.
+- Short term: use the Phase 30G scheduler planning layer documented in [LOCAL_SMART_SCHEDULER.md](LOCAL_SMART_SCHEDULER.md) as the basis for local-only budgeted engine orchestration.
 - Medium term: keep a subprocess prototype on the roadmap as the safer architecture if process-global stdio redirection or native crash behavior remains risky.
 - Do not add Brilliant/Great/Miss, official ACPL/accuracy, backend work, persistence, or public UI activation in Phase 30G.
 
