@@ -59,6 +59,36 @@ void main() {
       );
     });
 
+    test('rejects FEN with a rank width other than 8 files', () {
+      expect(
+        isStructurallyValidFenForTesting(
+          'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR9 w KQkq - 0 1',
+        ),
+        isFalse,
+      );
+    });
+
+    test('rejects FEN with invalid board, castling, or clock fields', () {
+      expect(
+        isStructurallyValidFenForTesting(
+          'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNX w KQkq - 0 1',
+        ),
+        isFalse,
+      );
+      expect(
+        isStructurallyValidFenForTesting(
+          'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KK - 0 1',
+        ),
+        isFalse,
+      );
+      expect(
+        isStructurallyValidFenForTesting(
+          'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - -1 1',
+        ),
+        isFalse,
+      );
+    });
+
     test('rejects FEN with a NUL byte', () {
       expect(
         isStructurallyValidFenForTesting(

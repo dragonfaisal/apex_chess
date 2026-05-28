@@ -39,6 +39,7 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:apex_chess/core/domain/entities/engine_line.dart';
 import 'package:apex_chess/core/domain/services/win_percent_calculator.dart';
 import 'package:apex_chess/core/infrastructure/engine/engine.dart';
+import 'package:apex_chess/core/infrastructure/engine/uci/fen_validator.dart';
 import 'package:apex_chess/infrastructure/api/cloud_eval_service.dart'
     show CloudEvalSnapshot, CloudEvalError;
 
@@ -109,7 +110,7 @@ class LocalEvalService {
     // cheap structural check has, in production, abort()'d the
     // worker thread (DartWorker SIGABRT) on the very first move of a
     // game when the upstream caller fed an empty / partial FEN.
-    if (!_isStructurallyValidFen(fen)) {
+    if (!validateFenForEngineCommand(fen).isValid) {
       return (null, EvalError.positionNotFound);
     }
 
@@ -402,24 +403,7 @@ class LocalEvalService {
 /// Exposed for unit testing via the `isStructurallyValidFenForTesting`
 /// indirection at the bottom of this file.
 bool _isStructurallyValidFen(String fen) {
-  if (fen.isEmpty) return false;
-  // Embedded NUL or non-ASCII control bytes are immediate disqualifiers
-  // — neither the UCI parser nor the text shaper handles them.
-  for (var i = 0; i < fen.length; i++) {
-    final cu = fen.codeUnitAt(i);
-    if (cu == 0) return false;
-    if (cu < 0x20 && cu != 0x09) return false;
-  }
-  final parts = fen.split(RegExp(r'\s+'));
-  if (parts.length < 4) return false;
-  final ranks = parts[0].split('/');
-  if (ranks.length != 8) return false;
-  for (final r in ranks) {
-    if (r.isEmpty) return false;
-  }
-  final stm = parts[1].toLowerCase();
-  if (stm != 'w' && stm != 'b') return false;
-  return true;
+  return validateFenForEngineCommand(fen).isValid;
 }
 
 /// Test-only re-export of [_isStructurallyValidFen] so the structural

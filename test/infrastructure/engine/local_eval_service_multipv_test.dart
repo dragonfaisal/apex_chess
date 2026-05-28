@@ -72,6 +72,29 @@ void main() {
       expect(snapshot.engineLines[0].moveSan, 'e5');
     });
 
+    test('normalizes black-to-move mate scores back to White POV', () async {
+      const blackToMoveFen =
+          'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+      final engine = _FakeChessEngine(
+        bestMove: 'e7e5',
+        infos: const [
+          EngineInfo(depth: 9, multipv: 1, scoreMate: 3, pv: ['e7e5']),
+        ],
+      );
+      final service = LocalEvalService(engine: engine);
+
+      final (snapshot, error) = await service.evaluate(
+        blackToMoveFen,
+        depth: 9,
+        timeout: const Duration(seconds: 1),
+      );
+
+      expect(error, isNull);
+      expect(snapshot!.mateIn, -3);
+      expect(snapshot.scoreCp, isNull);
+      expect(snapshot.engineLines.single.mateIn, -3);
+    });
+
     test('candidate verification can request MultiPV 5', () async {
       final engine = _FakeChessEngine(
         bestMove: 'e2e4',

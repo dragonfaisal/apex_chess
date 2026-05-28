@@ -70,12 +70,42 @@ void main() {
     });
 
     test('parses info with mate score', () {
-      final event =
-          parseUciLine('info depth 5 score mate 3 nodes 42 pv e2e4 e7e5 d1h5');
+      final event = parseUciLine(
+        'info depth 5 score mate 3 nodes 42 pv e2e4 e7e5 d1h5',
+      );
       final info = event as EngineInfo;
       expect(info.scoreCp, isNull);
       expect(info.scoreMate, 3);
       expect(info.pv, ['e2e4', 'e7e5', 'd1h5']);
+    });
+
+    test('does not parse mate scores as centipawns', () {
+      final event = parseUciLine(
+        'info depth 9 multipv 1 score mate -2 nodes 100 nps 500 pv h2h4',
+      );
+      final info = event as EngineInfo;
+      expect(info.scoreCp, isNull);
+      expect(info.scoreMate, -2);
+      expect(info.fields, containsPair('multipv', '1'));
+    });
+
+    test('parses distinct MultiPV lines', () {
+      final first =
+          parseUciLine(
+                'info depth 12 multipv 1 score cp 31 nodes 1000 nps 2000 pv e2e4 e7e5',
+              )
+              as EngineInfo;
+      final third =
+          parseUciLine(
+                'info depth 12 multipv 3 score cp 5 nodes 900 nps 1800 pv g1f3 g8f6',
+              )
+              as EngineInfo;
+
+      expect(first.multipv, 1);
+      expect(first.pv.first, 'e2e4');
+      expect(third.multipv, 3);
+      expect(third.pv.first, 'g1f3');
+      expect(third.scoreCp, 5);
     });
 
     test('parses info with score bound', () {
@@ -94,6 +124,30 @@ void main() {
       );
       final info = event as EngineInfo;
       expect(info.string, 'NNUE evaluation using nn-abc.nnue');
+    });
+
+    test('ignores unknown info tokens safely', () {
+      final event = parseUciLine(
+        'info depth 8 foo bar score cp -14 unknown 99 nodes 321 '
+        'nps 654 pv c2c4 e7e6',
+      );
+      final info = event as EngineInfo;
+      expect(info.depth, 8);
+      expect(info.scoreCp, -14);
+      expect(info.nodes, 321);
+      expect(info.nps, 654);
+      expect(info.pv, ['c2c4', 'e7e6']);
+    });
+
+    test('handles sparse info lines without assuming all fields exist', () {
+      final event = parseUciLine('info depth 4 currmove e2e4');
+      final info = event as EngineInfo;
+      expect(info.depth, 4);
+      expect(info.currmove, 'e2e4');
+      expect(info.scoreCp, isNull);
+      expect(info.scoreMate, isNull);
+      expect(info.nodes, isNull);
+      expect(info.pv, isEmpty);
     });
 
     test('unknown lines fall through to EngineRawLine', () {
