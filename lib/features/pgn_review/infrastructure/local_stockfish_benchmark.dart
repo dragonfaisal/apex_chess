@@ -146,6 +146,7 @@ class AndroidStockfishBenchmarkRow {
     this.scoreCp,
     this.scoreMate,
     required this.pvCount,
+    this.bestMove,
     this.warning,
   });
 
@@ -162,6 +163,7 @@ class AndroidStockfishBenchmarkRow {
   final int? scoreCp;
   final int? scoreMate;
   final int pvCount;
+  final String? bestMove;
   final String? warning;
 
   String get scoreLabel => switch (scoreType) {
@@ -171,22 +173,55 @@ class AndroidStockfishBenchmarkRow {
   };
 
   String toMarkdownRow() {
-    return '| $deviceLabel | $abi | $positionLabel | $targetLabel | $multiPv | '
-        '$elapsedMs | ${parsedDepth ?? '?'} | ${nodes ?? '?'} | '
-        '${nps ?? '?'} | $scoreLabel | $pvCount | ${warning ?? ''} |';
+    return '| ${_benchmarkMarkdownCell(deviceLabel)} | '
+        '${_benchmarkMarkdownCell(abi)} | '
+        '${_benchmarkMarkdownCell(positionLabel)} | '
+        '${_benchmarkMarkdownCell(targetLabel)} | '
+        '$multiPv | $elapsedMs | ${parsedDepth ?? '?'} | ${nodes ?? '?'} | '
+        '${nps ?? '?'} | ${_benchmarkMarkdownCell(scoreLabel)} | '
+        '$pvCount | ${_benchmarkMarkdownCell(bestMove ?? '')} | '
+        '${_benchmarkMarkdownCell(warning ?? '')} |';
+  }
+
+  Map<String, Object?> toJson() {
+    return {
+      'deviceLabel': deviceLabel,
+      'abi': abi,
+      'positionLabel': positionLabel,
+      'targetLabel': targetLabel,
+      'multiPv': multiPv,
+      'elapsedMs': elapsedMs,
+      'parsedDepth': parsedDepth,
+      'nodes': nodes,
+      'nps': nps,
+      'scoreType': scoreType.label,
+      'scoreCp': scoreCp,
+      'scoreMate': scoreMate,
+      'pvCount': pvCount,
+      'bestMove': bestMove,
+      'warning': warning,
+    };
   }
 
   static String renderMarkdownTable(List<AndroidStockfishBenchmarkRow> rows) {
     final buffer = StringBuffer()
       ..writeln(
-        '| Device | ABI | Position | Target | MultiPV | Elapsed ms | Depth | Nodes | NPS | Score | PV count | Warning |',
+        '| Device | ABI | Position | Target | MultiPV | Elapsed ms | Depth | Nodes | NPS | Score | PV count | Bestmove | Warning |',
       )
-      ..writeln('|---|---|---|---|---:|---:|---:|---:|---:|---|---:|---|');
+      ..writeln('|---|---|---|---|---:|---:|---:|---:|---:|---|---:|---|---|');
     for (final row in rows) {
       buffer.writeln(row.toMarkdownRow());
     }
     return buffer.toString();
   }
+}
+
+String _benchmarkMarkdownCell(Object value) {
+  return value
+      .toString()
+      .replaceAll('|', '/')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
 }
 
 class LocalStockfishBenchmarkReport {

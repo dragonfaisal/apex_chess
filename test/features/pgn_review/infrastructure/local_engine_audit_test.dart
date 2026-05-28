@@ -59,6 +59,15 @@ void main() {
       expect(tool, contains('androidPackagingAudit.render()'));
     });
 
+    test('Android Gradle packaging excludes non-target Stockfish ABIs', () {
+      final gradle = File('android/app/build.gradle.kts').readAsStringSync();
+
+      expect(gradle, contains('abiFilters += listOf("arm64-v8a")'));
+      expect(gradle, contains('jniLibs'));
+      expect(gradle, contains('"lib/armeabi-v7a/**"'));
+      expect(gradle, contains('"lib/x86_64/**"'));
+    });
+
     test('decision record is linked from the audit doc', () {
       final auditDoc = File(
         'docs/LOCAL_STOCKFISH_ENGINE_AUDIT.md',

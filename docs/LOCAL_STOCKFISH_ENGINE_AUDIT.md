@@ -4,6 +4,8 @@ Phase 30B status: local engine reality is explicit, not assumed.
 
 Phase 30C status: stub builds are fail-closed by default, packaging/ABI audit is first-class, and the FFI bridge remains provisional until Android benchmark and lifecycle proof exists.
 
+Phase 30D status: clean Android debug packaging is now ABI-consistent for Stockfish after adding explicit JNI exclusions for non-target ABIs. Android device smoke, stress, and benchmark execution were not run in this workspace because no Android device/emulator was available.
+
 ## Current Reality
 
 - Apex has a real local Stockfish integration path: Dart `StockfishEngine` -> worker isolate -> FFI -> `libstockfish_bridge`.
@@ -12,7 +14,8 @@ Phase 30C status: stub builds are fail-closed by default, packaging/ABI audit is
 - `main.cpp` is patched to expose `extern "C" int stockfish_main(...)`.
 - Android CMake metadata in this workspace shows `STOCKFISH_REAL=1`, `APEX_LIGHTWEIGHT_NNUE=1`, and 22 Stockfish source files compiled into `stockfish_bridge`.
 - Android `defaultConfig.ndk.abiFilters` targets `arm64-v8a`.
-- Existing debug artifacts contain `libstockfish_bridge.so` for `arm64-v8a`. The current debug APK in this workspace also contains stale/additional `armeabi-v7a` and `x86_64` engine libraries, so rebuild/packaging should be rechecked before release.
+- Android Gradle packaging now excludes non-target JNI libraries for `armeabi-v7a`, `x86`, and `x86_64` so debug APK contents match the declared local-engine ABI.
+- A clean Phase 30D rebuild produced a debug APK with `libstockfish_bridge.so` only under `lib/arm64-v8a/`.
 - The Windows host used for this audit cannot load `stockfish_bridge.dll`, so host benchmark rows are unavailable unless a host bridge is built and put on the loader path.
 
 ## Stub Status
@@ -135,7 +138,38 @@ dart run tool/local_stockfish_benchmark.dart --audit-packaging
 
 Expected clean result: configured ABI filters and packaged `libstockfish_bridge.so` ABIs match. With the current Gradle config that means `arm64-v8a` only.
 
-Phase 30B observed stale/additional `armeabi-v7a` and `x86_64` engine libraries in an existing debug APK. Phase 30C keeps that mismatch visible but does not fake a clean rebuild.
+Phase 30B observed stale/additional `armeabi-v7a` and `x86_64` engine libraries in an existing debug APK. Phase 30D reproduced that mismatch after a clean rebuild, then added explicit JNI packaging exclusions in `android/app/build.gradle.kts`.
+
+Phase 30D clean packaging result after that fix:
+
+```text
+status: abi-consistent
+configured ABI filters: arm64-v8a
+packaged engine ABIs: arm64-v8a
+extra packaged ABIs: none
+missing packaged ABIs: none
+```
+
+## Android Real-Engine Benchmark Collector
+
+Phase 30D added an opt-in integration test collector:
+
+```powershell
+flutter test integration_test/local_stockfish_device_benchmark_test.dart -d <android-device-id> --dart-define=APEX_RUN_LOCAL_STOCKFISH_DEVICE_BENCHMARK=true
+```
+
+Without `APEX_RUN_LOCAL_STOCKFISH_DEVICE_BENCHMARK=true`, the collector skips safely. It does not require UI interaction and does not add product navigation.
+
+The collector prints JSON and markdown summaries containing:
+
+- platform/device/ABI;
+- engine mode and engine identity;
+- `uciok` / `readyok` status;
+- smoke status for start position, tactical FEN, MultiPV 3, invalid FEN rejection, and repeated dispose;
+- lifecycle cycle count and stale-output flags;
+- benchmark rows with elapsed ms, parsed depth, nodes, nps, score type, PV count, bestmove, and warnings.
+
+The schema is `AndroidLocalEngineProofResult` plus `AndroidStockfishBenchmarkRow`. Pasted Android rows should be copied from device logs into this doc or a linked engineering note exactly as emitted. Do not invent rows, average rows from memory, or convert a host run into Android proof.
 
 ## Android Real-Engine Benchmark Runbook
 
@@ -151,6 +185,12 @@ flutter build apk --debug
 flutter install
 ```
 
+Opt-in proof command:
+
+```powershell
+flutter test integration_test/local_stockfish_device_benchmark_test.dart -d <android-device-id> --dart-define=APEX_RUN_LOCAL_STOCKFISH_DEVICE_BENCHMARK=true
+```
+
 Benchmark plan:
 
 - Positions: start position, tactical middlegame, endgame, mate-threat.
@@ -159,6 +199,22 @@ Benchmark plan:
 - Record: device model, Android version, ABI, elapsed ms, parsed depth, nodes, nps, score type, PV count, bestmove, warnings.
 
 The Dart schema `AndroidStockfishBenchmarkRow` can render pasted Android rows as a markdown table after manual/device collection. This is intentionally separate from host `dart run` output so Android facts are not faked.
+
+## Phase 30D Android Proof Status
+
+Packaging proof:
+
+- `flutter clean` passed.
+- `flutter pub get` passed.
+- `flutter build apk --debug` passed.
+- `dart run tool/local_stockfish_benchmark.dart --audit-packaging` passed with `abi-consistent`.
+
+Device proof:
+
+- `flutter devices` showed only Windows desktop, Chrome, and Edge.
+- No Android device or emulator was available in this workspace.
+- The opt-in Android collector was not executed on Android.
+- Real Android `libstockfish_bridge.so` load, `uciok`, `readyok`, bestmove, PV, MultiPV, lifecycle stress, and benchmark timings remain unproven.
 
 ## Optional Real-Engine Tests
 
@@ -181,7 +237,7 @@ The smoke tests verify:
 
 - The stub fallback is still selectable only by explicit CMake opt-in.
 - Host benchmark facts are unavailable until a host bridge is built or the harness is run on Android.
-- Existing debug APK contents include extra ABI libraries outside the current `arm64-v8a` filter; rebuild output should be checked before release packaging.
+- Android device proof has not run in this workspace; only APK packaging is proven.
 - The real bridge uses process-level stdin/stdout redirection and a process-persistent worker. This should be stress-tested on Android before scheduling many concurrent review jobs around it.
 - Current tests prove parser, FEN, stub guards, and fake-engine benchmark behavior; they do not prove Android target-device speed on this machine.
 
@@ -207,18 +263,17 @@ Decision record: [LOCAL_ENGINE_SUBSTRATE_DECISION.md](LOCAL_ENGINE_SUBSTRATE_DEC
 
 Summary:
 
-- The current FFI bridge is a provisional Phase 30D candidate because it already exists and Android real CMake metadata is present.
-- It is not final until Android proves packaging, lifecycle, and benchmark behavior.
-- If Android proof fails, Phase 30D should pivot toward a standalone subprocess UCI architecture instead of building a scheduler over an uncertain bridge.
+- The current FFI bridge remains provisional because packaging is now clean but target-device lifecycle and benchmark behavior are still unproven.
+- It is not final until Android proves real engine load, lifecycle stress, and benchmark behavior.
+- If Android device proof fails, Phase 30E should pivot toward a standalone subprocess UCI architecture instead of building a scheduler over an uncertain bridge.
 - Browser/WASM is not the immediate Android Flutter path.
 
-## Phase 30D Recommendation
+## Phase 30E Recommendation
 
 Do not add classifiers, ACPL/accuracy, backend phases, or review scheduling until Android target-device smoke and benchmark results are captured.
 
-Phase 30D should focus on Android proof:
+Phase 30E should focus on Android proof before scheduler work:
 
-- run the clean packaging verification runbook;
 - run Android real-engine smoke and lifecycle loops;
 - collect benchmark rows for every target position and movetime/depth target;
 - decide whether the FFI bridge is good enough to build a scheduler on, or pivot to subprocess UCI first.
