@@ -35,6 +35,357 @@ enum AndroidLocalEngineProofRecommendation {
   };
 }
 
+enum PackagingProofStatus {
+  missing,
+  abiConsistent,
+  abiMismatch;
+
+  String get label => switch (this) {
+    PackagingProofStatus.missing => 'missing',
+    PackagingProofStatus.abiConsistent => 'abiConsistent',
+    PackagingProofStatus.abiMismatch => 'abiMismatch',
+  };
+
+  static PackagingProofStatus fromAudit(AndroidPackagingAudit audit) {
+    if (!audit.artifactPresent) return PackagingProofStatus.missing;
+    if (audit.matchesConfigured) return PackagingProofStatus.abiConsistent;
+    return PackagingProofStatus.abiMismatch;
+  }
+
+  static PackagingProofStatus parse(String? label) {
+    return switch (label) {
+      'abiConsistent' || 'abi-consistent' => PackagingProofStatus.abiConsistent,
+      'abiMismatch' || 'abi-mismatch' => PackagingProofStatus.abiMismatch,
+      _ => PackagingProofStatus.missing,
+    };
+  }
+}
+
+enum DeviceProofStatus {
+  missing,
+  passed,
+  failed;
+
+  String get label => switch (this) {
+    DeviceProofStatus.missing => 'missing',
+    DeviceProofStatus.passed => 'passed',
+    DeviceProofStatus.failed => 'failed',
+  };
+}
+
+enum LocalEngineApprovalRecommendation {
+  needsPackagingProof,
+  needsDeviceProof,
+  approvedForSchedulerPrototype,
+  pivotToSubprocessRecommended;
+
+  String get label => switch (this) {
+    LocalEngineApprovalRecommendation.needsPackagingProof =>
+      'needsPackagingProof',
+    LocalEngineApprovalRecommendation.needsDeviceProof => 'needsDeviceProof',
+    LocalEngineApprovalRecommendation.approvedForSchedulerPrototype =>
+      'approvedForSchedulerPrototype',
+    LocalEngineApprovalRecommendation.pivotToSubprocessRecommended =>
+      'pivotToSubprocessRecommended',
+  };
+}
+
+class AndroidDeviceProofSummary {
+  const AndroidDeviceProofSummary({
+    required this.deviceLabel,
+    required this.platform,
+    required this.abi,
+    required this.deviceRunAttempted,
+    required this.engineMode,
+    this.engineName,
+    this.bridgeVersion,
+    required this.uciOk,
+    required this.readyOk,
+    required this.startposBestmoveLegal,
+    required this.tacticalPvNonEmpty,
+    required this.multiPvSupported,
+    required this.multiPv3Distinct,
+    required this.invalidFenRejectedBeforeEngine,
+    required this.repeatedDisposeSafe,
+    required this.lifecycleCyclesRequested,
+    required this.lifecycleCyclesCompleted,
+    required this.staleBestmoveDetected,
+    required this.queueContaminationDetected,
+    required this.benchmarkRowCount,
+    required this.rowsPreservedInFixture,
+    this.source = 'unknown',
+    this.warnings = const [],
+  });
+
+  final String deviceLabel;
+  final String platform;
+  final String abi;
+  final bool deviceRunAttempted;
+  final LocalEngineRuntimeMode engineMode;
+  final String? engineName;
+  final String? bridgeVersion;
+  final bool uciOk;
+  final bool readyOk;
+  final bool startposBestmoveLegal;
+  final bool tacticalPvNonEmpty;
+  final bool multiPvSupported;
+  final bool multiPv3Distinct;
+  final bool invalidFenRejectedBeforeEngine;
+  final bool repeatedDisposeSafe;
+  final int lifecycleCyclesRequested;
+  final int lifecycleCyclesCompleted;
+  final bool staleBestmoveDetected;
+  final bool queueContaminationDetected;
+  final int benchmarkRowCount;
+  final bool rowsPreservedInFixture;
+  final String source;
+  final List<String> warnings;
+
+  factory AndroidDeviceProofSummary.fromResult(
+    AndroidLocalEngineProofResult result, {
+    int? benchmarkRowCount,
+    bool rowsPreservedInFixture = true,
+    String source = 'AndroidLocalEngineProofResult',
+  }) {
+    return AndroidDeviceProofSummary(
+      deviceLabel: result.deviceLabel,
+      platform: result.platform,
+      abi: result.abi,
+      deviceRunAttempted: result.deviceRunAttempted,
+      engineMode: result.engineMode,
+      engineName: result.engineName,
+      bridgeVersion: result.bridgeVersion,
+      uciOk: result.uciOk,
+      readyOk: result.readyOk,
+      startposBestmoveLegal: result.startposBestmoveLegal,
+      tacticalPvNonEmpty: result.tacticalPvNonEmpty,
+      multiPvSupported: result.multiPvSupported,
+      multiPv3Distinct: result.multiPv3Distinct,
+      invalidFenRejectedBeforeEngine: result.invalidFenRejectedBeforeEngine,
+      repeatedDisposeSafe: result.repeatedDisposeSafe,
+      lifecycleCyclesRequested: result.lifecycleCyclesRequested,
+      lifecycleCyclesCompleted: result.lifecycleCyclesCompleted,
+      staleBestmoveDetected: result.staleBestmoveDetected,
+      queueContaminationDetected: result.queueContaminationDetected,
+      benchmarkRowCount: benchmarkRowCount ?? result.benchmarkRows.length,
+      rowsPreservedInFixture: rowsPreservedInFixture,
+      source: source,
+      warnings: result.warnings,
+    );
+  }
+
+  factory AndroidDeviceProofSummary.fromJson(Map<String, Object?> json) {
+    final device = _jsonMap(json['device']);
+    final proof = _jsonMap(json['deviceProof']);
+    final benchmark = _jsonMap(proof['benchmark']);
+    final lifecycle = _jsonMap(proof['lifecycle']);
+    final smoke = _jsonMap(proof['smoke']);
+    final multipv = _jsonMap(proof['multipv']);
+    return AndroidDeviceProofSummary(
+      deviceLabel: _jsonString(device['label'], fallback: 'unknown'),
+      platform: _jsonString(device['platform'], fallback: 'unknown'),
+      abi: _jsonString(device['abi'], fallback: 'unknown'),
+      deviceRunAttempted: _jsonBool(proof['deviceRunAttempted']),
+      engineMode: _parseRuntimeMode(_jsonString(proof['engineMode'])),
+      engineName: _jsonNullableString(proof['engineName']),
+      bridgeVersion: _jsonNullableString(proof['bridgeVersion']),
+      uciOk: _jsonBool(smoke['uciok']),
+      readyOk: _jsonBool(smoke['readyok']),
+      startposBestmoveLegal: _jsonBool(smoke['startposBestmoveLegal']),
+      tacticalPvNonEmpty: _jsonBool(smoke['tacticalPvNonEmpty']),
+      multiPvSupported: _jsonBool(multipv['supported']),
+      multiPv3Distinct: _jsonBool(multipv['multiPv3Distinct']),
+      invalidFenRejectedBeforeEngine: _jsonBool(
+        smoke['invalidFenRejectedBeforeEngine'],
+      ),
+      repeatedDisposeSafe: _jsonBool(smoke['repeatedDisposeSafe']),
+      lifecycleCyclesRequested: _jsonInt(lifecycle['cyclesRequested']),
+      lifecycleCyclesCompleted: _jsonInt(lifecycle['cyclesCompleted']),
+      staleBestmoveDetected: _jsonBool(lifecycle['staleBestmoveDetected']),
+      queueContaminationDetected: _jsonBool(
+        lifecycle['queueContaminationDetected'],
+      ),
+      benchmarkRowCount: _jsonInt(benchmark['rowCount']),
+      rowsPreservedInFixture: _jsonBool(benchmark['rowsPreservedInFixture']),
+      source: _jsonString(proof['source'], fallback: 'unknown'),
+      warnings: _jsonStringList(proof['warnings']),
+    );
+  }
+
+  bool get hasStubIdentity =>
+      (engineName ?? '').toLowerCase().contains('apexchess-stub') ||
+      (engineName ?? '').toLowerCase().contains('stub');
+
+  bool get hasBridgeFailure =>
+      engineMode != LocalEngineRuntimeMode.real ||
+      hasStubIdentity ||
+      !uciOk ||
+      !readyOk ||
+      !startposBestmoveLegal ||
+      !tacticalPvNonEmpty ||
+      !multiPvSupported ||
+      !multiPv3Distinct ||
+      !invalidFenRejectedBeforeEngine ||
+      !repeatedDisposeSafe ||
+      lifecycleCyclesCompleted < 20 ||
+      staleBestmoveDetected ||
+      queueContaminationDetected;
+
+  bool get passed =>
+      deviceRunAttempted && !hasBridgeFailure && benchmarkRowCount > 0;
+
+  List<String> get blockers {
+    final out = <String>[];
+    if (!deviceRunAttempted) out.add('device proof was not executed.');
+    if (engineMode != LocalEngineRuntimeMode.real) {
+      out.add('engine mode was ${engineMode.label}, not real.');
+    }
+    if (hasStubIdentity) out.add('engine identity reports a stub.');
+    if (!uciOk) out.add('uciok was not observed.');
+    if (!readyOk) out.add('readyok was not observed.');
+    if (!startposBestmoveLegal) {
+      out.add('startpos bestmove was missing or malformed.');
+    }
+    if (!tacticalPvNonEmpty) {
+      out.add('tactical FEN did not produce a non-empty PV.');
+    }
+    if (!multiPvSupported) out.add('MultiPV was not advertised.');
+    if (!multiPv3Distinct) {
+      out.add('MultiPV 3 did not produce distinct candidates.');
+    }
+    if (!invalidFenRejectedBeforeEngine) {
+      out.add('invalid FEN was not rejected before engine use.');
+    }
+    if (!repeatedDisposeSafe) out.add('repeated dispose was not safe.');
+    if (lifecycleCyclesCompleted < 20) {
+      out.add(
+        'lifecycle completed $lifecycleCyclesCompleted of at least 20 cycles.',
+      );
+    }
+    if (staleBestmoveDetected) out.add('stale bestmove reuse detected.');
+    if (queueContaminationDetected) out.add('queue contamination detected.');
+    if (benchmarkRowCount <= 0) out.add('no Android benchmark rows captured.');
+    return out;
+  }
+
+  String renderMarkdownSummary() {
+    final buffer = StringBuffer()
+      ..writeln('device: $deviceLabel')
+      ..writeln('platform/ABI: $platform / $abi')
+      ..writeln('engine: ${engineName ?? 'unknown'}')
+      ..writeln('bridge: ${bridgeVersion ?? 'unknown'}')
+      ..writeln('engine mode: ${engineMode.label}')
+      ..writeln('uciok: $uciOk')
+      ..writeln('readyok: $readyOk')
+      ..writeln('MultiPV supported: $multiPvSupported')
+      ..writeln('MultiPV 3 distinct: $multiPv3Distinct')
+      ..writeln(
+        'lifecycle: $lifecycleCyclesCompleted/$lifecycleCyclesRequested',
+      )
+      ..writeln('stale bestmove: $staleBestmoveDetected')
+      ..writeln('queue contamination: $queueContaminationDetected')
+      ..writeln('benchmark rows: $benchmarkRowCount')
+      ..writeln('raw rows preserved in fixture: $rowsPreservedInFixture')
+      ..writeln('device proof passed: $passed');
+    return buffer.toString();
+  }
+}
+
+class LocalEngineApprovalGateResult {
+  const LocalEngineApprovalGateResult({
+    required this.packagingStatus,
+    required this.deviceProof,
+    this.packagingSource = 'unknown',
+    this.deviceSource = 'unknown',
+  });
+
+  factory LocalEngineApprovalGateResult.fromFixtureJson(
+    Map<String, Object?> json,
+  ) {
+    final packaging = _jsonMap(json['packagingProof']);
+    return LocalEngineApprovalGateResult(
+      packagingStatus: PackagingProofStatus.parse(
+        _jsonString(packaging['status']),
+      ),
+      deviceProof: AndroidDeviceProofSummary.fromJson(json),
+      packagingSource: _jsonString(packaging['source'], fallback: 'unknown'),
+      deviceSource: _jsonString(
+        _jsonMap(json['deviceProof'])['source'],
+        fallback: 'unknown',
+      ),
+    );
+  }
+
+  final PackagingProofStatus packagingStatus;
+  final AndroidDeviceProofSummary? deviceProof;
+  final String packagingSource;
+  final String deviceSource;
+
+  DeviceProofStatus get deviceStatus {
+    final proof = deviceProof;
+    if (proof == null || !proof.deviceRunAttempted) {
+      return DeviceProofStatus.missing;
+    }
+    return proof.passed ? DeviceProofStatus.passed : DeviceProofStatus.failed;
+  }
+
+  List<String> get blockers {
+    final out = <String>[];
+    if (packagingStatus != PackagingProofStatus.abiConsistent) {
+      out.add('packaging proof is ${packagingStatus.label}.');
+    }
+    final proof = deviceProof;
+    if (proof == null) {
+      out.add('device proof is missing.');
+    } else {
+      out.addAll(proof.blockers.map((blocker) => 'device: $blocker'));
+    }
+    return out;
+  }
+
+  LocalEngineApprovalRecommendation get recommendation {
+    final proof = deviceProof;
+    if (proof != null && proof.hasBridgeFailure) {
+      return LocalEngineApprovalRecommendation.pivotToSubprocessRecommended;
+    }
+    if (packagingStatus != PackagingProofStatus.abiConsistent) {
+      return LocalEngineApprovalRecommendation.needsPackagingProof;
+    }
+    if (proof == null || !proof.passed) {
+      return LocalEngineApprovalRecommendation.needsDeviceProof;
+    }
+    return LocalEngineApprovalRecommendation.approvedForSchedulerPrototype;
+  }
+
+  String renderMarkdownSummary() {
+    final buffer = StringBuffer()
+      ..writeln('# Apex Local Engine Approval Gate')
+      ..writeln()
+      ..writeln('packaging status: ${packagingStatus.label}')
+      ..writeln('device status: ${deviceStatus.label}')
+      ..writeln('recommendation: ${recommendation.label}')
+      ..writeln('packaging source: $packagingSource')
+      ..writeln('device source: $deviceSource')
+      ..writeln()
+      ..writeln('blockers:');
+    final currentBlockers = blockers;
+    if (currentBlockers.isEmpty) {
+      buffer.writeln('- none');
+    } else {
+      for (final blocker in currentBlockers) {
+        buffer.writeln('- $blocker');
+      }
+    }
+    final proof = deviceProof;
+    if (proof != null) {
+      buffer
+        ..writeln()
+        ..write(proof.renderMarkdownSummary());
+    }
+    return buffer.toString();
+  }
+}
+
 class AndroidLocalEngineProofResult {
   const AndroidLocalEngineProofResult({
     required this.packagingAudit,
@@ -775,6 +1126,46 @@ String currentRuntimeAbiLabel() {
   } on Object {
     return 'unknown';
   }
+}
+
+Map<String, Object?> _jsonMap(Object? value) {
+  if (value is Map<String, Object?>) return value;
+  if (value is Map) {
+    return value.map((key, value) => MapEntry(key.toString(), value));
+  }
+  return const {};
+}
+
+String _jsonString(Object? value, {String fallback = ''}) {
+  return value is String ? value : fallback;
+}
+
+String? _jsonNullableString(Object? value) {
+  return value is String && value.trim().isNotEmpty ? value : null;
+}
+
+bool _jsonBool(Object? value) {
+  return value is bool ? value : false;
+}
+
+int _jsonInt(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value) ?? 0;
+  return 0;
+}
+
+List<String> _jsonStringList(Object? value) {
+  if (value is! List) return const [];
+  return value.whereType<String>().toList(growable: false);
+}
+
+LocalEngineRuntimeMode _parseRuntimeMode(String label) {
+  return switch (label) {
+    'real' => LocalEngineRuntimeMode.real,
+    'stub-detected' || 'stubDetected' => LocalEngineRuntimeMode.stubDetected,
+    _ => LocalEngineRuntimeMode.unavailable,
+  };
 }
 
 class _AndroidHandshake {

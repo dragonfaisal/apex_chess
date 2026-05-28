@@ -8,6 +8,8 @@ Phase 30D status: clean Android debug packaging is now ABI-consistent for Stockf
 
 Phase 30E status: Android proof execution remains blocked in this workspace. `flutter devices` showed Windows desktop, Chrome, and Edge only; no Android device/emulator was available, so the opt-in collector was not executed and no Android benchmark rows were captured.
 
+Phase 30F status: owner-provided S22 Ultra Android proof is now consolidated with the separate clean packaging proof. The local FFI bridge is provisionally approved for the Phase 30G scheduler prototype, not final production architecture.
+
 ## Current Reality
 
 - Apex has a real local Stockfish integration path: Dart `StockfishEngine` -> worker isolate -> FFI -> `libstockfish_bridge`.
@@ -54,7 +56,7 @@ Do not use that artifact for analysis, benchmarks, QA sign-off, or release.
 - `stockfish_bridge.cpp` starts a process-persistent Stockfish worker once and gates sessions to avoid repeated Stockfish static thread-pool teardown crashes.
 - `LocalEvalService` serializes searches, sends `stop` / `isready` / `ucinewgame`, sets sticky `MultiPV`, validates FEN before UCI, and normalizes engine scores to White perspective for review/domain callers.
 
-This architecture is good enough for controlled smoke and benchmark work, but it is not yet a final world-class engine substrate. The bridge redirects process stdin/stdout for real Stockfish, keeps process-global state alive, and needs more target-device lifecycle proof before Phase 30C builds scheduling on top of it.
+This architecture is now proven enough for a controlled local scheduler prototype on one Android target. It is not yet a final world-class engine substrate. The bridge redirects process stdin/stdout for real Stockfish, keeps process-global state alive, and still needs broader device, thermal, battery, and long-session proof before production sign-off.
 
 ## Parser And Score Contract
 
@@ -173,6 +175,14 @@ The collector prints JSON and markdown summaries containing:
 
 The schema is `AndroidLocalEngineProofResult` plus `AndroidStockfishBenchmarkRow`. Pasted Android rows should be copied from device logs into this doc or a linked engineering note exactly as emitted. Do not invent rows, average rows from memory, or convert a host run into Android proof.
 
+Phase 30F adds a consolidated approval gate that separates:
+
+- packaging proof: `missing`, `abiConsistent`, or `abiMismatch`;
+- device proof: `missing`, `passed`, or `failed`;
+- approval recommendation: `needsPackagingProof`, `needsDeviceProof`, `approvedForSchedulerPrototype`, or `pivotToSubprocessRecommended`.
+
+This avoids treating `artifact-missing` from inside the integration-test runtime as a blocker when a separate host-side packaging audit has already passed.
+
 ## Android Real-Engine Benchmark Runbook
 
 Android benchmark facts must be captured on a real device or emulator that runs the packaged native bridge.
@@ -266,6 +276,59 @@ Acceptance criteria before scheduler work:
 - no timeout, stale bestmove, queue contamination, crash, or dispose hang occurs;
 - benchmark rows exist for every Phase 30B target position and movetime/depth target.
 
+## Phase 30F Proof Consolidation
+
+Stored proof record:
+
+```text
+test/fixtures/local_stockfish/android_proof/s22_ultra_phase_30e.json
+```
+
+Packaging proof was captured separately with:
+
+```powershell
+flutter build apk --debug
+dart run tool/local_stockfish_benchmark.dart --audit-packaging
+```
+
+Packaging result:
+
+- status: `abi-consistent`;
+- configured ABI: `arm64-v8a`;
+- packaged Stockfish ABI: `arm64-v8a`;
+- extra ABIs: none;
+- missing ABIs: none.
+
+Device proof was captured from an owner run on:
+
+- device: S22 Ultra / `SM S908U1`;
+- platform: Android / `android-arm64`;
+- Android version: Android 16;
+- ABI: `arm64-v8a`.
+
+Collector summary:
+
+- engine mode: `real`;
+- engine name: `Stockfish 17`;
+- bridge version: `apex-stockfish-bridge/0.3.0`;
+- `uciok`: true;
+- `readyok`: true;
+- startpos bestmove legal-looking: true;
+- tactical PV non-empty: true;
+- MultiPV supported: true;
+- MultiPV 3 distinct: true;
+- invalid FEN rejected before engine: true;
+- repeated dispose safe: true;
+- lifecycle cycles: 20/20;
+- stale bestmove detected: false;
+- queue contamination detected: false;
+- benchmark rows: 139;
+- integration test: passed.
+
+The collector-local recommendation was still `needsAndroidProof` because the integration-test runtime could not inspect the host APK artifact and therefore reported packaging as `artifact-missing`. Phase 30F treats this as a false combined recommendation, not as a device failure. The new approval gate combines the separate `abi-consistent` packaging proof with the passed device proof and returns `approvedForSchedulerPrototype`.
+
+Raw benchmark rows were not pasted into this repository fixture. The fixture records the owner-provided row count and proof summary only. A future rerun should preserve the emitted JSON/markdown rows if detailed timing analysis is needed.
+
 ## Optional Real-Engine Tests
 
 Optional smoke tests live in:
@@ -287,8 +350,8 @@ The smoke tests verify:
 
 - The stub fallback is still selectable only by explicit CMake opt-in.
 - Host benchmark facts are unavailable until a host bridge is built or the harness is run on Android.
-- Android device proof has not run in this workspace; only APK packaging is proven.
-- The real bridge uses process-level stdin/stdout redirection and a process-persistent worker. This should be stress-tested on Android before scheduling many concurrent review jobs around it.
+- Android proof is currently from one S22 Ultra target only; broader device matrix, release/profile mode, thermal behavior, battery impact, and long-session behavior remain unproven.
+- The real bridge uses process-level stdin/stdout redirection and a process-persistent worker. Scheduler prototype work must keep stress, timeout, and queue-contamination checks active around it.
 - Current tests prove parser, FEN, stub guards, and fake-engine benchmark behavior; they do not prove Android target-device speed on this machine.
 
 ## Phase 30C Lifecycle Findings
@@ -300,12 +363,14 @@ Phase 30C added fake-engine lifecycle substrate tests:
 - search timeout returns a safe failure and sends `stop`;
 - repeated ready/stop/dispose paths do not hang in fake mode.
 
-What remains unproven:
+What remains unproven after Phase 30F:
 
-- real Android repeated start/search/stop/dispose loops;
-- process-global stdio behavior under Flutter Android logging;
-- native crash isolation;
-- stale bestmove leakage under real engine stress.
+- broader Android device behavior beyond the S22 Ultra proof target;
+- release/profile mode behavior;
+- native crash isolation under long-running scheduler load;
+- thermal, battery, and long-session stability.
+
+Phase 30F owner evidence closes the basic real Android smoke and 20-cycle lifecycle gap for one Android target. The remaining lifecycle risks are broader-device and long-duration risks, not immediate blockers for a prototype.
 
 ## FFI Vs Subprocess Decision
 
@@ -313,17 +378,26 @@ Decision record: [LOCAL_ENGINE_SUBSTRATE_DECISION.md](LOCAL_ENGINE_SUBSTRATE_DEC
 
 Summary:
 
-- The current FFI bridge remains provisional because packaging is now clean but target-device lifecycle and benchmark behavior are still unproven.
-- It is not final until Android proves real engine load, lifecycle stress, and benchmark behavior.
-- If Android device proof fails, Phase 30F should pivot toward a standalone subprocess UCI architecture instead of building a scheduler over an uncertain bridge.
+- The current FFI bridge is provisionally approved for a local scheduler prototype because separate packaging proof and S22 Ultra device proof now pass.
+- It is not final production architecture until broader Android device, release/profile, thermal, battery, and long-session behavior is proven.
+- If scheduler prototyping exposes lifecycle instability, Phase 30G/30H should pivot toward a standalone subprocess UCI architecture instead of masking bridge risk.
 - Browser/WASM is not the immediate Android Flutter path.
 
-## Phase 30F Recommendation
+## Phase 30G Recommendation
 
-Do not add classifiers, ACPL/accuracy, backend phases, or review scheduling until Android target-device smoke and benchmark results are captured.
+Proceed to `Phase 30G - Local Smart Scheduler Prototype v1` with strict limits.
 
-Phase 30F should either execute Android proof on a real target or choose the subprocess UCI pivot:
+Allowed:
 
-- run Android real-engine smoke and lifecycle loops;
-- collect benchmark rows for every target position and movetime/depth target;
-- decide whether the FFI bridge is good enough to build a scheduler on, or pivot to subprocess UCI first.
+- schedule a fast local pass plus controlled deep reanalysis decisions;
+- keep all engine calls behind the current local engine service;
+- enforce benchmark/time budgets to avoid overheating;
+- make scheduler behavior test-driven and device-profile-ready.
+
+Still not allowed:
+
+- Brilliant/Great/Miss classifier changes;
+- official ACPL/accuracy calculations;
+- backend/server/preflight work;
+- persistence/cache/database work;
+- public UI activation.

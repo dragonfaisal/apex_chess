@@ -52,6 +52,219 @@ void main() {
       );
     });
 
+    test('packaging passed and device passed approves scheduler prototype', () {
+      final gate = _gate(
+        packagingStatus: PackagingProofStatus.abiConsistent,
+        deviceProof: _summary(),
+      );
+
+      expect(
+        gate.recommendation,
+        LocalEngineApprovalRecommendation.approvedForSchedulerPrototype,
+      );
+      expect(gate.deviceStatus, DeviceProofStatus.passed);
+      expect(gate.blockers, isEmpty);
+    });
+
+    test('device passed but packaging missing needs packaging proof', () {
+      final gate = _gate(
+        packagingStatus: PackagingProofStatus.missing,
+        deviceProof: _summary(),
+      );
+
+      expect(
+        gate.recommendation,
+        LocalEngineApprovalRecommendation.needsPackagingProof,
+      );
+      expect(gate.deviceStatus, DeviceProofStatus.passed);
+      expect(gate.blockers, contains('packaging proof is missing.'));
+    });
+
+    test('packaging passed but device missing needs device proof', () {
+      final gate = _gate(
+        packagingStatus: PackagingProofStatus.abiConsistent,
+        deviceProof: null,
+      );
+
+      expect(
+        gate.recommendation,
+        LocalEngineApprovalRecommendation.needsDeviceProof,
+      );
+      expect(gate.deviceStatus, DeviceProofStatus.missing);
+      expect(gate.blockers, contains('device proof is missing.'));
+    });
+
+    test('packaging mismatch blocks approval even with device pass', () {
+      final gate = _gate(
+        packagingStatus: PackagingProofStatus.abiMismatch,
+        deviceProof: _summary(),
+      );
+
+      expect(
+        gate.recommendation,
+        LocalEngineApprovalRecommendation.needsPackagingProof,
+      );
+      expect(
+        gate.recommendation,
+        isNot(LocalEngineApprovalRecommendation.approvedForSchedulerPrototype),
+      );
+      expect(gate.blockers, contains('packaging proof is abiMismatch.'));
+    });
+
+    test('device proof with non-real engine mode blocks approval', () {
+      final gate = _gate(
+        packagingStatus: PackagingProofStatus.abiConsistent,
+        deviceProof: _summary(engineMode: LocalEngineRuntimeMode.unavailable),
+      );
+
+      expect(
+        gate.recommendation,
+        LocalEngineApprovalRecommendation.pivotToSubprocessRecommended,
+      );
+      expect(
+        gate.blockers,
+        contains('device: engine mode was unavailable, not real.'),
+      );
+    });
+
+    test('device proof with stub identity blocks approval', () {
+      final gate = _gate(
+        packagingStatus: PackagingProofStatus.abiConsistent,
+        deviceProof: _summary(engineName: 'ApexChess-Stub'),
+      );
+
+      expect(
+        gate.recommendation,
+        LocalEngineApprovalRecommendation.pivotToSubprocessRecommended,
+      );
+      expect(
+        gate.blockers,
+        contains('device: engine identity reports a stub.'),
+      );
+    });
+
+    test('device proof without uciok or readyok blocks approval', () {
+      final uciGate = _gate(
+        packagingStatus: PackagingProofStatus.abiConsistent,
+        deviceProof: _summary(uciOk: false),
+      );
+      final readyGate = _gate(
+        packagingStatus: PackagingProofStatus.abiConsistent,
+        deviceProof: _summary(readyOk: false),
+      );
+
+      expect(
+        uciGate.recommendation,
+        LocalEngineApprovalRecommendation.pivotToSubprocessRecommended,
+      );
+      expect(uciGate.blockers, contains('device: uciok was not observed.'));
+      expect(
+        readyGate.recommendation,
+        LocalEngineApprovalRecommendation.pivotToSubprocessRecommended,
+      );
+      expect(readyGate.blockers, contains('device: readyok was not observed.'));
+    });
+
+    test('device proof with insufficient MultiPV blocks approval', () {
+      final gate = _gate(
+        packagingStatus: PackagingProofStatus.abiConsistent,
+        deviceProof: _summary(multiPv3Distinct: false),
+      );
+
+      expect(
+        gate.recommendation,
+        LocalEngineApprovalRecommendation.pivotToSubprocessRecommended,
+      );
+      expect(
+        gate.blockers,
+        contains('device: MultiPV 3 did not produce distinct candidates.'),
+      );
+    });
+
+    test('device proof with lifecycle under 20 blocks approval', () {
+      final gate = _gate(
+        packagingStatus: PackagingProofStatus.abiConsistent,
+        deviceProof: _summary(lifecycleCyclesCompleted: 19),
+      );
+
+      expect(
+        gate.recommendation,
+        LocalEngineApprovalRecommendation.pivotToSubprocessRecommended,
+      );
+      expect(
+        gate.blockers,
+        contains('device: lifecycle completed 19 of at least 20 cycles.'),
+      );
+    });
+
+    test('stale bestmove or queue contamination blocks approval', () {
+      final staleGate = _gate(
+        packagingStatus: PackagingProofStatus.abiConsistent,
+        deviceProof: _summary(staleBestmoveDetected: true),
+      );
+      final queueGate = _gate(
+        packagingStatus: PackagingProofStatus.abiConsistent,
+        deviceProof: _summary(queueContaminationDetected: true),
+      );
+
+      expect(
+        staleGate.recommendation,
+        LocalEngineApprovalRecommendation.pivotToSubprocessRecommended,
+      );
+      expect(
+        staleGate.blockers,
+        contains('device: stale bestmove reuse detected.'),
+      );
+      expect(
+        queueGate.recommendation,
+        LocalEngineApprovalRecommendation.pivotToSubprocessRecommended,
+      );
+      expect(
+        queueGate.blockers,
+        contains('device: queue contamination detected.'),
+      );
+    });
+
+    test('benchmark rows count must be positive for approval', () {
+      final gate = _gate(
+        packagingStatus: PackagingProofStatus.abiConsistent,
+        deviceProof: _summary(benchmarkRowCount: 0),
+      );
+
+      expect(
+        gate.recommendation,
+        LocalEngineApprovalRecommendation.needsDeviceProof,
+      );
+      expect(
+        gate.blockers,
+        contains('device: no Android benchmark rows captured.'),
+      );
+    });
+
+    test('S22 fixture renders safe approval summary without raw logs', () {
+      final fixture =
+          jsonDecode(
+                File(
+                  'test/fixtures/local_stockfish/android_proof/s22_ultra_phase_30e.json',
+                ).readAsStringSync(),
+              )
+              as Map<String, dynamic>;
+      final gate = LocalEngineApprovalGateResult.fromFixtureJson(fixture);
+      final rendered = gate.renderMarkdownSummary();
+
+      expect(
+        gate.recommendation,
+        LocalEngineApprovalRecommendation.approvedForSchedulerPrototype,
+      );
+      expect(gate.deviceStatus, DeviceProofStatus.passed);
+      expect(rendered, contains('device: S22 Ultra'));
+      expect(rendered, contains('benchmark rows: 139'));
+      expect(rendered.length, lessThan(2500));
+      expect(rendered, isNot(contains('R5CT33FXE5K')));
+      expect(rendered, isNot(contains('logcat')));
+      expect(rendered, isNot(contains('ApexChess-Stub')));
+    });
+
     test('stub result cannot be accepted as Android proof', () {
       final result = _proof(
         engineMode: LocalEngineRuntimeMode.stubDetected,
@@ -222,6 +435,55 @@ final _mismatchedPackaging = analyzeAndroidPackaging(
   packagedEngineAbis: const ['arm64-v8a', 'x86_64'],
   artifactPresent: true,
 );
+
+LocalEngineApprovalGateResult _gate({
+  required PackagingProofStatus packagingStatus,
+  required AndroidDeviceProofSummary? deviceProof,
+}) {
+  return LocalEngineApprovalGateResult(
+    packagingStatus: packagingStatus,
+    deviceProof: deviceProof,
+    packagingSource: 'test packaging source',
+    deviceSource: 'test device source',
+  );
+}
+
+AndroidDeviceProofSummary _summary({
+  LocalEngineRuntimeMode engineMode = LocalEngineRuntimeMode.real,
+  String engineName = 'Stockfish 17',
+  bool uciOk = true,
+  bool readyOk = true,
+  bool multiPv3Distinct = true,
+  int lifecycleCyclesCompleted = 20,
+  bool staleBestmoveDetected = false,
+  bool queueContaminationDetected = false,
+  int benchmarkRowCount = 139,
+}) {
+  return AndroidDeviceProofSummary(
+    deviceLabel: 'S22 Ultra',
+    platform: 'android',
+    abi: 'arm64-v8a',
+    deviceRunAttempted: true,
+    engineMode: engineMode,
+    engineName: engineName,
+    bridgeVersion: 'apex-stockfish-bridge/0.3.0',
+    uciOk: uciOk,
+    readyOk: readyOk,
+    startposBestmoveLegal: true,
+    tacticalPvNonEmpty: true,
+    multiPvSupported: true,
+    multiPv3Distinct: multiPv3Distinct,
+    invalidFenRejectedBeforeEngine: true,
+    repeatedDisposeSafe: true,
+    lifecycleCyclesRequested: 20,
+    lifecycleCyclesCompleted: lifecycleCyclesCompleted,
+    staleBestmoveDetected: staleBestmoveDetected,
+    queueContaminationDetected: queueContaminationDetected,
+    benchmarkRowCount: benchmarkRowCount,
+    rowsPreservedInFixture: false,
+    source: 'test device source',
+  );
+}
 
 AndroidLocalEngineProofResult _proof({
   AndroidPackagingAudit? packagingAudit,

@@ -1,0 +1,57 @@
+{
+  "schema": "apex.localStockfish.androidProof.v1",
+  "phase": "30E",
+  "recordedBy": "owner-run",
+  "recordedContext": "Owner-provided Android integration collector summary; raw benchmark rows were not pasted into this fixture.",
+  "device": {
+    "label": "S22 Ultra",
+    "model": "SM S908U1",
+    "deviceId": "redacted",
+    "platform": "android",
+    "flutterPlatform": "android-arm64",
+    "androidVersion": "Android 16",
+    "abi": "arm64-v8a"
+  },
+  "packagingProof": {
+    "source": "flutter build apk --debug + dart run tool/local_stockfish_benchmark.dart --audit-packaging",
+    "status": "abiConsistent",
+    "configuredAbiFilters": ["arm64-v8a"],
+    "packagedEngineAbis": ["arm64-v8a"],
+    "extraPackagedAbis": [],
+    "missingPackagedAbis": []
+  },
+  "deviceProof": {
+    "source": "flutter test integration_test/local_stockfish_device_benchmark_test.dart -d <redacted-android-device-id> --dart-define=APEX_RUN_LOCAL_STOCKFISH_DEVICE_BENCHMARK=true",
+    "deviceRunAttempted": true,
+    "engineMode": "real",
+    "engineName": "Stockfish 17",
+    "bridgeVersion": "apex-stockfish-bridge/0.3.0",
+    "smoke": {
+      "uciok": true,
+      "readyok": true,
+      "startposBestmoveLegal": true,
+      "tacticalPvNonEmpty": true,
+      "invalidFenRejectedBeforeEngine": true,
+      "repeatedDisposeSafe": true
+    },
+    "multipv": {
+      "supported": true,
+      "multiPv3Distinct": true
+    },
+    "lifecycle": {
+      "cyclesRequested": 20,
+      "cyclesCompleted": 20,
+      "staleBestmoveDetected": false,
+      "queueContaminationDetected": false
+    },
+    "benchmark": {
+      "rowCount": 139,
+      "rowsPreservedInFixture": false,
+      "representativeRows": [],
+      "note": "Owner-provided summary reported 139 rows. Raw rows should be preserved in a follow-up fixture if a rerun is available."
+    },
+    "warnings": [
+      "Collector-local recommendation was needsAndroidProof only because APK artifact inspection is unavailable inside the integration-test runtime; separate packaging proof passed."
+    ]
+  }
+}
