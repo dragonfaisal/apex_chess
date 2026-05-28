@@ -141,9 +141,9 @@ Phase 30G/30H does not implement:
 
 - The measured prototype is not wired into `LocalGameAnalyzer` yet.
 - Batch execution is serial and intentionally small-scope.
-- Gated deep follow-up currently means "run after fast success"; the next phase should decide which fast-pass signals justify that gate in a full-game context.
+- Game-level deep gating is still an experiment-only layer; it selects candidates and reports telemetry but does not replace product review output.
 - Telemetry is in-memory only.
-- Android collector was not rerun because Phase 30H did not change the native bridge or `LocalEvalService` UCI orchestration.
+- Android collector was not rerun because Phases 30H-30K did not change the native bridge or `LocalEvalService` UCI orchestration.
 
 ## Phase 30I Measured Review Prototype
 
@@ -228,13 +228,85 @@ Phase 30J still does not implement:
 - UI activation;
 - parallel engine execution.
 
-## Phase 30K Recommendation
+## Phase 30K Game-Level Deep Gating Experiment
 
-Phase 30K should turn the observations into a game-level deep-gating experiment:
+`GameLevelDeepGatingExperiment` adds the first game-level policy that decides which positions deserve deferred deeper work after a fast local pass.
 
-- decide when fast-pass output earns deferred deep reanalysis across a game;
-- keep all calls behind the measured review stack;
-- enforce per-game engine-call and elapsed-time budgets;
-- report budget pressure before adding stronger profiles;
-- continue preserving current classifier and accuracy layers unchanged;
-- rerun the Android collector only if engine/native orchestration changes materially.
+The experiment exists to spend local analysis budget selectively:
+
+- run a broad fast pass first when requested;
+- inspect fast-pass evidence plus position context;
+- generate deterministic `DeepReanalysisCandidate` records;
+- suppress opening-known, only-legal, invalid, failed, low-power, and budget-exhausted positions;
+- select only the highest-priority candidates under explicit per-game caps;
+- optionally execute selected deep positions through `LocalReviewOrchestrationExperiment`.
+
+Candidate reason codes include:
+
+- `majorEvalSwing`;
+- `candidateEvalSpread`;
+- `tacticalSignal`;
+- `materialSwing`;
+- `givesCheck`;
+- `captureOrPromotion`;
+- `mateScoreDetected`;
+- `missingFastPv`;
+- `highLegalMoveCount`;
+- `previousEvalAvailable`;
+- budget and suppression reasons.
+
+The policy is pure and deterministic. It can run in `planOnly` mode with provided fast-pass evidence and no engine calls.
+
+Execution modes:
+
+- `planOnly`: no engine calls; use supplied evidence and position context to create a candidate plan.
+- `fastPassOnly`: run the bounded fast pass through orchestration, then stop.
+- `fastThenPlanDeep`: run the fast pass through orchestration, generate deep candidates, then stop.
+- `fastThenExecuteSelectedDeep`: run the fast pass, select candidates, and execute only selected deep positions through the existing measured stack.
+
+Budget rules:
+
+- no unlimited deep search;
+- `maxDeepCandidates` caps selection;
+- `maxDeepEngineCalls` caps deferred deep work;
+- `maxTotalEngineCalls` accounts for fast-pass cost before selecting deep candidates;
+- `maxTotalElapsedBudgetMs` can suppress deep selection when the elapsed budget is already exhausted;
+- low-power mode suppresses deep by default;
+- MultiPV never exceeds the active scheduler profile cap;
+- `eco` suppresses deep selection because that profile does not allow deep reanalysis.
+
+Telemetry reports:
+
+- positions considered;
+- fast failures;
+- opening/forced/invalid suppressions;
+- candidates generated and selected;
+- budget and low-power suppressions;
+- deep executions;
+- MultiPV deep executions;
+- timeout, warning, and budget-violation counts;
+- elapsed milliseconds;
+- max candidate priority.
+
+The developer report remains compact. It includes counts, selected candidate summaries, suppression reasons, warnings, failures, and the next recommendation. It intentionally avoids raw UCI logs, long PV dumps, final move labels, official accuracy, or ACPL.
+
+Phase 30K still does not implement:
+
+- final move labels;
+- Brilliant, Great, Miss, or similar classifier output;
+- official accuracy or ACPL;
+- replacement product review results;
+- persistence, cache, or database writes;
+- backend/server calls;
+- UI activation;
+- parallel engine execution.
+
+## Phase 30L Recommendation
+
+Phase 30L should use the deep-gating telemetry to tune a small set of full-game budgets and rerun measured review on representative games:
+
+- compare `planOnly`, `fastThenPlanDeep`, and `fastThenExecuteSelectedDeep` costs;
+- collect candidate distributions by profile;
+- verify that selected deep positions are not every move;
+- measure warning, timeout, and budget-pressure rates;
+- keep classifier, accuracy, persistence, backend, and UI work out of scope until the gating policy is stable.
