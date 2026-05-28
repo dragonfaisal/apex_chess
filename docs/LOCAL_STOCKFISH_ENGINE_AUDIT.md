@@ -14,6 +14,8 @@ Phase 30G status: the first pure local smart scheduler prototype now exists as a
 
 Phase 30H status: a thin local scheduler executor now consumes scheduler decisions and calls the engine only through `LocalEvalService`. It adds serial execution telemetry and safe failure handling, but still does not add full-game scheduling, UI, persistence, official accuracy, ACPL, or final move labels.
 
+Phase 30I status: the measured local review prototype now applies the scheduler executor across a serial list of positions, aggregates review-level telemetry, and enforces position, engine-call, elapsed-time, and fail-fast budgets. It still does not add UI, backend work, persistence, official accuracy, ACPL, or final move labels.
+
 ## Current Reality
 
 - Apex has a real local Stockfish integration path: Dart `StockfishEngine` -> worker isolate -> FFI -> `libstockfish_bridge`.
@@ -408,4 +410,4 @@ Still not allowed:
 - persistence/cache/database work;
 - public UI activation.
 
-Phase 30H added a thin executor around this planning model while keeping all engine calls behind `LocalEvalService` and preserving the classifier/accuracy layers unchanged. Phase 30I should wire executor results into a measured local review prototype without adding final labels or official metrics.
+Phase 30H added a thin executor around this planning model while keeping all engine calls behind `LocalEvalService` and preserving the classifier/accuracy layers unchanged. Phase 30I added a measured serial review prototype over the executor. Phase 30J should wire measured review outputs into a local orchestration experiment without adding final labels or official metrics.

@@ -15,7 +15,7 @@ The scheduler is local-first and pure:
 - it does not call Stockfish directly;
 - it does not create move labels, accuracy, ACPL, persistence, backend calls, or UI state.
 
-Engine execution remains behind `LocalEvalService`. Phase 30G produced deterministic planning decisions. Phase 30H adds a thin executor that consumes those decisions for a single position or small serial batch.
+Engine execution remains behind `LocalEvalService`. Phase 30G produced deterministic planning decisions. Phase 30H adds a thin executor that consumes those decisions for a single position or small serial batch. Phase 30I adds a measured local review prototype that applies the executor across a serial list of positions.
 
 ## Profiles
 
@@ -139,15 +139,49 @@ Phase 30G/30H does not implement:
 
 ## Current Limitations
 
-- The executor is not wired into `LocalGameAnalyzer` yet.
+- The measured prototype is not wired into `LocalGameAnalyzer` yet.
 - Batch execution is serial and intentionally small-scope.
 - Gated deep follow-up currently means "run after fast success"; the next phase should decide which fast-pass signals justify that gate in a full-game context.
 - Telemetry is in-memory only.
 - Android collector was not rerun because Phase 30H did not change the native bridge or `LocalEvalService` UCI orchestration.
 
-## Phase 30I Recommendation
+## Phase 30I Measured Review Prototype
 
-Phase 30I should wire the executor into a measured local review prototype:
+`MeasuredLocalReviewPrototype` applies `LocalSmartAnalysisExecutor` across a list of scheduler position inputs.
+
+It does:
+
+- execute positions serially;
+- preserve per-position result order;
+- apply `maxPositions`;
+- stop safely when `maxTotalEngineCalls` is reached or exceeded;
+- stop safely when `maxTotalElapsedBudgetMs` is reached;
+- stop on first failure only when `failFast` is true;
+- continue after single-position failures when `failFast` is false;
+- aggregate warnings and failures into a developer-facing result;
+- render a compact developer report without raw engine logs.
+
+Measured review telemetry includes:
+
+- positions planned, executed, skipped, and rejected;
+- engine calls;
+- fast calls;
+- deep calls;
+- MultiPV calls;
+- elapsed milliseconds;
+- timeouts;
+- invalid FENs;
+- missing PV warnings;
+- missing bestmove warnings;
+- budget violations;
+- max single-position elapsed milliseconds;
+- slowest position index and optional position id.
+
+The prototype uses executor decisions as-is. It does not decide game-level deep gating from fast-pass output yet. That is intentionally deferred so Phase 30I stays a measurement layer rather than a classifier or final review scheduler.
+
+## Phase 30J Recommendation
+
+Phase 30J should wire the measured prototype into a local review orchestration experiment:
 
 - consume `LocalSchedulerExecutionResult` for parsed positions;
 - keep all engine calls behind `LocalEvalService`;
