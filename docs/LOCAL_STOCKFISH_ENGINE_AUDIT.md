@@ -16,6 +16,8 @@ Phase 30H status: a thin local scheduler executor now consumes scheduler decisio
 
 Phase 30I status: the measured local review prototype now applies the scheduler executor across a serial list of positions, aggregates review-level telemetry, and enforces position, engine-call, elapsed-time, and fail-fast budgets. It still does not add UI, backend work, persistence, official accuracy, ACPL, or final move labels.
 
+Phase 30J status: the local review orchestration experiment now maps scheduler-ready inputs, parsed review positions, or PGN-derived positions into measured local review. It returns developer telemetry and future deep-gating observations only; product-facing review output, classifier behavior, official accuracy, ACPL, UI, backend, and persistence remain unchanged.
+
 ## Current Reality
 
 - Apex has a real local Stockfish integration path: Dart `StockfishEngine` -> worker isolate -> FFI -> `libstockfish_bridge`.
@@ -410,4 +412,4 @@ Still not allowed:
 - persistence/cache/database work;
 - public UI activation.
 
-Phase 30H added a thin executor around this planning model while keeping all engine calls behind `LocalEvalService` and preserving the classifier/accuracy layers unchanged. Phase 30I added a measured serial review prototype over the executor. Phase 30J should wire measured review outputs into a local orchestration experiment without adding final labels or official metrics.
+Phase 30H added a thin executor around this planning model while keeping all engine calls behind `LocalEvalService` and preserving the classifier/accuracy layers unchanged. Phase 30I added a measured serial review prototype over the executor. Phase 30J added a local orchestration experiment over measured review outputs. Phase 30K should explore game-level deep gating without adding final labels or official metrics.

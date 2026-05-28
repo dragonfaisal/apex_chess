@@ -15,7 +15,7 @@ The scheduler is local-first and pure:
 - it does not call Stockfish directly;
 - it does not create move labels, accuracy, ACPL, persistence, backend calls, or UI state.
 
-Engine execution remains behind `LocalEvalService`. Phase 30G produced deterministic planning decisions. Phase 30H adds a thin executor that consumes those decisions for a single position or small serial batch. Phase 30I adds a measured local review prototype that applies the executor across a serial list of positions.
+Engine execution remains behind `LocalEvalService`. Phase 30G produced deterministic planning decisions. Phase 30H adds a thin executor that consumes those decisions for a single position or small serial batch. Phase 30I adds a measured local review prototype that applies the executor across a serial list of positions. Phase 30J adds an orchestration experiment that maps review-shaped positions into scheduler inputs and runs the measured prototype.
 
 ## Profiles
 
@@ -179,15 +179,62 @@ Measured review telemetry includes:
 
 The prototype uses executor decisions as-is. It does not decide game-level deep gating from fast-pass output yet. That is intentionally deferred so Phase 30I stays a measurement layer rather than a classifier or final review scheduler.
 
-## Phase 30J Recommendation
+## Phase 30J Orchestration Experiment
 
-Phase 30J should wire the measured prototype into a local review orchestration experiment:
+`LocalReviewOrchestrationExperiment` is the first non-UI orchestration layer over measured local review.
 
-- consume `LocalSchedulerExecutionResult` for parsed positions;
-- keep all engine calls behind `LocalEvalService`;
-- keep execution serial unless a later device proof validates parallel workers;
-- use executor telemetry to report skipped, fast, deep, MultiPV, timeout, and warning counts;
-- decide the full-game gate for when fast-pass output earns deep reanalysis;
-- measure per-game search counts, elapsed time, MultiPV usage, and skipped positions;
-- preserve the current classifier and accuracy layers unchanged;
-- rerun the Android collector if engine orchestration changes materially.
+It can consume:
+
+- already scheduler-ready `LocalAnalysisPositionInput` values;
+- lightweight parsed review position records;
+- PGN strings through the same `dartchess` parser family already used by local analysis.
+
+The experiment maps only facts that are safely available:
+
+- FEN;
+- ply index and move number;
+- opening-known and only-legal hints when supplied;
+- capture, check, promotion, and castle hints when supplied or parsed;
+- existing eval/spread/material hints when supplied;
+- developer-only tags.
+
+It does not invent chess facts. Unknown legal-move counts, opening status, material swings, previous evals, and candidate spreads remain absent unless the caller provides them.
+
+Execution remains serial:
+
+- map source positions into scheduler inputs;
+- call `MeasuredLocalReviewPrototype`;
+- let the measured prototype call `LocalSmartAnalysisExecutor`;
+- let the executor call `LocalEvalService`;
+- aggregate review-level telemetry and developer observations.
+
+The report includes source count, mapped count, skipped-before-mapping count, measured skip/reject/fast/deep/MultiPV counts, engine calls, elapsed time, budget-stop reason, warnings, failures, and future deep-gating observations. It intentionally omits raw UCI logs and long PV dumps.
+
+Deep-gating output is observation-only in Phase 30J:
+
+- positions that actually received deep search;
+- positions that look like future game-level gate candidates because the scheduler planned deep, gated-deep, or MultiPV work;
+- budget-pressure observations;
+- MultiPV-pressure observations;
+- timeout or warning hotspots.
+
+Phase 30J still does not implement:
+
+- final move labels;
+- official accuracy or ACPL;
+- product review replacement;
+- persistence or cache writes;
+- backend/server calls;
+- UI activation;
+- parallel engine execution.
+
+## Phase 30K Recommendation
+
+Phase 30K should turn the observations into a game-level deep-gating experiment:
+
+- decide when fast-pass output earns deferred deep reanalysis across a game;
+- keep all calls behind the measured review stack;
+- enforce per-game engine-call and elapsed-time budgets;
+- report budget pressure before adding stronger profiles;
+- continue preserving current classifier and accuracy layers unchanged;
+- rerun the Android collector only if engine/native orchestration changes materially.
