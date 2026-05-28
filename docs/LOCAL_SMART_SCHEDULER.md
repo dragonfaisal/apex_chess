@@ -15,7 +15,7 @@ The scheduler is local-first and pure:
 - it does not call Stockfish directly;
 - it does not create move labels, accuracy, ACPL, persistence, backend calls, or UI state.
 
-Engine execution remains behind `LocalEvalService`. Phase 30G only produces deterministic planning decisions that a later game-review executor can consume.
+Engine execution remains behind `LocalEvalService`. Phase 30G produced deterministic planning decisions. Phase 30H adds a thin executor that consumes those decisions for a single position or small serial batch.
 
 ## Profiles
 
@@ -92,28 +92,68 @@ Phase 30F provisionally approved the current FFI bridge for a scheduler prototyp
 
 That approval is not final production sign-off. Scheduler work must keep the existing local engine proof and stub guardrails intact, and the Android collector should be rerun after engine/native/scheduler orchestration changes.
 
+## Phase 30H Executor
+
+`LocalSmartAnalysisExecutor` is the first execution layer over the pure scheduler.
+
+It does:
+
+- call `LocalSmartAnalysisScheduler.plan(...)` before any engine work;
+- return `skipped` for known openings and only-legal-move positions;
+- return `rejected` for invalid FEN before any engine call;
+- run a fast pass first for engine-required decisions;
+- run deep reanalysis only when the scheduler planned a deep decision or follow-up step;
+- request MultiPV only when the planned search step asks for it;
+- call the engine only through `LocalEvalService.evaluate(...)`;
+- continue serially through small batches and aggregate telemetry;
+- return safe failure results instead of throwing for expected engine errors.
+
+It tracks:
+
+- positions planned, skipped, and rejected;
+- engine call count;
+- fast calls;
+- deep calls;
+- MultiPV calls;
+- elapsed milliseconds;
+- timeout count;
+- invalid-FEN count;
+- budget-violation count;
+- warning count.
+
+Warnings are developer-facing and include missing bestmove, missing PV, missing score, and insufficient MultiPV lines. They do not become move labels.
+
 ## Intentionally Not Implemented
 
-Phase 30G does not implement:
+Phase 30G/30H does not implement:
 
 - Brilliant, Great, Miss, or other final move-label logic;
 - official accuracy or ACPL;
-- full-game review scheduling;
+- full-game product review scheduling;
 - persistence, cache, or database writes;
 - backend/server/preflight calls;
 - product UI, navigation, or activation;
 - thermal platform channels;
 - device-specific owner performance profiles;
-- direct Stockfish execution from the scheduler.
+- direct Stockfish execution from the scheduler or executor.
 
-## Phase 30H Recommendation
+## Current Limitations
 
-Phase 30H should add a thin local scheduler executor around the existing review path:
+- The executor is not wired into `LocalGameAnalyzer` yet.
+- Batch execution is serial and intentionally small-scope.
+- Gated deep follow-up currently means "run after fast success"; the next phase should decide which fast-pass signals justify that gate in a full-game context.
+- Telemetry is in-memory only.
+- Android collector was not rerun because Phase 30H did not change the native bridge or `LocalEvalService` UCI orchestration.
 
-- consume `LocalSchedulerDecision` for each parsed position;
+## Phase 30I Recommendation
+
+Phase 30I should wire the executor into a measured local review prototype:
+
+- consume `LocalSchedulerExecutionResult` for parsed positions;
 - keep all engine calls behind `LocalEvalService`;
-- execute fast pass first;
-- execute gated deep reanalysis only when fast-pass results justify it;
+- keep execution serial unless a later device proof validates parallel workers;
+- use executor telemetry to report skipped, fast, deep, MultiPV, timeout, and warning counts;
+- decide the full-game gate for when fast-pass output earns deep reanalysis;
 - measure per-game search counts, elapsed time, MultiPV usage, and skipped positions;
 - preserve the current classifier and accuracy layers unchanged;
 - rerun the Android collector if engine orchestration changes materially.

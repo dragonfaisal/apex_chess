@@ -12,6 +12,8 @@ Phase 30F status: owner-provided S22 Ultra Android proof is now consolidated wit
 
 Phase 30G status: the first pure local smart scheduler prototype now exists as a budgeted planning layer. It does not add UI, backend work, persistence, official accuracy, ACPL, or final move labels.
 
+Phase 30H status: a thin local scheduler executor now consumes scheduler decisions and calls the engine only through `LocalEvalService`. It adds serial execution telemetry and safe failure handling, but still does not add full-game scheduling, UI, persistence, official accuracy, ACPL, or final move labels.
+
 ## Current Reality
 
 - Apex has a real local Stockfish integration path: Dart `StockfishEngine` -> worker isolate -> FFI -> `libstockfish_bridge`.
@@ -406,4 +408,4 @@ Still not allowed:
 - persistence/cache/database work;
 - public UI activation.
 
-Phase 30H should add a thin executor around this planning model while keeping all engine calls behind `LocalEvalService` and preserving the classifier/accuracy layers unchanged.
+Phase 30H added a thin executor around this planning model while keeping all engine calls behind `LocalEvalService` and preserving the classifier/accuracy layers unchanged. Phase 30I should wire executor results into a measured local review prototype without adding final labels or official metrics.
