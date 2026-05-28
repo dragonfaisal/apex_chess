@@ -6,6 +6,8 @@ Phase 30C status: stub builds are fail-closed by default, packaging/ABI audit is
 
 Phase 30D status: clean Android debug packaging is now ABI-consistent for Stockfish after adding explicit JNI exclusions for non-target ABIs. Android device smoke, stress, and benchmark execution were not run in this workspace because no Android device/emulator was available.
 
+Phase 30E status: Android proof execution remains blocked in this workspace. `flutter devices` showed Windows desktop, Chrome, and Edge only; no Android device/emulator was available, so the opt-in collector was not executed and no Android benchmark rows were captured.
+
 ## Current Reality
 
 - Apex has a real local Stockfish integration path: Dart `StockfishEngine` -> worker isolate -> FFI -> `libstockfish_bridge`.
@@ -216,6 +218,54 @@ Device proof:
 - The opt-in Android collector was not executed on Android.
 - Real Android `libstockfish_bridge.so` load, `uciok`, `readyok`, bestmove, PV, MultiPV, lifecycle stress, and benchmark timings remain unproven.
 
+## Phase 30E Device Execution Status
+
+Device availability check:
+
+```text
+Found 3 connected devices:
+Windows (desktop) - windows-x64
+Chrome (web) - web-javascript
+Edge (web) - web-javascript
+```
+
+No Android device or emulator was visible to Flutter in this workspace.
+
+Result:
+
+- Android proof collector was not executed.
+- APK install on Android was not tested.
+- Packaged `libstockfish_bridge.so` load on Android was not tested.
+- `engineMode == real`, `uciok`, `readyok`, startpos bestmove, tactical PV, MultiPV 3, invalid-FEN rejection on device, lifecycle stress, and benchmark timings remain unproven.
+- FFI bridge remains provisional.
+- Phase 30F scheduler work must not start from this workspace state.
+
+Owner rerun steps on a machine with a real Android target:
+
+```powershell
+cd C:\apex_chess
+flutter devices
+flutter clean
+flutter pub get
+flutter build apk --debug
+dart run tool/local_stockfish_benchmark.dart --audit-packaging
+flutter test integration_test/local_stockfish_device_benchmark_test.dart -d <android-device-id> --dart-define=APEX_RUN_LOCAL_STOCKFISH_DEVICE_BENCHMARK=true
+```
+
+Acceptance criteria before scheduler work:
+
+- packaging audit reports `abi-consistent`;
+- `engineMode` is `real`;
+- engine identity does not contain `ApexChess-Stub`;
+- `uciok` and `readyok` are true;
+- start position returns a legal-looking bestmove;
+- tactical FEN returns a non-empty PV;
+- MultiPV 3 returns at least two distinct candidate lines where supported;
+- invalid FEN is rejected before engine command;
+- at least 20 lifecycle cycles complete;
+- no timeout, stale bestmove, queue contamination, crash, or dispose hang occurs;
+- benchmark rows exist for every Phase 30B target position and movetime/depth target.
+
 ## Optional Real-Engine Tests
 
 Optional smoke tests live in:
@@ -265,14 +315,14 @@ Summary:
 
 - The current FFI bridge remains provisional because packaging is now clean but target-device lifecycle and benchmark behavior are still unproven.
 - It is not final until Android proves real engine load, lifecycle stress, and benchmark behavior.
-- If Android device proof fails, Phase 30E should pivot toward a standalone subprocess UCI architecture instead of building a scheduler over an uncertain bridge.
+- If Android device proof fails, Phase 30F should pivot toward a standalone subprocess UCI architecture instead of building a scheduler over an uncertain bridge.
 - Browser/WASM is not the immediate Android Flutter path.
 
-## Phase 30E Recommendation
+## Phase 30F Recommendation
 
 Do not add classifiers, ACPL/accuracy, backend phases, or review scheduling until Android target-device smoke and benchmark results are captured.
 
-Phase 30E should focus on Android proof before scheduler work:
+Phase 30F should either execute Android proof on a real target or choose the subprocess UCI pivot:
 
 - run Android real-engine smoke and lifecycle loops;
 - collect benchmark rows for every target position and movetime/depth target;

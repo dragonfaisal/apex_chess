@@ -1,6 +1,6 @@
 # Local Engine Substrate Decision
 
-Status: provisional. Clean Android APK packaging is proven for `arm64-v8a`, but Android target benchmark and lifecycle proof are still pending.
+Status: provisional. Clean Android APK packaging is proven for `arm64-v8a`, but Android target benchmark and lifecycle proof are still pending. Phase 30E could not execute the device proof because no Android device/emulator was visible to Flutter in this workspace.
 
 ## Option A: Current FFI Bridge And Persistent Native Worker
 
@@ -58,13 +58,13 @@ Cons:
 
 ## Decision
 
-Continue with the current FFI bridge only as a provisional Phase 30E candidate. Phase 30D proved APK packaging after adding explicit JNI ABI exclusions, but no Android device/emulator was available in this workspace, so real engine load, UCI readiness, lifecycle stress, and speed remain unproven.
+Continue with the current FFI bridge only as a provisional candidate. Phase 30D proved APK packaging after adding explicit JNI ABI exclusions, and Phase 30E confirmed the proof collector is ready to run, but no Android device/emulator was available in this workspace. Real engine load, UCI readiness, lifecycle stress, and speed remain unproven.
 
-If Android proof fails, Phase 30E should pivot to a subprocess-based UCI prototype instead of trying to hide bridge risk behind scheduling logic.
+If Android proof fails, Phase 30F should pivot to a subprocess-based UCI prototype instead of trying to hide bridge risk behind scheduling logic.
 
 Current recommendation:
 
-- Short term: run the opt-in Android proof collector on a real Android target and preserve the emitted JSON/markdown rows.
+- Short term: run the opt-in Android proof collector on a real Android target and preserve the emitted JSON/markdown rows. Scheduler work remains blocked until that happens or a subprocess pivot is chosen.
 - Medium term: keep a subprocess prototype on the roadmap as the safer architecture if process-global stdio redirection or native crash behavior remains risky.
 - Do not add classifier, ACPL, or scheduler work until one engine substrate is proven.
 
