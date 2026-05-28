@@ -4,12 +4,15 @@
 # windows) via `add_subdirectory`. It produces a single shared library target
 # called `stockfish_bridge` that exports a small C ABI consumed by Dart FFI.
 #
-# Two build modes are supported:
+# Two build modes are supported, but only the real mode is valid for
+# analysis/release builds:
 #
-#   * STUB (default): only `stockfish_bridge.cpp` is compiled and the
-#     `STOCKFISH_STUB` macro is defined. The bridge responds to a handful of
-#     UCI commands so the Flutter layer can be exercised end-to-end before
-#     the real engine is wired in.
+#   * STUB (explicit development fallback only): only `stockfish_bridge.cpp`
+#     is compiled and the `STOCKFISH_STUB` macro is defined. The bridge
+#     responds to a handful of UCI commands so the Flutter layer can be
+#     exercised end-to-end before the real engine is wired in. This mode is
+#     unsafe for analysis and is disabled unless
+#     `-DAPEX_ALLOW_STOCKFISH_STUB=ON` is passed deliberately.
 #
 #   * REAL: auto-detected when `src/native/vendor/Stockfish/src/` exists.
 #     Populated by `scripts/fetch_stockfish.sh`. All `.cpp` files in that
@@ -46,6 +49,9 @@ endif()
 option(APEX_STOCKFISH_USE_NNUE
        "Embed NNUE weights via incbin (requires real .nnue files in src/)"
        ON)
+option(APEX_ALLOW_STOCKFISH_STUB
+       "Allow the unsafe development-only stub engine when real Stockfish sources are missing"
+       OFF)
 
 if(DEFINED STOCKFISH_SOURCES_DIR AND EXISTS "${STOCKFISH_SOURCES_DIR}")
   message(STATUS "stockfish_bridge: building with real engine from ${STOCKFISH_SOURCES_DIR}")
@@ -109,9 +115,20 @@ if(DEFINED STOCKFISH_SOURCES_DIR AND EXISTS "${STOCKFISH_SOURCES_DIR}")
     )
   endif()
 else()
-  message(STATUS "stockfish_bridge: building STUB engine. "
-                 "Run `scripts/fetch_stockfish.sh` then reconfigure for real Stockfish.")
+  if(NOT APEX_ALLOW_STOCKFISH_STUB)
+    message(FATAL_ERROR
+      "stockfish_bridge: real Stockfish sources were not found and "
+      "APEX_ALLOW_STOCKFISH_STUB is OFF. Stub builds are unsafe for local "
+      "analysis/release. Run `scripts/fetch_stockfish.sh --with-nnue` or "
+      "configure with `-DAPEX_ALLOW_STOCKFISH_STUB=ON` only for explicit "
+      "development fallback.")
+  endif()
+  message(WARNING "stockfish_bridge: building unsafe STUB engine because "
+                  "APEX_ALLOW_STOCKFISH_STUB=ON. Do not use this artifact "
+                  "for analysis, benchmarks, release, or QA sign-off.")
   target_compile_definitions(stockfish_bridge PRIVATE STOCKFISH_STUB=1)
+  target_compile_definitions(stockfish_bridge PRIVATE
+    APEX_STOCKFISH_STUB_UNSAFE_FOR_ANALYSIS=1)
 endif()
 
 if(MSVC)

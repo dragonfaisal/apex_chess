@@ -131,6 +131,64 @@ class BenchmarkResult {
   };
 }
 
+class AndroidStockfishBenchmarkRow {
+  const AndroidStockfishBenchmarkRow({
+    required this.deviceLabel,
+    required this.abi,
+    required this.positionLabel,
+    required this.targetLabel,
+    required this.multiPv,
+    required this.elapsedMs,
+    this.parsedDepth,
+    this.nodes,
+    this.nps,
+    required this.scoreType,
+    this.scoreCp,
+    this.scoreMate,
+    required this.pvCount,
+    this.warning,
+  });
+
+  final String deviceLabel;
+  final String abi;
+  final String positionLabel;
+  final String targetLabel;
+  final int multiPv;
+  final int elapsedMs;
+  final int? parsedDepth;
+  final int? nodes;
+  final int? nps;
+  final BenchmarkScoreType scoreType;
+  final int? scoreCp;
+  final int? scoreMate;
+  final int pvCount;
+  final String? warning;
+
+  String get scoreLabel => switch (scoreType) {
+    BenchmarkScoreType.cp => 'cp ${scoreCp ?? '?'}',
+    BenchmarkScoreType.mate => 'mate ${scoreMate ?? '?'}',
+    BenchmarkScoreType.none => 'none',
+  };
+
+  String toMarkdownRow() {
+    return '| $deviceLabel | $abi | $positionLabel | $targetLabel | $multiPv | '
+        '$elapsedMs | ${parsedDepth ?? '?'} | ${nodes ?? '?'} | '
+        '${nps ?? '?'} | $scoreLabel | $pvCount | ${warning ?? ''} |';
+  }
+
+  static String renderMarkdownTable(List<AndroidStockfishBenchmarkRow> rows) {
+    final buffer = StringBuffer()
+      ..writeln(
+        '| Device | ABI | Position | Target | MultiPV | Elapsed ms | Depth | Nodes | NPS | Score | PV count | Warning |',
+      )
+      ..writeln('|---|---|---|---|---:|---:|---:|---:|---:|---|---:|---|');
+    for (final row in rows) {
+      buffer.writeln(row.toMarkdownRow());
+    }
+    return buffer.toString();
+  }
+}
+
 class LocalStockfishBenchmarkReport {
   const LocalStockfishBenchmarkReport({
     required this.engineMode,
@@ -140,6 +198,7 @@ class LocalStockfishBenchmarkReport {
     required this.multiPvSupported,
     required this.warnings,
     required this.nextRecommendation,
+    this.androidBenchmarkStatus = 'unproven by host command',
     this.engineName,
     this.bridgeVersion,
     this.audit,
@@ -152,6 +211,7 @@ class LocalStockfishBenchmarkReport {
   final bool multiPvSupported;
   final List<String> warnings;
   final String nextRecommendation;
+  final String androidBenchmarkStatus;
   final String? engineName;
   final String? bridgeVersion;
   final LocalEngineAuditReport? audit;
@@ -177,6 +237,7 @@ class LocalStockfishBenchmarkReport {
       ..writeln('bridge version: ${bridgeVersion ?? 'unknown'}')
       ..writeln('target positions count: $targetPositionsCount')
       ..writeln('MultiPV support: ${multiPvSupported ? 'yes' : 'no'}')
+      ..writeln('Android benchmark status: $androidBenchmarkStatus')
       ..writeln('average elapsed ms: ${averageElapsedMs.toStringAsFixed(1)}')
       ..writeln('max elapsed ms: $maxElapsedMs')
       ..writeln()

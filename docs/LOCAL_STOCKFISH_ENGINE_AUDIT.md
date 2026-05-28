@@ -2,6 +2,8 @@
 
 Phase 30B status: local engine reality is explicit, not assumed.
 
+Phase 30C status: stub builds are fail-closed by default, packaging/ABI audit is first-class, and the FFI bridge remains provisional until Android benchmark and lifecycle proof exists.
+
 ## Current Reality
 
 - Apex has a real local Stockfish integration path: Dart `StockfishEngine` -> worker isolate -> FFI -> `libstockfish_bridge`.
@@ -15,7 +17,14 @@ Phase 30B status: local engine reality is explicit, not assumed.
 
 ## Stub Status
 
-The native bridge still contains an explicit `STOCKFISH_STUB` fallback. If `STOCKFISH_SOURCES_DIR` is absent at configure time, CMake can build a UCI stub that reports `ApexChess-Stub`, constant `score cp 0`, depth/nodes `1`, and `bestmove e2e4`.
+The native bridge still contains an explicit `STOCKFISH_STUB` fallback. The fallback reports `ApexChess-Stub`, constant `score cp 0`, depth/nodes `1`, and `bestmove e2e4`.
+
+Phase 30C changed the CMake policy:
+
+- `APEX_ALLOW_STOCKFISH_STUB` exists and defaults to `OFF`.
+- If real Stockfish sources are missing and `APEX_ALLOW_STOCKFISH_STUB` is `OFF`, CMake configuration fails with a clear `FATAL_ERROR`.
+- Stub artifacts built with explicit opt-in are marked with `APEX_STOCKFISH_STUB_UNSAFE_FOR_ANALYSIS=1`.
+- Stub mode is not acceptable as a real local analysis engine.
 
 This stub path is now detected by:
 
@@ -23,7 +32,15 @@ This stub path is now detected by:
 - runtime benchmark checks for stub UCI id;
 - behavioral checks for same bestmove, constant cp, and immediate no-search responses across unrelated positions.
 
-The stub was not removed in this phase because it is part of the native bridge build fallback. It should not be accepted silently for analysis builds.
+The stub was not removed because it is useful for explicit development fallback. It is controlled and visible, not silently accepted.
+
+Explicit dev-only stub build:
+
+```powershell
+cmake -S src/native -B build/native-stub -DAPEX_ALLOW_STOCKFISH_STUB=ON
+```
+
+Do not use that artifact for analysis, benchmarks, QA sign-off, or release.
 
 ## Architecture Summary
 
@@ -55,6 +72,13 @@ Run:
 dart run tool/local_stockfish_benchmark.dart
 ```
 
+Additional audit modes:
+
+```powershell
+dart run tool/local_stockfish_benchmark.dart --audit-only
+dart run tool/local_stockfish_benchmark.dart --audit-packaging
+```
+
 The command prints:
 
 - engine mode: `real`, `unavailable`, or `stub-detected`;
@@ -70,6 +94,8 @@ The command prints:
 
 On this Windows host during the audit, the command reported `engine mode: unavailable` because `stockfish_bridge.dll` was not on the host loader path. It did not fake benchmark success.
 
+The host command cannot prove Android speed. It reports host availability and Android packaging facts only.
+
 ## Benchmark Targets
 
 The harness defines:
@@ -83,8 +109,56 @@ For each target it can run:
 
 - movetime 50 ms, 100 ms, 250 ms, 500 ms;
 - depth 10, 12, 14, 16.
+- MultiPV 1, 2, and 3 should be captured on Android target hardware.
 
 The full benchmark is opt-in and not part of normal fast tests.
+
+## Android Packaging And ABI Audit
+
+The audit reads Gradle `abiFilters` and, when a debug APK exists, inspects `lib/<abi>/libstockfish_bridge.so` entries.
+
+Current policy:
+
+- Normal unit tests do not fail only because stale local APK artifacts exist.
+- The audit reports `artifact-missing`, `abi-consistent`, or `abi-mismatch`.
+- Extra packaged ABIs and missing configured ABIs are listed as warnings.
+
+Clean packaging verification runbook:
+
+```powershell
+cd C:\apex_chess
+flutter clean
+flutter pub get
+flutter build apk --debug
+dart run tool/local_stockfish_benchmark.dart --audit-packaging
+```
+
+Expected clean result: configured ABI filters and packaged `libstockfish_bridge.so` ABIs match. With the current Gradle config that means `arm64-v8a` only.
+
+Phase 30B observed stale/additional `armeabi-v7a` and `x86_64` engine libraries in an existing debug APK. Phase 30C keeps that mismatch visible but does not fake a clean rebuild.
+
+## Android Real-Engine Benchmark Runbook
+
+Android benchmark facts must be captured on a real device or emulator that runs the packaged native bridge.
+
+Build/install baseline:
+
+```powershell
+cd C:\apex_chess
+flutter clean
+flutter pub get
+flutter build apk --debug
+flutter install
+```
+
+Benchmark plan:
+
+- Positions: start position, tactical middlegame, endgame, mate-threat.
+- Targets: movetime 50/100/250/500 ms and depth 10/12/14/16.
+- MultiPV: capture 1, 2, and 3 where supported.
+- Record: device model, Android version, ABI, elapsed ms, parsed depth, nodes, nps, score type, PV count, bestmove, warnings.
+
+The Dart schema `AndroidStockfishBenchmarkRow` can render pasted Android rows as a markdown table after manual/device collection. This is intentionally separate from host `dart run` output so Android facts are not faked.
 
 ## Optional Real-Engine Tests
 
@@ -105,19 +179,46 @@ The smoke tests verify:
 
 ## Known Risks
 
-- The stub fallback is still selectable at native configure time.
+- The stub fallback is still selectable only by explicit CMake opt-in.
 - Host benchmark facts are unavailable until a host bridge is built or the harness is run on Android.
 - Existing debug APK contents include extra ABI libraries outside the current `arm64-v8a` filter; rebuild output should be checked before release packaging.
 - The real bridge uses process-level stdin/stdout redirection and a process-persistent worker. This should be stress-tested on Android before scheduling many concurrent review jobs around it.
 - Current tests prove parser, FEN, stub guards, and fake-engine benchmark behavior; they do not prove Android target-device speed on this machine.
 
-## Phase 30C Recommendation
+## Phase 30C Lifecycle Findings
+
+Phase 30C added fake-engine lifecycle substrate tests:
+
+- repeated FEN analyses are serialized and do not overlap;
+- invalid FEN is rejected before engine start/send;
+- search timeout returns a safe failure and sends `stop`;
+- repeated ready/stop/dispose paths do not hang in fake mode.
+
+What remains unproven:
+
+- real Android repeated start/search/stop/dispose loops;
+- process-global stdio behavior under Flutter Android logging;
+- native crash isolation;
+- stale bestmove leakage under real engine stress.
+
+## FFI Vs Subprocess Decision
+
+Decision record: [LOCAL_ENGINE_SUBSTRATE_DECISION.md](LOCAL_ENGINE_SUBSTRATE_DECISION.md).
+
+Summary:
+
+- The current FFI bridge is a provisional Phase 30D candidate because it already exists and Android real CMake metadata is present.
+- It is not final until Android proves packaging, lifecycle, and benchmark behavior.
+- If Android proof fails, Phase 30D should pivot toward a standalone subprocess UCI architecture instead of building a scheduler over an uncertain bridge.
+- Browser/WASM is not the immediate Android Flutter path.
+
+## Phase 30D Recommendation
 
 Do not add classifiers, ACPL/accuracy, backend phases, or review scheduling until Android target-device smoke and benchmark results are captured.
 
-Phase 30C should focus on hardening the local engine substrate:
+Phase 30D should focus on Android proof:
 
-- make stub builds fail closed for analysis/release configurations;
-- run the benchmark on target Android hardware;
-- decide whether to keep the current process-persistent FFI bridge or rebuild around a stricter subprocess/isolate engine architecture;
-- only then design the local-first review scheduler.
+- run the clean packaging verification runbook;
+- run Android real-engine smoke and lifecycle loops;
+- collect benchmark rows for every target position and movetime/depth target;
+- decide whether the FFI bridge is good enough to build a scheduler on, or pivot to subprocess UCI first.

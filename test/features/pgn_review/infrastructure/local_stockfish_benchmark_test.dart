@@ -41,7 +41,37 @@ void main() {
       expect(rendered, contains('max elapsed ms: 42'));
       expect(rendered, contains('score=cp 23'));
       expect(rendered, contains('MultiPV support: yes'));
+      expect(
+        rendered,
+        contains('Android benchmark status: unproven by host command'),
+      );
       expect(rendered, contains('sample recommendation'));
+    });
+
+    test('renders Android benchmark rows from pasted device data safely', () {
+      const rows = [
+        AndroidStockfishBenchmarkRow(
+          deviceLabel: 'Pixel test',
+          abi: 'arm64-v8a',
+          positionLabel: 'startpos',
+          targetLabel: 'movetime 100ms',
+          multiPv: 3,
+          elapsedMs: 112,
+          parsedDepth: 9,
+          nodes: 12345,
+          nps: 111000,
+          scoreType: BenchmarkScoreType.cp,
+          scoreCp: 25,
+          pvCount: 3,
+        ),
+      ];
+
+      final rendered = AndroidStockfishBenchmarkRow.renderMarkdownTable(rows);
+
+      expect(rendered, contains('| Device | ABI | Position |'));
+      expect(rendered, contains('| Pixel test | arm64-v8a | startpos |'));
+      expect(rendered, contains('cp 25'));
+      expect(rendered, contains('movetime 100ms'));
     });
   });
 

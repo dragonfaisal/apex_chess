@@ -42,11 +42,12 @@
 //
 // Two build modes are supported:
 //
-//   * STOCKFISH_STUB (default when `STOCKFISH_SOURCES_DIR` is not provided at
-//     configure time): a minimal UCI-ish stub that responds to `uci`,
-//     `isready`, `ucinewgame`, `position`, `go`, and `quit`. This lets the
-//     Dart / Flutter layer be exercised end-to-end before the real engine is
-//     integrated.
+//   * STOCKFISH_STUB (explicit development fallback only, gated by
+//     APEX_ALLOW_STOCKFISH_STUB=ON in CMake): a minimal UCI-ish stub that
+//     responds to `uci`, `isready`, `ucinewgame`, `position`, `go`, and
+//     `quit`. This lets the Dart / Flutter layer be exercised end-to-end
+//     before the real engine is integrated. It is unsafe for analysis,
+//     benchmarks, release, or QA sign-off.
 //
 //   * Real Stockfish: define `STOCKFISH_REAL` and link against the Stockfish
 //     translation units. The upstream `main` entrypoint is renamed to

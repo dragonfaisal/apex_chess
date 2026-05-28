@@ -396,9 +396,9 @@ class LocalEvalService {
 ///
 /// Rejects:
 ///   * null-ish / empty / control-char inputs (Skia / shaper safety),
-///   * fewer than 4 space-separated fields (board, side, castling, ep),
-///   * a board field that isn't 8 ranks separated by `/`,
-///   * a side-to-move field that isn't `w`/`b`.
+///   * FENs without exactly 4 or 6 fields,
+///   * board fields that are not 8 legal ranks of 8 files,
+///   * side, castling, en-passant, and clock fields with invalid shapes.
 ///
 /// Exposed for unit testing via the `isStructurallyValidFenForTesting`
 /// indirection at the bottom of this file.
