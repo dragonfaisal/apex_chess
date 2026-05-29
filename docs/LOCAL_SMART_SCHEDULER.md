@@ -367,13 +367,57 @@ Phase 30L still does not implement:
 - UI activation;
 - parallel engine execution.
 
-## Phase 30M Recommendation
+## Phase 30M Developer-Only Integration
 
-Phase 30M should run the first real local review integration experiment behind a developer-only seam:
+`LocalReviewIntegrationExperiment` is the first developer-only integration layer over `GameLevelDeepGatingExperiment`.
 
-- use the tuned representative budgets as starting defaults;
-- keep execution serial and local-first;
-- keep all engine calls behind `GameLevelDeepGatingExperiment` and the existing orchestration stack;
-- compare pure candidate plans with measured selected-deep execution on small games;
-- preserve current classifier and product review output unchanged;
-- continue blocking UI/backend/persistence/official-metric work until the measured integration path is stable.
+It compares three paths for small review-shaped position sets:
+
+- pure plan candidate counts;
+- fast-pass measured execution plus deep-candidate planning;
+- selected-deep execution under explicit budgets.
+
+The source can be scheduler-ready `LocalAnalysisPositionInput` values or lightweight parsed review positions. Parsed positions are mapped conservatively into scheduler inputs: FEN, ply and move indexes, opening/forced hints, tactical hints, eval/spread/material hints, and developer tags are preserved when supplied. Unknown chess facts are left unset.
+
+Budget presets are explicit and finite:
+
+| Preset | Profile | Max deep candidates | Max deep calls | Max total calls | Max elapsed |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `ecoSafe` | `eco` | 0 | 0 | 12 | 5,000 ms |
+| `balancedDefault` | `balanced` | 3 | 6 | 24 | 15,000 ms |
+| `performanceMeasured` | `performance` | 5 | 10 | 40 | 30,000 ms |
+| `ownerStrongLocal` | `owner` | 8 | 16 | 64 | 60,000 ms |
+
+Execution remains serial and local-first:
+
+- `planOnly` performs no engine calls;
+- `fastThenPlanDeep` runs the fast pass and selects deep candidates without executing them;
+- `fastThenExecuteSelectedDeep` executes only selected deep candidates;
+- all engine work stays behind `GameLevelDeepGatingExperiment`, `LocalReviewOrchestrationExperiment`, `MeasuredLocalReviewPrototype`, `LocalSmartAnalysisExecutor`, and `LocalEvalService`;
+- no product review controller, UI, storage, backend, or classifier layer is updated.
+
+The integration result reports source count, mapped count, pure candidate count, selected-deep count, executed-deep count, fast/deep/total engine calls, elapsed time, selected-deep ratio, budget pressure, warning/failure propagation, top reason codes, and suppressions.
+
+The developer report intentionally omits raw UCI logs, long PV dumps, final move labels, official accuracy, and ACPL.
+
+Phase 30M still does not implement:
+
+- final move labels;
+- Brilliant, Great, Miss, or similar classifier output;
+- official accuracy or ACPL;
+- replacement product review results;
+- persistence, cache, or database writes;
+- backend/server calls;
+- UI activation;
+- parallel engine execution.
+
+## Phase 30N Recommendation
+
+Phase 30N should validate the integration experiment against a compact set of real PGN-derived review fixtures:
+
+- keep the path developer-only;
+- preserve current product review results unchanged;
+- compare `balancedDefault` against `performanceMeasured` on small games;
+- record budget pressure, warning spikes, selected-deep ratios, and elapsed-time behavior;
+- decide whether PGN-derived mapping should be promoted into a stable non-UI review adapter;
+- continue blocking classifier labels, official metrics, UI activation, backend work, and persistence until the measured integration path is stable.
