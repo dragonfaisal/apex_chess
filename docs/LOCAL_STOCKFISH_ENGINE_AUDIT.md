@@ -24,6 +24,8 @@ Phase 30L status: representative deep-gating budget tuning now runs as a pure lo
 
 Phase 30M status: a developer-only local review integration experiment now compares pure deep-candidate plans, fast-pass measured execution, and selected-deep execution under explicit local budget presets. It remains non-UI, non-persistent, local-first, and keeps product review output unchanged.
 
+Phase 30N status: compact PGN-derived local integration fixtures now compare eco, balanced, performance, owner, low-power, and fake-engine execution modes through `LocalReviewIntegrationExperiment`. The comparison remains developer-only, serial, local-first, and does not change product review output.
+
 ## Current Reality
 
 - Apex has a real local Stockfish integration path: Dart `StockfishEngine` -> worker isolate -> FFI -> `libstockfish_bridge`.
@@ -418,4 +420,4 @@ Still not allowed:
 - persistence/cache/database work;
 - public UI activation.
 
-Phase 30H added a thin executor around this planning model while keeping all engine calls behind `LocalEvalService` and preserving the classifier/accuracy layers unchanged. Phase 30I added a measured serial review prototype over the executor. Phase 30J added a local orchestration experiment over measured review outputs. Phase 30K added a game-level deep-gating experiment with pure candidate ranking, budget suppression, and optional selected deep execution through the existing local stack. Phase 30L added pure representative budget tuning so default local integration budgets are selected from measured candidate distributions rather than guesswork. Phase 30M added a developer-only integration experiment over the deep-gating layer; it compares plan-only candidates, fast-pass measurement, and selected-deep execution without changing product review behavior.
+Phase 30H added a thin executor around this planning model while keeping all engine calls behind `LocalEvalService` and preserving the classifier/accuracy layers unchanged. Phase 30I added a measured serial review prototype over the executor. Phase 30J added a local orchestration experiment over measured review outputs. Phase 30K added a game-level deep-gating experiment with pure candidate ranking, budget suppression, and optional selected deep execution through the existing local stack. Phase 30L added pure representative budget tuning so default local integration budgets are selected from measured candidate distributions rather than guesswork. Phase 30M added a developer-only integration experiment over the deep-gating layer; it compares plan-only candidates, fast-pass measurement, and selected-deep execution without changing product review behavior. Phase 30N added compact PGN-derived profile comparisons so the integration path is no longer validated only with synthetic scheduler-ready inputs.

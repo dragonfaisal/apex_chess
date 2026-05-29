@@ -411,13 +411,60 @@ Phase 30M still does not implement:
 - UI activation;
 - parallel engine execution.
 
-## Phase 30N Recommendation
+## Phase 30N PGN-Derived Fixture Profiles
 
-Phase 30N should validate the integration experiment against a compact set of real PGN-derived review fixtures:
+`LocalReviewPgnFixtureProfileRunner` validates the developer-only integration stack on compact legal game-shaped inputs instead of scheduler-ready synthetic positions only.
 
-- keep the path developer-only;
-- preserve current product review results unchanged;
-- compare `balancedDefault` against `performanceMeasured` on small games;
-- record budget pressure, warning spikes, selected-deep ratios, and elapsed-time behavior;
-- decide whether PGN-derived mapping should be promoted into a stable non-UI review adapter;
-- continue blocking classifier labels, official metrics, UI activation, backend work, and persistence until the measured integration path is stable.
+Fixture categories:
+
+- quiet opening;
+- tactical middlegame;
+- forcing line;
+- technical endgame;
+- budget pressure;
+- invalid safety.
+
+Fixtures are intentionally compact and test-safe. PGNs are parsed with the same `dartchess` family already used by local orchestration, then mapped into `LocalReviewOrchestrationPosition` records. Fixture-specific hints may add developer-only context such as candidate spread, material swing, legal-move count, or check/capture hints. The mapper does not infer missing chess facts beyond what the PGN parser and fixture hints supply.
+
+The default comparison matrix covers:
+
+- `ecoSafe` in plan-only mode;
+- `balancedDefault` in plan-only mode;
+- `performanceMeasured` in plan-only mode;
+- `ownerStrongLocal` in plan-only mode;
+- `balancedDefault` with low-power enabled;
+- `balancedDefault` fast-then-plan;
+- `performanceMeasured` fast-then-plan.
+
+The fixture comparison verifies broad guardrails:
+
+- `ecoSafe` selects no deep work;
+- low-power selects no deep work;
+- `balancedDefault` remains a small controlled subset;
+- `performanceMeasured` may select at least as many candidates as balanced, but still not every move;
+- `ownerStrongLocal` remains finite;
+- budget-pressure fixtures make cap suppressions visible;
+- invalid PGNs fail safely without engine calls.
+
+The comparison report includes fixture/profile rows, mapped position counts, pure candidate counts, selected-deep counts, selected ratios, engine calls, budget pressure, warnings, failures, and guardrail messages. It intentionally omits raw UCI logs, long PV dumps, final move labels, official accuracy, and ACPL.
+
+Phase 30N still does not implement:
+
+- final move labels;
+- Brilliant, Great, Miss, or similar classifier output;
+- official accuracy or ACPL;
+- replacement product review results;
+- persistence, cache, or database writes;
+- backend/server calls;
+- UI activation;
+- parallel engine execution.
+
+## Phase 30O Recommendation
+
+Phase 30O should run a real-device selected-deep smoke over the compact PGN fixture set:
+
+- keep it opt-in and developer-only;
+- run `balancedDefault` first, then `performanceMeasured` on a small subset;
+- capture elapsed time, selected-deep ratio, budget pressure, warning spikes, and thermal/battery notes;
+- preserve current product review output unchanged;
+- keep classifier labels, official metrics, UI activation, backend work, and persistence blocked until device fixture behavior is stable.
