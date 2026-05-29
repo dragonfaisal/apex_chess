@@ -34,6 +34,176 @@ void main() {
         expect(item.containsBlockedClaim, isFalse, reason: item.id);
       }
     });
+
+    test('expanded motif tags are unique and stable', () {
+      final wires = GoldenMotifTag.values.map((motif) => motif.wire).toList();
+
+      expect(wires.toSet(), hasLength(wires.length));
+      expect(
+        wires,
+        containsAll(const [
+          'sacrifice',
+          'temporarySacrifice',
+          'exchangeSacrifice',
+          'pieceSacrifice',
+          'materialCompensation',
+          'queenWin',
+          'rookWin',
+          'pieceWin',
+          'pawnBreakthrough',
+          'mateThreat',
+          'forcedMate',
+          'backRankWeakness',
+          'exposedKing',
+          'kingHunt',
+          'matingNet',
+          'forcingLine',
+          'checkSequence',
+          'zwischenzug',
+          'fork',
+          'pin',
+          'skewer',
+          'discoveredAttack',
+          'deflection',
+          'decoy',
+          'overload',
+          'trappedPiece',
+          'clearance',
+          'interference',
+          'removeDefender',
+          'quietMove',
+          'quietPreparatoryMove',
+          'prophylaxis',
+          'restriction',
+          'outpost',
+          'openFile',
+          'passedPawn',
+          'endgamePrecision',
+          'onlyMove',
+          'openingTheory',
+          'invalidSafety',
+          'budgetPressure',
+          'evidenceIncomplete',
+          'realDeviceProofNeeded',
+        ]),
+      );
+    });
+
+    test('existing cases use expanded motifs', () {
+      final motifs = GoldenAnalysisCases.defaults
+          .expand((item) => item.motifTags)
+          .toSet();
+
+      expect(motifs, contains(GoldenMotifTag.checkSequence));
+      expect(motifs, contains(GoldenMotifTag.pieceSacrifice));
+      expect(motifs, contains(GoldenMotifTag.exposedKing));
+      expect(motifs, contains(GoldenMotifTag.matingNet));
+      expect(motifs, contains(GoldenMotifTag.quietPreparatoryMove));
+      expect(motifs, contains(GoldenMotifTag.evidenceIncomplete));
+      expect(motifs, contains(GoldenMotifTag.passedPawn));
+      expect(motifs, contains(GoldenMotifTag.realDeviceProofNeeded));
+    });
+  });
+
+  group('GoldenMotifEvidencePolicy', () {
+    const policy = GoldenMotifEvidencePolicy();
+
+    test('sacrifice motif requires material and compensation evidence', () {
+      final requirement = policy.requirementsFor(const [
+        GoldenMotifTag.sacrifice,
+      ]);
+
+      expect(
+        requirement.evidence.evidenceGroups,
+        contains(GoldenMotifEvidenceGroup.material),
+      );
+      expect(
+        requirement.evidence.evidenceGroups,
+        contains(GoldenMotifEvidenceGroup.tactical),
+      );
+      expect(requirement.evidence.requiresMaterialSwing, isTrue);
+      expect(requirement.evidence.requiresMaterialCompensation, isTrue);
+    });
+
+    test(
+      'mate-threat motif requires mate, king-safety, and forcing evidence',
+      () {
+        final requirement = policy.requirementsFor(const [
+          GoldenMotifTag.mateThreat,
+        ]);
+
+        expect(
+          requirement.evidence.evidenceGroups,
+          contains(GoldenMotifEvidenceGroup.kingSafety),
+        );
+        expect(
+          requirement.evidence.evidenceGroups,
+          contains(GoldenMotifEvidenceGroup.forcing),
+        );
+        expect(requirement.evidence.requiresMateSignal, isTrue);
+        expect(requirement.evidence.requiresKingSafetySignal, isTrue);
+        expect(requirement.evidence.requiresForcingLineSignal, isTrue);
+      },
+    );
+
+    test('quiet preparatory move does not force deep without evidence', () {
+      final profile = policy.profileFor(GoldenMotifTag.quietPreparatoryMove);
+
+      expect(profile.doesNotForceDeepByItself, isTrue);
+      expect(
+        policy.shouldForceDeepByItself(GoldenMotifTag.quietPreparatoryMove),
+        isFalse,
+      );
+      expect(profile.evidence.requiresQuietMoveEvidence, isTrue);
+    });
+
+    test('opening theory expects suppression instead of deep work', () {
+      final profile = policy.profileFor(GoldenMotifTag.openingTheory);
+
+      expect(profile.metadataOnlySafe, isTrue);
+      expect(profile.doesNotForceDeepByItself, isTrue);
+      expect(profile.evidence.requiresSuppressionReason, isTrue);
+      expect(
+        profile.evidence.suppressionReasons,
+        contains(DeepCandidateReasonCode.openingSuppressed),
+      );
+    });
+
+    test('invalid safety expects rejection before engine evidence', () {
+      final profile = policy.profileFor(GoldenMotifTag.invalidSafety);
+
+      expect(profile.metadataOnlySafe, isTrue);
+      expect(profile.evidence.requiresSuppressionReason, isTrue);
+      expect(
+        profile.evidence.suppressionReasons,
+        contains(DeepCandidateReasonCode.invalidFenSuppressed),
+      );
+    });
+
+    test('budget pressure expects suppression visibility', () {
+      final profile = policy.profileFor(GoldenMotifTag.budgetPressure);
+
+      expect(profile.evidence.requiresBudgetPressure, isTrue);
+      expect(profile.evidence.requiresSuppressionReason, isTrue);
+      expect(
+        profile.evidence.suppressionReasons,
+        contains(DeepCandidateReasonCode.budgetSuppressed),
+      );
+    });
+
+    test('queen win expects material and major swing evidence', () {
+      final profile = policy.profileFor(GoldenMotifTag.queenWin);
+
+      expect(profile.evidence.requiresMaterialSwing, isTrue);
+      expect(
+        profile.evidence.materialReasons,
+        contains(DeepCandidateReasonCode.materialSwing),
+      );
+      expect(
+        profile.evidence.materialReasons,
+        contains(DeepCandidateReasonCode.majorEvalSwing),
+      );
+    });
   });
 
   group('GoldenAnalysisSuiteRunner metadata', () {

@@ -40,12 +40,30 @@ enum GoldenAnalysisSourceType {
 
 enum GoldenMotifTag {
   sacrifice('sacrifice'),
+  temporarySacrifice('temporarySacrifice'),
+  exchangeSacrifice('exchangeSacrifice'),
+  pieceSacrifice('pieceSacrifice'),
   materialCompensation('materialCompensation'),
   queenWin('queenWin'),
+  rookWin('rookWin'),
+  pieceWin('pieceWin'),
+  pawnBreakthrough('pawnBreakthrough'),
   mateThreat('mateThreat'),
+  forcedMate('forcedMate'),
+  backRankWeakness('backRankWeakness'),
+  exposedKing('exposedKing'),
+  kingHunt('kingHunt'),
+  matingNet('matingNet'),
   forcingLine('forcingLine'),
+  checkSequence('checkSequence'),
   onlyMove('onlyMove'),
   quietMove('quietMove'),
+  quietPreparatoryMove('quietPreparatoryMove'),
+  prophylaxis('prophylaxis'),
+  restriction('restriction'),
+  outpost('outpost'),
+  openFile('openFile'),
+  passedPawn('passedPawn'),
   zwischenzug('zwischenzug'),
   fork('fork'),
   pin('pin'),
@@ -54,13 +72,47 @@ enum GoldenMotifTag {
   deflection('deflection'),
   decoy('decoy'),
   overload('overload'),
+  trappedPiece('trappedPiece'),
+  clearance('clearance'),
+  interference('interference'),
+  removeDefender('removeDefender'),
   promotion('promotion'),
   endgamePrecision('endgamePrecision'),
   openingTheory('openingTheory'),
   invalidSafety('invalidSafety'),
-  budgetPressure('budgetPressure');
+  budgetPressure('budgetPressure'),
+  evidenceIncomplete('evidenceIncomplete'),
+  realDeviceProofNeeded('realDeviceProofNeeded');
 
   const GoldenMotifTag(this.wire);
+
+  final String wire;
+}
+
+enum GoldenMotifGroup {
+  materialAndSacrifice('materialAndSacrifice'),
+  kingSafetyAndMate('kingSafetyAndMate'),
+  forcingAndTactical('forcingAndTactical'),
+  positionalAndQuiet('positionalAndQuiet'),
+  safetyAndControl('safetyAndControl');
+
+  const GoldenMotifGroup(this.wire);
+
+  final String wire;
+}
+
+enum GoldenMotifEvidenceGroup {
+  tactical('tactical'),
+  material('material'),
+  kingSafety('kingSafety'),
+  forcing('forcing'),
+  positional('positional'),
+  suppression('suppression'),
+  uncertainty('uncertainty'),
+  budget('budget'),
+  realDeviceProof('realDeviceProof');
+
+  const GoldenMotifEvidenceGroup(this.wire);
 
   final String wire;
 }
@@ -124,6 +176,504 @@ class GoldenAnalysisSafetyFlags {
       licenseSafe && (handcrafted || externalComparisonPending);
 }
 
+class GoldenTacticalEvidenceExpectation {
+  const GoldenTacticalEvidenceExpectation({
+    this.requiresMaterialSwing = false,
+    this.requiresMaterialCompensation = false,
+    this.requiresMateSignal = false,
+    this.requiresForcingLineSignal = false,
+    this.requiresKingSafetySignal = false,
+    this.requiresOnlyMoveSignal = false,
+    this.requiresQuietMoveEvidence = false,
+    this.requiresCandidateSpread = false,
+    this.requiresMultiPvEvidence = false,
+    this.requiresPvNonEmpty = false,
+    this.requiresBudgetPressure = false,
+    this.requiresSuppressionReason = false,
+    this.requiresRealDeviceProof = false,
+    this.tacticalReasons = const <DeepCandidateReasonCode>{},
+    this.materialReasons = const <DeepCandidateReasonCode>{},
+    this.kingSafetyReasons = const <DeepCandidateReasonCode>{},
+    this.forcingReasons = const <DeepCandidateReasonCode>{},
+    this.positionalReasons = const <DeepCandidateReasonCode>{},
+    this.suppressionReasons = const <DeepCandidateReasonCode>{},
+    this.uncertaintyReasons = const <DeepCandidateReasonCode>{},
+    this.declaredGroups = const <GoldenMotifEvidenceGroup>{},
+  });
+
+  final bool requiresMaterialSwing;
+  final bool requiresMaterialCompensation;
+  final bool requiresMateSignal;
+  final bool requiresForcingLineSignal;
+  final bool requiresKingSafetySignal;
+  final bool requiresOnlyMoveSignal;
+  final bool requiresQuietMoveEvidence;
+  final bool requiresCandidateSpread;
+  final bool requiresMultiPvEvidence;
+  final bool requiresPvNonEmpty;
+  final bool requiresBudgetPressure;
+  final bool requiresSuppressionReason;
+  final bool requiresRealDeviceProof;
+  final Set<DeepCandidateReasonCode> tacticalReasons;
+  final Set<DeepCandidateReasonCode> materialReasons;
+  final Set<DeepCandidateReasonCode> kingSafetyReasons;
+  final Set<DeepCandidateReasonCode> forcingReasons;
+  final Set<DeepCandidateReasonCode> positionalReasons;
+  final Set<DeepCandidateReasonCode> suppressionReasons;
+  final Set<DeepCandidateReasonCode> uncertaintyReasons;
+  final Set<GoldenMotifEvidenceGroup> declaredGroups;
+
+  Set<GoldenMotifEvidenceGroup> get evidenceGroups {
+    final groups = <GoldenMotifEvidenceGroup>{...declaredGroups};
+    if (requiresCandidateSpread ||
+        requiresMultiPvEvidence ||
+        requiresPvNonEmpty ||
+        tacticalReasons.isNotEmpty) {
+      groups.add(GoldenMotifEvidenceGroup.tactical);
+    }
+    if (requiresMaterialSwing ||
+        requiresMaterialCompensation ||
+        materialReasons.isNotEmpty) {
+      groups.add(GoldenMotifEvidenceGroup.material);
+    }
+    if (requiresMateSignal ||
+        requiresKingSafetySignal ||
+        kingSafetyReasons.isNotEmpty) {
+      groups.add(GoldenMotifEvidenceGroup.kingSafety);
+    }
+    if (requiresForcingLineSignal || forcingReasons.isNotEmpty) {
+      groups.add(GoldenMotifEvidenceGroup.forcing);
+    }
+    if (requiresQuietMoveEvidence || positionalReasons.isNotEmpty) {
+      groups.add(GoldenMotifEvidenceGroup.positional);
+    }
+    if (requiresOnlyMoveSignal ||
+        requiresSuppressionReason ||
+        suppressionReasons.isNotEmpty) {
+      groups.add(GoldenMotifEvidenceGroup.suppression);
+    }
+    if (uncertaintyReasons.isNotEmpty) {
+      groups.add(GoldenMotifEvidenceGroup.uncertainty);
+    }
+    if (requiresBudgetPressure) {
+      groups.add(GoldenMotifEvidenceGroup.budget);
+    }
+    if (requiresRealDeviceProof) {
+      groups.add(GoldenMotifEvidenceGroup.realDeviceProof);
+    }
+    return groups;
+  }
+
+  GoldenTacticalEvidenceExpectation merge(
+    GoldenTacticalEvidenceExpectation other,
+  ) {
+    return GoldenTacticalEvidenceExpectation(
+      requiresMaterialSwing:
+          requiresMaterialSwing || other.requiresMaterialSwing,
+      requiresMaterialCompensation:
+          requiresMaterialCompensation || other.requiresMaterialCompensation,
+      requiresMateSignal: requiresMateSignal || other.requiresMateSignal,
+      requiresForcingLineSignal:
+          requiresForcingLineSignal || other.requiresForcingLineSignal,
+      requiresKingSafetySignal:
+          requiresKingSafetySignal || other.requiresKingSafetySignal,
+      requiresOnlyMoveSignal:
+          requiresOnlyMoveSignal || other.requiresOnlyMoveSignal,
+      requiresQuietMoveEvidence:
+          requiresQuietMoveEvidence || other.requiresQuietMoveEvidence,
+      requiresCandidateSpread:
+          requiresCandidateSpread || other.requiresCandidateSpread,
+      requiresMultiPvEvidence:
+          requiresMultiPvEvidence || other.requiresMultiPvEvidence,
+      requiresPvNonEmpty: requiresPvNonEmpty || other.requiresPvNonEmpty,
+      requiresBudgetPressure:
+          requiresBudgetPressure || other.requiresBudgetPressure,
+      requiresSuppressionReason:
+          requiresSuppressionReason || other.requiresSuppressionReason,
+      requiresRealDeviceProof:
+          requiresRealDeviceProof || other.requiresRealDeviceProof,
+      tacticalReasons: {...tacticalReasons, ...other.tacticalReasons},
+      materialReasons: {...materialReasons, ...other.materialReasons},
+      kingSafetyReasons: {...kingSafetyReasons, ...other.kingSafetyReasons},
+      forcingReasons: {...forcingReasons, ...other.forcingReasons},
+      positionalReasons: {...positionalReasons, ...other.positionalReasons},
+      suppressionReasons: {...suppressionReasons, ...other.suppressionReasons},
+      uncertaintyReasons: {...uncertaintyReasons, ...other.uncertaintyReasons},
+      declaredGroups: {...declaredGroups, ...other.declaredGroups},
+    );
+  }
+}
+
+class GoldenMotifEvidenceProfile {
+  const GoldenMotifEvidenceProfile({
+    required this.motifGroup,
+    this.evidence = const GoldenTacticalEvidenceExpectation(),
+    this.requiresFakeEvidence = false,
+    this.requiresFutureRealDeviceProof = false,
+    this.metadataOnlySafe = false,
+    this.doesNotForceDeepByItself = false,
+  });
+
+  final GoldenMotifGroup motifGroup;
+  final GoldenTacticalEvidenceExpectation evidence;
+  final bool requiresFakeEvidence;
+  final bool requiresFutureRealDeviceProof;
+  final bool metadataOnlySafe;
+  final bool doesNotForceDeepByItself;
+}
+
+class GoldenMotifEvidenceRequirement {
+  const GoldenMotifEvidenceRequirement({
+    required this.motifGroups,
+    required this.evidence,
+    required this.fakeEvidenceMotifs,
+    required this.futureRealDeviceProofMotifs,
+    required this.metadataOnlySafeMotifs,
+    required this.motifsThatDoNotForceDeepByThemselves,
+  });
+
+  final Set<GoldenMotifGroup> motifGroups;
+  final GoldenTacticalEvidenceExpectation evidence;
+  final Set<GoldenMotifTag> fakeEvidenceMotifs;
+  final Set<GoldenMotifTag> futureRealDeviceProofMotifs;
+  final Set<GoldenMotifTag> metadataOnlySafeMotifs;
+  final Set<GoldenMotifTag> motifsThatDoNotForceDeepByThemselves;
+
+  Set<GoldenMotifEvidenceGroup> get evidenceGroups => evidence.evidenceGroups;
+
+  bool get requiresFakeEvidence => fakeEvidenceMotifs.isNotEmpty;
+
+  bool get requiresFutureRealDeviceProof =>
+      futureRealDeviceProofMotifs.isNotEmpty ||
+      evidence.requiresRealDeviceProof;
+}
+
+class GoldenMotifEvidencePolicy {
+  const GoldenMotifEvidencePolicy();
+
+  GoldenMotifEvidenceRequirement requirementsFor(
+    Iterable<GoldenMotifTag> motifs,
+  ) {
+    var evidence = const GoldenTacticalEvidenceExpectation();
+    final motifGroups = <GoldenMotifGroup>{};
+    final fakeEvidenceMotifs = <GoldenMotifTag>{};
+    final futureRealDeviceProofMotifs = <GoldenMotifTag>{};
+    final metadataOnlySafeMotifs = <GoldenMotifTag>{};
+    final motifsThatDoNotForceDeepByThemselves = <GoldenMotifTag>{};
+
+    for (final motif in motifs) {
+      final profile = profileFor(motif);
+      motifGroups.add(profile.motifGroup);
+      evidence = evidence.merge(profile.evidence);
+      if (profile.requiresFakeEvidence) {
+        fakeEvidenceMotifs.add(motif);
+      }
+      if (profile.requiresFutureRealDeviceProof) {
+        futureRealDeviceProofMotifs.add(motif);
+      }
+      if (profile.metadataOnlySafe) {
+        metadataOnlySafeMotifs.add(motif);
+      }
+      if (profile.doesNotForceDeepByItself) {
+        motifsThatDoNotForceDeepByThemselves.add(motif);
+      }
+    }
+
+    return GoldenMotifEvidenceRequirement(
+      motifGroups: Set<GoldenMotifGroup>.unmodifiable(motifGroups),
+      evidence: evidence,
+      fakeEvidenceMotifs: Set<GoldenMotifTag>.unmodifiable(fakeEvidenceMotifs),
+      futureRealDeviceProofMotifs: Set<GoldenMotifTag>.unmodifiable(
+        futureRealDeviceProofMotifs,
+      ),
+      metadataOnlySafeMotifs: Set<GoldenMotifTag>.unmodifiable(
+        metadataOnlySafeMotifs,
+      ),
+      motifsThatDoNotForceDeepByThemselves: Set<GoldenMotifTag>.unmodifiable(
+        motifsThatDoNotForceDeepByThemselves,
+      ),
+    );
+  }
+
+  GoldenMotifEvidenceProfile profileFor(GoldenMotifTag motif) {
+    return switch (motif) {
+      GoldenMotifTag.sacrifice ||
+      GoldenMotifTag.temporarySacrifice ||
+      GoldenMotifTag.exchangeSacrifice ||
+      GoldenMotifTag.pieceSacrifice => _sacrificeProfile,
+      GoldenMotifTag.materialCompensation => _materialCompensationProfile,
+      GoldenMotifTag.queenWin => _queenWinProfile,
+      GoldenMotifTag.rookWin ||
+      GoldenMotifTag.pieceWin ||
+      GoldenMotifTag.pawnBreakthrough => _materialWinProfile,
+      GoldenMotifTag.mateThreat => _mateThreatProfile,
+      GoldenMotifTag.forcedMate => _forcedMateProfile,
+      GoldenMotifTag.backRankWeakness ||
+      GoldenMotifTag.exposedKing ||
+      GoldenMotifTag.kingHunt ||
+      GoldenMotifTag.matingNet => _kingSafetyProfile,
+      GoldenMotifTag.forcingLine ||
+      GoldenMotifTag.checkSequence => _forcingProfile,
+      GoldenMotifTag.zwischenzug ||
+      GoldenMotifTag.fork ||
+      GoldenMotifTag.pin ||
+      GoldenMotifTag.skewer ||
+      GoldenMotifTag.discoveredAttack ||
+      GoldenMotifTag.deflection ||
+      GoldenMotifTag.decoy ||
+      GoldenMotifTag.overload ||
+      GoldenMotifTag.trappedPiece ||
+      GoldenMotifTag.clearance ||
+      GoldenMotifTag.interference ||
+      GoldenMotifTag.removeDefender ||
+      GoldenMotifTag.promotion => _tacticalProfile,
+      GoldenMotifTag.quietMove ||
+      GoldenMotifTag.prophylaxis ||
+      GoldenMotifTag.restriction ||
+      GoldenMotifTag.outpost ||
+      GoldenMotifTag.openFile ||
+      GoldenMotifTag.passedPawn ||
+      GoldenMotifTag.endgamePrecision => _positionalProfile,
+      GoldenMotifTag.quietPreparatoryMove => _quietPreparatoryProfile,
+      GoldenMotifTag.onlyMove => _onlyMoveProfile,
+      GoldenMotifTag.openingTheory => _openingTheoryProfile,
+      GoldenMotifTag.invalidSafety => _invalidSafetyProfile,
+      GoldenMotifTag.budgetPressure => _budgetPressureProfile,
+      GoldenMotifTag.evidenceIncomplete => _evidenceIncompleteProfile,
+      GoldenMotifTag.realDeviceProofNeeded => _realDeviceProofProfile,
+    };
+  }
+
+  bool requiresFakeEvidence(Iterable<GoldenMotifTag> motifs) =>
+      requirementsFor(motifs).requiresFakeEvidence;
+
+  bool requiresFutureRealDeviceProof(Iterable<GoldenMotifTag> motifs) =>
+      requirementsFor(motifs).requiresFutureRealDeviceProof;
+
+  bool metadataOnlySafe(Iterable<GoldenMotifTag> motifs) {
+    final requirement = requirementsFor(motifs);
+    return requirement.metadataOnlySafeMotifs.length == motifs.length;
+  }
+
+  bool shouldForceDeepByItself(GoldenMotifTag motif) =>
+      !profileFor(motif).doesNotForceDeepByItself;
+}
+
+const _materialReasons = <DeepCandidateReasonCode>{
+  DeepCandidateReasonCode.materialSwing,
+  DeepCandidateReasonCode.captureOrPromotion,
+};
+
+const _majorMaterialReasons = <DeepCandidateReasonCode>{
+  DeepCandidateReasonCode.materialSwing,
+  DeepCandidateReasonCode.majorEvalSwing,
+  DeepCandidateReasonCode.captureOrPromotion,
+};
+
+const _tacticalReasons = <DeepCandidateReasonCode>{
+  DeepCandidateReasonCode.tacticalSignal,
+  DeepCandidateReasonCode.givesCheck,
+  DeepCandidateReasonCode.captureOrPromotion,
+  DeepCandidateReasonCode.candidateEvalSpread,
+};
+
+const _forcingReasons = <DeepCandidateReasonCode>{
+  DeepCandidateReasonCode.tacticalSignal,
+  DeepCandidateReasonCode.givesCheck,
+  DeepCandidateReasonCode.candidateEvalSpread,
+  DeepCandidateReasonCode.mateScoreDetected,
+};
+
+const _mateReasons = <DeepCandidateReasonCode>{
+  DeepCandidateReasonCode.mateScoreDetected,
+  DeepCandidateReasonCode.tacticalSignal,
+  DeepCandidateReasonCode.givesCheck,
+};
+
+const _sacrificeProfile = GoldenMotifEvidenceProfile(
+  motifGroup: GoldenMotifGroup.materialAndSacrifice,
+  evidence: GoldenTacticalEvidenceExpectation(
+    requiresMaterialSwing: true,
+    requiresMaterialCompensation: true,
+    tacticalReasons: _tacticalReasons,
+    materialReasons: _materialReasons,
+  ),
+);
+
+const _materialCompensationProfile = GoldenMotifEvidenceProfile(
+  motifGroup: GoldenMotifGroup.materialAndSacrifice,
+  evidence: GoldenTacticalEvidenceExpectation(
+    requiresMaterialCompensation: true,
+    materialReasons: _materialReasons,
+  ),
+);
+
+const _queenWinProfile = GoldenMotifEvidenceProfile(
+  motifGroup: GoldenMotifGroup.materialAndSacrifice,
+  evidence: GoldenTacticalEvidenceExpectation(
+    requiresMaterialSwing: true,
+    requiresMultiPvEvidence: true,
+    tacticalReasons: _tacticalReasons,
+    materialReasons: _majorMaterialReasons,
+  ),
+);
+
+const _materialWinProfile = GoldenMotifEvidenceProfile(
+  motifGroup: GoldenMotifGroup.materialAndSacrifice,
+  evidence: GoldenTacticalEvidenceExpectation(
+    requiresMaterialSwing: true,
+    materialReasons: _materialReasons,
+  ),
+);
+
+const _mateThreatProfile = GoldenMotifEvidenceProfile(
+  motifGroup: GoldenMotifGroup.kingSafetyAndMate,
+  evidence: GoldenTacticalEvidenceExpectation(
+    requiresMateSignal: true,
+    requiresKingSafetySignal: true,
+    requiresForcingLineSignal: true,
+    kingSafetyReasons: _mateReasons,
+    forcingReasons: _forcingReasons,
+  ),
+  requiresFakeEvidence: true,
+);
+
+const _forcedMateProfile = GoldenMotifEvidenceProfile(
+  motifGroup: GoldenMotifGroup.kingSafetyAndMate,
+  evidence: GoldenTacticalEvidenceExpectation(
+    requiresMateSignal: true,
+    requiresPvNonEmpty: true,
+    requiresRealDeviceProof: true,
+    kingSafetyReasons: _mateReasons,
+    forcingReasons: _forcingReasons,
+  ),
+  requiresFakeEvidence: true,
+  requiresFutureRealDeviceProof: true,
+);
+
+const _kingSafetyProfile = GoldenMotifEvidenceProfile(
+  motifGroup: GoldenMotifGroup.kingSafetyAndMate,
+  evidence: GoldenTacticalEvidenceExpectation(
+    requiresKingSafetySignal: true,
+    kingSafetyReasons: _mateReasons,
+    forcingReasons: _forcingReasons,
+  ),
+);
+
+const _forcingProfile = GoldenMotifEvidenceProfile(
+  motifGroup: GoldenMotifGroup.forcingAndTactical,
+  evidence: GoldenTacticalEvidenceExpectation(
+    requiresForcingLineSignal: true,
+    forcingReasons: _forcingReasons,
+  ),
+);
+
+const _tacticalProfile = GoldenMotifEvidenceProfile(
+  motifGroup: GoldenMotifGroup.forcingAndTactical,
+  evidence: GoldenTacticalEvidenceExpectation(
+    tacticalReasons: _tacticalReasons,
+  ),
+);
+
+const _positionalProfile = GoldenMotifEvidenceProfile(
+  motifGroup: GoldenMotifGroup.positionalAndQuiet,
+  evidence: GoldenTacticalEvidenceExpectation(
+    declaredGroups: <GoldenMotifEvidenceGroup>{
+      GoldenMotifEvidenceGroup.positional,
+    },
+  ),
+  metadataOnlySafe: true,
+  doesNotForceDeepByItself: true,
+);
+
+const _quietPreparatoryProfile = GoldenMotifEvidenceProfile(
+  motifGroup: GoldenMotifGroup.positionalAndQuiet,
+  evidence: GoldenTacticalEvidenceExpectation(
+    requiresQuietMoveEvidence: true,
+    declaredGroups: <GoldenMotifEvidenceGroup>{
+      GoldenMotifEvidenceGroup.positional,
+      GoldenMotifEvidenceGroup.uncertainty,
+    },
+    uncertaintyReasons: <DeepCandidateReasonCode>{
+      DeepCandidateReasonCode.missingFastPv,
+    },
+  ),
+  doesNotForceDeepByItself: true,
+);
+
+const _onlyMoveProfile = GoldenMotifEvidenceProfile(
+  motifGroup: GoldenMotifGroup.safetyAndControl,
+  evidence: GoldenTacticalEvidenceExpectation(
+    requiresOnlyMoveSignal: true,
+    requiresSuppressionReason: true,
+    suppressionReasons: <DeepCandidateReasonCode>{
+      DeepCandidateReasonCode.forcedSuppressed,
+    },
+  ),
+  metadataOnlySafe: true,
+  doesNotForceDeepByItself: true,
+);
+
+const _openingTheoryProfile = GoldenMotifEvidenceProfile(
+  motifGroup: GoldenMotifGroup.safetyAndControl,
+  evidence: GoldenTacticalEvidenceExpectation(
+    requiresSuppressionReason: true,
+    suppressionReasons: <DeepCandidateReasonCode>{
+      DeepCandidateReasonCode.openingSuppressed,
+    },
+  ),
+  metadataOnlySafe: true,
+  doesNotForceDeepByItself: true,
+);
+
+const _invalidSafetyProfile = GoldenMotifEvidenceProfile(
+  motifGroup: GoldenMotifGroup.safetyAndControl,
+  evidence: GoldenTacticalEvidenceExpectation(
+    requiresSuppressionReason: true,
+    suppressionReasons: <DeepCandidateReasonCode>{
+      DeepCandidateReasonCode.invalidFenSuppressed,
+    },
+  ),
+  metadataOnlySafe: true,
+  doesNotForceDeepByItself: true,
+);
+
+const _budgetPressureProfile = GoldenMotifEvidenceProfile(
+  motifGroup: GoldenMotifGroup.safetyAndControl,
+  evidence: GoldenTacticalEvidenceExpectation(
+    requiresBudgetPressure: true,
+    requiresSuppressionReason: true,
+    suppressionReasons: <DeepCandidateReasonCode>{
+      DeepCandidateReasonCode.budgetSuppressed,
+    },
+  ),
+  doesNotForceDeepByItself: true,
+);
+
+const _evidenceIncompleteProfile = GoldenMotifEvidenceProfile(
+  motifGroup: GoldenMotifGroup.safetyAndControl,
+  evidence: GoldenTacticalEvidenceExpectation(
+    requiresQuietMoveEvidence: true,
+    declaredGroups: <GoldenMotifEvidenceGroup>{
+      GoldenMotifEvidenceGroup.uncertainty,
+    },
+    uncertaintyReasons: <DeepCandidateReasonCode>{
+      DeepCandidateReasonCode.missingFastPv,
+    },
+  ),
+  doesNotForceDeepByItself: true,
+);
+
+const _realDeviceProofProfile = GoldenMotifEvidenceProfile(
+  motifGroup: GoldenMotifGroup.safetyAndControl,
+  evidence: GoldenTacticalEvidenceExpectation(
+    requiresPvNonEmpty: true,
+    requiresRealDeviceProof: true,
+  ),
+  requiresFutureRealDeviceProof: true,
+  doesNotForceDeepByItself: true,
+);
+
 class GoldenEvidenceExpectation {
   const GoldenEvidenceExpectation({
     this.evalSwingMinCp,
@@ -134,6 +684,7 @@ class GoldenEvidenceExpectation {
     this.minMultiPvIfSelected,
     this.expectedReasonCodes = const <DeepCandidateReasonCode>{},
     this.expectedSuppressionReasons = const <DeepCandidateReasonCode>{},
+    this.tactical = const GoldenTacticalEvidenceExpectation(),
   }) : assert(evalSwingMinCp == null || evalSwingMinCp >= 0),
        assert(candidateSpreadMinCp == null || candidateSpreadMinCp >= 0),
        assert(materialSwingMinCp == null || materialSwingMinCp >= 0),
@@ -147,6 +698,7 @@ class GoldenEvidenceExpectation {
   final int? minMultiPvIfSelected;
   final Set<DeepCandidateReasonCode> expectedReasonCodes;
   final Set<DeepCandidateReasonCode> expectedSuppressionReasons;
+  final GoldenTacticalEvidenceExpectation tactical;
 }
 
 class GoldenExpectedBehavior {
@@ -563,7 +1115,12 @@ class GoldenAnalysisSuiteRunner {
     final suppressionCounts = plan == null
         ? const <DeepCandidateReasonCode, int>{}
         : _suppressionCounts(plan.suppressions);
-    final requiresReal = item.expected.evidence.pvShouldBeNonEmpty;
+    final requiresReal =
+        item.expected.evidence.pvShouldBeNonEmpty ||
+        item.expected.evidence.tactical.requiresRealDeviceProof ||
+        const GoldenMotifEvidencePolicy().requiresFutureRealDeviceProof(
+          item.motifTags,
+        );
 
     if (requiresReal && mode != GoldenAnalysisSuiteMode.metadataOnly) {
       warnings.add('PV evidence expectation requires future real-engine proof');
@@ -816,6 +1373,10 @@ class GoldenAnalysisCases {
           expectedSuppressionReasons: {
             DeepCandidateReasonCode.openingSuppressed,
           },
+          tactical: GoldenTacticalEvidenceExpectation(
+            requiresSuppressionReason: true,
+            suppressionReasons: {DeepCandidateReasonCode.openingSuppressed},
+          ),
         ),
         maxSelectedDeepRatio: 0,
       ),
@@ -842,6 +1403,10 @@ class GoldenAnalysisCases {
           expectedSuppressionReasons: {
             DeepCandidateReasonCode.invalidFenSuppressed,
           },
+          tactical: GoldenTacticalEvidenceExpectation(
+            requiresSuppressionReason: true,
+            suppressionReasons: {DeepCandidateReasonCode.invalidFenSuppressed},
+          ),
         ),
         maxSelectedDeepRatio: 0,
       ),
@@ -870,6 +1435,12 @@ class GoldenAnalysisCases {
           expectedSuppressionReasons: {
             DeepCandidateReasonCode.forcedSuppressed,
           },
+          tactical: GoldenTacticalEvidenceExpectation(
+            requiresOnlyMoveSignal: true,
+            requiresForcingLineSignal: true,
+            requiresSuppressionReason: true,
+            suppressionReasons: {DeepCandidateReasonCode.forcedSuppressed},
+          ),
         ),
         maxSelectedDeepRatio: 0,
       ),
@@ -890,7 +1461,11 @@ class GoldenAnalysisCases {
           candidateEvalSpreadCp: 260,
         ),
       ],
-      motifTags: [GoldenMotifTag.forcingLine, GoldenMotifTag.fork],
+      motifTags: [
+        GoldenMotifTag.forcingLine,
+        GoldenMotifTag.checkSequence,
+        GoldenMotifTag.fork,
+      ],
       expected: GoldenExpectedBehavior(
         behaviors: {
           GoldenExpectedBehaviorCode.shouldGenerateDeepCandidate,
@@ -908,6 +1483,22 @@ class GoldenAnalysisCases {
             DeepCandidateReasonCode.captureOrPromotion,
             DeepCandidateReasonCode.candidateEvalSpread,
           },
+          tactical: GoldenTacticalEvidenceExpectation(
+            requiresForcingLineSignal: true,
+            requiresCandidateSpread: true,
+            requiresMultiPvEvidence: true,
+            tacticalReasons: {
+              DeepCandidateReasonCode.tacticalSignal,
+              DeepCandidateReasonCode.givesCheck,
+              DeepCandidateReasonCode.captureOrPromotion,
+              DeepCandidateReasonCode.candidateEvalSpread,
+            },
+            forcingReasons: {
+              DeepCandidateReasonCode.tacticalSignal,
+              DeepCandidateReasonCode.givesCheck,
+              DeepCandidateReasonCode.candidateEvalSpread,
+            },
+          ),
         ),
         maxDeepCandidates: 1,
         maxDeepEngineCalls: 2,
@@ -931,6 +1522,7 @@ class GoldenAnalysisCases {
       ],
       motifTags: [
         GoldenMotifTag.sacrifice,
+        GoldenMotifTag.pieceSacrifice,
         GoldenMotifTag.materialCompensation,
         GoldenMotifTag.deflection,
       ],
@@ -946,6 +1538,15 @@ class GoldenAnalysisCases {
             DeepCandidateReasonCode.materialSwing,
             DeepCandidateReasonCode.captureOrPromotion,
           },
+          tactical: GoldenTacticalEvidenceExpectation(
+            requiresMaterialSwing: true,
+            requiresMaterialCompensation: true,
+            tacticalReasons: {DeepCandidateReasonCode.captureOrPromotion},
+            materialReasons: {
+              DeepCandidateReasonCode.materialSwing,
+              DeepCandidateReasonCode.captureOrPromotion,
+            },
+          ),
         ),
       ),
     ),
@@ -972,7 +1573,13 @@ class GoldenAnalysisCases {
           elapsedMilliseconds: 80,
         ),
       ],
-      motifTags: [GoldenMotifTag.mateThreat, GoldenMotifTag.forcingLine],
+      motifTags: [
+        GoldenMotifTag.mateThreat,
+        GoldenMotifTag.exposedKing,
+        GoldenMotifTag.matingNet,
+        GoldenMotifTag.forcingLine,
+        GoldenMotifTag.realDeviceProofNeeded,
+      ],
       expected: GoldenExpectedBehavior(
         behaviors: {
           GoldenExpectedBehaviorCode.shouldGenerateDeepCandidate,
@@ -988,6 +1595,21 @@ class GoldenAnalysisCases {
             DeepCandidateReasonCode.mateScoreDetected,
             DeepCandidateReasonCode.tacticalSignal,
           },
+          tactical: GoldenTacticalEvidenceExpectation(
+            requiresMateSignal: true,
+            requiresKingSafetySignal: true,
+            requiresForcingLineSignal: true,
+            requiresPvNonEmpty: true,
+            requiresRealDeviceProof: true,
+            kingSafetyReasons: {
+              DeepCandidateReasonCode.mateScoreDetected,
+              DeepCandidateReasonCode.tacticalSignal,
+            },
+            forcingReasons: {
+              DeepCandidateReasonCode.mateScoreDetected,
+              DeepCandidateReasonCode.tacticalSignal,
+            },
+          ),
         ),
       ),
     ),
@@ -1004,9 +1626,23 @@ class GoldenAnalysisCases {
           legalMoveCount: 24,
         ),
       ],
-      motifTags: [GoldenMotifTag.quietMove],
+      motifTags: [
+        GoldenMotifTag.quietMove,
+        GoldenMotifTag.quietPreparatoryMove,
+        GoldenMotifTag.evidenceIncomplete,
+      ],
       expected: GoldenExpectedBehavior(
         behaviors: {GoldenExpectedBehaviorCode.shouldNotEmitFinalLabel},
+        evidence: GoldenEvidenceExpectation(
+          tactical: GoldenTacticalEvidenceExpectation(
+            requiresQuietMoveEvidence: true,
+            declaredGroups: {
+              GoldenMotifEvidenceGroup.positional,
+              GoldenMotifEvidenceGroup.uncertainty,
+            },
+            uncertaintyReasons: {DeepCandidateReasonCode.missingFastPv},
+          ),
+        ),
         maxSelectedDeepRatio: 0,
       ),
     ),
@@ -1023,12 +1659,21 @@ class GoldenAnalysisCases {
           legalMoveCount: 10,
         ),
       ],
-      motifTags: [GoldenMotifTag.endgamePrecision],
+      motifTags: [
+        GoldenMotifTag.endgamePrecision,
+        GoldenMotifTag.passedPawn,
+        GoldenMotifTag.restriction,
+      ],
       expected: GoldenExpectedBehavior(
         behaviors: {
           GoldenExpectedBehaviorCode.shouldStayWithinBalancedBudget,
           GoldenExpectedBehaviorCode.shouldNotEmitFinalLabel,
         },
+        evidence: GoldenEvidenceExpectation(
+          tactical: GoldenTacticalEvidenceExpectation(
+            declaredGroups: {GoldenMotifEvidenceGroup.positional},
+          ),
+        ),
         maxSelectedDeepRatio: 0,
       ),
     ),
@@ -1076,6 +1721,11 @@ class GoldenAnalysisCases {
           expectedSuppressionReasons: {
             DeepCandidateReasonCode.budgetSuppressed,
           },
+          tactical: GoldenTacticalEvidenceExpectation(
+            requiresBudgetPressure: true,
+            requiresSuppressionReason: true,
+            suppressionReasons: {DeepCandidateReasonCode.budgetSuppressed},
+          ),
         ),
         maxDeepCandidates: 2,
         maxDeepEngineCalls: 4,
@@ -1120,6 +1770,16 @@ class GoldenAnalysisCases {
             DeepCandidateReasonCode.majorEvalSwing,
             DeepCandidateReasonCode.captureOrPromotion,
           },
+          tactical: GoldenTacticalEvidenceExpectation(
+            requiresMaterialSwing: true,
+            requiresMultiPvEvidence: true,
+            tacticalReasons: {DeepCandidateReasonCode.captureOrPromotion},
+            materialReasons: {
+              DeepCandidateReasonCode.materialSwing,
+              DeepCandidateReasonCode.majorEvalSwing,
+              DeepCandidateReasonCode.captureOrPromotion,
+            },
+          ),
         ),
       ),
     ),

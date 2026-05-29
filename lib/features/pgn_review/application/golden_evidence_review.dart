@@ -71,6 +71,11 @@ class GoldenEvidenceCaseReview {
     required this.missingReasonCodes,
     required this.expectedSuppressionsSatisfied,
     required this.expectedSuppressionsMissing,
+    required this.motifGroups,
+    required this.motifEvidenceGroups,
+    required this.satisfiedMotifEvidenceGroups,
+    required this.missingMotifEvidenceGroups,
+    required this.missingMotifEvidence,
     required this.budgetExpectationStatus,
     required this.realEngineEvidenceNeeded,
     required this.warnings,
@@ -88,6 +93,11 @@ class GoldenEvidenceCaseReview {
   final List<DeepCandidateReasonCode> missingReasonCodes;
   final List<DeepCandidateReasonCode> expectedSuppressionsSatisfied;
   final List<DeepCandidateReasonCode> expectedSuppressionsMissing;
+  final List<GoldenMotifGroup> motifGroups;
+  final List<GoldenMotifEvidenceGroup> motifEvidenceGroups;
+  final List<GoldenMotifEvidenceGroup> satisfiedMotifEvidenceGroups;
+  final List<GoldenMotifEvidenceGroup> missingMotifEvidenceGroups;
+  final List<String> missingMotifEvidence;
   final GoldenEvidenceBudgetStatus budgetExpectationStatus;
   final bool realEngineEvidenceNeeded;
   final List<String> warnings;
@@ -113,6 +123,9 @@ class GoldenEvidenceReviewResult {
     required this.blockedUnsafeClaims,
     required this.caseReviews,
     required this.motifCoverage,
+    required this.motifGroupCoverage,
+    required this.motifEvidenceGroupCoverage,
+    required this.casesMissingMotifEvidence,
     required this.categoryCoverage,
     required this.developerRecommendation,
     required this.realDeviceEvidenceCommand,
@@ -124,7 +137,8 @@ class GoldenEvidenceReviewResult {
        assert(needsRealDeviceEvidenceCount >= 0),
        assert(behaviorMismatches >= 0),
        assert(budgetMismatches >= 0),
-       assert(blockedUnsafeClaims >= 0);
+       assert(blockedUnsafeClaims >= 0),
+       assert(casesMissingMotifEvidence >= 0);
 
   final GoldenEvidenceReviewStatus status;
   final int totalCases;
@@ -138,6 +152,9 @@ class GoldenEvidenceReviewResult {
   final int blockedUnsafeClaims;
   final List<GoldenEvidenceCaseReview> caseReviews;
   final Map<GoldenMotifTag, int> motifCoverage;
+  final Map<GoldenMotifGroup, int> motifGroupCoverage;
+  final Map<GoldenMotifEvidenceGroup, int> motifEvidenceGroupCoverage;
+  final int casesMissingMotifEvidence;
   final Map<GoldenAnalysisCategory, int> categoryCoverage;
   final String developerRecommendation;
   final String realDeviceEvidenceCommand;
@@ -156,6 +173,7 @@ class GoldenEvidenceReviewResult {
       ..writeln('- behavior mismatches: $behaviorMismatches')
       ..writeln('- budget mismatches: $budgetMismatches')
       ..writeln('- blocked unsafe claims: $blockedUnsafeClaims')
+      ..writeln('- cases missing motif evidence: $casesMissingMotifEvidence')
       ..writeln()
       ..writeln('## Case Summary')
       ..writeln('| Case | Category | Status | Evidence Gaps | Next Action |')
@@ -164,6 +182,7 @@ class GoldenEvidenceReviewResult {
       final missing = [
         ...review.missingReasonCodes.map((reason) => reason.wire),
         ...review.expectedSuppressionsMissing.map((reason) => reason.wire),
+        ...review.missingMotifEvidence,
       ].join(',');
       buffer.writeln(
         '| ${review.caseId} | ${review.category.wire} | '
@@ -181,9 +200,37 @@ class GoldenEvidenceReviewResult {
 
     buffer
       ..writeln()
+      ..writeln('## Motif Group Coverage');
+    for (final entry in _sortedEnumCounts(motifGroupCoverage)) {
+      buffer.writeln('- ${entry.key.wire}: ${entry.value}');
+    }
+
+    buffer
+      ..writeln()
+      ..writeln('## Motif Evidence Group Coverage');
+    for (final entry in _sortedEnumCounts(motifEvidenceGroupCoverage)) {
+      buffer.writeln('- ${entry.key.wire}: ${entry.value}');
+    }
+
+    buffer
+      ..writeln()
       ..writeln('## Category Coverage');
     for (final entry in _sortedEnumCounts(categoryCoverage)) {
       buffer.writeln('- ${entry.key.wire}: ${entry.value}');
+    }
+
+    final missingMotif = caseReviews
+        .where((review) => review.missingMotifEvidence.isNotEmpty)
+        .toList(growable: false);
+    if (missingMotif.isNotEmpty) {
+      buffer
+        ..writeln()
+        ..writeln('## Motif Evidence Gaps');
+      for (final review in missingMotif) {
+        buffer.writeln(
+          '- ${review.caseId}: ${review.missingMotifEvidence.join(", ")}',
+        );
+      }
     }
 
     final realNeeded = caseReviews
@@ -234,9 +281,11 @@ class GoldenEvidenceReviewResult {
 class GoldenEvidenceReviewRunner {
   const GoldenEvidenceReviewRunner({
     this.suiteRunner = const GoldenAnalysisSuiteRunner(),
+    this.motifEvidencePolicy = const GoldenMotifEvidencePolicy(),
   });
 
   final GoldenAnalysisSuiteRunner suiteRunner;
+  final GoldenMotifEvidencePolicy motifEvidencePolicy;
 
   GoldenEvidenceReviewResult review(GoldenEvidenceReviewRequest request) {
     final suiteResult = suiteRunner.run(
@@ -256,6 +305,7 @@ class GoldenEvidenceReviewRunner {
           resultById[item.id],
           mode: request.mode,
           includeFutureRealEngineNeeds: request.includeFutureRealEngineNeeds,
+          motifEvidencePolicy: motifEvidencePolicy,
         ),
     ];
     final status = _aggregateStatus(
@@ -308,6 +358,17 @@ class GoldenEvidenceReviewRunner {
           .length,
       caseReviews: List<GoldenEvidenceCaseReview>.unmodifiable(reviews),
       motifCoverage: _motifCoverage(request.cases),
+      motifGroupCoverage: _motifGroupCoverage(
+        request.cases,
+        motifEvidencePolicy,
+      ),
+      motifEvidenceGroupCoverage: _motifEvidenceGroupCoverage(
+        request.cases,
+        motifEvidencePolicy,
+      ),
+      casesMissingMotifEvidence: reviews
+          .where((review) => review.missingMotifEvidence.isNotEmpty)
+          .length,
       categoryCoverage: _categoryCoverage(request.cases),
       developerRecommendation: _recommendationFor(status),
       realDeviceEvidenceCommand: _realDeviceEvidenceCommand,
@@ -319,9 +380,16 @@ class GoldenEvidenceReviewRunner {
     GoldenAnalysisCaseResult? suiteCase, {
     required GoldenEvidenceReviewMode mode,
     required bool includeFutureRealEngineNeeds,
+    required GoldenMotifEvidencePolicy motifEvidencePolicy,
   }) {
     final warnings = <String>[...?suiteCase?.warnings];
     final failures = <String>[...?suiteCase?.failures];
+    final motifRequirement = motifEvidencePolicy.requirementsFor(
+      item.motifTags,
+    );
+    final motifEvidence = motifRequirement.evidence.merge(
+      item.expected.evidence.tactical,
+    );
     final expectedReasons = item.expected.evidence.expectedReasonCodes;
     final satisfiedReasons = _sortedReasons(
       expectedReasons
@@ -356,15 +424,39 @@ class GoldenEvidenceReviewRunner {
           .toList(),
     );
     final budgetStatus = _budgetStatusFor(failures);
+    final missingMotifEvidence = _missingMotifEvidence(
+      item: item,
+      suiteCase: suiteCase,
+      mode: mode,
+      expectation: motifEvidence,
+    );
+    final missingMotifGroups = _motifEvidenceGroupsFromGaps(
+      missingMotifEvidence,
+    );
+    final motifEvidenceGroups = _sortedEvidenceGroups(
+      motifEvidence.evidenceGroups,
+    );
     final needsReal =
         mode != GoldenEvidenceReviewMode.metadataOnly &&
         includeFutureRealEngineNeeds &&
         (item.expected.evidence.pvShouldBeNonEmpty ||
+            item.expected.evidence.tactical.requiresRealDeviceProof ||
+            motifRequirement.requiresFutureRealDeviceProof ||
             mode == GoldenEvidenceReviewMode.realDeviceEvidenceReferenceOnly &&
                 _needsRealDeviceReference(item));
+    final pendingRealGroups = needsReal
+        ? const {GoldenMotifEvidenceGroup.realDeviceProof}
+        : const <GoldenMotifEvidenceGroup>{};
+    final satisfiedMotifGroups = _sortedEvidenceGroups(
+      motifEvidence.evidenceGroups
+          .difference(missingMotifGroups.toSet())
+          .difference(pendingRealGroups),
+    );
 
     if (mode == GoldenEvidenceReviewMode.planOnly &&
-        _needsFakeEvidence(item, missingReasons)) {
+        (_needsFakeEvidence(item, missingReasons) ||
+            motifRequirement.requiresFakeEvidence &&
+                item.fakeEvidence.isEmpty)) {
       warnings.add('fake evidence needed for full reason-code review');
     }
     if (needsReal) {
@@ -377,6 +469,7 @@ class GoldenEvidenceReviewRunner {
       mode: mode,
       missingReasons: missingReasons,
       missingSuppressions: missingSuppressions,
+      missingMotifEvidence: missingMotifEvidence,
       budgetStatus: budgetStatus,
       needsReal: needsReal,
       warnings: warnings,
@@ -394,6 +487,11 @@ class GoldenEvidenceReviewRunner {
       missingReasonCodes: missingReasons,
       expectedSuppressionsSatisfied: satisfiedSuppressions,
       expectedSuppressionsMissing: missingSuppressions,
+      motifGroups: _sortedMotifGroups(motifRequirement.motifGroups),
+      motifEvidenceGroups: motifEvidenceGroups,
+      satisfiedMotifEvidenceGroups: satisfiedMotifGroups,
+      missingMotifEvidenceGroups: missingMotifGroups,
+      missingMotifEvidence: List<String>.unmodifiable(missingMotifEvidence),
       budgetExpectationStatus: budgetStatus,
       realEngineEvidenceNeeded: needsReal,
       warnings: List<String>.unmodifiable(warnings),
@@ -420,6 +518,7 @@ GoldenEvidenceReviewStatus _caseStatusFor({
   required GoldenEvidenceReviewMode mode,
   required List<DeepCandidateReasonCode> missingReasons,
   required List<DeepCandidateReasonCode> missingSuppressions,
+  required List<String> missingMotifEvidence,
   required GoldenEvidenceBudgetStatus budgetStatus,
   required bool needsReal,
   required List<String> warnings,
@@ -446,6 +545,9 @@ GoldenEvidenceReviewStatus _caseStatusFor({
   }
   if (missingSuppressions.isNotEmpty) {
     return GoldenEvidenceReviewStatus.behaviorMismatch;
+  }
+  if (missingMotifEvidence.isNotEmpty) {
+    return GoldenEvidenceReviewStatus.incompleteEvidence;
   }
   if (failures.isNotEmpty) {
     return GoldenEvidenceReviewStatus.behaviorMismatch;
@@ -536,11 +638,162 @@ bool _needsFakeEvidence(
 bool _needsRealDeviceReference(GoldenAnalysisCase item) {
   final evidence = item.expected.evidence;
   return evidence.pvShouldBeNonEmpty ||
+      evidence.tactical.requiresRealDeviceProof ||
+      const GoldenMotifEvidencePolicy().requiresFutureRealDeviceProof(
+        item.motifTags,
+      ) ||
       evidence.minMultiPvIfSelected != null ||
       item.expected.expects(
         GoldenExpectedBehaviorCode.shouldUseMultiPvAtLeast2,
       );
 }
+
+List<String> _missingMotifEvidence({
+  required GoldenAnalysisCase item,
+  required GoldenAnalysisCaseResult? suiteCase,
+  required GoldenEvidenceReviewMode mode,
+  required GoldenTacticalEvidenceExpectation expectation,
+}) {
+  if (mode == GoldenEvidenceReviewMode.metadataOnly || suiteCase == null) {
+    return const <String>[];
+  }
+
+  final reasons = suiteCase.reasonCounts.keys.toSet();
+  final suppressions = suiteCase.suppressionCounts.keys.toSet();
+  final missing = <String>{};
+
+  bool hasReason(Iterable<DeepCandidateReasonCode> values) {
+    return values.any(reasons.contains);
+  }
+
+  bool hasSuppression(Iterable<DeepCandidateReasonCode> values) {
+    return values.any(suppressions.contains);
+  }
+
+  bool hasReasonOrSuppression(Iterable<DeepCandidateReasonCode> values) {
+    return hasReason(values) || hasSuppression(values);
+  }
+
+  if (expectation.requiresMaterialSwing &&
+      !hasReason(const {
+        DeepCandidateReasonCode.materialSwing,
+        DeepCandidateReasonCode.majorEvalSwing,
+      })) {
+    missing.add('material:materialSwing');
+  }
+  if (expectation.requiresMaterialCompensation &&
+      !hasReason(
+        expectation.materialReasons.isEmpty
+            ? _materialFallbackReasons
+            : expectation.materialReasons,
+      )) {
+    missing.add('material:materialCompensation');
+  }
+  if (expectation.materialReasons.isNotEmpty &&
+      !hasReason(expectation.materialReasons)) {
+    missing.add('material:materialReasons');
+  }
+  if (expectation.tacticalReasons.isNotEmpty &&
+      !hasReason(expectation.tacticalReasons)) {
+    missing.add('tactical:tacticalReasons');
+  }
+  if (expectation.requiresMateSignal &&
+      !hasReason(
+        expectation.kingSafetyReasons.isEmpty
+            ? _mateFallbackReasons
+            : expectation.kingSafetyReasons,
+      )) {
+    missing.add('kingSafety:mateSignal');
+  }
+  if (expectation.requiresKingSafetySignal &&
+      !hasReason(
+        expectation.kingSafetyReasons.isEmpty
+            ? _mateFallbackReasons
+            : expectation.kingSafetyReasons,
+      )) {
+    missing.add('kingSafety:kingSafetySignal');
+  }
+  if (expectation.kingSafetyReasons.isNotEmpty &&
+      !hasReason(expectation.kingSafetyReasons)) {
+    missing.add('kingSafety:kingSafetyReasons');
+  }
+  if (expectation.requiresForcingLineSignal &&
+      !hasReasonOrSuppression({
+        ..._forcingFallbackReasons,
+        DeepCandidateReasonCode.forcedSuppressed,
+        ...expectation.forcingReasons,
+      })) {
+    missing.add('forcing:forcingLineSignal');
+  }
+  if (expectation.forcingReasons.isNotEmpty &&
+      !hasReasonOrSuppression({
+        ...expectation.forcingReasons,
+        DeepCandidateReasonCode.forcedSuppressed,
+      })) {
+    missing.add('forcing:forcingReasons');
+  }
+  if (expectation.requiresOnlyMoveSignal &&
+      !hasSuppression(const {DeepCandidateReasonCode.forcedSuppressed})) {
+    missing.add('suppression:onlyMoveSignal');
+  }
+  if (expectation.requiresQuietMoveEvidence &&
+      !hasReason(expectation.uncertaintyReasons) &&
+      item.fakeEvidence.isEmpty) {
+    missing.add('uncertainty:quietMoveEvidence');
+  }
+  if (expectation.requiresCandidateSpread &&
+      !hasReason(const {DeepCandidateReasonCode.candidateEvalSpread})) {
+    missing.add('forcing:candidateSpread');
+  }
+  if (expectation.requiresMultiPvEvidence &&
+      item.expected.evidence.minMultiPvIfSelected == null &&
+      !item.expected.expects(
+        GoldenExpectedBehaviorCode.shouldUseMultiPvAtLeast2,
+      )) {
+    missing.add('tactical:multiPvEvidence');
+  }
+  if (expectation.requiresBudgetPressure &&
+      !hasSuppression(const {DeepCandidateReasonCode.budgetSuppressed})) {
+    missing.add('budget:budgetPressure');
+  }
+  final expectedSuppressions = expectation.suppressionReasons.isEmpty
+      ? item.expected.evidence.expectedSuppressionReasons
+      : expectation.suppressionReasons;
+  if (expectation.requiresSuppressionReason &&
+      !hasSuppression(expectedSuppressions)) {
+    missing.add('suppression:suppressionReason');
+  }
+  if (expectation.suppressionReasons.isNotEmpty &&
+      !hasSuppression(expectation.suppressionReasons)) {
+    missing.add('suppression:suppressionReasons');
+  }
+  if (expectation.uncertaintyReasons.isNotEmpty &&
+      item.motifTags.contains(GoldenMotifTag.evidenceIncomplete) &&
+      !hasReason(expectation.uncertaintyReasons) &&
+      item.fakeEvidence.isEmpty) {
+    missing.add('uncertainty:evidenceIncomplete');
+  }
+
+  return missing.toList()..sort();
+}
+
+const _materialFallbackReasons = <DeepCandidateReasonCode>{
+  DeepCandidateReasonCode.materialSwing,
+  DeepCandidateReasonCode.captureOrPromotion,
+};
+
+const _mateFallbackReasons = <DeepCandidateReasonCode>{
+  DeepCandidateReasonCode.mateScoreDetected,
+  DeepCandidateReasonCode.tacticalSignal,
+  DeepCandidateReasonCode.givesCheck,
+};
+
+const _forcingFallbackReasons = <DeepCandidateReasonCode>{
+  DeepCandidateReasonCode.tacticalSignal,
+  DeepCandidateReasonCode.givesCheck,
+  DeepCandidateReasonCode.candidateEvalSpread,
+  DeepCandidateReasonCode.mateScoreDetected,
+};
 
 List<String> _evidenceExpectationLabels(GoldenExpectedBehavior expected) {
   final labels = <String>[];
@@ -558,6 +811,45 @@ List<String> _evidenceExpectationLabels(GoldenExpectedBehavior expected) {
   if (evidence.pvShouldBeNonEmpty) labels.add('pvNonEmptyFutureProof');
   if (evidence.minMultiPvIfSelected != null) {
     labels.add('minMultiPv=${evidence.minMultiPvIfSelected}');
+  }
+  labels.addAll(
+    evidence.tactical.evidenceGroups.map(
+      (group) => 'motifEvidenceGroup=${group.wire}',
+    ),
+  );
+  if (evidence.tactical.requiresMaterialSwing) {
+    labels.add('requiresMaterialSwing');
+  }
+  if (evidence.tactical.requiresMaterialCompensation) {
+    labels.add('requiresMaterialCompensation');
+  }
+  if (evidence.tactical.requiresMateSignal) labels.add('requiresMateSignal');
+  if (evidence.tactical.requiresForcingLineSignal) {
+    labels.add('requiresForcingLineSignal');
+  }
+  if (evidence.tactical.requiresKingSafetySignal) {
+    labels.add('requiresKingSafetySignal');
+  }
+  if (evidence.tactical.requiresOnlyMoveSignal) {
+    labels.add('requiresOnlyMoveSignal');
+  }
+  if (evidence.tactical.requiresQuietMoveEvidence) {
+    labels.add('requiresQuietMoveEvidence');
+  }
+  if (evidence.tactical.requiresCandidateSpread) {
+    labels.add('requiresCandidateSpread');
+  }
+  if (evidence.tactical.requiresMultiPvEvidence) {
+    labels.add('requiresMultiPvEvidence');
+  }
+  if (evidence.tactical.requiresBudgetPressure) {
+    labels.add('requiresBudgetPressure');
+  }
+  if (evidence.tactical.requiresSuppressionReason) {
+    labels.add('requiresSuppressionReason');
+  }
+  if (evidence.tactical.requiresRealDeviceProof) {
+    labels.add('requiresRealDeviceProof');
   }
   labels.addAll(evidence.expectedReasonCodes.map((reason) => reason.wire));
   labels.addAll(
@@ -577,6 +869,37 @@ Map<GoldenMotifTag, int> _motifCoverage(List<GoldenAnalysisCase> cases) {
   return Map<GoldenMotifTag, int>.unmodifiable(counts);
 }
 
+Map<GoldenMotifGroup, int> _motifGroupCoverage(
+  List<GoldenAnalysisCase> cases,
+  GoldenMotifEvidencePolicy policy,
+) {
+  final counts = <GoldenMotifGroup, int>{};
+  for (final item in cases) {
+    final groups = policy.requirementsFor(item.motifTags).motifGroups;
+    for (final group in groups) {
+      counts[group] = (counts[group] ?? 0) + 1;
+    }
+  }
+  return Map<GoldenMotifGroup, int>.unmodifiable(counts);
+}
+
+Map<GoldenMotifEvidenceGroup, int> _motifEvidenceGroupCoverage(
+  List<GoldenAnalysisCase> cases,
+  GoldenMotifEvidencePolicy policy,
+) {
+  final counts = <GoldenMotifEvidenceGroup, int>{};
+  for (final item in cases) {
+    final requirement = policy.requirementsFor(item.motifTags);
+    final evidence = requirement.evidence.merge(
+      item.expected.evidence.tactical,
+    );
+    for (final group in evidence.evidenceGroups) {
+      counts[group] = (counts[group] ?? 0) + 1;
+    }
+  }
+  return Map<GoldenMotifEvidenceGroup, int>.unmodifiable(counts);
+}
+
 Map<GoldenAnalysisCategory, int> _categoryCoverage(
   List<GoldenAnalysisCase> cases,
 ) {
@@ -591,6 +914,32 @@ List<GoldenExpectedBehaviorCode> _sortedBehaviors(
   Set<GoldenExpectedBehaviorCode> values,
 ) {
   return values.toList()..sort((a, b) => a.wire.compareTo(b.wire));
+}
+
+List<GoldenMotifGroup> _sortedMotifGroups(Iterable<GoldenMotifGroup> values) {
+  return values.toList()..sort((a, b) => a.wire.compareTo(b.wire));
+}
+
+List<GoldenMotifEvidenceGroup> _sortedEvidenceGroups(
+  Iterable<GoldenMotifEvidenceGroup> values,
+) {
+  return values.toList()..sort((a, b) => a.wire.compareTo(b.wire));
+}
+
+List<GoldenMotifEvidenceGroup> _motifEvidenceGroupsFromGaps(
+  Iterable<String> gaps,
+) {
+  final groups = <GoldenMotifEvidenceGroup>{};
+  for (final gap in gaps) {
+    final prefix = gap.split(':').first;
+    for (final group in GoldenMotifEvidenceGroup.values) {
+      if (group.wire == prefix) {
+        groups.add(group);
+        break;
+      }
+    }
+  }
+  return _sortedEvidenceGroups(groups);
 }
 
 List<DeepCandidateReasonCode> _sortedReasons(

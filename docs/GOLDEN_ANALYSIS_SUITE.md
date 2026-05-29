@@ -33,28 +33,15 @@ The suite intentionally prefers compact handcrafted FENs and short test-safe pos
 
 Golden motif tags are taxonomy only. They do not produce user-facing labels.
 
-Current motifs include:
+Phase 30S expands the internal taxonomy into motif groups:
 
-- sacrifice;
-- material compensation;
-- queen win;
-- mate threat;
-- forcing line;
-- only move;
-- quiet move;
-- zwischenzug;
-- fork;
-- pin;
-- skewer;
-- discovered attack;
-- deflection;
-- decoy;
-- overload;
-- promotion;
-- endgame precision;
-- opening theory;
-- invalid safety;
-- budget pressure.
+- material and sacrifice: `sacrifice`, `temporarySacrifice`, `exchangeSacrifice`, `pieceSacrifice`, `materialCompensation`, `queenWin`, `rookWin`, `pieceWin`, and `pawnBreakthrough`;
+- king safety and mate: `mateThreat`, `forcedMate`, `backRankWeakness`, `exposedKing`, `kingHunt`, and `matingNet`;
+- forcing and tactical: `forcingLine`, `checkSequence`, `zwischenzug`, `fork`, `pin`, `skewer`, `discoveredAttack`, `deflection`, `decoy`, `overload`, `trappedPiece`, `clearance`, `interference`, `removeDefender`, and existing promotion tactics;
+- positional and quiet: `quietMove`, `quietPreparatoryMove`, `prophylaxis`, `restriction`, `outpost`, `openFile`, `passedPawn`, and `endgamePrecision`;
+- safety and control: `onlyMove`, `openingTheory`, `invalidSafety`, `budgetPressure`, `evidenceIncomplete`, and `realDeviceProofNeeded`.
+
+These tags are internal evidence taxonomy. They are not product labels and must not be shown as final move quality.
 
 ## Expected Behavior Model
 
@@ -87,6 +74,30 @@ Supported evidence expectations include:
 - minimum MultiPV when selected;
 - expected reason codes such as tactical signal, material swing, mate score detected, candidate eval spread, gives check, capture or promotion, and major eval swing;
 - expected suppression reasons such as opening suppressed, forced suppressed, invalid FEN suppressed, or budget suppressed.
+
+Phase 30S adds broad motif evidence expectations for future-proofing:
+
+- boolean requirements such as material swing, material compensation, mate signal, forcing-line signal, king-safety signal, only-move signal, quiet-move evidence, candidate spread, MultiPV evidence, non-empty PV proof, budget pressure, suppression reason, and real-device proof;
+- structured reason groups: tactical, material, king safety, forcing, positional, suppression, and uncertainty;
+- declared evidence groups for cases that should be visible in coverage even when pure tests intentionally avoid engine proof.
+
+Exact centipawn assertions remain optional and should not be the default.
+
+## Motif-To-Evidence Policy
+
+`GoldenMotifEvidencePolicy` maps motif tags to expected evidence groups without running an engine.
+
+Examples:
+
+- sacrifice motifs require material, tactical, and compensation evidence;
+- mate-threat motifs require mate, king-safety, and forcing evidence;
+- quiet preparatory moves do not force deep certainty without supporting evidence;
+- opening theory expects suppression or skip visibility, not deep work;
+- invalid safety expects rejection before engine work;
+- budget pressure expects budget-suppression visibility;
+- real-device-proof motifs mark future opt-in proof needs.
+
+The review runner uses this policy to mark missing motif-required evidence as `incompleteEvidence`. It does not fake evidence. Hard contradictions, unsafe claims, budget mismatches, and behavior mismatches keep their existing statuses.
 
 ## Runner Modes
 
@@ -153,8 +164,8 @@ Supported review modes:
 
 Supported formats:
 
-- `--format=markdown`: default; prints summary counts, coverage, per-case table, real-device-needed cases, and next recommended action.
-- `--format=json`: prints the same report data in stable structured form.
+- `--format=markdown`: default; prints summary counts, category coverage, motif coverage, motif group coverage, motif evidence group coverage, per-case table, evidence gaps, real-device-needed cases, and next recommended action.
+- `--format=json`: prints the same report data in stable structured form, including motif evidence group coverage and cases with motif evidence gaps.
 
 Strict flags:
 
@@ -177,6 +188,8 @@ flutter test integration_test/local_review_pgn_fixture_device_smoke_test.dart -d
 ```
 
 The report intentionally excludes raw UCI logs, long PV dumps, final move labels, official accuracy, ACPL, backend URLs, and secrets. It is not classifier work. Golden cases remain regression inputs and evidence expectations, not product claims.
+
+Phase 30S makes evidence gaps more visible, especially quiet preparatory uncertainty and real-device proof needs. This prepares future classifier work by requiring structured chess evidence first; it does not implement classifier output.
 
 ## Initial V1 Cases
 

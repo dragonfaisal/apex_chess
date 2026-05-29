@@ -623,6 +623,14 @@ The command supports metadata-only, plan-only, fake-evidence, and real-device-re
 
 The report makes protected, incomplete, real-device-needed, mismatched, budget-mismatched, and unsafe golden cases visible without product UI. Product labels remain blocked: Phase 30R still does not add final move labels, Brilliant/Great/Miss-style labels, official accuracy, ACPL, persistence, backend work, or product review replacement.
 
-## Phase 30S Recommendation
+## Phase 30S Tactical Motif Taxonomy And Evidence Model
 
-Phase 30S should use the report output to tighten weak golden evidence rows and decide which cases deserve owner-run Android proof next. Keep this as evidence hardening only; product labels and official metrics should remain blocked until golden evidence coverage is stronger.
+Phase 30S expands the Golden Analysis Suite with an internal tactical motif taxonomy and a pure `GoldenMotifEvidencePolicy`.
+
+The policy maps motifs to broad evidence groups: material, tactical, king safety, forcing, positional, suppression, uncertainty, budget, and real-device proof. Existing golden cases now carry richer motif metadata and broad evidence expectations, so sacrifice rows require compensation evidence, mate-threat rows require king-safety or mate/forcing evidence, quiet preparatory rows remain visibly incomplete without stronger proof, opening and forced rows expect suppression, invalid rows expect rejection, and budget rows expect budget-suppression visibility.
+
+The Golden Evidence Review report now includes motif group coverage, motif evidence group coverage, cases with motif evidence gaps, and real-device-proof cases in markdown and JSON. This remains developer-only evidence hardening. Phase 30S does not add final move labels, Brilliant/Great/Miss-style labels, official accuracy, ACPL, UI activation, backend calls, persistence, cache/database writes, or product review replacement.
+
+## Phase 30T Recommendation
+
+Phase 30T should use the expanded evidence report to decide the smallest next set of owner-run Android proofs or new handcrafted hard cases. Classifier work remains blocked until the evidence rows are stronger and the real-device proof queue is intentionally reviewed.

@@ -7,7 +7,6 @@ import 'dart:io';
 import 'package:apex_chess/features/pgn_review/application/golden_analysis_suite.dart';
 import 'package:apex_chess/features/pgn_review/application/golden_evidence_review.dart';
 import 'package:apex_chess/features/pgn_review/application/golden_evidence_review_report.dart';
-import 'package:apex_chess/features/pgn_review/application/local_smart_analysis_scheduler.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../../tool/golden_evidence_review_report.dart';
@@ -89,6 +88,9 @@ void main() {
       expect(decoded['mode'], GoldenEvidenceReviewMode.fakeEvidence.wire);
       expect(decoded['summary'], isA<Map<String, Object?>>());
       expect(decoded['caseSummaries'], isA<List<Object?>>());
+      expect(decoded['motifGroupCoverage'], isA<List<Object?>>());
+      expect(decoded['motifEvidenceGroupCoverage'], isA<List<Object?>>());
+      expect(decoded['casesMissingMotifEvidence'], isA<List<Object?>>());
     });
 
     test('Markdown format includes summary and per-case table', () {
@@ -97,6 +99,8 @@ void main() {
       expect(result.exitCode, goldenEvidenceReviewReportExitSuccess);
       expect(result.stdoutText, contains('# Golden Evidence Review Report'));
       expect(result.stdoutText, contains('## Summary'));
+      expect(result.stdoutText, contains('## Motif Evidence Group Coverage'));
+      expect(result.stdoutText, contains('## Motif Evidence Gaps'));
       expect(result.stdoutText, contains('## Per-Case Summary'));
       expect(
         result.stdoutText,
@@ -127,13 +131,10 @@ void main() {
     });
 
     test('--fail-on-incomplete returns nonzero with incomplete cases', () {
-      final result = _run(
-        args: const ['--fail-on-incomplete'],
-        cases: [_incompleteCase()],
-      );
+      final result = _run(args: const ['--fail-on-incomplete']);
 
       expect(result.exitCode, goldenEvidenceReviewReportExitIncomplete);
-      expect(result.review!.incomplete, 1);
+      expect(result.review!.incomplete, greaterThan(0));
     });
 
     test('--fail-on-real-device-needed returns nonzero when needed', () {
@@ -240,14 +241,6 @@ GoldenEvidenceReviewReportCommandResult _run({
   return runGoldenEvidenceReviewReportCommand(args: args, cases: cases);
 }
 
-GoldenAnalysisCase _incompleteCase() {
-  return _caseById('simple-tactical-capture-check').copyWith(
-    id: 'weak-tactical-evidence',
-    inputs: const [LocalAnalysisPositionInput(fen: _fen)],
-    fakeEvidence: const [],
-  );
-}
-
 GoldenAnalysisCase _unsafeCase() {
   return _caseById('quiet-opening-skip').copyWith(
     id: 'unsafe-license-case',
@@ -269,6 +262,3 @@ String _imports(String source) {
       .where((line) => line.trimLeft().startsWith('import '))
       .join('\n');
 }
-
-const _fen =
-    'rn1qkbnr/ppp2ppp/3b4/3pp3/4P3/2NP1N2/PPP2PPP/R1BQKB1R w KQkq - 2 5';

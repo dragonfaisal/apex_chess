@@ -180,9 +180,17 @@ void main() {
     test('quiet preparatory case does not fake certainty', () {
       final review = _reviewSingle('quiet-preparatory-uncertain');
 
-      expect(review.status, GoldenEvidenceReviewStatus.passed);
+      expect(review.status, GoldenEvidenceReviewStatus.incompleteEvidence);
       expect(review.satisfiedReasonCodes, isEmpty);
       expect(review.missingReasonCodes, isEmpty);
+      expect(
+        review.missingMotifEvidence,
+        contains('uncertainty:quietMoveEvidence'),
+      );
+      expect(
+        review.missingMotifEvidenceGroups,
+        contains(GoldenMotifEvidenceGroup.uncertainty),
+      );
     });
 
     test('endgame case remains conservative without evidence', () {
@@ -191,6 +199,24 @@ void main() {
       expect(review.status, GoldenEvidenceReviewStatus.passed);
       expect(review.satisfiedReasonCodes, isEmpty);
       expect(review.missingReasonCodes, isEmpty);
+      expect(
+        review.motifEvidenceGroups,
+        contains(GoldenMotifEvidenceGroup.positional),
+      );
+    });
+
+    test('missing motif evidence becomes incomplete evidence', () {
+      final incomplete = _caseById('quiet-preparatory-uncertain');
+
+      final result = const GoldenEvidenceReviewRunner().review(
+        GoldenEvidenceReviewRequest(cases: [incomplete]),
+      );
+
+      expect(
+        result.caseReviews.single.status,
+        GoldenEvidenceReviewStatus.incompleteEvidence,
+      );
+      expect(result.casesMissingMotifEvidence, 1);
     });
 
     test('real-device reference mode marks cases needing future proof', () {
@@ -205,6 +231,10 @@ void main() {
       expect(result.status, GoldenEvidenceReviewStatus.needsRealEngineEvidence);
       expect(result.needsRealDeviceEvidenceCount, 1);
       expect(result.realDeviceEvidenceCommand, contains('flutter test'));
+      expect(
+        result.caseReviews.single.motifs,
+        contains(GoldenMotifTag.realDeviceProofNeeded),
+      );
     });
   });
 
@@ -216,6 +246,11 @@ void main() {
 
       expect(result.renderMarkdownReport(), result.renderMarkdownReport());
       expect(result.renderMarkdownReport(), contains('Motif Coverage'));
+      expect(
+        result.renderMarkdownReport(),
+        contains('Motif Evidence Group Coverage'),
+      );
+      expect(result.renderMarkdownReport(), contains('Motif Evidence Gaps'));
       expect(result.renderMarkdownReport(), contains('Category Coverage'));
     });
 

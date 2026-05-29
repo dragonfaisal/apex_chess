@@ -41,6 +41,9 @@ String renderGoldenEvidenceReviewReportMarkdown(
     ..writeln('- budget mismatches: ${result.budgetMismatches}')
     ..writeln('- blocked unsafe claims: ${result.blockedUnsafeClaims}')
     ..writeln('- failed count: ${result.failed}')
+    ..writeln(
+      '- cases missing motif evidence: ${result.casesMissingMotifEvidence}',
+    )
     ..writeln()
     ..writeln('## Category Coverage');
 
@@ -52,6 +55,20 @@ String renderGoldenEvidenceReviewReportMarkdown(
     ..writeln()
     ..writeln('## Motif Coverage');
   for (final entry in _sortedEnumCounts(result.motifCoverage)) {
+    buffer.writeln('- ${entry.key.wire}: ${entry.value}');
+  }
+
+  buffer
+    ..writeln()
+    ..writeln('## Motif Group Coverage');
+  for (final entry in _sortedEnumCounts(result.motifGroupCoverage)) {
+    buffer.writeln('- ${entry.key.wire}: ${entry.value}');
+  }
+
+  buffer
+    ..writeln()
+    ..writeln('## Motif Evidence Group Coverage');
+  for (final entry in _sortedEnumCounts(result.motifEvidenceGroupCoverage)) {
     buffer.writeln('- ${entry.key.wire}: ${entry.value}');
   }
 
@@ -125,6 +142,20 @@ String renderGoldenEvidenceReviewReportMarkdown(
     }
   }
 
+  final missingMotif = result.caseReviews
+      .where((review) => review.missingMotifEvidence.isNotEmpty)
+      .toList(growable: false);
+  if (missingMotif.isNotEmpty) {
+    buffer
+      ..writeln()
+      ..writeln('## Motif Evidence Gaps');
+    for (final review in missingMotif) {
+      buffer.writeln(
+        '- ${review.caseId}: ${review.missingMotifEvidence.join(", ")}',
+      );
+    }
+  }
+
   buffer
     ..writeln()
     ..writeln('## Next Recommended Action')
@@ -172,6 +203,7 @@ Map<String, Object?> goldenEvidenceReviewReportToJson(
       'budgetMismatches': result.budgetMismatches,
       'blockedUnsafeClaims': result.blockedUnsafeClaims,
       'failedCount': result.failed,
+      'casesMissingMotifEvidence': result.casesMissingMotifEvidence,
     },
     'categoryCoverage': [
       for (final entry in _sortedEnumCounts(result.categoryCoverage))
@@ -180,6 +212,26 @@ Map<String, Object?> goldenEvidenceReviewReportToJson(
     'motifCoverage': [
       for (final entry in _sortedEnumCounts(result.motifCoverage))
         <String, Object?>{'motif': entry.key.wire, 'count': entry.value},
+    ],
+    'motifGroupCoverage': [
+      for (final entry in _sortedEnumCounts(result.motifGroupCoverage))
+        <String, Object?>{'group': entry.key.wire, 'count': entry.value},
+    ],
+    'motifEvidenceGroupCoverage': [
+      for (final entry in _sortedEnumCounts(result.motifEvidenceGroupCoverage))
+        <String, Object?>{'group': entry.key.wire, 'count': entry.value},
+    ],
+    'casesMissingMotifEvidence': [
+      for (final review in result.caseReviews.where(
+        (review) => review.missingMotifEvidence.isNotEmpty,
+      ))
+        <String, Object?>{
+          'caseId': review.caseId,
+          'missingMotifEvidence': review.missingMotifEvidence,
+          'missingMotifEvidenceGroups': review.missingMotifEvidenceGroups
+              .map((group) => group.wire)
+              .toList(),
+        },
     ],
     'caseSummaries': [
       for (final review in result.caseReviews) _caseReviewToJson(review),
@@ -205,6 +257,17 @@ Map<String, Object?> _caseReviewToJson(GoldenEvidenceCaseReview review) {
         .map((behavior) => behavior.wire)
         .toList(),
     'evidenceExpectations': review.evidenceExpectationsChecked,
+    'motifGroups': review.motifGroups.map((group) => group.wire).toList(),
+    'motifEvidenceGroups': review.motifEvidenceGroups
+        .map((group) => group.wire)
+        .toList(),
+    'satisfiedMotifEvidenceGroups': review.satisfiedMotifEvidenceGroups
+        .map((group) => group.wire)
+        .toList(),
+    'missingMotifEvidenceGroups': review.missingMotifEvidenceGroups
+        .map((group) => group.wire)
+        .toList(),
+    'missingMotifEvidence': review.missingMotifEvidence,
     'satisfiedReasonCodes': _reasonWires(review.satisfiedReasonCodes),
     'missingReasonCodes': _reasonWires(review.missingReasonCodes),
     'expectedSuppressionsSatisfied': _reasonWires(
@@ -231,6 +294,7 @@ String _evidenceGaps(GoldenEvidenceCaseReview review) {
   final gaps = <String>[
     ...review.missingReasonCodes.map((reason) => reason.wire),
     ...review.expectedSuppressionsMissing.map((reason) => reason.wire),
+    ...review.missingMotifEvidence,
     if (review.realEngineEvidenceNeeded) 'real-device-proof',
   ]..sort();
   return gaps.isEmpty ? '-' : gaps.join(', ');
