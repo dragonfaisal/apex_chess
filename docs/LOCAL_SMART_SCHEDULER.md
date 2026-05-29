@@ -459,12 +459,100 @@ Phase 30N still does not implement:
 - UI activation;
 - parallel engine execution.
 
-## Phase 30O Recommendation
+## Phase 30O Real-Device Selected-Deep Smoke
 
-Phase 30O should run a real-device selected-deep smoke over the compact PGN fixture set:
+`LocalReviewPgnFixtureDeviceSmokeCollector` adds a developer-only real-device smoke layer over the compact PGN fixture profile runner.
 
-- keep it opt-in and developer-only;
-- run `balancedDefault` first, then `performanceMeasured` on a small subset;
-- capture elapsed time, selected-deep ratio, budget pressure, warning spikes, and thermal/battery notes;
-- preserve current product review output unchanged;
-- keep classifier labels, official metrics, UI activation, backend work, and persistence blocked until device fixture behavior is stable.
+The smoke exists to prove selected-deep execution on Android without turning the experiment into product review output. It runs the existing local stack only:
+
+- `LocalReviewPgnFixtureProfileRunner`;
+- `LocalReviewIntegrationExperiment`;
+- `GameLevelDeepGatingExperiment`;
+- `LocalReviewOrchestrationExperiment`;
+- `MeasuredLocalReviewPrototype`;
+- `LocalSmartAnalysisExecutor`;
+- `LocalEvalService`.
+
+Default scope is intentionally conservative:
+
+- fixtures: quiet opening plus tactical middlegame;
+- mode: `fastThenExecuteSelectedDeep`;
+- preset: `balancedDefault`;
+- max fixtures: 2;
+- max positions per fixture: 14;
+- max total engine calls: 32;
+- max elapsed budget: 30,000 ms.
+
+`performanceMeasured` is available only with a second explicit flag and a larger explicit cap.
+
+Opt-in command:
+
+```powershell
+flutter test integration_test/local_review_pgn_fixture_device_smoke_test.dart -d <android-device-id> --dart-define=APEX_RUN_LOCAL_REVIEW_PGN_FIXTURE_DEVICE_SMOKE=true
+```
+
+Optional performance preset:
+
+```powershell
+flutter test integration_test/local_review_pgn_fixture_device_smoke_test.dart -d <android-device-id> --dart-define=APEX_RUN_LOCAL_REVIEW_PGN_FIXTURE_DEVICE_SMOKE=true --dart-define=APEX_RUN_LOCAL_REVIEW_PGN_FIXTURE_DEVICE_SMOKE_PERFORMANCE=true
+```
+
+Without the opt-in flag, the integration test prints a skipped result and does not run the local engine. Normal unit tests use fake engine execution only.
+
+The smoke report renders safe JSON and markdown with:
+
+- platform, device, ABI, and engine identity text when available;
+- fixture and preset counts;
+- mapped positions;
+- pure candidate count;
+- selected and executed deep count;
+- selected-deep ratio;
+- fast, deep, and total engine calls;
+- elapsed time;
+- timeout, warning, failure, and budget-pressure counts;
+- per-fixture summaries.
+
+Pass interpretation:
+
+- at least one `balancedDefault` fixture run completes;
+- selected-deep ratio is finite and below 100%;
+- total engine calls stay within caps;
+- execution remains serial through the existing stack;
+- no uncaught exception occurs;
+- no visible stub identity is accepted.
+
+Warning interpretation:
+
+- no selected-deep work was planned or executed;
+- budget pressure appears;
+- balanced selected-deep ratio is high;
+- timeout or missing-result warnings appear;
+- `performanceMeasured` looks too expensive for the requested cap.
+
+Failure interpretation:
+
+- selected every mapped position for deep analysis;
+- total engine call cap exceeded;
+- visible stub identity;
+- fixture execution failure or unbounded selected-deep behavior.
+
+Phase 30O still does not implement:
+
+- final move labels;
+- Brilliant, Great, Miss, or similar classifier output;
+- official accuracy or ACPL;
+- replacement product review results;
+- persistence, cache, or database writes;
+- backend/server calls;
+- UI activation;
+- parallel engine execution.
+
+## Phase 30P Recommendation
+
+Phase 30P should use the opt-in device smoke results to decide between:
+
+- a Golden Analysis Suite over compact game-shaped fixtures if `balancedDefault` stays safe on device;
+- further budget tuning if warning or budget-pressure rates are high;
+- targeted engine-stack fixes if selected-deep execution fails or shows instability.
+
+Do not start product labels, official metrics, UI activation, backend work, or persistence until real-device selected-deep behavior is stable enough to serve as a trustworthy measurement base.
