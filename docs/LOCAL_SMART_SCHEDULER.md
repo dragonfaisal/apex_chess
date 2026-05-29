@@ -547,12 +547,45 @@ Phase 30O still does not implement:
 - UI activation;
 - parallel engine execution.
 
-## Phase 30P Recommendation
+## Phase 30P Golden Analysis Suite
 
-Phase 30P should use the opt-in device smoke results to decide between:
+Owner-run Phase 30O real-device selected-deep smoke passed on an S22 Ultra / SM S908U1 / android-arm64 / Android 16 target with ABI-consistent packaging.
 
-- a Golden Analysis Suite over compact game-shaped fixtures if `balancedDefault` stays safe on device;
-- further budget tuning if warning or budget-pressure rates are high;
-- targeted engine-stack fixes if selected-deep execution fails or shows instability.
+Observed 30O evidence:
 
-Do not start product labels, official metrics, UI activation, backend work, or persistence until real-device selected-deep behavior is stable enough to serve as a trustworthy measurement base.
+- `balancedDefault` completed with warnings: 2 fixture runs, 21 mapped positions, 5 candidates, 3 selected-deep executions, selected-deep ratio about 0.14, 27 total engine calls, elapsed about 1.8 to 2.0 seconds, 1 budget-pressure row, 0 timeouts, 0 failures.
+- `performanceMeasured` completed with warnings: 2 preset runs, 42 mapped positions, 10 candidates, 8 selected deep, 7 executed deep, selected-deep ratio about 0.19, 57 total engine calls, elapsed about 5.9 seconds, 0 timeouts, 0 failures.
+- Stub identity was not detected.
+
+That evidence supports starting `GoldenAnalysisSuite` as the durable regression layer for future analysis intelligence. The suite records compact, license-safe hard cases with:
+
+- category and motif taxonomy;
+- source FEN, compact PGN, parsed position, or synthetic safety input;
+- explicit safety flags;
+- expected scheduler/deep-gating behavior;
+- broad evidence expectations such as reason codes, MultiPV minimums, budget pressure, and suppression reasons.
+
+Runner modes:
+
+- `metadataOnly` validates IDs, sources, motifs, safety flags, and blocked product claims.
+- `planOnly` runs the pure deep-gating policy without real engine calls.
+- `fakeEvidence` supplies deterministic fast-pass evidence to test reason-code behavior without requiring Stockfish.
+
+The initial cases cover quiet opening skip, invalid FEN safety, forced move skip, tactical capture/check, material sacrifice compensation, mate-threat evidence, quiet preparatory uncertainty, technical endgame conservatism, budget pressure, and queen-win material swing.
+
+Golden suite documentation: [GOLDEN_ANALYSIS_SUITE.md](GOLDEN_ANALYSIS_SUITE.md).
+
+Phase 30P still does not implement:
+
+- final move labels;
+- Brilliant, Great, Miss, or similar classifier output;
+- official accuracy or ACPL;
+- replacement product review results;
+- persistence, cache, or database writes;
+- backend/server calls;
+- UI activation;
+- parallel engine execution.
+
+## Phase 30Q Recommendation
+
+Phase 30Q should use the golden suite to define a small "golden evidence review" workflow: run selected cases through fake evidence and, optionally, opt-in real-device selected-deep checks for only the cases that require PV evidence. Keep it developer-only and do not start product labels or official metrics until the golden suite can protect the classifier from regressions.
