@@ -301,12 +301,79 @@ Phase 30K still does not implement:
 - UI activation;
 - parallel engine execution.
 
-## Phase 30L Recommendation
+## Phase 30L Budget Tuning
 
-Phase 30L should use the deep-gating telemetry to tune a small set of full-game budgets and rerun measured review on representative games:
+`DeepGatingBudgetTuningRunner` adds a pure representative-game telemetry layer over the Phase 30K policy.
 
-- compare `planOnly`, `fastThenPlanDeep`, and `fastThenExecuteSelectedDeep` costs;
-- collect candidate distributions by profile;
-- verify that selected deep positions are not every move;
-- measure warning, timeout, and budget-pressure rates;
-- keep classifier, accuracy, persistence, backend, and UI work out of scope until the gating policy is stable.
+The tuning layer exists to answer whether the deep-gating policy is selective enough before product integration. It does not require Android, a host bridge, or real engine execution in normal tests.
+
+Representative scenario categories:
+
+- quiet opening-heavy;
+- tactical middlegame;
+- technical endgame;
+- low-power suppression;
+- forcing line;
+- mixed invalid/safety;
+- budget pressure.
+
+The default profile matrix compares:
+
+- `eco`;
+- `balanced`;
+- `performance`;
+- `owner`;
+- `balanced` with low-power enabled.
+
+The current tuning path is intentionally pure:
+
+- representative games use compact scheduler-ready position inputs;
+- optional fast-pass evidence is supplied as structured test data;
+- `DeepGatingPolicy` ranks and suppresses candidates;
+- selected ratios, reason-code counts, suppressions, and estimated deep call cost are aggregated;
+- no real local engine call is required.
+
+Selected-deep ratio guardrails:
+
+- `eco` should select no deep work;
+- low-power should suppress deep work;
+- `balanced` should stay a small selective subset;
+- `performance` may select a larger subset but remains finite;
+- `owner` can be strongest, but must still avoid selecting every move by default;
+- budget-pressure scenarios must make budget suppression visible.
+
+Budget pressure means the policy found plausible candidates but explicit per-game caps suppressed some of them. That is not a product failure by itself; it is the signal Phase 30M should use to choose default mobile budgets and decide which scenarios need stronger evidence before deeper execution.
+
+The tuning report includes:
+
+- scenario/profile table;
+- positions considered;
+- candidates generated;
+- candidates selected;
+- selected ratio;
+- budget status;
+- top reason-code counts;
+- suppression counts;
+- warnings and observations.
+
+Phase 30L still does not implement:
+
+- final move labels;
+- Brilliant, Great, Miss, or similar classifier output;
+- official accuracy or ACPL;
+- replacement product review results;
+- persistence, cache, or database writes;
+- backend/server calls;
+- UI activation;
+- parallel engine execution.
+
+## Phase 30M Recommendation
+
+Phase 30M should run the first real local review integration experiment behind a developer-only seam:
+
+- use the tuned representative budgets as starting defaults;
+- keep execution serial and local-first;
+- keep all engine calls behind `GameLevelDeepGatingExperiment` and the existing orchestration stack;
+- compare pure candidate plans with measured selected-deep execution on small games;
+- preserve current classifier and product review output unchanged;
+- continue blocking UI/backend/persistence/official-metric work until the measured integration path is stable.

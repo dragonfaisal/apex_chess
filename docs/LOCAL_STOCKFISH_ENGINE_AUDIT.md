@@ -20,6 +20,8 @@ Phase 30J status: the local review orchestration experiment now maps scheduler-r
 
 Phase 30K status: the game-level deep-gating experiment now ranks and suppresses deferred deep-analysis candidates after a fast pass or provided evidence. It keeps execution behind the orchestration/measured/executor/`LocalEvalService` stack and still does not add product labels, official metrics, UI, backend work, or persistence.
 
+Phase 30L status: representative deep-gating budget tuning now runs as a pure local report model over compact scheduler-ready scenarios and profile matrices. It requires no real engine in normal tests and still does not add product labels, official metrics, UI, backend work, or persistence.
+
 ## Current Reality
 
 - Apex has a real local Stockfish integration path: Dart `StockfishEngine` -> worker isolate -> FFI -> `libstockfish_bridge`.
@@ -414,4 +416,4 @@ Still not allowed:
 - persistence/cache/database work;
 - public UI activation.
 
-Phase 30H added a thin executor around this planning model while keeping all engine calls behind `LocalEvalService` and preserving the classifier/accuracy layers unchanged. Phase 30I added a measured serial review prototype over the executor. Phase 30J added a local orchestration experiment over measured review outputs. Phase 30K added a game-level deep-gating experiment with pure candidate ranking, budget suppression, and optional selected deep execution through the existing local stack.
+Phase 30H added a thin executor around this planning model while keeping all engine calls behind `LocalEvalService` and preserving the classifier/accuracy layers unchanged. Phase 30I added a measured serial review prototype over the executor. Phase 30J added a local orchestration experiment over measured review outputs. Phase 30K added a game-level deep-gating experiment with pure candidate ranking, budget suppression, and optional selected deep execution through the existing local stack. Phase 30L added pure representative budget tuning so Phase 30M can choose default local integration budgets from measured candidate distributions rather than guesswork.
