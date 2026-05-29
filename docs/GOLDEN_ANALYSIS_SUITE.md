@@ -134,6 +134,50 @@ The workflow protects future classifier work by forcing each hard case to say on
 - this case needs real-device proof;
 - this expectation is unsafe or mismatched.
 
+## Golden Evidence Report Command
+
+Phase 30R adds a developer-only report command:
+
+```powershell
+dart run tool/golden_evidence_review_report.dart
+```
+
+The command runs locally without Android, does not load the real engine, does not call `LocalEvalService`, does not read network, and does not write files by default. It prints deterministic output and exits `0` for completed reports unless an explicit strict flag is supplied.
+
+Supported review modes:
+
+- `--mode=metadataOnly`: validates golden case safety and structure.
+- `--mode=planOnly`: runs pure deep-gating plans without supplied fake evidence or engine execution.
+- `--mode=fakeEvidence`: default mode; reviews deterministic supplied evidence without real engine work.
+- `--mode=realDeviceEvidenceReferenceOnly`: lists cases that need future opt-in real-device proof and prints safe command guidance only.
+
+Supported formats:
+
+- `--format=markdown`: default; prints summary counts, coverage, per-case table, real-device-needed cases, and next recommended action.
+- `--format=json`: prints the same report data in stable structured form.
+
+Strict flags:
+
+- `--fail-on-incomplete`: exits nonzero when incomplete evidence exists.
+- `--fail-on-real-device-needed`: exits nonzero when future real-device proof is needed.
+- `--fail-on-mismatch`: exits nonzero when behavior mismatch, budget mismatch, blocked unsafe claim, or failure rows exist.
+
+Exit code policy:
+
+- `0`: report generated successfully and no strict failure was triggered.
+- `64`: bad command usage, unknown flag, unknown mode, or unknown format.
+- `65`: strict incomplete-evidence failure.
+- `66`: strict real-device-needed failure.
+- `67`: strict mismatch, unsafe-claim, or failure row.
+
+Real-device reference mode does not run Android. It prints this safe opt-in guidance for a future owner run:
+
+```powershell
+flutter test integration_test/local_review_pgn_fixture_device_smoke_test.dart -d <android-device-id> --dart-define=APEX_RUN_LOCAL_REVIEW_PGN_FIXTURE_DEVICE_SMOKE=true
+```
+
+The report intentionally excludes raw UCI logs, long PV dumps, final move labels, official accuracy, ACPL, backend URLs, and secrets. It is not classifier work. Golden cases remain regression inputs and evidence expectations, not product claims.
+
 ## Initial V1 Cases
 
 The initial suite includes compact cases for:

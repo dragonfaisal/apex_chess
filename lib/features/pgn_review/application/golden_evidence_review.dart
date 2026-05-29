@@ -1,7 +1,7 @@
 /// Developer-only evidence readiness review for golden analysis cases.
 library;
 
-import 'package:apex_chess/features/pgn_review/application/game_level_deep_gating_experiment.dart';
+import 'package:apex_chess/features/pgn_review/application/game_level_deep_gating_policy.dart';
 import 'package:apex_chess/features/pgn_review/application/golden_analysis_suite.dart';
 import 'package:apex_chess/features/pgn_review/application/local_smart_analysis_scheduler.dart';
 

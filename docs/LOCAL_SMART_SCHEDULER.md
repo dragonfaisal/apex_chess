@@ -615,6 +615,14 @@ The real-device path is reference-only in normal tests. Cases that require futur
 
 Phase 30Q still keeps classifier work blocked. It does not implement final move labels, Brilliant/Great/Miss-style labels, official metrics, UI activation, backend calls, persistence, or direct engine access.
 
-## Phase 30R Recommendation
+## Phase 30R Golden Evidence Report Command
 
-Phase 30R should add a small golden evidence report command or fixture export if needed by developers, still pure and deterministic. The next useful step is to make it easy to run metadata/plan/fake-evidence review locally and see which golden cases remain incomplete or require opt-in real-device proof. Product labels and official metrics should remain blocked.
+`dart run tool/golden_evidence_review_report.dart` now prints a deterministic developer-only report over the Golden Evidence Review workflow.
+
+The command supports metadata-only, plan-only, fake-evidence, and real-device-reference-only modes, plus markdown or JSON output. It runs under plain Dart without Android, does not load the real engine, does not call `LocalEvalService`, and does not execute the opt-in Android collector. Strict flags can turn incomplete evidence, real-device-needed evidence, or mismatch/unsafe rows into explicit nonzero exits for local regression gates.
+
+The report makes protected, incomplete, real-device-needed, mismatched, budget-mismatched, and unsafe golden cases visible without product UI. Product labels remain blocked: Phase 30R still does not add final move labels, Brilliant/Great/Miss-style labels, official accuracy, ACPL, persistence, backend work, or product review replacement.
+
+## Phase 30S Recommendation
+
+Phase 30S should use the report output to tighten weak golden evidence rows and decide which cases deserve owner-run Android proof next. Keep this as evidence hardening only; product labels and official metrics should remain blocked until golden evidence coverage is stronger.

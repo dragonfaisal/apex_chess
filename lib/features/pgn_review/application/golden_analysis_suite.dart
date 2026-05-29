@@ -1,7 +1,7 @@
 /// Durable local-analysis regression cases for scheduler and deep-gating work.
 library;
 
-import 'package:apex_chess/features/pgn_review/application/game_level_deep_gating_experiment.dart';
+import 'package:apex_chess/features/pgn_review/application/game_level_deep_gating_policy.dart';
 import 'package:apex_chess/features/pgn_review/application/local_smart_analysis_scheduler.dart';
 
 enum GoldenAnalysisCategory {
