@@ -586,6 +586,35 @@ Phase 30P still does not implement:
 - UI activation;
 - parallel engine execution.
 
-## Phase 30Q Recommendation
+## Phase 30Q Golden Evidence Review
 
-Phase 30Q should use the golden suite to define a small "golden evidence review" workflow: run selected cases through fake evidence and, optionally, opt-in real-device selected-deep checks for only the cases that require PV evidence. Keep it developer-only and do not start product labels or official metrics until the golden suite can protect the classifier from regressions.
+`GoldenEvidenceReviewRunner` adds a developer-only readiness workflow over `GoldenAnalysisSuite`.
+
+It reviews each golden case and returns one of these evidence states:
+
+- passed;
+- passed with warnings;
+- incomplete evidence;
+- needs real-engine evidence;
+- behavior mismatch;
+- budget mismatch;
+- blocked unsafe claim;
+- failed.
+
+The review workflow checks:
+
+- metadata and safety flags;
+- blocked product claims;
+- expected behavior consistency;
+- satisfied and missing reason codes;
+- expected suppression reasons;
+- budget/cap status;
+- future real-device proof needs.
+
+The real-device path is reference-only in normal tests. Cases that require future PV or selected-deep proof are listed with opt-in command guidance; no Android collector is executed by default.
+
+Phase 30Q still keeps classifier work blocked. It does not implement final move labels, Brilliant/Great/Miss-style labels, official metrics, UI activation, backend calls, persistence, or direct engine access.
+
+## Phase 30R Recommendation
+
+Phase 30R should add a small golden evidence report command or fixture export if needed by developers, still pure and deterministic. The next useful step is to make it easy to run metadata/plan/fake-evidence review locally and see which golden cases remain incomplete or require opt-in real-device proof. Product labels and official metrics should remain blocked.

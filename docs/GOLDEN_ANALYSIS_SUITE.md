@@ -98,6 +98,42 @@ Supported evidence expectations include:
 
 Normal tests do not require Android or a host Stockfish bridge.
 
+## Golden Evidence Review Workflow
+
+`GoldenEvidenceReviewRunner` is the developer-only review layer above the golden suite. It decides whether each golden case has enough evidence to protect future analysis work.
+
+Review modes:
+
+- `metadataOnly`: validates case safety and structure only.
+- `planOnly`: checks pure deep-gating behavior without supplied fast-pass evidence.
+- `fakeEvidence`: checks deterministic supplied evidence and reason codes without real engine execution.
+- `realDeviceEvidenceReferenceOnly`: identifies cases that need future opt-in real-device selected-deep proof and prints command guidance, but does not run Android.
+
+Per-case readiness statuses:
+
+- `passed`: case is protected for the requested review mode.
+- `passedWithWarnings`: case is usable but warnings remain visible.
+- `incompleteEvidence`: the case needs fake evidence or clearer expectations before it can protect future work.
+- `needsRealEngineEvidence`: the case needs opt-in real-device proof, usually for PV or selected-deep evidence that pure tests should not fake.
+- `behaviorMismatch`: the expected scheduler/deep-gating behavior does not match current behavior.
+- `budgetMismatch`: a cap, ratio, or budget-pressure expectation is violated.
+- `blockedUnsafeClaim`: the case encodes an unsafe product claim or is not explicitly safe.
+- `failed`: structural or expectation failures need correction.
+
+Incomplete is different from failed:
+
+- Incomplete means the case may be valid, but the current evidence is not strong enough yet.
+- Failed means the case, expectation, or current behavior is wrong for the requested mode.
+
+Real-device evidence is needed when a case expects PV content or other selected-deep evidence that must come from the Android local engine path. Normal tests only identify these cases and keep them out of mandatory real-engine execution.
+
+The workflow protects future classifier work by forcing each hard case to say one of:
+
+- this case is protected;
+- this case needs fake evidence;
+- this case needs real-device proof;
+- this expectation is unsafe or mismatched.
+
 ## Initial V1 Cases
 
 The initial suite includes compact cases for:
