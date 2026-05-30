@@ -711,3 +711,19 @@ Current post-30W decision:
 - tactical, material, forcing-line, and king-safety evidence is stronger than quiet evidence but still not product-label readiness.
 
 The next recommended phase is `Phase 30Y -- Quiet Preparatory Evidence Resolution` unless future evidence changes the blocker ordering.
+
+## Phase 30Y Quiet Preparatory Evidence Resolution
+
+Phase 30Y resolves the quiet/preparatory evidence gap with a pure `QuietPreparatoryEvidence` model and policy. It distinguishes unsupported quiet moves, intentionally incomplete quiet evidence, deterministic broad support, explicit PV/MultiPV proof needs, protected quiet evidence, and quiet evidence mismatches.
+
+Current post-30Y state:
+
+- total golden cases: 15;
+- protected cases: 14;
+- incomplete cases: 1 (`quiet-preparatory-uncertain`);
+- real-device-needed cases: 0;
+- owner Android proof queue: empty;
+- `quiet-preparatory-hard-case` is protected by broad deterministic support groups;
+- `quiet-preparatory-uncertain` remains visible and unresolved.
+
+Classifier output remains blocked. Basic classifier foundation can only remain developer-only design/prototype work, product-facing labels remain blocked, advanced candidate gates remain blocked, and quiet/preparatory scope remains blocked until the unresolved quiet uncertainty is either supported or intentionally excluded by a later gate.

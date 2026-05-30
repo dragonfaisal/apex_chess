@@ -38,16 +38,17 @@ void main() {
       expect(first.stdoutText, second.stdoutText);
       expect(decoded['version'], goldenClassifierReadinessReportVersion);
       expect(summary['totalCases'], 15);
-      expect(summary['protectedCount'], 13);
-      expect(summary['incompleteCount'], 2);
+      expect(summary['protectedCount'], 14);
+      expect(summary['incompleteCount'], 1);
       expect(decoded['scopes'], isA<List<Object?>>());
+      expect(decoded['quietPreparatoryEvidence'], isA<List<Object?>>());
     });
 
     test('strict mode fails because current readiness is blocked', () {
       final result = _run(args: const ['--strict']);
 
       expect(result.exitCode, goldenClassifierReadinessReportExitBlockedStrict);
-      expect(result.result!.incompleteCount, 2);
+      expect(result.result!.incompleteCount, 1);
       expect(
         result.result!.nextRecommendedPhase,
         GoldenClassifierNextPhase.quietPreparatoryEvidenceResolution,

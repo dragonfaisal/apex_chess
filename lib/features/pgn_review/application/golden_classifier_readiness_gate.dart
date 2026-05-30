@@ -7,6 +7,7 @@ import 'package:apex_chess/features/pgn_review/application/golden_android_proof_
 import 'package:apex_chess/features/pgn_review/application/golden_analysis_suite.dart';
 import 'package:apex_chess/features/pgn_review/application/golden_evidence_review.dart';
 import 'package:apex_chess/features/pgn_review/application/golden_evidence_triage.dart';
+import 'package:apex_chess/features/pgn_review/application/quiet_preparatory_evidence.dart';
 
 const goldenClassifierReadinessReportVersion =
     'golden-classifier-readiness-gate-v1';
@@ -60,13 +61,13 @@ enum GoldenClassifierScopeStatus {
 
 enum GoldenClassifierNextPhase {
   quietPreparatoryEvidenceResolution(
-    'Phase 30Y -- Quiet Preparatory Evidence Resolution',
+    'Phase 30Z -- Quiet Preparatory Evidence Resolution',
   ),
   basicClassifierFoundationDesignOnly(
-    'Phase 30Y -- Basic Classifier Foundation Design Only',
+    'Phase 30Z -- Basic Classifier Foundation Design Only',
   ),
-  ownerAndroidProofQueue('Phase 30Y -- Owner Android Proof Queue'),
-  mismatchInvestigation('Phase 30Y -- Mismatch Investigation');
+  ownerAndroidProofQueue('Phase 30Z -- Owner Android Proof Queue'),
+  mismatchInvestigation('Phase 30Z -- Mismatch Investigation');
 
   const GoldenClassifierNextPhase(this.wire);
 
@@ -134,6 +135,29 @@ class GoldenClassifierScopeReadiness {
   }
 }
 
+class GoldenClassifierQuietEvidenceSummary {
+  const GoldenClassifierQuietEvidenceSummary({
+    required this.caseId,
+    required this.status,
+    required this.supportGroups,
+    required this.blockers,
+  });
+
+  final String caseId;
+  final QuietPreparatoryEvidenceStatus status;
+  final List<QuietPreparatoryEvidenceSupportGroup> supportGroups;
+  final List<String> blockers;
+
+  Map<String, Object?> toJson() {
+    return <String, Object?>{
+      'caseId': caseId,
+      'status': status.wire,
+      'supportGroups': supportGroups.map((group) => group.wire).toList(),
+      'blockers': blockers,
+    };
+  }
+}
+
 class GoldenClassifierReadinessResult {
   const GoldenClassifierReadinessResult({
     required this.status,
@@ -154,6 +178,7 @@ class GoldenClassifierReadinessResult {
     required this.ownerProofQueueCaseIds,
     required this.unsafeCaseIds,
     required this.mismatchCaseIds,
+    required this.quietEvidence,
     required this.scopes,
     required this.blockers,
     required this.nextRecommendedPhase,
@@ -177,6 +202,7 @@ class GoldenClassifierReadinessResult {
   final List<String> ownerProofQueueCaseIds;
   final List<String> unsafeCaseIds;
   final List<String> mismatchCaseIds;
+  final List<GoldenClassifierQuietEvidenceSummary> quietEvidence;
   final List<GoldenClassifierScopeReadiness> scopes;
   final List<String> blockers;
   final GoldenClassifierNextPhase nextRecommendedPhase;
@@ -249,6 +275,24 @@ class GoldenClassifierReadinessResult {
 
     buffer
       ..writeln()
+      ..writeln('## Quiet Preparatory Evidence');
+    if (quietEvidence.isEmpty) {
+      buffer.writeln('- none');
+    } else {
+      buffer
+        ..writeln('| Case | Status | Support Groups | Blockers |')
+        ..writeln('| --- | --- | --- | --- |');
+      for (final item in quietEvidence) {
+        buffer.writeln(
+          '| ${_cell(item.caseId)} | ${item.status.wire} | '
+          '${_cell(_supportGroups(item.supportGroups))} | '
+          '${_cell(item.blockers.isEmpty ? "-" : item.blockers.join(", "))} |',
+        );
+      }
+    }
+
+    buffer
+      ..writeln()
       ..writeln('## Blockers');
     if (blockers.isEmpty) {
       buffer.writeln('- none');
@@ -313,6 +357,9 @@ class GoldenClassifierReadinessResult {
       'capturedAndroidProofCaseIds': capturedAndroidProofCaseIds,
       'unsafeCaseIds': unsafeCaseIds,
       'mismatchCaseIds': mismatchCaseIds,
+      'quietPreparatoryEvidence': [
+        for (final item in quietEvidence) item.toJson(),
+      ],
       'nextRecommendedPhase': nextRecommendedPhase.wire,
       'developerOnly': true,
       'classifierWork': false,
@@ -406,6 +453,31 @@ class GoldenClassifierReadinessGate {
         .map((item) => item.caseId)
         .toSet();
     final protectedCount = protectedCaseIds.length;
+    final unresolvedQuietCaseIds = review.caseReviews
+        .where(
+          (item) =>
+              item.quietEvidenceStatus != null &&
+              !item.passedLike &&
+              !item.realEngineEvidenceNeeded,
+        )
+        .map((item) => item.caseId)
+        .toSet();
+    final quietEvidence =
+        review.caseReviews
+            .where((item) => item.quietEvidenceStatus != null)
+            .map(
+              (item) => GoldenClassifierQuietEvidenceSummary(
+                caseId: item.caseId,
+                status: item.quietEvidenceStatus!,
+                supportGroups:
+                    List<QuietPreparatoryEvidenceSupportGroup>.unmodifiable(
+                      item.quietEvidenceSupportGroups,
+                    ),
+                blockers: List<String>.unmodifiable(item.quietEvidenceBlockers),
+              ),
+            )
+            .toList()
+          ..sort((a, b) => a.caseId.compareTo(b.caseId));
 
     final scopes = <GoldenClassifierScopeReadiness>[
       _basicScope(
@@ -414,6 +486,7 @@ class GoldenClassifierReadinessGate {
         protectedCaseIds: protectedCaseIds,
         globalBlockers: globalBlockers,
         minimumProtectedCases: request.minimumProtectedCasesForBasicFoundation,
+        excludeQuietPreparatory: unresolvedQuietCaseIds.isNotEmpty,
       ),
       _motifScope(
         scope: GoldenClassifierScope.tacticalCandidateFoundation,
@@ -544,6 +617,9 @@ class GoldenClassifierReadinessGate {
       ownerProofQueueCaseIds: List<String>.unmodifiable(ownerProofQueueCaseIds),
       unsafeCaseIds: List<String>.unmodifiable(unsafeCaseIds),
       mismatchCaseIds: List<String>.unmodifiable(mismatchCaseIds),
+      quietEvidence: List<GoldenClassifierQuietEvidenceSummary>.unmodifiable(
+        quietEvidence,
+      ),
       scopes: List<GoldenClassifierScopeReadiness>.unmodifiable(scopes),
       blockers: List<String>.unmodifiable(allBlockers),
       nextRecommendedPhase: _nextPhase(
@@ -566,11 +642,15 @@ GoldenClassifierScopeReadiness _basicScope({
   required Set<String> protectedCaseIds,
   required List<String> globalBlockers,
   required int minimumProtectedCases,
+  required bool excludeQuietPreparatory,
 }) {
   final supporting =
       caseById.values
           .where((item) => protectedCaseIds.contains(item.id))
-          .where((item) => !_isQuietPreparatoryCase(item))
+          .where(
+            (item) =>
+                !excludeQuietPreparatory || !_isQuietPreparatoryCase(item),
+          )
           .map((item) => item.id)
           .toList()
         ..sort();
@@ -624,9 +704,12 @@ GoldenClassifierScopeReadiness _basicScope({
     blockers: const <String>[],
     supportingCaseIds: List<String>.unmodifiable(supporting),
     missingCaseIds: const <String>[],
-    recommendation:
-        'Allowed only as developer-only prototype design; emit no labels and '
-        'exclude incomplete quiet-preparatory motifs.',
+    recommendation: excludeQuietPreparatory
+        ? 'Allowed only as developer-only prototype design; emit no labels and '
+              'exclude incomplete quiet-preparatory motifs.'
+        : 'Allowed only as developer-only prototype design; emit no labels. '
+              'Quiet-preparatory evidence may be considered only as internal '
+              'evidence, not product output.',
   );
 }
 
@@ -935,6 +1018,10 @@ bool _isEndgamePrecisionCase(GoldenAnalysisCase item) {
 }
 
 String _ids(List<String> ids) => ids.isEmpty ? '-' : ids.join(', ');
+
+String _supportGroups(List<QuietPreparatoryEvidenceSupportGroup> groups) {
+  return groups.isEmpty ? '-' : groups.map((group) => group.wire).join(', ');
+}
 
 String _cell(String value) => value.replaceAll('|', '/');
 

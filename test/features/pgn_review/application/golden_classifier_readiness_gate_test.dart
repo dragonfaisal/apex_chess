@@ -9,6 +9,7 @@ import 'package:apex_chess/features/pgn_review/application/golden_android_proof_
 import 'package:apex_chess/features/pgn_review/application/golden_analysis_suite.dart';
 import 'package:apex_chess/features/pgn_review/application/golden_classifier_readiness_gate.dart';
 import 'package:apex_chess/features/pgn_review/application/local_smart_analysis_scheduler.dart';
+import 'package:apex_chess/features/pgn_review/application/quiet_preparatory_evidence.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -20,17 +21,14 @@ void main() {
       expect(result.totalCaseCount, GoldenAnalysisCases.defaults.length);
     });
 
-    test('reports 13 protected and 2 incomplete rows', () {
+    test('reports 14 protected and 1 incomplete row', () {
       final result = _run();
 
-      expect(result.protectedCount, 13);
-      expect(result.incompleteCount, 2);
+      expect(result.protectedCount, 14);
+      expect(result.incompleteCount, 1);
       expect(
         result.incompleteCaseIds,
-        orderedEquals([
-          'quiet-preparatory-hard-case',
-          'quiet-preparatory-uncertain',
-        ]),
+        orderedEquals(['quiet-preparatory-uncertain']),
       );
     });
 
@@ -72,7 +70,7 @@ void main() {
       );
     });
 
-    test('quiet preparatory scope is blocked by the two incomplete cases', () {
+    test('quiet preparatory scope is blocked by the incomplete quiet case', () {
       final scope = _run().scope(
         GoldenClassifierScope.quietPreparatoryFoundation,
       );
@@ -83,11 +81,9 @@ void main() {
       );
       expect(
         scope.missingCaseIds,
-        orderedEquals([
-          'quiet-preparatory-hard-case',
-          'quiet-preparatory-uncertain',
-        ]),
+        orderedEquals(['quiet-preparatory-uncertain']),
       );
+      expect(scope.supportingCaseIds, contains('quiet-preparatory-hard-case'));
       expect(scope.blockers.join('\n'), contains('incomplete evidence'));
     });
 
@@ -168,6 +164,40 @@ void main() {
         GoldenClassifierNextPhase.quietPreparatoryEvidenceResolution,
       );
     });
+
+    test(
+      'quiet scope can become design-only when quiet cases are resolved',
+      () {
+        final result = _run(cases: _quietResolvedCases());
+        final quietScope = result.scope(
+          GoldenClassifierScope.quietPreparatoryFoundation,
+        );
+        final basicScope = result.scope(
+          GoldenClassifierScope.basicMoveQualityFoundation,
+        );
+
+        expect(result.incompleteCount, 0);
+        expect(
+          quietScope.status,
+          GoldenClassifierScopeStatus.allowedForDesignOnly,
+        );
+        expect(
+          quietScope.supportingCaseIds,
+          containsAll([
+            'quiet-preparatory-hard-case',
+            'quiet-preparatory-uncertain',
+          ]),
+        );
+        expect(
+          basicScope.supportingCaseIds,
+          contains('quiet-preparatory-uncertain'),
+        );
+        expect(
+          result.nextRecommendedPhase,
+          GoldenClassifierNextPhase.basicClassifierFoundationDesignOnly,
+        );
+      },
+    );
   });
 
   group('GoldenClassifierReadinessGate proof and blocker behavior', () {
@@ -342,8 +372,20 @@ void main() {
       expect(report, contains('Next Recommended Phase'));
       expect(
         report,
-        contains('Phase 30Y -- Quiet Preparatory Evidence Resolution'),
+        contains('Phase 30Z -- Quiet Preparatory Evidence Resolution'),
       );
+    });
+
+    test('report includes quiet evidence status and support groups', () {
+      final result = _run();
+      final report = result.renderMarkdownReport();
+      final decoded =
+          jsonDecode(result.renderJsonReport()) as Map<String, Object?>;
+
+      expect(report, contains('Quiet Preparatory Evidence'));
+      expect(report, contains('quietEvidenceProtected'));
+      expect(report, contains('candidateSpreadFutureThreat'));
+      expect(decoded['quietPreparatoryEvidence'], isA<List<Object?>>());
     });
 
     test('report contains no raw UCI spam or PV dumps', () {
@@ -446,6 +488,25 @@ GoldenAnalysisCase _unprovenMateThreat() {
 
 GoldenAnalysisCase _caseById(String id) {
   return GoldenAnalysisCases.defaults.singleWhere((item) => item.id == id);
+}
+
+List<GoldenAnalysisCase> _quietResolvedCases() {
+  return GoldenAnalysisCases.defaults.map((item) {
+    if (item.id != 'quiet-preparatory-uncertain') return item;
+    return item.copyWith(
+      motifTags: const [
+        GoldenMotifTag.quietMove,
+        GoldenMotifTag.quietPreparatoryMove,
+      ],
+      quietPreparatoryEvidence: const QuietPreparatoryEvidence(
+        candidateSpreadPresent: true,
+        futureTacticalThreatPrepared: true,
+        keySquareControlImproved: true,
+        forcingLineEnabledNext: true,
+        noImmediateCaptureCheckPromotion: true,
+      ),
+    );
+  }).toList();
 }
 
 String get _gateSource => File(

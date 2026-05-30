@@ -3,6 +3,7 @@ library;
 
 import 'package:apex_chess/features/pgn_review/application/game_level_deep_gating_policy.dart';
 import 'package:apex_chess/features/pgn_review/application/local_smart_analysis_scheduler.dart';
+import 'package:apex_chess/features/pgn_review/application/quiet_preparatory_evidence.dart';
 
 enum GoldenAnalysisCategory {
   tacticalShot('tacticalShot'),
@@ -748,6 +749,7 @@ class GoldenAnalysisCase {
     this.notes = const <String>[],
     this.safety = const GoldenAnalysisSafetyFlags(),
     this.fakeEvidence = const <GameLevelProvidedFastEvidence>[],
+    this.quietPreparatoryEvidence = const QuietPreparatoryEvidence(),
   });
 
   final String id;
@@ -765,6 +767,7 @@ class GoldenAnalysisCase {
   final GoldenAnalysisSafetyFlags safety;
   final GoldenExpectedBehavior expected;
   final List<GameLevelProvidedFastEvidence> fakeEvidence;
+  final QuietPreparatoryEvidence quietPreparatoryEvidence;
 
   bool get hasSource {
     return switch (sourceType) {
@@ -785,6 +788,7 @@ class GoldenAnalysisCase {
       if (candidateMoveUci != null) candidateMoveUci!,
       ...expectedCandidateMovesUci,
       ...notes,
+      ...quietPreparatoryEvidence.searchableText,
     ].join(' ');
     return _containsBlockedTerm(searchable);
   }
@@ -803,6 +807,7 @@ class GoldenAnalysisCase {
     GoldenAnalysisSafetyFlags? safety,
     GoldenExpectedBehavior? expected,
     List<GameLevelProvidedFastEvidence>? fakeEvidence,
+    QuietPreparatoryEvidence? quietPreparatoryEvidence,
   }) {
     return GoldenAnalysisCase(
       id: id ?? this.id,
@@ -820,6 +825,8 @@ class GoldenAnalysisCase {
       notes: notes,
       safety: safety ?? this.safety,
       fakeEvidence: fakeEvidence ?? this.fakeEvidence,
+      quietPreparatoryEvidence:
+          quietPreparatoryEvidence ?? this.quietPreparatoryEvidence,
     );
   }
 }
@@ -1631,6 +1638,10 @@ class GoldenAnalysisCases {
         GoldenMotifTag.quietPreparatoryMove,
         GoldenMotifTag.evidenceIncomplete,
       ],
+      quietPreparatoryEvidence: QuietPreparatoryEvidence(
+        uncertaintyReason: 'quiet preparatory support is intentionally absent',
+        noImmediateCaptureCheckPromotion: true,
+      ),
       expected: GoldenExpectedBehavior(
         behaviors: {GoldenExpectedBehaviorCode.shouldNotEmitFinalLabel},
         evidence: GoldenEvidenceExpectation(
@@ -1855,9 +1866,15 @@ class GoldenAnalysisCases {
       motifTags: [
         GoldenMotifTag.quietPreparatoryMove,
         GoldenMotifTag.quietMove,
-        GoldenMotifTag.evidenceIncomplete,
       ],
       notes: ['handcrafted license-safe Phase 30W regression input'],
+      quietPreparatoryEvidence: QuietPreparatoryEvidence(
+        candidateSpreadPresent: true,
+        futureTacticalThreatPrepared: true,
+        keySquareControlImproved: true,
+        forcingLineEnabledNext: true,
+        noImmediateCaptureCheckPromotion: true,
+      ),
       expected: GoldenExpectedBehavior(
         behaviors: {GoldenExpectedBehaviorCode.shouldNotEmitFinalLabel},
         evidence: GoldenEvidenceExpectation(

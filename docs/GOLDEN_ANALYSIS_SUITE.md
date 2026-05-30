@@ -99,6 +99,8 @@ Examples:
 
 The review runner uses this policy to mark missing motif-required evidence as `incompleteEvidence`. It does not fake evidence. Hard contradictions, unsafe claims, budget mismatches, and behavior mismatches keep their existing statuses.
 
+Quiet/preparatory rows also carry a narrower quiet-evidence policy after Phase 30Y. A quiet tag alone is never enough to protect a case and never forces deep analysis. The quiet evidence model asks for broad support groups such as candidate spread plus a future tactical threat, opponent-threat reduction plus positional or king-safety signal, a forcing line enabled next, PV/MultiPV proof when explicitly required, or clear alternative-move weakness. When a quiet case explicitly requires PV/MultiPV proof, normal tests mark it as needing future real-engine evidence instead of treating fake evidence as equivalent to device proof.
+
 ## Runner Modes
 
 `GoldenAnalysisSuiteRunner` supports:
@@ -364,7 +366,7 @@ Phase 30V does not update product review output and does not add labels. Golden 
 Phase 30W adds the smallest next handcrafted case set for weak motif coverage. The new rows are compact, license-safe regression inputs only:
 
 - `king-safety-mating-net-hard-case`: exposed-king, mating-net, king-hunt, mate-threat, and forcing-line evidence without claiming a forced mate;
-- `quiet-preparatory-hard-case`: quiet preparatory uncertainty that stays incomplete until stronger supporting evidence is supplied;
+- `quiet-preparatory-hard-case`: quiet preparatory uncertainty that stayed incomplete until stronger supporting evidence was supplied in Phase 30Y;
 - `sacrifice-compensation-hard-case`: sacrifice and exchange-sacrifice compensation requiring material and tactical evidence;
 - `endgame-precision-hard-case`: conservative endgame-precision coverage without exact score assertions;
 - `forcing-line-variation-hard-case`: forcing-line/check-sequence variation with tactical reason-code coverage.
@@ -408,7 +410,7 @@ Scope readiness is tracked per future foundation area:
 - `quietPreparatoryFoundation` is blocked while quiet-preparatory evidence is incomplete;
 - advanced candidate gates and `productFacingLabels` are blocked by policy.
 
-Scope blockers keep exact case IDs visible. The current post-30W decision is:
+Scope blockers keep exact case IDs visible. The Phase 30X input decision was:
 
 - total golden cases: 15;
 - protected cases: 13;
@@ -429,7 +431,41 @@ dart run tool/golden_classifier_readiness_report.dart
 
 Supported formats are markdown and JSON. `--strict` exits nonzero when readiness remains blocked or an unsafe readiness claim is detected. The report excludes raw UCI logs, long PV dumps, final move labels, official accuracy, ACPL, backend URLs, and secrets.
 
-Phase 30X recommends `Phase 30Y -- Quiet Preparatory Evidence Resolution` while the two quiet-preparatory rows remain incomplete.
+Phase 30X recommended `Phase 30Y -- Quiet Preparatory Evidence Resolution` while the two quiet-preparatory rows remained incomplete.
+
+## Quiet Preparatory Evidence Resolution
+
+Phase 30Y adds `QuietPreparatoryEvidence` and `GoldenQuietPreparatoryEvidencePolicy`, a pure internal evidence model for quiet/preparatory cases. It does not classify moves, does not add product labels, does not change scheduler thresholds, and does not call Stockfish, FFI, native bridge code, or `LocalEvalService`.
+
+Quiet moves are dangerous to over-promote because they often look plausible without proving that the move improves a future line, reduces an opponent threat, or changes candidate quality. The quiet policy therefore separates:
+
+- `unsupportedQuietMove`: a quiet/preparatory tag has no support and must not pass;
+- `incompleteQuietEvidence`: uncertainty remains intentionally visible;
+- `fakeEvidenceSupported`: deterministic internal evidence supports a broad regression expectation;
+- `needsRealDeviceProof`: PV/MultiPV support is explicitly required and must be queued for future owner proof rather than faked;
+- `quietEvidenceProtected`: enough broad support groups exist to protect a developer-only golden regression case;
+- `quietEvidenceMismatch`: supplied quiet evidence contradicts the case or fails the no-immediate-capture/check/promotion guard.
+
+Supported quiet cases require at least one strong support group, and protected quiet cases should normally have multiple groups. Current groups include candidate spread plus future tactical threat, threat reduction, king-safety or positional improvement, forcing line enabled next, PV support, MultiPV support, alternative weakness, and passed-pawn/endgame-plan support. These groups are evidence taxonomy only; they are not product-facing move labels.
+
+Phase 30Y resolves the two quiet rows differently:
+
+- `quiet-preparatory-hard-case` is now protected as an internal golden case because it has deterministic broad support: candidate spread plus future tactical threat, key-square control improvement, and a forcing line enabled next.
+- `quiet-preparatory-uncertain` remains incomplete by design because it has no quiet support beyond an explicit uncertainty reason.
+
+Current post-30Y decision:
+
+- total golden cases: 15;
+- protected cases: 14;
+- incomplete cases: 1 (`quiet-preparatory-uncertain`);
+- real-device-needed cases: 0;
+- owner proof queue: empty;
+- captured Android proof remains attached only to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`;
+- quiet/preparatory foundation remains blocked while `quiet-preparatory-uncertain` is unresolved;
+- basic classifier foundation remains developer-only and must exclude unresolved quiet/preparatory evidence;
+- product-facing labels and advanced candidate gates remain blocked.
+
+Reports now include quiet evidence status, support groups, blockers, and the readiness effect in markdown and JSON. They still exclude raw UCI logs, long PV dumps, final move labels, official accuracy, ACPL, backend URLs, and secrets.
 
 ## Initial V1 Cases
 

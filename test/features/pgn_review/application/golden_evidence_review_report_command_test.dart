@@ -84,6 +84,7 @@ void main() {
       expect(decoded['motifGroupCoverage'], isA<List<Object?>>());
       expect(decoded['motifEvidenceGroupCoverage'], isA<List<Object?>>());
       expect(decoded['casesMissingMotifEvidence'], isA<List<Object?>>());
+      expect(decoded['quietPreparatoryEvidence'], isA<List<Object?>>());
     });
 
     test('Markdown format includes summary and per-case table', () {
@@ -94,6 +95,7 @@ void main() {
       expect(result.stdoutText, contains('## Summary'));
       expect(result.stdoutText, contains('## Motif Evidence Group Coverage'));
       expect(result.stdoutText, contains('## Motif Evidence Gaps'));
+      expect(result.stdoutText, contains('## Quiet Preparatory Evidence'));
       expect(result.stdoutText, contains('## Per-Case Summary'));
       expect(
         result.stdoutText,
@@ -119,7 +121,7 @@ void main() {
       final summary = decoded['summary'] as Map<String, Object?>;
 
       expect(summary['totalCases'], 15);
-      expect(summary['incompleteCount'], 2);
+      expect(summary['incompleteCount'], 1);
       expect(summary['needsRealDeviceEvidenceCount'], 0);
     });
 

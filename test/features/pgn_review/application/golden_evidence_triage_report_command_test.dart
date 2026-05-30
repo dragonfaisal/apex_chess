@@ -51,18 +51,24 @@ void main() {
       expect(decoded['summary'], isA<Map<String, Object?>>());
       expect(decoded['proofQueue'], isA<Map<String, Object?>>());
       expect(summary['totalCases'], 15);
-      expect(summary['protectedCount'], 13);
-      expect(summary['incompleteCount'], 2);
+      expect(summary['protectedCount'], 14);
+      expect(summary['incompleteCount'], 1);
+      expect(decoded['quietPreparatoryEvidence'], isA<List<Object?>>());
     });
 
-    test('triage output includes new quiet hard-case action', () {
-      final result = _run();
+    test(
+      'triage output shows protected quiet hard case and unresolved guard',
+      () {
+        final result = _run();
 
-      expect(result.exitCode, goldenEvidenceTriageReportExitSuccess);
-      expect(result.stdoutText, contains('quiet-preparatory-hard-case'));
-      expect(result.stdoutText, contains('addFakeEvidence'));
-      expect(result.triage!.recommendedOwnerRunProofQueue.targets, isEmpty);
-    });
+        expect(result.exitCode, goldenEvidenceTriageReportExitSuccess);
+        expect(result.stdoutText, contains('quiet-preparatory-hard-case'));
+        expect(result.stdoutText, contains('quietEvidenceProtected'));
+        expect(result.stdoutText, contains('quiet-preparatory-uncertain'));
+        expect(result.stdoutText, contains('addFakeEvidence'));
+        expect(result.triage!.recommendedOwnerRunProofQueue.targets, isEmpty);
+      },
+    );
 
     test('max proof targets flag keeps ingested queue empty', () {
       final result = _run(args: const ['--max-proof-targets=2']);

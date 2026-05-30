@@ -8,6 +8,7 @@ import 'package:apex_chess/features/pgn_review/application/golden_analysis_suite
 import 'package:apex_chess/features/pgn_review/application/golden_evidence_review.dart';
 import 'package:apex_chess/features/pgn_review/application/golden_evidence_triage.dart';
 import 'package:apex_chess/features/pgn_review/application/local_smart_analysis_scheduler.dart';
+import 'package:apex_chess/features/pgn_review/application/quiet_preparatory_evidence.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -38,6 +39,10 @@ void main() {
       expect(
         entry.currentReviewStatus,
         GoldenEvidenceReviewStatus.incompleteEvidence,
+      );
+      expect(
+        entry.quietEvidenceStatus,
+        QuietPreparatoryEvidenceStatus.incompleteQuietEvidence,
       );
       expect(entry.priority, GoldenEvidenceTriagePriority.medium);
       expect(entry.nextAction, GoldenEvidenceTriageNextAction.addFakeEvidence);
@@ -259,11 +264,19 @@ void main() {
       );
 
       final quiet = _entry(result, 'quiet-preparatory-hard-case');
+      expect(quiet.isProtected, isTrue);
+      expect(quiet.currentReviewStatus, GoldenEvidenceReviewStatus.passed);
+      expect(quiet.nextAction, GoldenEvidenceTriageNextAction.keepProtected);
       expect(
-        quiet.currentReviewStatus,
-        GoldenEvidenceReviewStatus.incompleteEvidence,
+        quiet.quietEvidenceStatus,
+        QuietPreparatoryEvidenceStatus.quietEvidenceProtected,
       );
-      expect(quiet.nextAction, GoldenEvidenceTriageNextAction.addFakeEvidence);
+      expect(
+        quiet.quietEvidenceSupportGroups,
+        contains(
+          QuietPreparatoryEvidenceSupportGroup.candidateSpreadFutureThreat,
+        ),
+      );
     });
   });
 
@@ -276,6 +289,7 @@ void main() {
       expect(first, contains('Golden Evidence Triage'));
       expect(first, contains('Proof Queue'));
       expect(first, contains('Weak Motif Groups'));
+      expect(first, contains('Quiet Preparatory Evidence'));
     });
 
     test('json report is valid and deterministic', () {
@@ -287,6 +301,7 @@ void main() {
       expect(decoded['version'], goldenEvidenceTriageReportVersion);
       expect(decoded['summary'], isA<Map<String, Object?>>());
       expect(decoded['proofQueue'], isA<Map<String, Object?>>());
+      expect(decoded['quietPreparatoryEvidence'], isA<List<Object?>>());
     });
 
     test('report contains no raw UCI spam', () {

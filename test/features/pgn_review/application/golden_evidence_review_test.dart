@@ -4,6 +4,7 @@ import 'package:apex_chess/features/pgn_review/application/game_level_deep_gatin
 import 'package:apex_chess/features/pgn_review/application/golden_analysis_suite.dart';
 import 'package:apex_chess/features/pgn_review/application/golden_evidence_review.dart';
 import 'package:apex_chess/features/pgn_review/application/local_smart_analysis_scheduler.dart';
+import 'package:apex_chess/features/pgn_review/application/quiet_preparatory_evidence.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -185,6 +186,10 @@ void main() {
       final review = _reviewSingle('quiet-preparatory-uncertain');
 
       expect(review.status, GoldenEvidenceReviewStatus.incompleteEvidence);
+      expect(
+        review.quietEvidenceStatus,
+        QuietPreparatoryEvidenceStatus.incompleteQuietEvidence,
+      );
       expect(review.satisfiedReasonCodes, isEmpty);
       expect(review.missingReasonCodes, isEmpty);
       expect(
@@ -227,14 +232,52 @@ void main() {
       );
     });
 
-    test('quiet preparatory hard case remains incomplete without support', () {
+    test('quiet preparatory hard case is protected by broad support', () {
       final review = _reviewSingle('quiet-preparatory-hard-case');
 
-      expect(review.status, GoldenEvidenceReviewStatus.incompleteEvidence);
+      expect(review.status, GoldenEvidenceReviewStatus.passed);
       expect(review.realEngineEvidenceNeeded, isFalse);
       expect(
+        review.quietEvidenceStatus,
+        QuietPreparatoryEvidenceStatus.quietEvidenceProtected,
+      );
+      expect(
+        review.quietEvidenceSupportGroups,
+        contains(
+          QuietPreparatoryEvidenceSupportGroup.candidateSpreadFutureThreat,
+        ),
+      );
+      expect(
+        review.quietEvidenceSupportGroups,
+        contains(QuietPreparatoryEvidenceSupportGroup.forcingLineEnabledNext),
+      );
+      expect(
         review.missingMotifEvidence,
-        contains('uncertainty:quietMoveEvidence'),
+        isNot(contains('uncertainty:quietMoveEvidence')),
+      );
+    });
+
+    test('quiet case requiring PV or MultiPV needs real engine evidence', () {
+      final proofNeeded = _caseById('quiet-preparatory-hard-case').copyWith(
+        id: 'quiet-preparatory-proof-needed',
+        quietPreparatoryEvidence: const QuietPreparatoryEvidence(
+          quietMoveHasPvSupport: true,
+          quietMoveHasMultiPvSupport: true,
+          requiresRealDeviceProof: true,
+          noImmediateCaptureCheckPromotion: true,
+        ),
+      );
+
+      final result = const GoldenEvidenceReviewRunner().review(
+        GoldenEvidenceReviewRequest(cases: [proofNeeded]),
+      );
+      final review = result.caseReviews.single;
+
+      expect(review.status, GoldenEvidenceReviewStatus.needsRealEngineEvidence);
+      expect(review.realEngineEvidenceNeeded, isTrue);
+      expect(
+        review.quietEvidenceStatus,
+        QuietPreparatoryEvidenceStatus.needsRealDeviceProof,
       );
     });
 
@@ -374,6 +417,10 @@ void main() {
       );
       expect(result.renderMarkdownReport(), contains('Motif Evidence Gaps'));
       expect(result.renderMarkdownReport(), contains('Category Coverage'));
+      expect(
+        result.renderMarkdownReport(),
+        contains('Quiet Preparatory Evidence'),
+      );
     });
 
     test('report contains no raw UCI spam or PV dumps', () {

@@ -104,6 +104,24 @@ String renderGoldenEvidenceReviewReportMarkdown(
       );
   }
 
+  final quietRows = result.caseReviews
+      .where((review) => review.quietEvidenceStatus != null)
+      .toList(growable: false);
+  if (quietRows.isNotEmpty) {
+    buffer
+      ..writeln()
+      ..writeln('## Quiet Preparatory Evidence')
+      ..writeln('| Case | Quiet Evidence Status | Support Groups | Blockers |')
+      ..writeln('| --- | --- | --- | --- |');
+    for (final review in quietRows) {
+      buffer.writeln(
+        '| ${_cell(review.caseId)} | ${review.quietEvidenceStatus!.wire} | '
+        '${_cell(_quietSupportGroups(review))} | '
+        '${_cell(review.quietEvidenceBlockers.isEmpty ? "-" : review.quietEvidenceBlockers.join(", "))} |',
+      );
+    }
+  }
+
   final realNeeded = result.caseReviews
       .where((review) => review.realEngineEvidenceNeeded)
       .toList(growable: false);
@@ -250,6 +268,19 @@ Map<String, Object?> goldenEvidenceReviewReportToJson(
     'caseSummaries': [
       for (final review in result.caseReviews) _caseReviewToJson(review),
     ],
+    'quietPreparatoryEvidence': [
+      for (final review in result.caseReviews.where(
+        (review) => review.quietEvidenceStatus != null,
+      ))
+        <String, Object?>{
+          'caseId': review.caseId,
+          'status': review.quietEvidenceStatus!.wire,
+          'supportGroups': review.quietEvidenceSupportGroups
+              .map((group) => group.wire)
+              .toList(),
+          'blockers': review.quietEvidenceBlockers,
+        },
+    ],
     'realDeviceEvidence': <String, Object?>{
       'neededCount': result.needsRealDeviceEvidenceCount,
       'caseIds': realNeeded,
@@ -288,6 +319,11 @@ Map<String, Object?> _caseReviewToJson(GoldenEvidenceCaseReview review) {
         .map((group) => group.wire)
         .toList(),
     'missingMotifEvidence': review.missingMotifEvidence,
+    'quietEvidenceStatus': review.quietEvidenceStatus?.wire,
+    'quietEvidenceSupportGroups': review.quietEvidenceSupportGroups
+        .map((group) => group.wire)
+        .toList(),
+    'quietEvidenceBlockers': review.quietEvidenceBlockers,
     'satisfiedReasonCodes': _reasonWires(review.satisfiedReasonCodes),
     'missingReasonCodes': _reasonWires(review.missingReasonCodes),
     'expectedSuppressionsSatisfied': _reasonWires(
@@ -318,6 +354,13 @@ String _evidenceGaps(GoldenEvidenceCaseReview review) {
     if (review.realEngineEvidenceNeeded) 'real-device-proof',
   ]..sort();
   return gaps.isEmpty ? '-' : gaps.join(', ');
+}
+
+String _quietSupportGroups(GoldenEvidenceCaseReview review) {
+  final groups = review.quietEvidenceSupportGroups
+      .map((group) => group.wire)
+      .toList();
+  return groups.isEmpty ? '-' : groups.join(', ');
 }
 
 String _safeMessages(List<String> messages) {

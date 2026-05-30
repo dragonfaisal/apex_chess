@@ -415,6 +415,8 @@ Summary:
 - If scheduler prototyping exposes lifecycle instability, Phase 30G/30H should pivot toward a standalone subprocess UCI architecture instead of masking bridge risk.
 - Browser/WASM is not the immediate Android Flutter path.
 
+Phase 30Y status: quiet/preparatory evidence resolution is pure model/report work only; it adds no direct engine calls, no Android collector requirement, and no new real-device proof need.
+
 ## Phase 30G Recommendation
 
 Scheduler design: [LOCAL_SMART_SCHEDULER.md](LOCAL_SMART_SCHEDULER.md).

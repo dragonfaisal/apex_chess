@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'package:apex_chess/features/pgn_review/application/game_level_deep_gating_policy.dart';
 import 'package:apex_chess/features/pgn_review/application/golden_analysis_suite.dart';
 import 'package:apex_chess/features/pgn_review/application/golden_evidence_review.dart';
+import 'package:apex_chess/features/pgn_review/application/quiet_preparatory_evidence.dart';
 
 const goldenEvidenceTriageReportVersion = 'golden-evidence-triage-v1';
 
@@ -92,6 +93,9 @@ class GoldenEvidenceTriageEntry {
     required this.gapReasonCodes,
     required this.gapSuppressionReasons,
     required this.motifEvidenceGaps,
+    required this.quietEvidenceStatus,
+    required this.quietEvidenceSupportGroups,
+    required this.quietEvidenceBlockers,
     required this.realDeviceProofRequired,
     required this.priority,
     required this.nextAction,
@@ -107,6 +111,9 @@ class GoldenEvidenceTriageEntry {
   final List<DeepCandidateReasonCode> gapReasonCodes;
   final List<DeepCandidateReasonCode> gapSuppressionReasons;
   final List<String> motifEvidenceGaps;
+  final QuietPreparatoryEvidenceStatus? quietEvidenceStatus;
+  final List<QuietPreparatoryEvidenceSupportGroup> quietEvidenceSupportGroups;
+  final List<String> quietEvidenceBlockers;
   final bool realDeviceProofRequired;
   final GoldenEvidenceTriagePriority priority;
   final GoldenEvidenceTriageNextAction nextAction;
@@ -309,6 +316,29 @@ class GoldenEvidenceTriageResult {
       }
     }
 
+    final quietEntries =
+        entries
+            .where((entry) => entry.quietEvidenceStatus != null)
+            .toList(growable: false)
+          ..sort(_compareEntriesForReport);
+    if (quietEntries.isNotEmpty) {
+      buffer
+        ..writeln()
+        ..writeln('## Quiet Preparatory Evidence')
+        ..writeln('| Case | Status | Support Groups | Blockers |')
+        ..writeln('| --- | --- | --- | --- |');
+      for (final entry in quietEntries) {
+        final support = entry.quietEvidenceSupportGroups
+            .map((group) => group.wire)
+            .join(', ');
+        buffer.writeln(
+          '| ${_cell(entry.caseId)} | ${entry.quietEvidenceStatus!.wire} | '
+          '${_cell(support.isEmpty ? "-" : support)} | '
+          '${_cell(entry.quietEvidenceBlockers.isEmpty ? "-" : entry.quietEvidenceBlockers.join(", "))} |',
+        );
+      }
+    }
+
     buffer
       ..writeln()
       ..writeln('## Android Proof Evidence');
@@ -441,6 +471,19 @@ class GoldenEvidenceTriageResult {
           _entryToJson(entry),
       ],
       'proofQueue': _proofQueueToJson(recommendedOwnerRunProofQueue),
+      'quietPreparatoryEvidence': [
+        for (final entry in _sortedEntriesForReport(
+          entries,
+        ).where((entry) => entry.quietEvidenceStatus != null))
+          <String, Object?>{
+            'caseId': entry.caseId,
+            'status': entry.quietEvidenceStatus!.wire,
+            'supportGroups': entry.quietEvidenceSupportGroups
+                .map((group) => group.wire)
+                .toList(),
+            'blockers': entry.quietEvidenceBlockers,
+          },
+      ],
       'androidProofEvidence': <String, Object?>{
         'sourceId': androidProofEvidenceSourceId,
         'provenCaseIds': androidProofEvidenceCaseIds,
@@ -553,6 +596,14 @@ class GoldenEvidenceTriagePolicy {
         review.expectedSuppressionsMissing,
       ),
       motifEvidenceGaps: List<String>.unmodifiable(review.missingMotifEvidence),
+      quietEvidenceStatus: review.quietEvidenceStatus,
+      quietEvidenceSupportGroups:
+          List<QuietPreparatoryEvidenceSupportGroup>.unmodifiable(
+            review.quietEvidenceSupportGroups,
+          ),
+      quietEvidenceBlockers: List<String>.unmodifiable(
+        review.quietEvidenceBlockers,
+      ),
       realDeviceProofRequired: review.realEngineEvidenceNeeded,
       priority: priority,
       nextAction: action,
@@ -895,6 +946,11 @@ Map<String, Object?> _entryToJson(GoldenEvidenceTriageEntry entry) {
         .map((reason) => reason.wire)
         .toList(),
     'motifEvidenceGaps': entry.motifEvidenceGaps,
+    'quietEvidenceStatus': entry.quietEvidenceStatus?.wire,
+    'quietEvidenceSupportGroups': entry.quietEvidenceSupportGroups
+        .map((group) => group.wire)
+        .toList(),
+    'quietEvidenceBlockers': entry.quietEvidenceBlockers,
     'realDeviceProofRequired': entry.realDeviceProofRequired,
     'priority': entry.priority.wire,
     'nextAction': entry.nextAction.wire,
