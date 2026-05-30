@@ -191,6 +191,59 @@ The report intentionally excludes raw UCI logs, long PV dumps, final move labels
 
 Phase 30S makes evidence gaps more visible, especially quiet preparatory uncertainty and real-device proof needs. This prepares future classifier work by requiring structured chess evidence first; it does not implement classifier output.
 
+## Golden Evidence Triage
+
+Phase 30T adds a developer-only triage layer over Golden Evidence Review.
+
+The triage result answers what needs attention next:
+
+- cases already protected by the current evidence model;
+- cases with incomplete fake or structured evidence;
+- cases needing future opt-in owner Android proof;
+- cases with motif evidence gaps;
+- weak and strong motif groups;
+- recommended handcrafted hard-case areas;
+- the smallest deterministic owner-run proof queue.
+
+Per-case triage entries keep the case ID, category, internal motifs, current review status, missing evidence groups, missing reason codes, missing suppression reasons, real-device-proof need, priority, next action, and rationale.
+
+Priorities are developer workflow priorities only:
+
+- `none`: already protected for the current evidence workflow.
+- `low`: visible but not blocking stronger evidence work.
+- `medium`: needs attention, commonly quiet preparatory uncertainty or thin motif coverage.
+- `high`: needs proof or investigation before it can protect important future behavior.
+- `critical`: unsafe claims or hard blockers that must not be normalized.
+
+Recommended actions are also internal workflow actions:
+
+- `keepProtected`: no immediate work needed.
+- `addFakeEvidence`: add deterministic broad evidence or reason coverage.
+- `addHandcraftedCase`: add a compact license-safe hard case when the motif group is thin.
+- `runOwnerAndroidProof`: use opt-in Android proof for selected-deep evidence that pure tests must not fake.
+- `adjustExpectation`: correct contradictory expectations.
+- `investigateMismatch`: inspect behavior or budget mismatch.
+- `blockUnsafeClaim`: remove or quarantine unsafe product-claim content.
+
+The owner proof queue excludes protected cases and fake-evidence-only cases. It orders targets by priority and case ID, limits the target count, and prints safe command guidance only. It does not run Android or load the real engine.
+
+Weak motif group recommendations are deterministic prompts for future handcrafted coverage, such as sacrifice compensation, quiet preparatory evidence, king-safety and mating-net proof, forcing-line proof, and endgame precision proof. Phase 30T does not add a large case set; it decides where new cases would matter.
+
+The optional report command is:
+
+```powershell
+dart run tool/golden_evidence_triage_report.dart
+```
+
+Supported flags:
+
+- `--format=markdown`: default summary report with counts, evidence gaps, proof queue, weak motif groups, and next actions.
+- `--format=json`: stable structured report with the same triage data.
+- `--max-proof-targets=<n>`: caps owner-proof recommendations.
+- `--include-protected`: includes protected cases in the detailed table.
+
+The triage report excludes raw UCI logs, long PV dumps, final move labels, official accuracy, ACPL, backend URLs, and secrets. It remains developer-only evidence planning. Motifs are internal taxonomy, not product labels, and golden cases remain regression inputs rather than product claims.
+
 ## Initial V1 Cases
 
 The initial suite includes compact cases for:

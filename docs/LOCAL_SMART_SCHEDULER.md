@@ -631,6 +631,16 @@ The policy maps motifs to broad evidence groups: material, tactical, king safety
 
 The Golden Evidence Review report now includes motif group coverage, motif evidence group coverage, cases with motif evidence gaps, and real-device-proof cases in markdown and JSON. This remains developer-only evidence hardening. Phase 30S does not add final move labels, Brilliant/Great/Miss-style labels, official accuracy, ACPL, UI activation, backend calls, persistence, cache/database writes, or product review replacement.
 
-## Phase 30T Recommendation
+## Phase 30T Golden Evidence Triage And Proof Queue
 
-Phase 30T should use the expanded evidence report to decide the smallest next set of owner-run Android proofs or new handcrafted hard cases. Classifier work remains blocked until the evidence rows are stronger and the real-device proof queue is intentionally reviewed.
+Phase 30T adds a developer-only Golden Evidence Triage layer over the Golden Evidence Review report data.
+
+The triage model produces deterministic status counts, per-case priorities, motif evidence gaps, weak motif groups, recommended handcrafted hard-case areas, and a smallest owner-run proof queue. The optional `dart run tool/golden_evidence_triage_report.dart` command prints markdown or JSON locally without Android, without real-engine loading, without `LocalEvalService`, and without executing proof commands.
+
+The proof queue recommends only future opt-in owner runs for cases that need real-device selected-deep evidence. Protected cases and fake-evidence-only cases are excluded from that queue.
+
+Classifier work remains blocked. Phase 30T does not add final move labels, Brilliant/Great/Miss-style labels, official accuracy, ACPL, UI activation, backend calls, persistence, cache/database writes, product review replacement, or direct engine access.
+
+## Phase 30U Recommendation
+
+Phase 30U should consume the triage output to either add the smallest missing handcrafted hard cases or run the smallest owner-approved Android proof set. Classifier work should remain blocked until the high-priority evidence gaps and proof queue have been intentionally addressed.
