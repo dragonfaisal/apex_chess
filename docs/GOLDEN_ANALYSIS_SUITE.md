@@ -385,6 +385,52 @@ The Phase 30U/30V S22 Ultra proof remains attached only to:
 
 The new hard cases are not product claims. They do not add final labels, official metrics, UI activation, persistence, backend behavior, or classifier thresholds. Any row without enough evidence remains incomplete instead of being treated as protected. Future real-device proof should only be queued for cases that explicitly need PV or MultiPV proof.
 
+## Evidence-To-Classifier Readiness Gate
+
+Phase 30X adds `GoldenClassifierReadinessGate`, a deterministic developer-only gate over the existing golden evidence stack. It consumes the Golden Analysis Suite cases, Golden Evidence Review results, Golden Evidence Triage results, and the static S22 Ultra Android proof evidence. It does not classify moves and does not call Stockfish, FFI, native bridge code, or `LocalEvalService`.
+
+Readiness statuses are deliberately conservative:
+
+- `blockedByUnsafeClaim`: unsafe source metadata or product-claim content blocks all classifier planning;
+- `blockedByMismatch`: behavior, budget, or structural mismatches must be investigated first;
+- `blockedByRealDeviceProof`: real-device proof is still needed or the owner proof queue is non-empty;
+- `blockedByIncompleteEvidence`: evidence gaps affect the requested scope;
+- `readyForEvidenceOnly`: evidence can be reported but not used for classifier foundation;
+- `readyForBasicClassifierFoundation`: basic developer-only foundation could proceed with no open blockers;
+- `readyForLimitedClassifierFoundation`: only a narrow developer-only prototype/design scope is allowed;
+- `notReadyForAdvancedLabels`: advanced label gates remain blocked.
+
+Scope readiness is tracked per future foundation area:
+
+- `basicMoveQualityFoundation` may be allowed only as developer-only prototype/design, with no product labels and no product review replacement;
+- tactical, material-swing, forcing-line, and king-safety foundations are stronger than quiet evidence, but still developer-only and not label-ready;
+- `endgamePrecisionFoundation` is design-only because current evidence is conservative;
+- `quietPreparatoryFoundation` is blocked while quiet-preparatory evidence is incomplete;
+- advanced candidate gates and `productFacingLabels` are blocked by policy.
+
+Scope blockers keep exact case IDs visible. The current post-30W decision is:
+
+- total golden cases: 15;
+- protected cases: 13;
+- incomplete cases: 2 (`quiet-preparatory-uncertain` and `quiet-preparatory-hard-case`);
+- real-device-needed cases: 0;
+- owner proof queue: empty;
+- captured Android proof remains attached only to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`;
+- product-facing labels are not ready;
+- advanced candidate gates are not ready;
+- quiet/preparatory classification is not ready;
+- basic classifier foundation may be discussed only as developer-only design/prototype and must exclude incomplete quiet-preparatory motifs.
+
+The deterministic command is:
+
+```powershell
+dart run tool/golden_classifier_readiness_report.dart
+```
+
+Supported formats are markdown and JSON. `--strict` exits nonzero when readiness remains blocked or an unsafe readiness claim is detected. The report excludes raw UCI logs, long PV dumps, final move labels, official accuracy, ACPL, backend URLs, and secrets.
+
+Phase 30X recommends `Phase 30Y -- Quiet Preparatory Evidence Resolution` while the two quiet-preparatory rows remain incomplete.
+
 ## Initial V1 Cases
 
 The initial suite includes compact cases for:

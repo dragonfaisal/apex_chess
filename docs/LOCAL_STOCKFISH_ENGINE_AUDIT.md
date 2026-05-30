@@ -40,6 +40,8 @@ Phase 30V status: owner-run S22 Ultra golden proof output is now ingested as sta
 
 Phase 30W status: five compact handcrafted golden hard cases expand weak motif coverage while keeping quiet preparatory gaps incomplete and avoiding Android execution, direct engine access, product labels, official metrics, UI, backend, or persistence changes.
 
+Phase 30X status: the Evidence-to-Classifier Readiness Gate reports developer-only classifier foundation readiness from existing golden evidence while keeping product labels, advanced labels, UI, backend, persistence, direct engine access, and Android execution blocked.
+
 ## Current Reality
 
 - Apex has a real local Stockfish integration path: Dart `StockfishEngine` -> worker isolate -> FFI -> `libstockfish_bridge`.

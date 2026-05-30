@@ -691,3 +691,23 @@ Classifier work remains blocked. Phase 30W does not add final move labels, Brill
 ## Phase 30X Recommendation
 
 Phase 30X should decide whether to add deterministic fake evidence for the two quiet preparatory incomplete rows or queue a narrowly scoped owner proof only if a future quiet case explicitly requires PV/MultiPV evidence.
+
+## Phase 30X Evidence-To-Classifier Readiness Gate
+
+Phase 30X adds a readiness gate only. `GoldenClassifierReadinessGate` sits above Golden Evidence Review, Golden Evidence Triage, and the static Android proof evidence to decide whether any future classifier foundation can be planned.
+
+The gate does not run Android, load real Stockfish, call `LocalEvalService`, change scheduler thresholds, replace product review output, add UI, add persistence, or emit move labels. It reports scope readiness and blockers in markdown/JSON through:
+
+```powershell
+dart run tool/golden_classifier_readiness_report.dart
+```
+
+Current post-30W decision:
+
+- product-facing labels remain blocked;
+- advanced candidate gates remain blocked;
+- quiet/preparatory foundation remains blocked by `quiet-preparatory-uncertain` and `quiet-preparatory-hard-case`;
+- basic classifier foundation is allowed only as developer-only design/prototype that emits no labels and excludes incomplete quiet-preparatory motifs;
+- tactical, material, forcing-line, and king-safety evidence is stronger than quiet evidence but still not product-label readiness.
+
+The next recommended phase is `Phase 30Y -- Quiet Preparatory Evidence Resolution` unless future evidence changes the blocker ordering.
