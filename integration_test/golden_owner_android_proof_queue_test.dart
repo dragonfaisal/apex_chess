@@ -50,6 +50,28 @@ void main() {
 
     final includePerformance =
         isGoldenOwnerAndroidProofQueuePerformanceEnabled();
+    final request = GoldenOwnerAndroidProofQueueRequest(
+      requestId: 'android-golden-owner-proof-queue',
+      includePerformance: includePerformance,
+      maxTotalEngineCalls: includePerformance ? 64 : 24,
+      maxTotalElapsedBudgetMs: includePerformance ? 60000 : 30000,
+      notes: const ['real Android golden owner proof queue run'],
+    );
+    if (request.resolveTargetCaseIds().isEmpty) {
+      final skipped = GoldenOwnerAndroidProofQueueResult.skipped(
+        platform: Platform.operatingSystem,
+        deviceLabel: Platform.localHostname,
+        abi: _runtimeAbiLabel(),
+        reason: 'No remaining default golden owner proof targets.',
+      );
+      // ignore: avoid_print
+      print(skipped.renderJson());
+      // ignore: avoid_print
+      print(skipped.renderMarkdownReport());
+      markTestSkipped('No remaining default golden owner proof targets.');
+      return;
+    }
+
     final engine = StockfishEngine(startupTimeout: const Duration(seconds: 12));
     final eval = LocalEvalService(engine: engine);
     final collector = GoldenOwnerAndroidProofQueueCollector(
@@ -65,15 +87,8 @@ void main() {
     );
 
     try {
-      final maxCalls = includePerformance ? 64 : 24;
       final result = await collector.run(
-        GoldenOwnerAndroidProofQueueRequest(
-          requestId: 'android-golden-owner-proof-queue',
-          includePerformance: includePerformance,
-          maxTotalEngineCalls: maxCalls,
-          maxTotalElapsedBudgetMs: includePerformance ? 60000 : 30000,
-          notes: const ['real Android golden owner proof queue run'],
-        ),
+        request,
         platform: Platform.operatingSystem,
         deviceLabel: Platform.localHostname,
         abi: _runtimeAbiLabel(),
@@ -96,7 +111,10 @@ void main() {
       expect(result.stubIdentityDetected, isFalse);
       expect(result.targetCaseCount, greaterThan(0));
       expect(result.executedTargetCount, greaterThan(0));
-      expect(result.totalEngineCalls, lessThanOrEqualTo(maxCalls));
+      expect(
+        result.totalEngineCalls,
+        lessThanOrEqualTo(request.maxTotalEngineCalls),
+      );
       expect(result.selectedDeepCount, greaterThanOrEqualTo(0));
       expect(result.executedDeepCount, greaterThanOrEqualTo(0));
     } finally {

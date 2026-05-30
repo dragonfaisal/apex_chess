@@ -22,17 +22,10 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('GoldenOwnerAndroidProofQueueRequest', () {
-    test('default request uses triage queue IDs', () {
+    test('default request uses post-ingestion triage queue IDs', () {
       const request = GoldenOwnerAndroidProofQueueRequest();
 
-      expect(
-        request.resolveTargetCaseIds(),
-        orderedEquals([
-          'mate-threat-fast-evidence',
-          'queen-win-major-swing',
-          'simple-tactical-capture-check',
-        ]),
-      );
+      expect(request.resolveTargetCaseIds(), isEmpty);
     });
 
     test('default request is balanced-only and conservative', () {
@@ -70,7 +63,10 @@ void main() {
     test('max target count is respected', () {
       const request = GoldenOwnerAndroidProofQueueRequest(maxTargets: 2);
 
-      expect(request.resolveTargetCaseIds(), hasLength(2));
+      expect(
+        request.resolveTargetCaseIds(cases: _unprovenProofCases()),
+        hasLength(2),
+      );
     });
 
     test('proof queue excludes protected cases', () {
@@ -348,6 +344,16 @@ GoldenOwnerAndroidProofQueueCollector _collector(
 
 GoldenAnalysisCase _caseById(String id) {
   return GoldenAnalysisCases.defaults.singleWhere((item) => item.id == id);
+}
+
+List<GoldenAnalysisCase> _unprovenProofCases() {
+  return [
+    _caseById('mate-threat-fast-evidence').copyWith(id: 'mate-threat-unproven'),
+    _caseById('queen-win-major-swing').copyWith(id: 'queen-win-unproven'),
+    _caseById(
+      'simple-tactical-capture-check',
+    ).copyWith(id: 'tactical-check-unproven'),
+  ];
 }
 
 String get _modelSource => File(

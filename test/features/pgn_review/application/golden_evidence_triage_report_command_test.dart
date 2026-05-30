@@ -35,6 +35,8 @@ void main() {
       expect(first.stdoutText, second.stdoutText);
       expect(first.stdoutText, contains('Golden Evidence Triage'));
       expect(first.stdoutText, contains('Proof Queue'));
+      expect(first.stdoutText, contains('Android Proof Evidence'));
+      expect(first.stdoutText, contains('s22-ultra-phase-30u-owner-queue'));
     });
 
     test('json output is valid and deterministic', () {
@@ -49,14 +51,15 @@ void main() {
       expect(decoded['proofQueue'], isA<Map<String, Object?>>());
     });
 
-    test('max proof targets flag limits queue', () {
+    test('max proof targets flag keeps ingested queue empty', () {
       final result = _run(args: const ['--max-proof-targets=2']);
 
       expect(result.exitCode, goldenEvidenceTriageReportExitSuccess);
       expect(result.maxProofTargets, 2);
+      expect(result.triage!.recommendedOwnerRunProofQueue.targets, isEmpty);
       expect(
-        result.triage!.recommendedOwnerRunProofQueue.targets,
-        hasLength(2),
+        result.stdoutText,
+        contains('mate-threat-fast-evidence, queen-win-major-swing'),
       );
     });
 

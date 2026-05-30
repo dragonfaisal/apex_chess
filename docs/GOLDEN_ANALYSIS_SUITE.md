@@ -293,6 +293,72 @@ The proof report renders safe JSON and markdown with target counts, selected/exe
 
 Captured proof is evidence for a later pure documentation or golden-evidence update. Phase 30U does not mark a case protected unless the owner-run output actually supports that update, and it does not create product labels.
 
+## Owner Android Proof Ingestion
+
+Phase 30V ingests the owner-run Phase 30U proof queue as static developer evidence.
+
+Proof source:
+
+- source ID: `s22-ultra-phase-30u-owner-queue`;
+- device: S22 Ultra / `SM S908U1`;
+- platform: Android;
+- ABI: `arm64-v8a`;
+- engine identity: `apex-stockfish-bridge/0.3.0`;
+- stub identity detected: false;
+- source note: owner-run Android proof, developer evidence only.
+
+Captured balanced-default facts:
+
+- status: `completedWithWarnings`;
+- target cases: 3;
+- executed targets: 3;
+- selected deep: 3;
+- executed deep: 3;
+- fast engine calls: 3;
+- deep engine calls: 6;
+- total engine calls: 9;
+- elapsed ms: 1672;
+- timeouts: 0;
+- failures: 0;
+- budget pressure: 0;
+- missing PV rows: 0;
+- insufficient MultiPV rows: 0.
+
+Captured performance-measured facts:
+
+- status: `completedWithWarnings`;
+- target cases: 3;
+- executed targets: 3;
+- selected deep: 6;
+- executed deep: 6;
+- fast engine calls: 6;
+- deep engine calls: 12;
+- total engine calls: 18;
+- elapsed ms: 4505;
+- timeouts: 0;
+- failures: 0;
+- budget pressure: 0;
+- missing PV rows: 0;
+- insufficient MultiPV rows: 0.
+
+Android-proof-backed cases:
+
+- `mate-threat-fast-evidence`: selected deep and executed deep both 1, PV present, MultiPV line count 3, reason-code evidence for candidate spread, check, and tactical signal;
+- `queen-win-major-swing`: selected deep and executed deep both 1, PV present, MultiPV line count 3, reason-code evidence for capture or promotion, major eval swing, material swing, and previous eval availability;
+- `simple-tactical-capture-check`: selected deep and executed deep both 1, PV present, MultiPV line count 3, reason-code evidence for candidate spread, capture or promotion, check, and tactical signal.
+
+The proof evidence is stored as compact model data and a deterministic fixture. It does not store raw UCI logs, long PV lines, final move labels, official accuracy, ACPL, backend URLs, secrets, or product claims.
+
+After ingestion:
+
+- the three owner-proven cases satisfy their real-device proof requirement;
+- `realDeviceEvidenceReferenceOnly` no longer lists those case IDs as needing future proof;
+- the triage proof queue is empty unless a future unproven case is added;
+- quiet preparatory uncertainty remains incomplete and visible;
+- weak motif-group recommendations remain visible, especially king-safety and mating-net coverage.
+
+Phase 30V does not update product review output and does not add labels. Golden cases remain regression inputs and evidence records only.
+
 ## Initial V1 Cases
 
 The initial suite includes compact cases for:

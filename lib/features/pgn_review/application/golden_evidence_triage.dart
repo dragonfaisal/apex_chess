@@ -193,6 +193,8 @@ class GoldenEvidenceTriageResult {
     required this.warnings,
     required this.failures,
     required this.includeProtected,
+    required this.androidProofEvidenceSourceId,
+    required this.androidProofEvidenceCaseIds,
   });
 
   final int totalCases;
@@ -205,6 +207,8 @@ class GoldenEvidenceTriageResult {
   final List<String> warnings;
   final List<String> failures;
   final bool includeProtected;
+  final String? androidProofEvidenceSourceId;
+  final List<String> androidProofEvidenceCaseIds;
 
   List<GoldenEvidenceTriageEntry> get protectedCases =>
       entries.where((entry) => entry.isProtected).toList(growable: false);
@@ -303,6 +307,20 @@ class GoldenEvidenceTriageResult {
           '${gaps.isEmpty ? "no detail" : gaps.join(", ")}',
         );
       }
+    }
+
+    buffer
+      ..writeln()
+      ..writeln('## Android Proof Evidence');
+    if (androidProofEvidenceSourceId == null) {
+      buffer.writeln('- none');
+    } else {
+      buffer
+        ..writeln('- source: $androidProofEvidenceSourceId')
+        ..writeln(
+          '- proven cases: '
+          '${androidProofEvidenceCaseIds.isEmpty ? "-" : androidProofEvidenceCaseIds.join(", ")}',
+        );
     }
 
     buffer
@@ -423,6 +441,11 @@ class GoldenEvidenceTriageResult {
           _entryToJson(entry),
       ],
       'proofQueue': _proofQueueToJson(recommendedOwnerRunProofQueue),
+      'androidProofEvidence': <String, Object?>{
+        'sourceId': androidProofEvidenceSourceId,
+        'provenCaseIds': androidProofEvidenceCaseIds,
+        'present': androidProofEvidenceSourceId != null,
+      },
       'weakMotifGroups': [
         for (final group in weakMotifGroups) _motifGroupToJson(group),
       ],
@@ -499,6 +522,8 @@ class GoldenEvidenceTriageRunner {
       warnings: List<String>.unmodifiable(_warningsFor(entries)),
       failures: List<String>.unmodifiable(_failuresFor(entries)),
       includeProtected: request.includeProtected,
+      androidProofEvidenceSourceId: review.androidProofEvidenceSourceId,
+      androidProofEvidenceCaseIds: review.androidProofEvidenceCaseIds,
     );
   }
 }
@@ -639,8 +664,7 @@ class GoldenEvidenceTriagePolicy {
           motifGroup: GoldenMotifGroup.kingSafetyAndMate,
           evidenceGroup: GoldenMotifEvidenceGroup.kingSafety,
           priority: GoldenEvidenceTriagePriority.high,
-          rationale:
-              'king-safety proof is still thin and device proof is pending',
+          rationale: 'king-safety and mating-net coverage remains thin',
         ),
       );
     }

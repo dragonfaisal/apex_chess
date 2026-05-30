@@ -2,6 +2,7 @@
 library;
 
 import 'package:apex_chess/features/pgn_review/application/game_level_deep_gating_policy.dart';
+import 'package:apex_chess/features/pgn_review/application/golden_android_proof_evidence.dart';
 import 'package:apex_chess/features/pgn_review/application/golden_analysis_suite.dart';
 import 'package:apex_chess/features/pgn_review/application/local_smart_analysis_scheduler.dart';
 
@@ -48,6 +49,7 @@ class GoldenEvidenceReviewRequest {
     this.profile = LocalSchedulerProfile.balanced,
     this.requireAllEvidence = false,
     this.includeFutureRealEngineNeeds = true,
+    this.androidProofEvidence = GoldenAndroidProofEvidence.phase30uS22Ultra,
     this.requestId,
   });
 
@@ -56,6 +58,7 @@ class GoldenEvidenceReviewRequest {
   final LocalSchedulerProfile profile;
   final bool requireAllEvidence;
   final bool includeFutureRealEngineNeeds;
+  final GoldenAndroidProofEvidence? androidProofEvidence;
   final String? requestId;
 }
 
@@ -127,6 +130,9 @@ class GoldenEvidenceReviewResult {
     required this.motifEvidenceGroupCoverage,
     required this.casesMissingMotifEvidence,
     required this.categoryCoverage,
+    required this.androidProofEvidenceSourceId,
+    required this.androidProofEvidenceCaseIds,
+    required this.androidProofEvidenceDeviceSummary,
     required this.developerRecommendation,
     required this.realDeviceEvidenceCommand,
   }) : assert(totalCases >= 0),
@@ -156,6 +162,9 @@ class GoldenEvidenceReviewResult {
   final Map<GoldenMotifEvidenceGroup, int> motifEvidenceGroupCoverage;
   final int casesMissingMotifEvidence;
   final Map<GoldenAnalysisCategory, int> categoryCoverage;
+  final String? androidProofEvidenceSourceId;
+  final List<String> androidProofEvidenceCaseIds;
+  final String? androidProofEvidenceDeviceSummary;
   final String developerRecommendation;
   final String realDeviceEvidenceCommand;
 
@@ -252,6 +261,18 @@ class GoldenEvidenceReviewResult {
         ..writeln('```');
     }
 
+    if (androidProofEvidenceSourceId != null) {
+      buffer
+        ..writeln()
+        ..writeln('## Android Proof Evidence')
+        ..writeln('- source: $androidProofEvidenceSourceId')
+        ..writeln('- device: ${androidProofEvidenceDeviceSummary ?? "unknown"}')
+        ..writeln(
+          '- proven cases: '
+          '${androidProofEvidenceCaseIds.isEmpty ? "-" : androidProofEvidenceCaseIds.join(", ")}',
+        );
+    }
+
     final mismatches = caseReviews
         .where(
           (review) =>
@@ -306,6 +327,7 @@ class GoldenEvidenceReviewRunner {
           mode: request.mode,
           includeFutureRealEngineNeeds: request.includeFutureRealEngineNeeds,
           motifEvidencePolicy: motifEvidencePolicy,
+          androidProofEvidence: request.androidProofEvidence,
         ),
     ];
     final status = _aggregateStatus(
@@ -370,6 +392,13 @@ class GoldenEvidenceReviewRunner {
           .where((review) => review.missingMotifEvidence.isNotEmpty)
           .length,
       categoryCoverage: _categoryCoverage(request.cases),
+      androidProofEvidenceSourceId: request.androidProofEvidence?.sourceId,
+      androidProofEvidenceCaseIds:
+          request.androidProofEvidence?.targetCaseIds.toList(growable: false) ??
+          const <String>[],
+      androidProofEvidenceDeviceSummary: _androidProofDeviceSummary(
+        request.androidProofEvidence,
+      ),
       developerRecommendation: _recommendationFor(status),
       realDeviceEvidenceCommand: _realDeviceEvidenceCommand,
     );
@@ -381,6 +410,7 @@ class GoldenEvidenceReviewRunner {
     required GoldenEvidenceReviewMode mode,
     required bool includeFutureRealEngineNeeds,
     required GoldenMotifEvidencePolicy motifEvidencePolicy,
+    required GoldenAndroidProofEvidence? androidProofEvidence,
   }) {
     final warnings = <String>[...?suiteCase?.warnings];
     final failures = <String>[...?suiteCase?.failures];
@@ -390,19 +420,20 @@ class GoldenEvidenceReviewRunner {
     final motifEvidence = motifRequirement.evidence.merge(
       item.expected.evidence.tactical,
     );
+    final effectiveReasonCounts = _effectiveReasonCounts(
+      suiteCase?.reasonCounts ?? const <DeepCandidateReasonCode, int>{},
+      androidProofEvidence?.reasonCountsFor(item.id) ??
+          const <DeepCandidateReasonCode, int>{},
+    );
     final expectedReasons = item.expected.evidence.expectedReasonCodes;
     final satisfiedReasons = _sortedReasons(
       expectedReasons
-          .where(
-            (reason) => suiteCase?.reasonCounts.containsKey(reason) ?? false,
-          )
+          .where((reason) => effectiveReasonCounts.containsKey(reason))
           .toList(),
     );
     final missingReasons = _sortedReasons(
       expectedReasons
-          .where(
-            (reason) => !(suiteCase?.reasonCounts.containsKey(reason) ?? false),
-          )
+          .where((reason) => !effectiveReasonCounts.containsKey(reason))
           .toList(),
     );
     final expectedSuppressions =
@@ -429,6 +460,7 @@ class GoldenEvidenceReviewRunner {
       suiteCase: suiteCase,
       mode: mode,
       expectation: motifEvidence,
+      reasonCounts: effectiveReasonCounts,
     );
     final missingMotifGroups = _motifEvidenceGroupsFromGaps(
       missingMotifEvidence,
@@ -436,7 +468,7 @@ class GoldenEvidenceReviewRunner {
     final motifEvidenceGroups = _sortedEvidenceGroups(
       motifEvidence.evidenceGroups,
     );
-    final needsReal =
+    final realProofRequired =
         mode != GoldenEvidenceReviewMode.metadataOnly &&
         includeFutureRealEngineNeeds &&
         (item.expected.evidence.pvShouldBeNonEmpty ||
@@ -444,6 +476,17 @@ class GoldenEvidenceReviewRunner {
             motifRequirement.requiresFutureRealDeviceProof ||
             mode == GoldenEvidenceReviewMode.realDeviceEvidenceReferenceOnly &&
                 _needsRealDeviceReference(item));
+    final realProofSatisfied =
+        realProofRequired &&
+        _androidProofSatisfiesCase(item, androidProofEvidence);
+    if (realProofSatisfied) {
+      warnings.removeWhere((warning) {
+        final lower = warning.toLowerCase();
+        return lower.contains('pv evidence') ||
+            lower.contains('pv content is reserved');
+      });
+    }
+    final needsReal = realProofRequired && !realProofSatisfied;
     final pendingRealGroups = needsReal
         ? const {GoldenMotifEvidenceGroup.realDeviceProof}
         : const <GoldenMotifEvidenceGroup>{};
@@ -653,12 +696,13 @@ List<String> _missingMotifEvidence({
   required GoldenAnalysisCaseResult? suiteCase,
   required GoldenEvidenceReviewMode mode,
   required GoldenTacticalEvidenceExpectation expectation,
+  required Map<DeepCandidateReasonCode, int> reasonCounts,
 }) {
   if (mode == GoldenEvidenceReviewMode.metadataOnly || suiteCase == null) {
     return const <String>[];
   }
 
-  final reasons = suiteCase.reasonCounts.keys.toSet();
+  final reasons = reasonCounts.keys.toSet();
   final suppressions = suiteCase.suppressionCounts.keys.toSet();
   final missing = <String>{};
 
@@ -990,6 +1034,51 @@ String _nextActionFor(GoldenEvidenceReviewStatus status) {
 }
 
 const _realDeviceEvidenceCommand =
-    'flutter test integration_test/local_review_pgn_fixture_device_smoke_test.dart '
+    'flutter test integration_test/golden_owner_android_proof_queue_test.dart '
     '-d <android-device-id> '
-    '--dart-define=APEX_RUN_LOCAL_REVIEW_PGN_FIXTURE_DEVICE_SMOKE=true';
+    '--dart-define=APEX_RUN_GOLDEN_OWNER_ANDROID_PROOF_QUEUE=true';
+
+Map<DeepCandidateReasonCode, int> _effectiveReasonCounts(
+  Map<DeepCandidateReasonCode, int> suiteCounts,
+  Map<DeepCandidateReasonCode, int> proofCounts,
+) {
+  final out = <DeepCandidateReasonCode, int>{...suiteCounts};
+  for (final entry in proofCounts.entries) {
+    final current = out[entry.key] ?? 0;
+    if (entry.value > current) {
+      out[entry.key] = entry.value;
+    }
+  }
+  return Map<DeepCandidateReasonCode, int>.unmodifiable(out);
+}
+
+bool _androidProofSatisfiesCase(
+  GoldenAnalysisCase item,
+  GoldenAndroidProofEvidence? proofEvidence,
+) {
+  if (proofEvidence == null) return false;
+  return proofEvidence.isRealDeviceProofCapturedFor(
+    item.id,
+    minMultiPvLineCount: _minMultiPvNeededForRealProof(item),
+    requirePv:
+        _needsRealDeviceReference(item) ||
+        item.expected.evidence.tactical.requiresPvNonEmpty,
+  );
+}
+
+int _minMultiPvNeededForRealProof(GoldenAnalysisCase item) {
+  final explicit = item.expected.evidence.minMultiPvIfSelected;
+  if (explicit != null) return explicit;
+  if (item.expected.expects(
+    GoldenExpectedBehaviorCode.shouldUseMultiPvAtLeast2,
+  )) {
+    return 2;
+  }
+  return 0;
+}
+
+String? _androidProofDeviceSummary(GoldenAndroidProofEvidence? proofEvidence) {
+  if (proofEvidence == null) return null;
+  return '${proofEvidence.deviceFamily} / ${proofEvidence.deviceModel} / '
+      '${proofEvidence.platform} / ${proofEvidence.abi}';
+}

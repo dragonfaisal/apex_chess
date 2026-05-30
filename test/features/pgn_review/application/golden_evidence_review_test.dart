@@ -148,10 +148,10 @@ void main() {
       );
     });
 
-    test('mate-threat case requires mate and tactical evidence', () {
+    test('mate-threat case uses captured Android proof for PV needs', () {
       final review = _reviewSingle('mate-threat-fast-evidence');
 
-      expect(review.status, GoldenEvidenceReviewStatus.needsRealEngineEvidence);
+      expect(review.status, GoldenEvidenceReviewStatus.passed);
       expect(
         review.satisfiedReasonCodes,
         contains(DeepCandidateReasonCode.mateScoreDetected),
@@ -160,7 +160,11 @@ void main() {
         review.satisfiedReasonCodes,
         contains(DeepCandidateReasonCode.tacticalSignal),
       );
-      expect(review.realEngineEvidenceNeeded, isTrue);
+      expect(review.realEngineEvidenceNeeded, isFalse);
+      expect(
+        review.satisfiedMotifEvidenceGroups,
+        contains(GoldenMotifEvidenceGroup.realDeviceProof),
+      );
     });
 
     test('budget pressure case requires suppression visibility', () {
@@ -219,10 +223,32 @@ void main() {
       expect(result.casesMissingMotifEvidence, 1);
     });
 
-    test('real-device reference mode marks cases needing future proof', () {
+    test('real-device reference mode clears owner-proven cases', () {
       final result = const GoldenEvidenceReviewRunner().review(
         GoldenEvidenceReviewRequest(
           cases: [_caseById('mate-threat-fast-evidence')],
+          mode: GoldenEvidenceReviewMode.realDeviceEvidenceReferenceOnly,
+          requireAllEvidence: true,
+        ),
+      );
+
+      expect(result.status, GoldenEvidenceReviewStatus.passed);
+      expect(result.needsRealDeviceEvidenceCount, 0);
+      expect(
+        result.androidProofEvidenceCaseIds,
+        contains('mate-threat-fast-evidence'),
+      );
+      expect(result.caseReviews.single.realEngineEvidenceNeeded, isFalse);
+    });
+
+    test('real-device reference mode does not prove unrelated IDs', () {
+      final unproven = _caseById(
+        'mate-threat-fast-evidence',
+      ).copyWith(id: 'mate-threat-unproven');
+
+      final result = const GoldenEvidenceReviewRunner().review(
+        GoldenEvidenceReviewRequest(
+          cases: [unproven],
           mode: GoldenEvidenceReviewMode.realDeviceEvidenceReferenceOnly,
           requireAllEvidence: true,
         ),

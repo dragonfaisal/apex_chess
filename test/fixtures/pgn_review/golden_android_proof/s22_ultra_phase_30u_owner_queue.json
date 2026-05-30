@@ -1,0 +1,174 @@
+{
+  "proofVersion": "golden-android-proof-evidence-v1",
+  "sourceId": "s22-ultra-phase-30u-owner-queue",
+  "sourceNote": "owner-run Android proof, developer evidence only",
+  "deviceFamily": "S22 Ultra",
+  "deviceModel": "SM S908U1",
+  "platform": "android",
+  "abi": "arm64-v8a",
+  "engineIdentity": "apex-stockfish-bridge/0.3.0",
+  "stubIdentityDetected": false,
+  "targetCaseIds": [
+    "mate-threat-fast-evidence",
+    "queen-win-major-swing",
+    "simple-tactical-capture-check"
+  ],
+  "runs": [
+    {
+      "preset": "balancedDefault",
+      "status": "completedWithWarnings",
+      "targetCaseCount": 3,
+      "executedTargetCount": 3,
+      "selectedDeepCount": 3,
+      "executedDeepCount": 3,
+      "fastEngineCalls": 3,
+      "deepEngineCalls": 6,
+      "totalEngineCalls": 9,
+      "elapsedMs": 1672,
+      "timeoutCount": 0,
+      "warningCount": 1,
+      "failureCount": 0,
+      "budgetPressureCount": 0,
+      "missingPvCount": 0,
+      "insufficientMultiPvCount": 0,
+      "warnings": [
+        "real Android golden owner proof queue run"
+      ],
+      "failures": [],
+      "caseRows": [
+        {
+          "caseId": "mate-threat-fast-evidence",
+          "preset": "balancedDefault",
+          "proofStatus": "proofCaptured",
+          "selectedDeepCount": 1,
+          "executedDeepCount": 1,
+          "pvPresent": true,
+          "multiPvLineCount": 3,
+          "reasonCodeCounts": {
+            "candidateEvalSpread": 1,
+            "givesCheck": 1,
+            "tacticalSignal": 1
+          },
+          "warnings": [],
+          "failures": [],
+          "nextAction": "updateGoldenEvidence"
+        },
+        {
+          "caseId": "queen-win-major-swing",
+          "preset": "balancedDefault",
+          "proofStatus": "proofCaptured",
+          "selectedDeepCount": 1,
+          "executedDeepCount": 1,
+          "pvPresent": true,
+          "multiPvLineCount": 3,
+          "reasonCodeCounts": {
+            "captureOrPromotion": 1,
+            "majorEvalSwing": 1,
+            "materialSwing": 1,
+            "previousEvalAvailable": 1
+          },
+          "warnings": [],
+          "failures": [],
+          "nextAction": "updateGoldenEvidence"
+        },
+        {
+          "caseId": "simple-tactical-capture-check",
+          "preset": "balancedDefault",
+          "proofStatus": "proofCaptured",
+          "selectedDeepCount": 1,
+          "executedDeepCount": 1,
+          "pvPresent": true,
+          "multiPvLineCount": 3,
+          "reasonCodeCounts": {
+            "candidateEvalSpread": 1,
+            "captureOrPromotion": 1,
+            "givesCheck": 1,
+            "tacticalSignal": 1
+          },
+          "warnings": [],
+          "failures": [],
+          "nextAction": "updateGoldenEvidence"
+        }
+      ]
+    },
+    {
+      "preset": "performanceMeasured",
+      "status": "completedWithWarnings",
+      "targetCaseCount": 3,
+      "executedTargetCount": 3,
+      "selectedDeepCount": 6,
+      "executedDeepCount": 6,
+      "fastEngineCalls": 6,
+      "deepEngineCalls": 12,
+      "totalEngineCalls": 18,
+      "elapsedMs": 4505,
+      "timeoutCount": 0,
+      "warningCount": 1,
+      "failureCount": 0,
+      "budgetPressureCount": 0,
+      "missingPvCount": 0,
+      "insufficientMultiPvCount": 0,
+      "warnings": [
+        "real Android golden owner proof queue run"
+      ],
+      "failures": [],
+      "caseRows": [
+        {
+          "caseId": "mate-threat-fast-evidence",
+          "preset": "performanceMeasured",
+          "proofStatus": "proofCaptured",
+          "selectedDeepCount": 1,
+          "executedDeepCount": 1,
+          "pvPresent": true,
+          "multiPvLineCount": 3,
+          "reasonCodeCounts": {
+            "candidateEvalSpread": 1,
+            "givesCheck": 1,
+            "tacticalSignal": 1
+          },
+          "warnings": [],
+          "failures": [],
+          "nextAction": "updateGoldenEvidence"
+        },
+        {
+          "caseId": "queen-win-major-swing",
+          "preset": "performanceMeasured",
+          "proofStatus": "proofCaptured",
+          "selectedDeepCount": 1,
+          "executedDeepCount": 1,
+          "pvPresent": true,
+          "multiPvLineCount": 3,
+          "reasonCodeCounts": {
+            "captureOrPromotion": 1,
+            "majorEvalSwing": 1,
+            "materialSwing": 1,
+            "previousEvalAvailable": 1
+          },
+          "warnings": [],
+          "failures": [],
+          "nextAction": "updateGoldenEvidence"
+        },
+        {
+          "caseId": "simple-tactical-capture-check",
+          "preset": "performanceMeasured",
+          "proofStatus": "proofCaptured",
+          "selectedDeepCount": 1,
+          "executedDeepCount": 1,
+          "pvPresent": true,
+          "multiPvLineCount": 3,
+          "reasonCodeCounts": {
+            "candidateEvalSpread": 1,
+            "captureOrPromotion": 1,
+            "givesCheck": 1,
+            "tacticalSignal": 1
+          },
+          "warnings": [],
+          "failures": [],
+          "nextAction": "updateGoldenEvidence"
+        }
+      ]
+    }
+  ],
+  "developerOnly": true,
+  "productClaims": false
+}

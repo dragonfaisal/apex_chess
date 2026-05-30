@@ -55,27 +55,20 @@ void main() {
       expect(first.stdoutText, contains('mode: fakeEvidence'));
     });
 
-    test(
-      'realDeviceEvidenceReferenceOnly lists cases without running Android',
-      () {
-        final result = _run(
-          args: const ['--mode=realDeviceEvidenceReferenceOnly'],
-        );
+    test('realDeviceEvidenceReferenceOnly shows ingested proof safely', () {
+      final result = _run(
+        args: const ['--mode=realDeviceEvidenceReferenceOnly'],
+      );
 
-        expect(result.exitCode, goldenEvidenceReviewReportExitSuccess);
-        expect(result.review!.needsRealDeviceEvidenceCount, greaterThan(0));
-        expect(result.stdoutText, contains('Real-Device Evidence Needed'));
-        expect(result.stdoutText, contains('mate-threat-fast-evidence'));
-        expect(
-          result.stdoutText,
-          contains(
-            'flutter test integration_test/local_review_pgn_fixture_device_smoke_test.dart',
-          ),
-        );
-        expect(_commandSource(), isNot(contains('Process.run')));
-        expect(_commandSource(), isNot(contains('Process.start')));
-      },
-    );
+      expect(result.exitCode, goldenEvidenceReviewReportExitSuccess);
+      expect(result.review!.needsRealDeviceEvidenceCount, 0);
+      expect(result.stdoutText, contains('Android Proof Evidence'));
+      expect(result.stdoutText, contains('s22-ultra-phase-30u-owner-queue'));
+      expect(result.stdoutText, contains('mate-threat-fast-evidence'));
+      expect(result.stdoutText, isNot(contains('Real-Device Evidence Needed')));
+      expect(_commandSource(), isNot(contains('Process.run')));
+      expect(_commandSource(), isNot(contains('Process.start')));
+    });
 
     test('JSON format is valid and stable', () {
       final first = _run(args: const ['--format=json']);
@@ -137,11 +130,24 @@ void main() {
       expect(result.review!.incomplete, greaterThan(0));
     });
 
-    test('--fail-on-real-device-needed returns nonzero when needed', () {
+    test('--fail-on-real-device-needed stays zero after proof ingestion', () {
       final result = _run(args: const ['--fail-on-real-device-needed']);
 
+      expect(result.exitCode, goldenEvidenceReviewReportExitSuccess);
+      expect(result.review!.needsRealDeviceEvidenceCount, 0);
+    });
+
+    test('--fail-on-real-device-needed returns nonzero for unproven IDs', () {
+      final unproven = _caseById(
+        'mate-threat-fast-evidence',
+      ).copyWith(id: 'mate-threat-unproven');
+      final result = _run(
+        args: const ['--fail-on-real-device-needed'],
+        cases: [unproven],
+      );
+
       expect(result.exitCode, goldenEvidenceReviewReportExitRealDeviceNeeded);
-      expect(result.review!.needsRealDeviceEvidenceCount, greaterThan(0));
+      expect(result.review!.needsRealDeviceEvidenceCount, 1);
     });
 
     test('--fail-on-mismatch returns nonzero for unsafe cases', () {

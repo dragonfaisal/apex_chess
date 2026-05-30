@@ -90,6 +90,20 @@ String renderGoldenEvidenceReviewReportMarkdown(
     );
   }
 
+  if (result.androidProofEvidenceSourceId != null) {
+    buffer
+      ..writeln()
+      ..writeln('## Android Proof Evidence')
+      ..writeln('- source: ${result.androidProofEvidenceSourceId}')
+      ..writeln(
+        '- device: ${result.androidProofEvidenceDeviceSummary ?? "unknown"}',
+      )
+      ..writeln(
+        '- proven cases: '
+        '${result.androidProofEvidenceCaseIds.isEmpty ? "-" : result.androidProofEvidenceCaseIds.join(", ")}',
+      );
+  }
+
   final realNeeded = result.caseReviews
       .where((review) => review.realEngineEvidenceNeeded)
       .toList(growable: false);
@@ -240,6 +254,12 @@ Map<String, Object?> goldenEvidenceReviewReportToJson(
       'neededCount': result.needsRealDeviceEvidenceCount,
       'caseIds': realNeeded,
       'referenceCommand': result.realDeviceEvidenceCommand,
+    },
+    'androidProofEvidence': <String, Object?>{
+      'sourceId': result.androidProofEvidenceSourceId,
+      'device': result.androidProofEvidenceDeviceSummary,
+      'provenCaseIds': result.androidProofEvidenceCaseIds,
+      'present': result.androidProofEvidenceSourceId != null,
     },
     'developerRecommendation': result.developerRecommendation,
     'developerOnly': true,

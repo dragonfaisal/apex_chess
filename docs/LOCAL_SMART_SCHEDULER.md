@@ -663,6 +663,23 @@ flutter test integration_test/golden_owner_android_proof_queue_test.dart -d <and
 
 Without the opt-in flag, the integration test skips and does not start the engine. Phase 30U remains developer-only evidence collection and still does not add final move labels, Brilliant/Great/Miss-style labels, official accuracy, ACPL, UI activation, backend calls, persistence, cache/database writes, product review replacement, or classifier threshold changes.
 
-## Phase 30V Recommendation
+## Phase 30V Golden Proof Evidence Ingestion
 
-Phase 30V should consume owner-run proof output if available and convert only supported facts into explicit golden evidence updates. Cases with skipped, incomplete, or warning-heavy proof should remain queued until the evidence is stronger. Classifier work should remain blocked.
+Phase 30V consumes the owner-run Phase 30U S22 Ultra proof output as static developer evidence.
+
+The ingested proof records:
+
+- balanced-default selected-deep proof for `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`;
+- performance-measured selected-deep proof for the same three cases;
+- Android / `arm64-v8a` execution through the existing local stack;
+- engine identity `apex-stockfish-bridge/0.3.0`;
+- stub identity detected: false;
+- zero timeouts, zero failures, zero budget-pressure rows, zero missing-PV rows, and zero insufficient-MultiPV rows.
+
+The Golden Evidence Review and Triage layers now use that static proof to clear real-device-needed status only for the three owner-proven case IDs. The default proof queue is empty after ingestion, while quiet preparatory uncertainty and weak motif-group recommendations remain visible.
+
+Classifier work remains blocked. Phase 30V does not add final move labels, Brilliant/Great/Miss-style labels, official accuracy, ACPL, UI activation, backend calls, persistence, cache/database writes, product review replacement, or classifier threshold changes.
+
+## Phase 30W Recommendation
+
+Phase 30W should use the cleaner proof queue to add the next smallest handcrafted evidence cases for weak motifs, starting with king-safety/mating-net and quiet preparatory uncertainty. Any new case should enter the golden suite as regression evidence first, not as a product label or threshold change.

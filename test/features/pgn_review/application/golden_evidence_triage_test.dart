@@ -45,8 +45,11 @@ void main() {
     });
 
     test('real-device-needed cases produce owner Android proof action', () {
-      final result = _run();
-      final entry = _entry(result, 'mate-threat-fast-evidence');
+      final unproven = _caseById(
+        'mate-threat-fast-evidence',
+      ).copyWith(id: 'mate-threat-unproven');
+      final result = _run(cases: [unproven]);
+      final entry = _entry(result, 'mate-threat-unproven');
 
       expect(entry.realDeviceProofRequired, isTrue);
       expect(entry.priority, GoldenEvidenceTriagePriority.high);
@@ -176,11 +179,14 @@ void main() {
 
       expect(ids, isNot(contains('quiet-opening-skip')));
       expect(ids, isNot(contains('quiet-preparatory-uncertain')));
-      expect(ids, contains('mate-threat-fast-evidence'));
+      expect(ids, isNot(contains('mate-threat-fast-evidence')));
+      expect(ids, isNot(contains('queen-win-major-swing')));
+      expect(ids, isNot(contains('simple-tactical-capture-check')));
+      expect(ids, isEmpty);
     });
 
     test('proof queue respects max target count', () {
-      final result = _run(maxProofTargets: 2);
+      final result = _run(cases: _unprovenProofCases(), maxProofTargets: 2);
 
       expect(result.recommendedOwnerRunProofQueue.targets, hasLength(2));
     });
@@ -193,12 +199,15 @@ void main() {
         first.recommendedOwnerRunProofQueue.targetCaseIds,
         second.recommendedOwnerRunProofQueue.targetCaseIds,
       );
+      expect(first.recommendedOwnerRunProofQueue.targetCaseIds, isEmpty);
+
+      final unproven = _run(cases: _unprovenProofCases());
       expect(
-        first.recommendedOwnerRunProofQueue.targetCaseIds,
+        unproven.recommendedOwnerRunProofQueue.targetCaseIds,
         orderedEquals([
-          'mate-threat-fast-evidence',
-          'queen-win-major-swing',
-          'simple-tactical-capture-check',
+          'mate-threat-unproven',
+          'queen-win-unproven',
+          'tactical-check-unproven',
         ]),
       );
     });
@@ -320,6 +329,16 @@ GoldenEvidenceTriageEntry _entry(GoldenEvidenceTriageResult result, String id) {
 
 GoldenAnalysisCase _caseById(String id) {
   return GoldenAnalysisCases.defaults.singleWhere((item) => item.id == id);
+}
+
+List<GoldenAnalysisCase> _unprovenProofCases() {
+  return [
+    _caseById('mate-threat-fast-evidence').copyWith(id: 'mate-threat-unproven'),
+    _caseById('queen-win-major-swing').copyWith(id: 'queen-win-unproven'),
+    _caseById(
+      'simple-tactical-capture-check',
+    ).copyWith(id: 'tactical-check-unproven'),
+  ];
 }
 
 String get _triageSource => File(
