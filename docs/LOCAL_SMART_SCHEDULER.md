@@ -641,6 +641,28 @@ The proof queue recommends only future opt-in owner runs for cases that need rea
 
 Classifier work remains blocked. Phase 30T does not add final move labels, Brilliant/Great/Miss-style labels, official accuracy, ACPL, UI activation, backend calls, persistence, cache/database writes, product review replacement, or direct engine access.
 
-## Phase 30U Recommendation
+## Phase 30U Owner Android Golden Proof Queue
 
-Phase 30U should consume the triage output to either add the smallest missing handcrafted hard cases or run the smallest owner-approved Android proof set. Classifier work should remain blocked until the high-priority evidence gaps and proof queue have been intentionally addressed.
+Phase 30U adds an opt-in owner-run Android proof queue for Golden Evidence Triage targets.
+
+The collector uses the current triage proof queue by default, runs only those selected golden cases through `LocalReviewIntegrationExperiment` in selected-deep mode, and renders safe markdown/JSON proof output. It stays behind the existing local stack and does not call Stockfish, FFI, native bridge code, or `LocalEvalService` directly from the proof model.
+
+Default scope remains conservative: `balancedDefault`, max three targets, finite engine-call and elapsed-time caps, no performance run unless explicitly enabled. Unsupported mappings, missing PV, insufficient MultiPV, budget pressure, timeouts, failures, and stub identity are surfaced instead of hidden.
+
+Opt-in command:
+
+```powershell
+flutter test integration_test/golden_owner_android_proof_queue_test.dart -d <android-device-id> --dart-define=APEX_RUN_GOLDEN_OWNER_ANDROID_PROOF_QUEUE=true
+```
+
+Optional performance run:
+
+```powershell
+flutter test integration_test/golden_owner_android_proof_queue_test.dart -d <android-device-id> --dart-define=APEX_RUN_GOLDEN_OWNER_ANDROID_PROOF_QUEUE=true --dart-define=APEX_RUN_GOLDEN_OWNER_ANDROID_PROOF_QUEUE_PERFORMANCE=true
+```
+
+Without the opt-in flag, the integration test skips and does not start the engine. Phase 30U remains developer-only evidence collection and still does not add final move labels, Brilliant/Great/Miss-style labels, official accuracy, ACPL, UI activation, backend calls, persistence, cache/database writes, product review replacement, or classifier threshold changes.
+
+## Phase 30V Recommendation
+
+Phase 30V should consume owner-run proof output if available and convert only supported facts into explicit golden evidence updates. Cases with skipped, incomplete, or warning-heavy proof should remain queued until the evidence is stronger. Classifier work should remain blocked.

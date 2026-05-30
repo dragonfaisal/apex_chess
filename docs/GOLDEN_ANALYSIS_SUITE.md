@@ -244,6 +244,55 @@ Supported flags:
 
 The triage report excludes raw UCI logs, long PV dumps, final move labels, official accuracy, ACPL, backend URLs, and secrets. It remains developer-only evidence planning. Motifs are internal taxonomy, not product labels, and golden cases remain regression inputs rather than product claims.
 
+## Owner Android Proof Queue
+
+Phase 30U adds an opt-in owner-run Android proof collector for the current Golden Evidence Triage proof queue.
+
+The collector selects proof targets from `GoldenEvidenceTriageRunner` by default. With the current suite, that means the smallest high-priority queue:
+
+- `mate-threat-fast-evidence`;
+- `queen-win-major-swing`;
+- `simple-tactical-capture-check`.
+
+The collector runs only selected proof targets through the existing local stack:
+
+- `LocalReviewIntegrationExperiment`;
+- `GameLevelDeepGatingExperiment`;
+- `LocalReviewOrchestrationExperiment`;
+- `MeasuredLocalReviewPrototype`;
+- `LocalSmartAnalysisExecutor`;
+- `LocalEvalService`.
+
+It does not call Stockfish, FFI, or native bridge code directly. It does not update golden cases automatically.
+
+Opt-in owner command:
+
+```powershell
+flutter test integration_test/golden_owner_android_proof_queue_test.dart -d <android-device-id> --dart-define=APEX_RUN_GOLDEN_OWNER_ANDROID_PROOF_QUEUE=true
+```
+
+Optional performance proof:
+
+```powershell
+flutter test integration_test/golden_owner_android_proof_queue_test.dart -d <android-device-id> --dart-define=APEX_RUN_GOLDEN_OWNER_ANDROID_PROOF_QUEUE=true --dart-define=APEX_RUN_GOLDEN_OWNER_ANDROID_PROOF_QUEUE_PERFORMANCE=true
+```
+
+Without the opt-in flag, the integration test skips safely and does not start the local engine. Normal tests use fake engine execution only.
+
+Per-case proof statuses:
+
+- `proofCaptured`: selected-deep evidence was captured for the case.
+- `proofCapturedWithWarnings`: proof exists, but warnings such as budget pressure remain visible.
+- `proofIncomplete`: selected-deep, PV, or MultiPV evidence is still missing or insufficient.
+- `proofFailed`: local stack execution failed or guardrails rejected the result.
+- `proofSkipped`: the target was not mappable or a cap prevented execution.
+
+Recommended next actions are internal workflow actions only: update golden evidence, rerun with performance, add fake evidence, investigate engine result, or keep queued.
+
+The proof report renders safe JSON and markdown with target counts, selected/executed deep counts, PV and MultiPV presence, engine-call counts, elapsed time, warnings, failures, and owner command guidance. It intentionally excludes raw UCI logs, long PV dumps, final move labels, official accuracy, ACPL, backend URLs, and secrets.
+
+Captured proof is evidence for a later pure documentation or golden-evidence update. Phase 30U does not mark a case protected unless the owner-run output actually supports that update, and it does not create product labels.
+
 ## Initial V1 Cases
 
 The initial suite includes compact cases for:
