@@ -209,6 +209,102 @@ void main() {
       );
     });
 
+    test('king-safety mating-net hard case has king-safety coverage', () {
+      final review = _reviewSingle('king-safety-mating-net-hard-case');
+
+      expect(review.status, GoldenEvidenceReviewStatus.passed);
+      expect(
+        review.motifEvidenceGroups,
+        contains(GoldenMotifEvidenceGroup.kingSafety),
+      );
+      expect(
+        review.motifEvidenceGroups,
+        contains(GoldenMotifEvidenceGroup.forcing),
+      );
+      expect(
+        review.satisfiedReasonCodes,
+        contains(DeepCandidateReasonCode.givesCheck),
+      );
+    });
+
+    test('quiet preparatory hard case remains incomplete without support', () {
+      final review = _reviewSingle('quiet-preparatory-hard-case');
+
+      expect(review.status, GoldenEvidenceReviewStatus.incompleteEvidence);
+      expect(review.realEngineEvidenceNeeded, isFalse);
+      expect(
+        review.missingMotifEvidence,
+        contains('uncertainty:quietMoveEvidence'),
+      );
+    });
+
+    test('missing compensation evidence becomes incomplete evidence', () {
+      final weak = _caseById('sacrifice-compensation-hard-case').copyWith(
+        id: 'weak-sacrifice-compensation-hard-case',
+        inputs: const [LocalAnalysisPositionInput(fen: _fen)],
+      );
+
+      final result = const GoldenEvidenceReviewRunner().review(
+        GoldenEvidenceReviewRequest(cases: [weak]),
+      );
+
+      expect(
+        result.caseReviews.single.status,
+        GoldenEvidenceReviewStatus.incompleteEvidence,
+      );
+      expect(
+        result.caseReviews.single.missingMotifEvidence,
+        contains('material:materialCompensation'),
+      );
+    });
+
+    test('endgame precision hard case stays conservative', () {
+      final review = _reviewSingle('endgame-precision-hard-case');
+
+      expect(review.status, GoldenEvidenceReviewStatus.passed);
+      expect(review.satisfiedReasonCodes, isEmpty);
+      expect(
+        review.motifEvidenceGroups,
+        contains(GoldenMotifEvidenceGroup.positional),
+      );
+    });
+
+    test('forcing-line variation hard case has forcing evidence', () {
+      final review = _reviewSingle('forcing-line-variation-hard-case');
+
+      expect(review.status, GoldenEvidenceReviewStatus.passed);
+      expect(
+        review.motifEvidenceGroups,
+        contains(GoldenMotifEvidenceGroup.forcing),
+      );
+      expect(
+        review.satisfiedReasonCodes,
+        contains(DeepCandidateReasonCode.candidateEvalSpread),
+      );
+    });
+
+    test('new hard cases do not need real-device proof by default', () {
+      final result = const GoldenEvidenceReviewRunner().review(
+        GoldenEvidenceReviewRequest(
+          cases: [
+            _caseById('king-safety-mating-net-hard-case'),
+            _caseById('quiet-preparatory-hard-case'),
+            _caseById('sacrifice-compensation-hard-case'),
+            _caseById('endgame-precision-hard-case'),
+            _caseById('forcing-line-variation-hard-case'),
+          ],
+          mode: GoldenEvidenceReviewMode.realDeviceEvidenceReferenceOnly,
+          requireAllEvidence: true,
+        ),
+      );
+
+      expect(result.needsRealDeviceEvidenceCount, 0);
+      expect(
+        result.caseReviews.every((review) => !review.realEngineEvidenceNeeded),
+        isTrue,
+      );
+    });
+
     test('missing motif evidence becomes incomplete evidence', () {
       final incomplete = _caseById('quiet-preparatory-uncertain');
 

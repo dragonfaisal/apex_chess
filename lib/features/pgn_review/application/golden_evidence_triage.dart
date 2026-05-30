@@ -653,11 +653,8 @@ class GoldenEvidenceTriagePolicy {
       );
     }
     if (weakGroups.any(
-          (group) => group.group == GoldenMotifGroup.kingSafetyAndMate,
-        ) ||
-        entries.any(
-          (entry) => entry.motifs.contains(GoldenMotifTag.matingNet),
-        )) {
+      (group) => group.group == GoldenMotifGroup.kingSafetyAndMate,
+    )) {
       add(
         const GoldenHandcraftedHardCaseArea(
           id: 'king-safety-mating-net-proof',

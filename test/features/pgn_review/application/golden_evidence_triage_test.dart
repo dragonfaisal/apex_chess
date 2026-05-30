@@ -166,11 +166,11 @@ void main() {
     test('weak motif groups are detected', () {
       final result = _run();
 
+      expect(result.weakMotifGroups, isEmpty);
       expect(
-        result.weakMotifGroups.map((group) => group.group),
+        result.strongMotifGroups.map((group) => group.group),
         contains(GoldenMotifGroup.kingSafetyAndMate),
       );
-      expect(result.strongMotifGroups, isNotEmpty);
     });
 
     test('proof queue excludes protected and fake-evidence-only cases', () {
@@ -237,8 +237,33 @@ void main() {
       );
       expect(
         first.recommendedNewHandcraftedHardCaseAreas.map((area) => area.id),
-        contains('king-safety-mating-net-proof'),
+        isNot(contains('king-safety-mating-net-proof')),
       );
+    });
+
+    test('new hard cases are triaged without hiding uncertainty', () {
+      final result = _run();
+
+      expect(
+        _entry(result, 'king-safety-mating-net-hard-case').isProtected,
+        isTrue,
+      );
+      expect(
+        _entry(result, 'sacrifice-compensation-hard-case').isProtected,
+        isTrue,
+      );
+      expect(_entry(result, 'endgame-precision-hard-case').isProtected, isTrue);
+      expect(
+        _entry(result, 'forcing-line-variation-hard-case').isProtected,
+        isTrue,
+      );
+
+      final quiet = _entry(result, 'quiet-preparatory-hard-case');
+      expect(
+        quiet.currentReviewStatus,
+        GoldenEvidenceReviewStatus.incompleteEvidence,
+      );
+      expect(quiet.nextAction, GoldenEvidenceTriageNextAction.addFakeEvidence);
     });
   });
 

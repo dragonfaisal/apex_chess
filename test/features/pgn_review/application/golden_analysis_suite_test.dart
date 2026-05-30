@@ -103,6 +103,27 @@ void main() {
       expect(motifs, contains(GoldenMotifTag.passedPawn));
       expect(motifs, contains(GoldenMotifTag.realDeviceProofNeeded));
     });
+
+    test('Phase 30W handcrafted cases are present and safe', () {
+      final cases = _phase30wCases();
+
+      expect(
+        cases.map((item) => item.id),
+        orderedEquals(const [
+          'king-safety-mating-net-hard-case',
+          'quiet-preparatory-hard-case',
+          'sacrifice-compensation-hard-case',
+          'endgame-precision-hard-case',
+          'forcing-line-variation-hard-case',
+        ]),
+      );
+      for (final item in cases) {
+        expect(item.safety.licenseSafe, isTrue, reason: item.id);
+        expect(item.safety.handcrafted, isTrue, reason: item.id);
+        expect(item.safety.noFinalLabel, isTrue, reason: item.id);
+        expect(item.containsBlockedClaim, isFalse, reason: item.id);
+      }
+    });
   });
 
   group('GoldenMotifEvidencePolicy', () {
@@ -362,6 +383,80 @@ void main() {
       expect(result.casesRequiringFutureRealEngineProof, 1);
     });
 
+    test(
+      'king-safety mating-net case requires king-safety and forcing evidence',
+      () {
+        final item = _caseById('king-safety-mating-net-hard-case');
+        final result = _runSingle(item.id);
+
+        expect(result.passed, isTrue);
+        expect(result.selectedDeepCount, 1);
+        expect(
+          item.expected.evidence.tactical.requiresKingSafetySignal,
+          isTrue,
+        );
+        expect(
+          item.expected.evidence.tactical.requiresForcingLineSignal,
+          isTrue,
+        );
+        expect(
+          result.reasonCounts,
+          containsPair(DeepCandidateReasonCode.givesCheck, 1),
+        );
+      },
+    );
+
+    test('quiet preparatory hard case does not force deep by tag alone', () {
+      final result = _runSingle('quiet-preparatory-hard-case');
+
+      expect(result.passed, isTrue);
+      expect(result.candidateCount, 0);
+      expect(result.selectedDeepCount, 0);
+    });
+
+    test('sacrifice compensation hard case requires material evidence', () {
+      final item = _caseById('sacrifice-compensation-hard-case');
+      final result = _runSingle(item.id);
+
+      expect(result.passed, isTrue);
+      expect(item.expected.evidence.tactical.requiresMaterialSwing, isTrue);
+      expect(
+        item.expected.evidence.tactical.requiresMaterialCompensation,
+        isTrue,
+      );
+      expect(
+        result.reasonCounts,
+        containsPair(DeepCandidateReasonCode.materialSwing, 1),
+      );
+    });
+
+    test(
+      'endgame precision hard case remains conservative without evidence',
+      () {
+        final result = _runSingle('endgame-precision-hard-case');
+
+        expect(result.passed, isTrue);
+        expect(result.candidateCount, 0);
+        expect(result.selectedDeepCount, 0);
+      },
+    );
+
+    test('forcing-line variation requires forcing and tactical evidence', () {
+      final item = _caseById('forcing-line-variation-hard-case');
+      final result = _runSingle(item.id);
+
+      expect(result.passed, isTrue);
+      expect(item.expected.evidence.tactical.requiresForcingLineSignal, isTrue);
+      expect(
+        result.reasonCounts,
+        containsPair(DeepCandidateReasonCode.givesCheck, 1),
+      );
+      expect(
+        result.reasonCounts,
+        containsPair(DeepCandidateReasonCode.candidateEvalSpread, 1),
+      );
+    });
+
     test('plan-only mode performs no real engine calls', () {
       final result = const GoldenAnalysisSuiteRunner().run(
         const GoldenAnalysisSuiteRequest(
@@ -479,6 +574,17 @@ GoldenAnalysisCaseResult _runSingle(
 
 GoldenAnalysisCase _caseById(String id) {
   return GoldenAnalysisCases.defaults.singleWhere((item) => item.id == id);
+}
+
+List<GoldenAnalysisCase> _phase30wCases() {
+  const ids = [
+    'king-safety-mating-net-hard-case',
+    'quiet-preparatory-hard-case',
+    'sacrifice-compensation-hard-case',
+    'endgame-precision-hard-case',
+    'forcing-line-variation-hard-case',
+  ];
+  return ids.map(_caseById).toList(growable: false);
 }
 
 String get _goldenSource => File(

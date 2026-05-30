@@ -101,6 +101,28 @@ void main() {
       );
     });
 
+    test('report includes Phase 30W handcrafted cases', () {
+      final result = _run(args: const ['--format=markdown']);
+
+      expect(result.exitCode, goldenEvidenceReviewReportExitSuccess);
+      expect(result.review!.totalCases, 15);
+      expect(result.stdoutText, contains('king-safety-mating-net-hard-case'));
+      expect(result.stdoutText, contains('quiet-preparatory-hard-case'));
+      expect(result.stdoutText, contains('sacrifice-compensation-hard-case'));
+      expect(result.stdoutText, contains('endgame-precision-hard-case'));
+      expect(result.stdoutText, contains('forcing-line-variation-hard-case'));
+    });
+
+    test('JSON report captures updated motif coverage', () {
+      final result = _run(args: const ['--format=json']);
+      final decoded = jsonDecode(result.stdoutText) as Map<String, Object?>;
+      final summary = decoded['summary'] as Map<String, Object?>;
+
+      expect(summary['totalCases'], 15);
+      expect(summary['incompleteCount'], 2);
+      expect(summary['needsRealDeviceEvidenceCount'], 0);
+    });
+
     test('unknown flag exits usage error', () {
       final result = _run(args: const ['--unknown']);
 

@@ -359,6 +359,32 @@ After ingestion:
 
 Phase 30V does not update product review output and does not add labels. Golden cases remain regression inputs and evidence records only.
 
+## Handcrafted Hard Cases Expansion
+
+Phase 30W adds the smallest next handcrafted case set for weak motif coverage. The new rows are compact, license-safe regression inputs only:
+
+- `king-safety-mating-net-hard-case`: exposed-king, mating-net, king-hunt, mate-threat, and forcing-line evidence without claiming a forced mate;
+- `quiet-preparatory-hard-case`: quiet preparatory uncertainty that stays incomplete until stronger supporting evidence is supplied;
+- `sacrifice-compensation-hard-case`: sacrifice and exchange-sacrifice compensation requiring material and tactical evidence;
+- `endgame-precision-hard-case`: conservative endgame-precision coverage without exact score assertions;
+- `forcing-line-variation-hard-case`: forcing-line/check-sequence variation with tactical reason-code coverage.
+
+Post-30W review state:
+
+- total golden cases: 15;
+- protected cases: 13;
+- incomplete cases: 2 (`quiet-preparatory-uncertain` and `quiet-preparatory-hard-case`);
+- real-device-needed cases: 0;
+- owner proof queue: empty.
+
+The Phase 30U/30V S22 Ultra proof remains attached only to:
+
+- `mate-threat-fast-evidence`;
+- `queen-win-major-swing`;
+- `simple-tactical-capture-check`.
+
+The new hard cases are not product claims. They do not add final labels, official metrics, UI activation, persistence, backend behavior, or classifier thresholds. Any row without enough evidence remains incomplete instead of being treated as protected. Future real-device proof should only be queued for cases that explicitly need PV or MultiPV proof.
+
 ## Initial V1 Cases
 
 The initial suite includes compact cases for:
@@ -373,6 +399,8 @@ The initial suite includes compact cases for:
 - technical endgame conservatism;
 - budget pressure;
 - queen-win major swing.
+
+Phase 30W extends that base with compact rows for king-safety mating-net pressure, quiet preparatory uncertainty, sacrifice compensation variation, endgame precision, and forcing-line variation.
 
 The cases are framework guards and evidence expectations, not final chess judgments.
 

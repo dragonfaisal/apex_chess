@@ -43,12 +43,25 @@ void main() {
       final first = _run(args: const ['--format=json']);
       final second = _run(args: const ['--format=json']);
       final decoded = jsonDecode(first.stdoutText) as Map<String, Object?>;
+      final summary = decoded['summary'] as Map<String, Object?>;
 
       expect(first.exitCode, goldenEvidenceTriageReportExitSuccess);
       expect(first.stdoutText, second.stdoutText);
       expect(decoded['version'], goldenEvidenceTriageReportVersion);
       expect(decoded['summary'], isA<Map<String, Object?>>());
       expect(decoded['proofQueue'], isA<Map<String, Object?>>());
+      expect(summary['totalCases'], 15);
+      expect(summary['protectedCount'], 13);
+      expect(summary['incompleteCount'], 2);
+    });
+
+    test('triage output includes new quiet hard-case action', () {
+      final result = _run();
+
+      expect(result.exitCode, goldenEvidenceTriageReportExitSuccess);
+      expect(result.stdoutText, contains('quiet-preparatory-hard-case'));
+      expect(result.stdoutText, contains('addFakeEvidence'));
+      expect(result.triage!.recommendedOwnerRunProofQueue.targets, isEmpty);
     });
 
     test('max proof targets flag keeps ingested queue empty', () {

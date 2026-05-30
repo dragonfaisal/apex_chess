@@ -1783,6 +1783,244 @@ class GoldenAnalysisCases {
         ),
       ),
     ),
+    GoldenAnalysisCase(
+      id: 'king-safety-mating-net-hard-case',
+      title: 'King safety mating-net pressure',
+      category: GoldenAnalysisCategory.forcedMateThreat,
+      sourceType: GoldenAnalysisSourceType.fenPosition,
+      fen: _mateThreatFen,
+      inputs: [
+        LocalAnalysisPositionInput(
+          fen: _mateThreatFen,
+          plyIndex: 34,
+          legalMoveCount: 28,
+          givesCheck: true,
+          candidateEvalSpreadCp: 240,
+        ),
+      ],
+      motifTags: [
+        GoldenMotifTag.exposedKing,
+        GoldenMotifTag.matingNet,
+        GoldenMotifTag.kingHunt,
+        GoldenMotifTag.mateThreat,
+        GoldenMotifTag.forcingLine,
+      ],
+      notes: ['handcrafted license-safe Phase 30W regression input'],
+      expected: GoldenExpectedBehavior(
+        behaviors: {
+          GoldenExpectedBehaviorCode.shouldGenerateDeepCandidate,
+          GoldenExpectedBehaviorCode.shouldSelectDeepUnderBalanced,
+          GoldenExpectedBehaviorCode.shouldNotEmitFinalLabel,
+        },
+        evidence: GoldenEvidenceExpectation(
+          candidateSpreadMinCp: 220,
+          expectedReasonCodes: {
+            DeepCandidateReasonCode.tacticalSignal,
+            DeepCandidateReasonCode.givesCheck,
+            DeepCandidateReasonCode.candidateEvalSpread,
+          },
+          tactical: GoldenTacticalEvidenceExpectation(
+            requiresKingSafetySignal: true,
+            requiresForcingLineSignal: true,
+            requiresCandidateSpread: true,
+            kingSafetyReasons: {
+              DeepCandidateReasonCode.tacticalSignal,
+              DeepCandidateReasonCode.givesCheck,
+            },
+            forcingReasons: {
+              DeepCandidateReasonCode.tacticalSignal,
+              DeepCandidateReasonCode.givesCheck,
+              DeepCandidateReasonCode.candidateEvalSpread,
+            },
+          ),
+        ),
+        maxDeepCandidates: 1,
+        maxDeepEngineCalls: 2,
+        maxTotalEngineCalls: 2,
+      ),
+    ),
+    GoldenAnalysisCase(
+      id: 'quiet-preparatory-hard-case',
+      title: 'Quiet preparatory evidence gap',
+      category: GoldenAnalysisCategory.quietPreparatoryMove,
+      sourceType: GoldenAnalysisSourceType.fenPosition,
+      fen: _quietFen,
+      inputs: [
+        LocalAnalysisPositionInput(
+          fen: _quietFen,
+          plyIndex: 36,
+          legalMoveCount: 22,
+        ),
+      ],
+      motifTags: [
+        GoldenMotifTag.quietPreparatoryMove,
+        GoldenMotifTag.quietMove,
+        GoldenMotifTag.evidenceIncomplete,
+      ],
+      notes: ['handcrafted license-safe Phase 30W regression input'],
+      expected: GoldenExpectedBehavior(
+        behaviors: {GoldenExpectedBehaviorCode.shouldNotEmitFinalLabel},
+        evidence: GoldenEvidenceExpectation(
+          tactical: GoldenTacticalEvidenceExpectation(
+            requiresQuietMoveEvidence: true,
+            declaredGroups: {
+              GoldenMotifEvidenceGroup.positional,
+              GoldenMotifEvidenceGroup.uncertainty,
+            },
+            uncertaintyReasons: {DeepCandidateReasonCode.missingFastPv},
+          ),
+        ),
+        maxSelectedDeepRatio: 0,
+      ),
+    ),
+    GoldenAnalysisCase(
+      id: 'sacrifice-compensation-hard-case',
+      title: 'Sacrifice compensation variation',
+      category: GoldenAnalysisCategory.materialSacrifice,
+      sourceType: GoldenAnalysisSourceType.fenPosition,
+      fen: _tacticalFen,
+      inputs: [
+        LocalAnalysisPositionInput(
+          fen: _tacticalFen,
+          plyIndex: 38,
+          materialDeltaAfterMoveCp: -420,
+          isCapture: true,
+          candidateEvalSpreadCp: 230,
+        ),
+      ],
+      motifTags: [
+        GoldenMotifTag.sacrifice,
+        GoldenMotifTag.exchangeSacrifice,
+        GoldenMotifTag.materialCompensation,
+        GoldenMotifTag.forcingLine,
+      ],
+      notes: ['handcrafted license-safe Phase 30W regression input'],
+      expected: GoldenExpectedBehavior(
+        behaviors: {
+          GoldenExpectedBehaviorCode.shouldGenerateDeepCandidate,
+          GoldenExpectedBehaviorCode.shouldSelectDeepUnderBalanced,
+          GoldenExpectedBehaviorCode.shouldNotEmitFinalLabel,
+        },
+        evidence: GoldenEvidenceExpectation(
+          candidateSpreadMinCp: 220,
+          materialSwingMinCp: 300,
+          expectedReasonCodes: {
+            DeepCandidateReasonCode.materialSwing,
+            DeepCandidateReasonCode.captureOrPromotion,
+            DeepCandidateReasonCode.candidateEvalSpread,
+          },
+          tactical: GoldenTacticalEvidenceExpectation(
+            requiresMaterialSwing: true,
+            requiresMaterialCompensation: true,
+            requiresForcingLineSignal: true,
+            requiresCandidateSpread: true,
+            tacticalReasons: {
+              DeepCandidateReasonCode.captureOrPromotion,
+              DeepCandidateReasonCode.candidateEvalSpread,
+            },
+            materialReasons: {
+              DeepCandidateReasonCode.materialSwing,
+              DeepCandidateReasonCode.captureOrPromotion,
+            },
+            forcingReasons: {DeepCandidateReasonCode.candidateEvalSpread},
+          ),
+        ),
+        maxDeepCandidates: 1,
+        maxDeepEngineCalls: 2,
+        maxTotalEngineCalls: 2,
+      ),
+    ),
+    GoldenAnalysisCase(
+      id: 'endgame-precision-hard-case',
+      title: 'Endgame precision conservative row',
+      category: GoldenAnalysisCategory.endgamePrecision,
+      sourceType: GoldenAnalysisSourceType.fenPosition,
+      fen: _endgameFen,
+      inputs: [
+        LocalAnalysisPositionInput(
+          fen: _endgameFen,
+          plyIndex: 58,
+          legalMoveCount: 8,
+        ),
+      ],
+      motifTags: [
+        GoldenMotifTag.endgamePrecision,
+        GoldenMotifTag.passedPawn,
+        GoldenMotifTag.prophylaxis,
+      ],
+      notes: ['handcrafted license-safe Phase 30W regression input'],
+      expected: GoldenExpectedBehavior(
+        behaviors: {
+          GoldenExpectedBehaviorCode.shouldStayWithinBalancedBudget,
+          GoldenExpectedBehaviorCode.shouldNotEmitFinalLabel,
+        },
+        evidence: GoldenEvidenceExpectation(
+          tactical: GoldenTacticalEvidenceExpectation(
+            declaredGroups: {GoldenMotifEvidenceGroup.positional},
+          ),
+        ),
+        maxSelectedDeepRatio: 0,
+      ),
+    ),
+    GoldenAnalysisCase(
+      id: 'forcing-line-variation-hard-case',
+      title: 'Forcing-line tactical variation',
+      category: GoldenAnalysisCategory.tacticalShot,
+      sourceType: GoldenAnalysisSourceType.fenPosition,
+      fen: _tacticalFen,
+      inputs: [
+        LocalAnalysisPositionInput(
+          fen: _tacticalFen,
+          plyIndex: 40,
+          legalMoveCount: 34,
+          givesCheck: true,
+          isCapture: true,
+          candidateEvalSpreadCp: 250,
+        ),
+      ],
+      motifTags: [
+        GoldenMotifTag.forcingLine,
+        GoldenMotifTag.checkSequence,
+        GoldenMotifTag.zwischenzug,
+        GoldenMotifTag.deflection,
+        GoldenMotifTag.removeDefender,
+      ],
+      notes: ['handcrafted license-safe Phase 30W regression input'],
+      expected: GoldenExpectedBehavior(
+        behaviors: {
+          GoldenExpectedBehaviorCode.shouldGenerateDeepCandidate,
+          GoldenExpectedBehaviorCode.shouldSelectDeepUnderBalanced,
+          GoldenExpectedBehaviorCode.shouldNotEmitFinalLabel,
+        },
+        evidence: GoldenEvidenceExpectation(
+          candidateSpreadMinCp: 220,
+          expectedReasonCodes: {
+            DeepCandidateReasonCode.tacticalSignal,
+            DeepCandidateReasonCode.givesCheck,
+            DeepCandidateReasonCode.captureOrPromotion,
+            DeepCandidateReasonCode.candidateEvalSpread,
+          },
+          tactical: GoldenTacticalEvidenceExpectation(
+            requiresForcingLineSignal: true,
+            requiresCandidateSpread: true,
+            tacticalReasons: {
+              DeepCandidateReasonCode.tacticalSignal,
+              DeepCandidateReasonCode.givesCheck,
+              DeepCandidateReasonCode.captureOrPromotion,
+              DeepCandidateReasonCode.candidateEvalSpread,
+            },
+            forcingReasons: {
+              DeepCandidateReasonCode.tacticalSignal,
+              DeepCandidateReasonCode.givesCheck,
+              DeepCandidateReasonCode.candidateEvalSpread,
+            },
+          ),
+        ),
+        maxDeepCandidates: 1,
+        maxDeepEngineCalls: 2,
+        maxTotalEngineCalls: 2,
+      ),
+    ),
   ];
 }
 

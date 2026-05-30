@@ -682,4 +682,12 @@ Classifier work remains blocked. Phase 30V does not add final move labels, Brill
 
 ## Phase 30W Recommendation
 
-Phase 30W should use the cleaner proof queue to add the next smallest handcrafted evidence cases for weak motifs, starting with king-safety/mating-net and quiet preparatory uncertainty. Any new case should enter the golden suite as regression evidence first, not as a product label or threshold change.
+Phase 30W adds five compact handcrafted golden cases for weak motif coverage: king-safety/mating-net pressure, quiet preparatory uncertainty, sacrifice compensation, endgame precision, and forcing-line variation.
+
+The post-30W Golden Evidence Review state is 15 total cases, 13 protected, 2 incomplete, and 0 real-device-needed rows. The owner proof queue remains empty because no new row requests PV or MultiPV proof. Quiet preparatory uncertainty remains visible rather than over-promoted.
+
+Classifier work remains blocked. Phase 30W does not add final move labels, Brilliant/Great/Miss-style labels, official accuracy, ACPL, UI activation, backend calls, persistence, cache/database writes, product review replacement, direct engine access, or classifier threshold changes.
+
+## Phase 30X Recommendation
+
+Phase 30X should decide whether to add deterministic fake evidence for the two quiet preparatory incomplete rows or queue a narrowly scoped owner proof only if a future quiet case explicitly requires PV/MultiPV evidence.

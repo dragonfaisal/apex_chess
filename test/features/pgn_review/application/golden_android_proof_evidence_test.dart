@@ -179,18 +179,18 @@ void main() {
       expect(quiet.nextAction, GoldenEvidenceTriageNextAction.addFakeEvidence);
     });
 
-    test('weak motif group recommendations remain visible', () {
+    test('Phase 30W hard cases strengthen king-safety motif coverage', () {
       final triage = const GoldenEvidenceTriageRunner().run(
         const GoldenEvidenceTriageRequest(),
       );
 
       expect(
-        triage.weakMotifGroups.map((group) => group.group),
+        triage.strongMotifGroups.map((group) => group.group),
         contains(GoldenMotifGroup.kingSafetyAndMate),
       );
       expect(
         triage.recommendedNewHandcraftedHardCaseAreas.map((area) => area.id),
-        contains('king-safety-mating-net-proof'),
+        isNot(contains('king-safety-mating-net-proof')),
       );
     });
 
