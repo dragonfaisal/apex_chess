@@ -770,6 +770,33 @@ dart run tool/internal_non_label_scoring_design_report.dart
 
 It renders deterministic markdown or JSON, supports `--strict`, `--safe-demo`, and `--include-partial`, does not run Android, does not load real Stockfish, does not call `LocalEvalService`, does not read network, does not write files, and does not execute proof commands.
 
+## Phase 31H Guarded Internal Non-Label Signal Profile
+
+Phase 31H adds a developer-only `InternalNonLabelSignalProfilePrototype` layer above the Phase 31G scoring design. It produces qualitative internal signal profiles only. Signals are evidence signals, not labels, not move-quality judgments, and not product output.
+
+Signal statuses are explicit: `active`, `activeWithWarnings`, `partial`, `excluded`, `blockedByPolicy`, `futureOnly`, `inactive`, or `invalid`. These statuses describe internal profile availability only. They do not classify moves, rank moves, compute numeric move scores, create thresholds, or emit user-facing judgments.
+
+Qualitative confidence values are also internal-only: `highConfidence`, `mediumConfidence`, `lowConfidence`, `warningOnly`, `excluded`, `blocked`, and `futureOnly`. Phase 31H uses no numeric weights, aggregate scores, move rankings, or score thresholds.
+
+Current post-31H decision:
+
+- profile status: `readyWithWarnings`, because warning-ready and partial design dimensions remain visible;
+- active signals: tactical pressure, material swing, forcing line, candidate spread, PV/MultiPV support, and Android proof confidence;
+- warning or partial signals: king safety, endgame support, suppression safety, and budget risk;
+- quiet/preparatory signal: excluded by `quiet-preparatory-uncertain`;
+- product-label, advanced-label, and official-metric signals: blocked by policy;
+- CP-loss and win-probability signals: future-only and not implemented;
+- Android proof confidence remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`;
+- no labels, numeric scores, move rankings, official metrics, CP-loss computation, or win-probability computation are emitted.
+
+The optional command is:
+
+```powershell
+dart run tool/internal_non_label_signal_profile_report.dart
+```
+
+It renders deterministic markdown or JSON, supports `--strict`, `--safe-demo`, and `--include-partial`, does not run Android, does not load real Stockfish, does not call `LocalEvalService`, does not read network, does not write files, and does not execute proof commands.
+
 ## Initial V1 Cases
 
 The initial suite includes compact cases for:

@@ -790,3 +790,9 @@ No scheduler or product integration is added in Phase 31F. The local engine stac
 Phase 31G adds a pure `InternalNonLabelScoringDesign` model and report command. It consumes the Phase 31F coverage matrix and turns area coverage into developer-only design dimensions with qualitative signal types and future prerequisites.
 
 No scheduler or product integration is added in Phase 31G. The local engine stack, selected-deep scheduler, product review flow, saved analysis, UI, backend, persistence, and Android proof collector are unchanged. The design layer does not classify moves, compute scores, add numeric weights, create thresholds, compute official metrics, compute CP loss, compute win probability, call the engine, run Android, or emit product-facing labels. Quiet/preparatory scope remains excluded by `quiet-preparatory-uncertain`.
+
+## Phase 31H Guarded Internal Non-Label Signal Profile
+
+Phase 31H adds a pure `InternalNonLabelSignalProfilePrototype` model and report command. It consumes the Phase 31G scoring design and turns internal design dimensions into qualitative developer-only signal profiles with confidence values, support case IDs, Android proof references, warning-only signals, blocked signals, excluded signals, and future prerequisites.
+
+No scheduler or product integration is added in Phase 31H. The local engine stack, selected-deep scheduler, product review flow, saved analysis, UI, backend, persistence, and Android proof collector are unchanged. The signal profile does not classify moves, compute numeric scores, rank moves, create thresholds, compute official metrics, compute CP loss, compute win probability, call the engine, run Android, or emit product-facing labels. Quiet/preparatory scope remains excluded by `quiet-preparatory-uncertain`.
