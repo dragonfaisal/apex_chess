@@ -545,6 +545,50 @@ dart run tool/basic_classifier_foundation_design_report.dart
 
 It renders deterministic markdown or JSON, supports `--strict`, does not run Android, does not load real Stockfish, does not call `LocalEvalService`, does not read network, and does not write files.
 
+## Phase 31B Evidence Contract Prototype
+
+Phase 31B adds a developer-only `BasicClassifierEvidenceContract` prototype. It turns the Phase 31A design checklist into a structured evidence object and validator that a later internal classifier prototype could consume. It still does not classify moves, score moves, compute official metrics, emit move-quality labels, or connect to UI, saved analysis, product review output, backend, persistence, or the engine.
+
+The contract groups fields by evidence domain:
+
+- evaluation availability: previous eval, played-move eval, best-move eval, candidate spread, PV, and MultiPV availability;
+- tactical evidence: tactical signal, capture/promotion signal, check signal, candidate-spread signal, forcing-line signal, and mate signal;
+- material evidence: material swing, major eval swing, queen-win evidence, and sacrifice-compensation evidence;
+- king-safety evidence: king-safety signal, exposed-king signal, mating-net signal, and king-hunt signal;
+- safety/suppression evidence: opening suppression, forced-move suppression, invalid-FEN suppression, budget pressure, and negative-guard scope exclusion;
+- future product inputs: centipawn-loss availability, win-probability availability, officialAccuracy availability, officialAcpl availability, and product-label output availability.
+
+Field statuses are explicit: `present`, `missing`, `blockedByPolicy`, `futureOnly`, `excludedByNegativeGuard`, `notImplemented`, or `unsupported`. Product-facing output, officialAccuracy, officialAcpl, centipawn-loss computation, and win-probability computation remain blocked or not implemented in this phase.
+
+Group readiness is also explicit:
+
+- tactical, material, forcing-line, king-safety, and safety/suppression evidence are ready only as developer evidence groups with supporting protected golden case IDs;
+- evaluation availability is partial because broad evidence exists, but eval-input fields remain future-only;
+- quiet/preparatory evidence is excluded by `quiet-preparatory-uncertain`;
+- future product inputs remain future-only or policy-blocked.
+
+`quiet-preparatory-hard-case` may appear as protected quiet evidence, but it does not unblock quiet/preparatory classification. `quiet-preparatory-uncertain` remains the exclusion guard and keeps unsupported quiet moves out of future classifier scopes.
+
+Current post-31B decision:
+
+- evidence contract status: `readyForDeveloperEvidencePrototype`;
+- ready for Phase 31C internal non-label bucket design: true;
+- product-facing labels: blocked;
+- advanced candidate gates: blocked;
+- quiet/preparatory classification: excluded;
+- official metrics: blocked;
+- CP-loss and win-probability computation: not implemented;
+- captured Android proof remains attached only to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`;
+- next recommended phase: `Phase 31C -- Internal Non-Label Bucket Design`.
+
+The optional command is:
+
+```powershell
+dart run tool/basic_classifier_evidence_contract_report.dart
+```
+
+It renders deterministic markdown or JSON, supports `--strict`, does not run Android, does not load real Stockfish, does not call `LocalEvalService`, does not read network, does not write files, and does not execute proof commands.
+
 ## Initial V1 Cases
 
 The initial suite includes compact cases for:

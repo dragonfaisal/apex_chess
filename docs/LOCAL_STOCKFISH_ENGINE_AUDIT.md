@@ -421,6 +421,8 @@ Phase 30Z status: quiet/preparatory negative guard and scope exclusion are pure 
 
 Phase 31A status: basic classifier foundation design is pure model/report work only; it adds no direct engine calls, no scheduler/product integration, no Android collector requirement, and no new real-device proof need.
 
+Phase 31B status: basic classifier evidence contract prototyping is pure model/report work only; it adds no direct engine calls, no scheduler/product integration, no Android collector requirement, and no new real-device proof need.
+
 ## Phase 30G Recommendation
 
 Scheduler design: [LOCAL_SMART_SCHEDULER.md](LOCAL_SMART_SCHEDULER.md).

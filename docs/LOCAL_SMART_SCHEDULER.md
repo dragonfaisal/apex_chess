@@ -754,3 +754,9 @@ Allowed scopes are limited to developer-only non-quiet evidence design: non-quie
 Blocked scopes remain quiet/preparatory classification, product-facing labels, advanced candidate gates, officialAccuracy, and officialAcpl. `quiet-preparatory-uncertain` remains the negative guard that excludes quiet/preparatory classification, while `quiet-preparatory-hard-case` remains protected evidence only.
 
 No scheduler integration is added in Phase 31A. The local engine stack, selected-deep scheduler, product review flow, saved analysis, UI, backend, persistence, and real-device proof collector are unchanged. Normal tests still do not require real Stockfish or Android.
+
+## Phase 31B Evidence Contract Prototype
+
+Phase 31B adds a pure `BasicClassifierEvidenceContract` prototype and report command. It consumes the Phase 31A foundation design and golden evidence review data to describe developer-only evidence fields, group readiness, support mapping, blocked future fields, and the quiet/preparatory exclusion.
+
+No scheduler or product integration is added in Phase 31B. The local engine stack, selected-deep scheduler, product review flow, saved analysis, UI, backend, persistence, and Android proof collector are unchanged. The contract does not compute CP loss, win probability, official metrics, or move labels. Quiet/preparatory classification remains excluded by `quiet-preparatory-uncertain`; non-quiet evidence groups may proceed only toward internal non-label bucket design.
