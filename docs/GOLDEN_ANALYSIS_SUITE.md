@@ -797,6 +797,38 @@ dart run tool/internal_non_label_signal_profile_report.dart
 
 It renders deterministic markdown or JSON, supports `--strict`, `--safe-demo`, and `--include-partial`, does not run Android, does not load real Stockfish, does not call `LocalEvalService`, does not read network, does not write files, and does not execute proof commands.
 
+## Phase 31I Internal Signal Profile Consistency Matrix
+
+Phase 31I adds a developer-only `InternalSignalProfileConsistencyMatrix` layer above the Phase 31H signal profile. It checks whether internal signals are coherent, source-backed, non-contradictory, and safe for later internal non-label experiments. This is consistency analysis only; it is not move-quality analysis.
+
+Consistency checks are explicit and deterministic:
+
+- active signals must keep source dimension IDs, evidence area IDs, bucket IDs, and supporting Golden case IDs;
+- warning and partial signals must expose warning reasons or future prerequisites;
+- quiet/preparatory, product-label, advanced-label, official-metric, CP-loss, and win-probability signals must remain excluded, blocked, or future-only;
+- Android proof references must remain limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`;
+- forbidden label output, numeric score output, move ranking, official metrics, raw UCI text, and long PV dumps remain blocked.
+
+Current post-31I decision:
+
+- consistency matrix status: `consistentWithWarnings`, because warning and partial signals remain visible;
+- blocker count: 0;
+- critical count: 0;
+- safe for guarded internal experiment: true;
+- active signals remain source-backed and Golden-supported;
+- quiet/preparatory scope remains excluded by `quiet-preparatory-uncertain`;
+- product-facing labels, advanced labels, and official metrics remain blocked;
+- CP-loss and win-probability computation remain future-only and not implemented;
+- no labels, numeric scores, aggregate signal scores, move rankings, official metrics, CP-loss computation, or win-probability computation are emitted.
+
+The optional command is:
+
+```powershell
+dart run tool/internal_signal_profile_consistency_matrix_report.dart
+```
+
+It renders deterministic markdown or JSON, supports `--strict`, `--safe-demo`, and `--include-partial`, does not run Android, does not load real Stockfish, does not call `LocalEvalService`, does not read network, does not write files, and does not execute proof commands.
+
 ## Initial V1 Cases
 
 The initial suite includes compact cases for:
