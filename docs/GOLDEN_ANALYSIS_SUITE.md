@@ -666,6 +666,42 @@ dart run tool/internal_bucket_experiment_guards_report.dart
 
 It renders deterministic markdown or JSON, supports `--strict` and `--safe-demo`, does not run Android, does not load real Stockfish, does not call `LocalEvalService`, does not read network, does not write files, and does not execute proof commands.
 
+## Phase 31E Internal Non-Label Bucket Experiment Harness
+
+Phase 31E adds a developer-only `InternalBucketExperimentHarness` layer. The harness can run only after `InternalBucketExperimentGuard` approves the request as `allowedInternalOnly` or `allowedWithWarnings`. If the guard blocks a request, the harness stops and reports the guard decision without inspecting buckets.
+
+Harness observations are internal evidence observations only. They record approved bucket IDs, bucket status, supporting golden case IDs, optional partial-bucket warnings, evidence areas, and proven Android proof references. They are not move labels, do not score moves, do not tune thresholds, and do not emit product-facing judgments.
+
+Quiet/preparatory scope remains excluded by `quiet-preparatory-uncertain`. The harness reports the exclusion in an inactive blocked/excluded section; it does not activate quiet/preparatory observations. Product output, advanced gates, official metrics, CP-loss computation, and win-probability computation remain blocked.
+
+Android proof references are limited to the captured Phase 30U IDs:
+
+- `mate-threat-fast-evidence`;
+- `queen-win-major-swing`;
+- `simple-tactical-capture-check`.
+
+Current post-31E decision:
+
+- safe demo harness status: `completedInternalOnly`;
+- guard status for safe demo: `allowedInternalOnly`;
+- observed buckets: supported non-quiet internal evidence buckets only;
+- partial buckets: warning-only when explicitly included, skipped deterministically when excluded;
+- quiet/preparatory scope: excluded;
+- product-facing labels: blocked;
+- advanced gates: blocked;
+- official metrics: blocked;
+- CP-loss and win-probability computation: not implemented;
+- direct engine, UI, backend, and persistence access: blocked;
+- next recommended phase: `Phase 31F -- Internal Evidence Area Analysis With Labels Still Blocked`.
+
+The optional command is:
+
+```powershell
+dart run tool/internal_bucket_experiment_harness_report.dart
+```
+
+It renders deterministic markdown or JSON, supports `--strict`, `--safe-demo`, and `--include-partial`, does not run Android, does not load real Stockfish, does not call `LocalEvalService`, does not read network, does not write files, and does not execute proof commands.
+
 ## Initial V1 Cases
 
 The initial suite includes compact cases for:

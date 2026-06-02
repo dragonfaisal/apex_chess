@@ -772,3 +772,9 @@ No scheduler or product integration is added in Phase 31C. The local engine stac
 Phase 31D adds a pure `InternalBucketExperimentGuard` model and report command. It protects future internal bucket experiments from requesting product labels, advanced labels, official metrics, CP-loss or win-probability computation, quiet/preparatory scope, unproven Android proof claims, direct engine access, UI/backend output, or persistence.
 
 No scheduler or product integration is added in Phase 31D. The local engine stack, selected-deep scheduler, product review flow, saved analysis, UI, backend, persistence, and Android proof collector are unchanged. Safe experiments may only use supported non-quiet buckets as developer-only evidence references.
+
+## Phase 31E Internal Non-Label Bucket Experiment Harness
+
+Phase 31E adds a pure `InternalBucketExperimentHarness` model and report command. It runs only after the Phase 31D guard approves the request, then observes approved supported non-quiet internal buckets, supporting golden case IDs, partial-bucket warnings, blocked/excluded areas, and proven Android proof references.
+
+No scheduler or product integration is added in Phase 31E. The local engine stack, selected-deep scheduler, product review flow, saved analysis, UI, backend, persistence, and Android proof collector are unchanged. The harness does not classify moves, score moves, compute official metrics, compute CP loss, compute win probability, call the engine, run Android, or emit product-facing labels. Quiet/preparatory scope remains excluded by `quiet-preparatory-uncertain`.
