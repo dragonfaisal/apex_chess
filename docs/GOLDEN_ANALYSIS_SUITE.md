@@ -702,6 +702,40 @@ dart run tool/internal_bucket_experiment_harness_report.dart
 
 It renders deterministic markdown or JSON, supports `--strict`, `--safe-demo`, and `--include-partial`, does not run Android, does not load real Stockfish, does not call `LocalEvalService`, does not read network, does not write files, and does not execute proof commands.
 
+## Phase 31F Internal Evidence Area Coverage Matrix
+
+Phase 31F adds a developer-only `InternalEvidenceAreaCoverageMatrix` layer above the Phase 31E harness. It analyzes evidence-area coverage from approved harness output. This is coverage analysis, not chess move quality analysis.
+
+Evidence areas are internal coverage areas only:
+
+- tactical, material-swing, forcing-line, king-safety, conservative endgame, safety/suppression, Android-proof-backed, candidate-spread, PV/MultiPV, budget-pressure, opening-suppression, forced-move-suppression, and invalid-FEN-suppression areas;
+- quiet/preparatory exclusion;
+- product-label, advanced-label, official-metric, CP-loss, and win-probability policy blocks.
+
+Coverage statuses are explicit: `strong`, `adequate`, `partial`, `weak`, `excluded`, `blockedByPolicy`, `futureOnly`, `unsupported`, or `invalid`. These statuses describe evidence coverage only. They do not classify moves, score moves, tune thresholds, or emit user-facing judgments.
+
+Gap recommendations are deterministic workflow hints: `keepStable`, `addHandcraftedCase`, `addFakeEvidence`, `addOwnerAndroidProofOnlyIfPvRequired`, `keepExcludedByNegativeGuard`, `keepBlockedByPolicy`, `investigateMismatch`, and `futureProductInputOnly`.
+
+Current post-31F decision:
+
+- matrix status: `readyWithWarnings`, because individual suppression areas currently have one supporting case each;
+- strong areas: tactical and safety/suppression;
+- adequate areas: material swing, forcing line, king safety, conservative endgame, Android proof backing, candidate spread, and PV/MultiPV;
+- partial areas: budget pressure, opening suppression, forced-move suppression, and invalid-FEN suppression;
+- quiet/preparatory area: excluded by `quiet-preparatory-uncertain`;
+- product, advanced, and official metric areas: blocked by policy;
+- CP-loss and win-probability computation areas: future-only and not implemented;
+- Android proof support remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`;
+- next recommended phase: `Phase 31G -- Internal Non-Label Coverage-Informed Scoring Design`.
+
+The optional command is:
+
+```powershell
+dart run tool/internal_evidence_area_coverage_matrix_report.dart
+```
+
+It renders deterministic markdown or JSON, supports `--strict`, `--safe-demo`, and `--include-partial`, does not run Android, does not load real Stockfish, does not call `LocalEvalService`, does not read network, does not write files, and does not execute proof commands.
+
 ## Initial V1 Cases
 
 The initial suite includes compact cases for:

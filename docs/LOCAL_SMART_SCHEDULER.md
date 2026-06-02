@@ -778,3 +778,9 @@ No scheduler or product integration is added in Phase 31D. The local engine stac
 Phase 31E adds a pure `InternalBucketExperimentHarness` model and report command. It runs only after the Phase 31D guard approves the request, then observes approved supported non-quiet internal buckets, supporting golden case IDs, partial-bucket warnings, blocked/excluded areas, and proven Android proof references.
 
 No scheduler or product integration is added in Phase 31E. The local engine stack, selected-deep scheduler, product review flow, saved analysis, UI, backend, persistence, and Android proof collector are unchanged. The harness does not classify moves, score moves, compute official metrics, compute CP loss, compute win probability, call the engine, run Android, or emit product-facing labels. Quiet/preparatory scope remains excluded by `quiet-preparatory-uncertain`.
+
+## Phase 31F Internal Evidence Area Coverage Matrix
+
+Phase 31F adds a pure `InternalEvidenceAreaCoverageMatrix` model and report command. It consumes approved Phase 31E harness output and summarizes evidence coverage by internal area: strong, adequate, partial, excluded, blocked, or future-only.
+
+No scheduler or product integration is added in Phase 31F. The local engine stack, selected-deep scheduler, product review flow, saved analysis, UI, backend, persistence, and Android proof collector are unchanged. The matrix does not classify moves, score moves, compute official metrics, compute CP loss, compute win probability, call the engine, run Android, or emit product-facing labels. Quiet/preparatory scope remains excluded by `quiet-preparatory-uncertain`.
