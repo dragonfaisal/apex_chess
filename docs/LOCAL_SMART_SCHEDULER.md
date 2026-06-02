@@ -766,3 +766,9 @@ No scheduler or product integration is added in Phase 31B. The local engine stac
 Phase 31C adds a pure `InternalEvidenceBucketPrototype` model and report command. It consumes the Phase 31B evidence contract to group current developer-only evidence into internal buckets such as tactical support, material swing support, forcing-line support, king-safety support, conservative endgame support, suppression support, Android-proof backing, candidate spread, and PV/MultiPV support.
 
 No scheduler or product integration is added in Phase 31C. The local engine stack, selected-deep scheduler, product review flow, saved analysis, UI, backend, persistence, and Android proof collector are unchanged. Buckets are not move labels. Product output remains blocked, official metrics remain blocked, CP-loss and win-probability computation remain unimplemented, and quiet/preparatory classification remains excluded by `quiet-preparatory-uncertain`.
+
+## Phase 31D Internal Bucket Experiment Guards
+
+Phase 31D adds a pure `InternalBucketExperimentGuard` model and report command. It protects future internal bucket experiments from requesting product labels, advanced labels, official metrics, CP-loss or win-probability computation, quiet/preparatory scope, unproven Android proof claims, direct engine access, UI/backend output, or persistence.
+
+No scheduler or product integration is added in Phase 31D. The local engine stack, selected-deep scheduler, product review flow, saved analysis, UI, backend, persistence, and Android proof collector are unchanged. Safe experiments may only use supported non-quiet buckets as developer-only evidence references.

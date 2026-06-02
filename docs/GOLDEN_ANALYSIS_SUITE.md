@@ -626,6 +626,46 @@ dart run tool/internal_evidence_buckets_report.dart
 
 It renders deterministic markdown or JSON, supports `--strict`, does not run Android, does not load real Stockfish, does not call `LocalEvalService`, does not read network, does not write files, and does not execute proof commands.
 
+## Phase 31D Internal Bucket Experiment Guards
+
+Phase 31D adds a developer-only `InternalBucketExperimentGuard` layer. It protects future internal bucket experiments before any experiment can consume the Phase 31C buckets. This is guard work only: it does not classify moves, does not score moves, does not tune thresholds, does not compute product metrics, and does not connect to UI, saved analysis, product review output, backend, persistence, or the engine.
+
+Allowed experiments must be internal-only and may request only supported or partial non-quiet buckets. Partial buckets are allowed only with warnings. Every allowed request keeps product output, advanced gates, official metrics, CP-loss computation, win-probability computation, direct engine access, UI/backend output, and persistence disabled.
+
+The guard blocks requests that ask for:
+
+- product-facing or final move-quality output;
+- advanced candidate output;
+- official metrics;
+- CP-loss or win-probability computation;
+- quiet/preparatory scope;
+- direct engine or `LocalEvalService` access;
+- UI, backend, persistence, cache, or database output;
+- policy-blocked, future-only, unsupported, or excluded buckets;
+- Android proof claims outside captured proof IDs.
+
+Android proof claims are evidence references only and are limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`. `quiet-preparatory-uncertain` remains the negative guard that excludes quiet/preparatory scope, while `quiet-preparatory-hard-case` remains protected evidence only.
+
+Current post-31D decision:
+
+- safe demo experiment status: `allowedInternalOnly`;
+- requested safe buckets: supported non-quiet internal evidence buckets only;
+- quiet/preparatory scope: excluded;
+- product-facing labels: blocked;
+- advanced gates: blocked;
+- official metrics: blocked;
+- CP-loss and win-probability computation: not implemented;
+- direct engine, UI, backend, and persistence access: blocked;
+- next recommended phase: `Phase 31E -- Internal Non-Label Bucket Experiment Harness`.
+
+The optional command is:
+
+```powershell
+dart run tool/internal_bucket_experiment_guards_report.dart
+```
+
+It renders deterministic markdown or JSON, supports `--strict` and `--safe-demo`, does not run Android, does not load real Stockfish, does not call `LocalEvalService`, does not read network, does not write files, and does not execute proof commands.
+
 ## Initial V1 Cases
 
 The initial suite includes compact cases for:

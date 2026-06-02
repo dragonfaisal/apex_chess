@@ -425,6 +425,8 @@ Phase 31B status: basic classifier evidence contract prototyping is pure model/r
 
 Phase 31C status: internal non-label evidence bucket prototyping is pure model/report work only; it adds no direct engine calls, no scheduler/product integration, no Android collector requirement, and no new real-device proof need.
 
+Phase 31D status: internal bucket experiment guards are pure model/report work only; they add no direct engine calls, no scheduler/product integration, no Android collector requirement, and no new real-device proof need.
+
 ## Phase 30G Recommendation
 
 Scheduler design: [LOCAL_SMART_SCHEDULER.md](LOCAL_SMART_SCHEDULER.md).
