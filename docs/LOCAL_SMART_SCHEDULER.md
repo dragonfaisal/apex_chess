@@ -727,3 +727,20 @@ Current post-30Y state:
 - `quiet-preparatory-uncertain` remains visible and unresolved.
 
 Classifier output remains blocked. Basic classifier foundation can only remain developer-only design/prototype work, product-facing labels remain blocked, advanced candidate gates remain blocked, and quiet/preparatory scope remains blocked until the unresolved quiet uncertainty is either supported or intentionally excluded by a later gate.
+
+## Phase 30Z Quiet Preparatory Negative Guard
+
+Phase 30Z makes the remaining quiet/preparatory uncertainty explicit instead of forcing protection. `quiet-preparatory-uncertain` is now an intentional negative guard: it proves unsupported quiet moves must remain excluded from future classifier scopes unless stronger evidence is added later.
+
+Current post-30Z state:
+
+- total golden cases: 15;
+- protected cases: 14;
+- negative guard cases: 1 (`quiet-preparatory-uncertain`);
+- incomplete cases: 0;
+- real-device-needed cases: 0;
+- owner Android proof queue: empty;
+- `quiet-preparatory-hard-case` remains protected by broad deterministic support groups;
+- `quiet-preparatory-uncertain` is visible, not protected, not failed, and not queued for Android proof.
+
+This remains readiness and evidence work only. Product-facing labels and advanced candidate gates stay blocked. Basic developer-only classifier design may proceed later only with quiet/preparatory scope excluded, and reports must keep that exclusion visible.

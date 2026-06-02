@@ -94,7 +94,7 @@ void main() {
       expect(result.stdoutText, contains('# Golden Evidence Review Report'));
       expect(result.stdoutText, contains('## Summary'));
       expect(result.stdoutText, contains('## Motif Evidence Group Coverage'));
-      expect(result.stdoutText, contains('## Motif Evidence Gaps'));
+      expect(result.stdoutText, contains('## Negative Guards'));
       expect(result.stdoutText, contains('## Quiet Preparatory Evidence'));
       expect(result.stdoutText, contains('## Per-Case Summary'));
       expect(
@@ -121,7 +121,9 @@ void main() {
       final summary = decoded['summary'] as Map<String, Object?>;
 
       expect(summary['totalCases'], 15);
-      expect(summary['incompleteCount'], 1);
+      expect(summary['passedCount'], 14);
+      expect(summary['negativeGuardCount'], 1);
+      expect(summary['incompleteCount'], 0);
       expect(summary['needsRealDeviceEvidenceCount'], 0);
     });
 
@@ -148,10 +150,25 @@ void main() {
     });
 
     test('--fail-on-incomplete returns nonzero with incomplete cases', () {
-      final result = _run(args: const ['--fail-on-incomplete']);
+      final incomplete = _caseById('quiet-preparatory-uncertain').copyWith(
+        id: 'quiet-preparatory-ordinary-incomplete',
+        evidenceIntent: GoldenEvidenceIntent.protectiveRegression,
+      );
+      final result = _run(
+        args: const ['--fail-on-incomplete'],
+        cases: [incomplete],
+      );
 
       expect(result.exitCode, goldenEvidenceReviewReportExitIncomplete);
       expect(result.review!.incomplete, greaterThan(0));
+    });
+
+    test('--fail-on-incomplete ignores intentional negative guards', () {
+      final result = _run(args: const ['--fail-on-incomplete']);
+
+      expect(result.exitCode, goldenEvidenceReviewReportExitSuccess);
+      expect(result.review!.negativeGuards, 1);
+      expect(result.review!.incomplete, 0);
     });
 
     test('--fail-on-real-device-needed stays zero after proof ingestion', () {

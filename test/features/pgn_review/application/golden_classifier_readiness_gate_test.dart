@@ -21,15 +21,17 @@ void main() {
       expect(result.totalCaseCount, GoldenAnalysisCases.defaults.length);
     });
 
-    test('reports 14 protected and 1 incomplete row', () {
+    test('reports 14 protected, 1 negative guard, and 0 incomplete rows', () {
       final result = _run();
 
       expect(result.protectedCount, 14);
-      expect(result.incompleteCount, 1);
+      expect(result.negativeGuardCount, 1);
+      expect(result.incompleteCount, 0);
       expect(
-        result.incompleteCaseIds,
+        result.negativeGuardCaseIds,
         orderedEquals(['quiet-preparatory-uncertain']),
       );
+      expect(result.incompleteCaseIds, isEmpty);
     });
 
     test('reports no real-device-needed rows and empty owner proof queue', () {
@@ -70,21 +72,18 @@ void main() {
       );
     });
 
-    test('quiet preparatory scope is blocked by the incomplete quiet case', () {
+    test('quiet preparatory scope is blocked by the negative guard', () {
       final scope = _run().scope(
         GoldenClassifierScope.quietPreparatoryFoundation,
       );
 
-      expect(
-        scope.status,
-        GoldenClassifierScopeStatus.blockedByIncompleteCases,
-      );
+      expect(scope.status, GoldenClassifierScopeStatus.blockedByEvidence);
       expect(
         scope.missingCaseIds,
         orderedEquals(['quiet-preparatory-uncertain']),
       );
       expect(scope.supportingCaseIds, contains('quiet-preparatory-hard-case'));
-      expect(scope.blockers.join('\n'), contains('incomplete evidence'));
+      expect(scope.blockers.join('\n'), contains('negative guard'));
     });
 
     test('tactical material forcing and king-safety scopes are stronger', () {
@@ -112,30 +111,28 @@ void main() {
       );
     });
 
-    test(
-      'basic foundation is developer-only and excludes incomplete quiet',
-      () {
-        final scope = _run().scope(
-          GoldenClassifierScope.basicMoveQualityFoundation,
-        );
+    test('basic foundation is developer-only and excludes quiet scope', () {
+      final scope = _run().scope(
+        GoldenClassifierScope.basicMoveQualityFoundation,
+      );
 
-        expect(
-          scope.status,
-          GoldenClassifierScopeStatus.allowedForDeveloperPrototype,
-        );
-        expect(scope.missingCaseIds, isEmpty);
-        expect(
-          scope.supportingCaseIds,
-          isNot(contains('quiet-preparatory-uncertain')),
-        );
-        expect(
-          scope.supportingCaseIds,
-          isNot(contains('quiet-preparatory-hard-case')),
-        );
-        expect(scope.recommendation, contains('developer-only'));
-        expect(scope.recommendation, contains('emit no labels'));
-      },
-    );
+      expect(
+        scope.status,
+        GoldenClassifierScopeStatus.allowedForDeveloperPrototype,
+      );
+      expect(scope.missingCaseIds, isEmpty);
+      expect(
+        scope.supportingCaseIds,
+        isNot(contains('quiet-preparatory-uncertain')),
+      );
+      expect(
+        scope.supportingCaseIds,
+        isNot(contains('quiet-preparatory-hard-case')),
+      );
+      expect(scope.recommendation, contains('developer-only'));
+      expect(scope.recommendation, contains('emit no labels'));
+      expect(scope.recommendation, contains('exclude quiet/preparatory'));
+    });
 
     test('endgame precision is design-only and not label-ready', () {
       final scope = _run().scope(
@@ -152,7 +149,7 @@ void main() {
       );
     });
 
-    test('current default recommendation is quiet evidence resolution', () {
+    test('current default recommendation excludes quiet scope', () {
       final result = _run();
 
       expect(
@@ -161,7 +158,7 @@ void main() {
       );
       expect(
         result.nextRecommendedPhase,
-        GoldenClassifierNextPhase.quietPreparatoryEvidenceResolution,
+        GoldenClassifierNextPhase.basicClassifierFoundationDesignOnly,
       );
     });
 
@@ -177,6 +174,7 @@ void main() {
         );
 
         expect(result.incompleteCount, 0);
+        expect(result.negativeGuardCount, 0);
         expect(
           quietScope.status,
           GoldenClassifierScopeStatus.allowedForDesignOnly,
@@ -289,12 +287,19 @@ void main() {
       );
     });
 
-    test('incomplete evidence blocks only relevant scopes', () {
+    test('negative guard blocks only relevant quiet scope', () {
       final result = _run();
 
       expect(
         result.scope(GoldenClassifierScope.quietPreparatoryFoundation).status,
-        GoldenClassifierScopeStatus.blockedByIncompleteCases,
+        GoldenClassifierScopeStatus.blockedByEvidence,
+      );
+      expect(
+        result
+            .scope(GoldenClassifierScope.quietPreparatoryFoundation)
+            .blockers
+            .join('\n'),
+        contains('negative guard'),
       );
       expect(
         result.scope(GoldenClassifierScope.tacticalCandidateFoundation).status,
@@ -372,7 +377,25 @@ void main() {
       expect(report, contains('Next Recommended Phase'));
       expect(
         report,
-        contains('Phase 30Z -- Quiet Preparatory Evidence Resolution'),
+        contains(
+          'Phase 31A -- Basic Classifier Foundation Design With Quiet Scope Excluded',
+        ),
+      );
+    });
+
+    test('report includes negative guard count and case IDs', () {
+      final result = _run();
+      final report = result.renderMarkdownReport();
+      final decoded =
+          jsonDecode(result.renderJsonReport()) as Map<String, Object?>;
+      final summary = decoded['summary'] as Map<String, Object?>;
+
+      expect(report, contains('negative guard count: 1'));
+      expect(report, contains('quiet-preparatory-uncertain'));
+      expect(summary['negativeGuardCount'], 1);
+      expect(
+        decoded['negativeGuardCaseIds'],
+        orderedEquals(['quiet-preparatory-uncertain']),
       );
     });
 
@@ -498,6 +521,7 @@ List<GoldenAnalysisCase> _quietResolvedCases() {
         GoldenMotifTag.quietMove,
         GoldenMotifTag.quietPreparatoryMove,
       ],
+      evidenceIntent: GoldenEvidenceIntent.protectiveRegression,
       quietPreparatoryEvidence: const QuietPreparatoryEvidence(
         candidateSpreadPresent: true,
         futureTacticalThreatPrepared: true,

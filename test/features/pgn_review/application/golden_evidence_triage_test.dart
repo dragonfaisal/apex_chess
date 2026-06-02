@@ -32,9 +32,14 @@ void main() {
       expect(entry.nextAction, GoldenEvidenceTriageNextAction.keepProtected);
     });
 
-    test('incomplete evidence produces fake-evidence action', () {
-      final result = _run();
-      final entry = _entry(result, 'quiet-preparatory-uncertain');
+    test('ordinary incomplete evidence produces fake-evidence action', () {
+      final ordinaryIncomplete = _caseById('quiet-preparatory-uncertain')
+          .copyWith(
+            id: 'quiet-preparatory-ordinary-incomplete',
+            evidenceIntent: GoldenEvidenceIntent.protectiveRegression,
+          );
+      final result = _run(cases: [ordinaryIncomplete]);
+      final entry = _entry(result, 'quiet-preparatory-ordinary-incomplete');
 
       expect(
         entry.currentReviewStatus,
@@ -47,6 +52,27 @@ void main() {
       expect(entry.priority, GoldenEvidenceTriagePriority.medium);
       expect(entry.nextAction, GoldenEvidenceTriageNextAction.addFakeEvidence);
       expect(entry.hasEvidenceGap, isTrue);
+    });
+
+    test('quiet negative guard is excluded from classifier scope', () {
+      final result = _run();
+      final entry = _entry(result, 'quiet-preparatory-uncertain');
+
+      expect(
+        entry.currentReviewStatus,
+        GoldenEvidenceReviewStatus.negativeGuard,
+      );
+      expect(
+        entry.quietEvidenceStatus,
+        QuietPreparatoryEvidenceStatus.incompleteQuietEvidence,
+      );
+      expect(entry.priority, GoldenEvidenceTriagePriority.medium);
+      expect(
+        entry.nextAction,
+        GoldenEvidenceTriageNextAction.excludeFromClassifierScope,
+      );
+      expect(entry.hasEvidenceGap, isFalse);
+      expect(result.negativeGuardCases, contains(entry));
     });
 
     test('real-device-needed cases produce owner Android proof action', () {
@@ -162,10 +188,15 @@ void main() {
 
       expect(entry.isProtected, isFalse);
       expect(
+        entry.currentReviewStatus,
+        GoldenEvidenceReviewStatus.negativeGuard,
+      );
+      expect(
         entry.evidenceGapGroups,
         contains(GoldenMotifEvidenceGroup.uncertainty),
       );
-      expect(result.motifEvidenceGapCases, contains(entry));
+      expect(result.motifEvidenceGapCases, isNot(contains(entry)));
+      expect(result.recommendedOwnerRunProofQueue.targetCaseIds, isEmpty);
     });
 
     test('weak motif groups are detected', () {
@@ -238,7 +269,7 @@ void main() {
       );
       expect(
         first.recommendedNewHandcraftedHardCaseAreas.map((area) => area.id),
-        contains('quiet-preparatory-evidence'),
+        isNot(contains('quiet-preparatory-evidence')),
       );
       expect(
         first.recommendedNewHandcraftedHardCaseAreas.map((area) => area.id),

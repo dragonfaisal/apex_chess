@@ -467,6 +467,35 @@ Current post-30Y decision:
 
 Reports now include quiet evidence status, support groups, blockers, and the readiness effect in markdown and JSON. They still exclude raw UCI logs, long PV dumps, final move labels, official accuracy, ACPL, backend URLs, and secrets.
 
+## Quiet Negative Guard
+
+Phase 30Z clarifies `quiet-preparatory-uncertain` as an intentional negative guard. Its purpose is to prove that Apex must not trust, promote, or classify a quiet/preparatory move when the evidence is insufficient. The row remains visible, but it is not treated as an ordinary evidence gap that should be fixed by simply adding fake evidence.
+
+The suite now distinguishes four evidence outcomes:
+
+- protected: deterministic evidence is strong enough for a golden regression guard;
+- negative guard: intentionally unsupported evidence is preserved to exclude an unsafe scope;
+- incomplete: a case still lacks evidence that should be supplied or clarified;
+- real-device-needed: PV/MultiPV or selected-deep proof must be queued for future owner Android proof.
+
+Negative guards are valuable because quiet moves can look strategically plausible without showing candidate spread, future tactical pressure, threat reduction, square control, king-safety improvement, or a forcing line enabled next. Keeping an unsupported quiet row as a guard prevents future classifier work from treating quiet style as evidence.
+
+Current post-30Z decision:
+
+- total golden cases: 15;
+- protected cases: 14;
+- negative guard cases: 1 (`quiet-preparatory-uncertain`);
+- incomplete cases: 0;
+- real-device-needed cases: 0;
+- owner proof queue: empty;
+- captured Android proof remains attached only to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`;
+- `quiet-preparatory-hard-case` remains protected by broad deterministic support groups;
+- quiet/preparatory foundation remains blocked or explicitly excluded by the negative guard;
+- basic non-quiet classifier foundation may proceed later only as developer-only design/prototype work with quiet/preparatory scope excluded;
+- product-facing labels and advanced candidate gates remain blocked.
+
+Evidence review, triage, and classifier-readiness reports now include negative guard counts, negative guard case IDs, excluded scope information, and the readiness effect. They still do not emit classifier labels, raw UCI logs, long PV dumps, official accuracy, ACPL, backend URLs, or secrets.
+
 ## Initial V1 Cases
 
 The initial suite includes compact cases for:

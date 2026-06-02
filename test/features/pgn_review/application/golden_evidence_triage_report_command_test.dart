@@ -52,7 +52,8 @@ void main() {
       expect(decoded['proofQueue'], isA<Map<String, Object?>>());
       expect(summary['totalCases'], 15);
       expect(summary['protectedCount'], 14);
-      expect(summary['incompleteCount'], 1);
+      expect(summary['negativeGuardCount'], 1);
+      expect(summary['incompleteCount'], 0);
       expect(decoded['quietPreparatoryEvidence'], isA<List<Object?>>());
     });
 
@@ -65,7 +66,8 @@ void main() {
         expect(result.stdoutText, contains('quiet-preparatory-hard-case'));
         expect(result.stdoutText, contains('quietEvidenceProtected'));
         expect(result.stdoutText, contains('quiet-preparatory-uncertain'));
-        expect(result.stdoutText, contains('addFakeEvidence'));
+        expect(result.stdoutText, contains('excludeFromClassifierScope'));
+        expect(result.stdoutText, contains('Negative Guards'));
         expect(result.triage!.recommendedOwnerRunProofQueue.targets, isEmpty);
       },
     );

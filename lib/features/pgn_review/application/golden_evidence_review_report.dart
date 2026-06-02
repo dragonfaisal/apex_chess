@@ -32,6 +32,7 @@ String renderGoldenEvidenceReviewReportMarkdown(
     ..writeln('- total cases: ${result.totalCases}')
     ..writeln('- passed count: ${result.passed}')
     ..writeln('- warnings count: ${result.warnings}')
+    ..writeln('- negative guard count: ${result.negativeGuards}')
     ..writeln('- incomplete count: ${result.incomplete}')
     ..writeln(
       '- needs real-device evidence count: '
@@ -141,6 +142,22 @@ String renderGoldenEvidenceReviewReportMarkdown(
       ..writeln('```');
   }
 
+  final negativeGuards = result.caseReviews
+      .where(
+        (review) => review.status == GoldenEvidenceReviewStatus.negativeGuard,
+      )
+      .toList(growable: false);
+  if (negativeGuards.isNotEmpty) {
+    buffer
+      ..writeln()
+      ..writeln('## Negative Guards');
+    for (final review in negativeGuards) {
+      buffer.writeln(
+        '- ${review.caseId}: quiet/preparatory excluded unless stronger evidence exists',
+      );
+    }
+  }
+
   final mismatches = result.caseReviews
       .where(
         (review) =>
@@ -175,7 +192,11 @@ String renderGoldenEvidenceReviewReportMarkdown(
   }
 
   final missingMotif = result.caseReviews
-      .where((review) => review.missingMotifEvidence.isNotEmpty)
+      .where(
+        (review) =>
+            review.status != GoldenEvidenceReviewStatus.negativeGuard &&
+            review.missingMotifEvidence.isNotEmpty,
+      )
       .toList(growable: false);
   if (missingMotif.isNotEmpty) {
     buffer
@@ -229,6 +250,7 @@ Map<String, Object?> goldenEvidenceReviewReportToJson(
       'totalCases': result.totalCases,
       'passedCount': result.passed,
       'warningsCount': result.warnings,
+      'negativeGuardCount': result.negativeGuards,
       'incompleteCount': result.incomplete,
       'needsRealDeviceEvidenceCount': result.needsRealDeviceEvidenceCount,
       'behaviorMismatches': result.behaviorMismatches,
@@ -255,7 +277,9 @@ Map<String, Object?> goldenEvidenceReviewReportToJson(
     ],
     'casesMissingMotifEvidence': [
       for (final review in result.caseReviews.where(
-        (review) => review.missingMotifEvidence.isNotEmpty,
+        (review) =>
+            review.status != GoldenEvidenceReviewStatus.negativeGuard &&
+            review.missingMotifEvidence.isNotEmpty,
       ))
         <String, Object?>{
           'caseId': review.caseId,
@@ -267,6 +291,17 @@ Map<String, Object?> goldenEvidenceReviewReportToJson(
     ],
     'caseSummaries': [
       for (final review in result.caseReviews) _caseReviewToJson(review),
+    ],
+    'negativeGuards': [
+      for (final review in result.caseReviews.where(
+        (review) => review.status == GoldenEvidenceReviewStatus.negativeGuard,
+      ))
+        <String, Object?>{
+          'caseId': review.caseId,
+          'excludedScope': 'quietPreparatoryFoundation',
+          'rationale':
+              'quiet/preparatory excluded unless stronger evidence exists',
+        },
     ],
     'quietPreparatoryEvidence': [
       for (final review in result.caseReviews.where(

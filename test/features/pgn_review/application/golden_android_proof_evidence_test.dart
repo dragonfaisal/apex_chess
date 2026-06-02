@@ -164,7 +164,7 @@ void main() {
       expect(triage.androidProofEvidenceCaseIds, _evidence.targetCaseIds);
     });
 
-    test('incomplete quiet preparatory uncertainty remains visible', () {
+    test('quiet preparatory negative guard remains visible', () {
       final triage = const GoldenEvidenceTriageRunner().run(
         const GoldenEvidenceTriageRequest(),
       );
@@ -174,9 +174,14 @@ void main() {
 
       expect(
         quiet.currentReviewStatus,
-        GoldenEvidenceReviewStatus.incompleteEvidence,
+        GoldenEvidenceReviewStatus.negativeGuard,
       );
-      expect(quiet.nextAction, GoldenEvidenceTriageNextAction.addFakeEvidence);
+      expect(
+        quiet.nextAction,
+        GoldenEvidenceTriageNextAction.excludeFromClassifierScope,
+      );
+      expect(triage.negativeGuardCases, contains(quiet));
+      expect(triage.recommendedOwnerRunProofQueue.targets, isEmpty);
     });
 
     test('Phase 30W hard cases strengthen king-safety motif coverage', () {

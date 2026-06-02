@@ -25,6 +25,8 @@ enum GoldenEvidenceTriagePriority {
 
 enum GoldenEvidenceTriageNextAction {
   keepProtected('keepProtected'),
+  keepNegativeGuard('keepNegativeGuard'),
+  excludeFromClassifierScope('excludeFromClassifierScope'),
   addFakeEvidence('addFakeEvidence'),
   addHandcraftedCase('addHandcraftedCase'),
   runOwnerAndroidProof('runOwnerAndroidProof'),
@@ -123,11 +125,15 @@ class GoldenEvidenceTriageEntry {
       priority == GoldenEvidenceTriagePriority.none &&
       nextAction == GoldenEvidenceTriageNextAction.keepProtected;
 
+  bool get isNegativeGuard =>
+      currentReviewStatus == GoldenEvidenceReviewStatus.negativeGuard;
+
   bool get hasEvidenceGap =>
-      evidenceGapGroups.isNotEmpty ||
-      gapReasonCodes.isNotEmpty ||
-      gapSuppressionReasons.isNotEmpty ||
-      motifEvidenceGaps.isNotEmpty;
+      !isNegativeGuard &&
+      (evidenceGapGroups.isNotEmpty ||
+          gapReasonCodes.isNotEmpty ||
+          gapSuppressionReasons.isNotEmpty ||
+          motifEvidenceGaps.isNotEmpty);
 }
 
 class GoldenMotifGroupTriage {
@@ -228,6 +234,14 @@ class GoldenEvidenceTriageResult {
       )
       .toList(growable: false);
 
+  List<GoldenEvidenceTriageEntry> get negativeGuardCases => entries
+      .where(
+        (entry) =>
+            entry.currentReviewStatus ==
+            GoldenEvidenceReviewStatus.negativeGuard,
+      )
+      .toList(growable: false);
+
   List<GoldenEvidenceTriageEntry> get realDeviceNeededCases => entries
       .where((entry) => entry.realDeviceProofRequired)
       .toList(growable: false);
@@ -266,6 +280,7 @@ class GoldenEvidenceTriageResult {
       ..writeln('- version: $goldenEvidenceTriageReportVersion')
       ..writeln('- total cases: $totalCases')
       ..writeln('- protected: ${protectedCases.length}')
+      ..writeln('- negative guards: ${negativeGuardCases.length}')
       ..writeln('- incomplete: ${incompleteCases.length}')
       ..writeln('- needs real-device proof: ${realDeviceNeededCases.length}')
       ..writeln('- behavior mismatches: ${behaviorMismatchCases.length}')
@@ -335,6 +350,17 @@ class GoldenEvidenceTriageResult {
           '| ${_cell(entry.caseId)} | ${entry.quietEvidenceStatus!.wire} | '
           '${_cell(support.isEmpty ? "-" : support)} | '
           '${_cell(entry.quietEvidenceBlockers.isEmpty ? "-" : entry.quietEvidenceBlockers.join(", "))} |',
+        );
+      }
+    }
+
+    if (negativeGuardCases.isNotEmpty) {
+      buffer
+        ..writeln()
+        ..writeln('## Negative Guards');
+      for (final entry in negativeGuardCases) {
+        buffer.writeln(
+          '- ${entry.caseId}: ${entry.nextAction.wire}, quiet/preparatory excluded unless stronger evidence exists',
         );
       }
     }
@@ -457,6 +483,7 @@ class GoldenEvidenceTriageResult {
       'summary': <String, Object?>{
         'totalCases': totalCases,
         'protectedCount': protectedCases.length,
+        'negativeGuardCount': negativeGuardCases.length,
         'incompleteCount': incompleteCases.length,
         'realDeviceProofCount': realDeviceNeededCases.length,
         'behaviorMismatchCount': behaviorMismatchCases.length,
@@ -469,6 +496,15 @@ class GoldenEvidenceTriageResult {
           entries,
         ).where((entry) => includeProtected || !entry.isProtected))
           _entryToJson(entry),
+      ],
+      'negativeGuards': [
+        for (final entry in negativeGuardCases)
+          <String, Object?>{
+            'caseId': entry.caseId,
+            'nextAction': entry.nextAction.wire,
+            'excludedScope': 'quietPreparatoryFoundation',
+            'rationale': entry.rationale,
+          },
       ],
       'proofQueue': _proofQueueToJson(recommendedOwnerRunProofQueue),
       'quietPreparatoryEvidence': [
@@ -761,6 +797,8 @@ GoldenEvidenceTriagePriority _priorityFor(
     GoldenEvidenceReviewStatus.failed => GoldenEvidenceTriagePriority.high,
     GoldenEvidenceReviewStatus.needsRealEngineEvidence =>
       GoldenEvidenceTriagePriority.high,
+    GoldenEvidenceReviewStatus.negativeGuard =>
+      GoldenEvidenceTriagePriority.medium,
     GoldenEvidenceReviewStatus.incompleteEvidence => _incompletePriority(item),
     GoldenEvidenceReviewStatus.passed ||
     GoldenEvidenceReviewStatus.passedWithWarnings =>
@@ -812,6 +850,9 @@ GoldenEvidenceTriageNextAction _actionFor(
       review.status == GoldenEvidenceReviewStatus.needsRealEngineEvidence) {
     return GoldenEvidenceTriageNextAction.runOwnerAndroidProof;
   }
+  if (review.status == GoldenEvidenceReviewStatus.negativeGuard) {
+    return GoldenEvidenceTriageNextAction.excludeFromClassifierScope;
+  }
   if (review.status == GoldenEvidenceReviewStatus.incompleteEvidence) {
     if (item.motifTags.contains(GoldenMotifTag.evidenceIncomplete) &&
         review.missingReasonCodes.isEmpty) {
@@ -842,6 +883,10 @@ String _rationaleFor(
   }
   if (action == GoldenEvidenceTriageNextAction.runOwnerAndroidProof) {
     return 'future owner Android proof is required for selected-deep evidence';
+  }
+  if (action == GoldenEvidenceTriageNextAction.excludeFromClassifierScope ||
+      action == GoldenEvidenceTriageNextAction.keepNegativeGuard) {
+    return 'intentional quiet/preparatory negative guard; exclude this scope';
   }
   if (action == GoldenEvidenceTriageNextAction.addFakeEvidence) {
     final gaps = review.missingMotifEvidence.isEmpty
@@ -888,6 +933,9 @@ List<String> _warningsFor(List<GoldenEvidenceTriageEntry> entries) {
         GoldenEvidenceReviewStatus.incompleteEvidence) {
       warnings.add('${entry.caseId}: evidence gap remains visible');
     }
+    if (entry.currentReviewStatus == GoldenEvidenceReviewStatus.negativeGuard) {
+      warnings.add('${entry.caseId}: negative guard excludes quiet scope');
+    }
     if (entry.realDeviceProofRequired) {
       warnings.add('${entry.caseId}: owner-run Android proof recommended');
     }
@@ -926,6 +974,9 @@ String _nextRecommendation(GoldenEvidenceTriageResult result) {
   }
   if (result.incompleteCases.isNotEmpty) {
     return 'Add deterministic fake evidence or clarify incomplete expectations.';
+  }
+  if (result.negativeGuardCases.isNotEmpty) {
+    return 'Keep negative guards visible and exclude their scope from classifier design.';
   }
   return 'Use weak motif groups to choose the next handcrafted hard case.';
 }

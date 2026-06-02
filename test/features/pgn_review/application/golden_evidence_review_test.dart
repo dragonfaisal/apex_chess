@@ -182,10 +182,10 @@ void main() {
       );
     });
 
-    test('quiet preparatory case does not fake certainty', () {
+    test('quiet preparatory case is an intentional negative guard', () {
       final review = _reviewSingle('quiet-preparatory-uncertain');
 
-      expect(review.status, GoldenEvidenceReviewStatus.incompleteEvidence);
+      expect(review.status, GoldenEvidenceReviewStatus.negativeGuard);
       expect(
         review.quietEvidenceStatus,
         QuietPreparatoryEvidenceStatus.incompleteQuietEvidence,
@@ -200,6 +200,7 @@ void main() {
         review.missingMotifEvidenceGroups,
         contains(GoldenMotifEvidenceGroup.uncertainty),
       );
+      expect(review.nextAction, contains('exclude quiet/preparatory'));
     });
 
     test('endgame case remains conservative without evidence', () {
@@ -348,8 +349,11 @@ void main() {
       );
     });
 
-    test('missing motif evidence becomes incomplete evidence', () {
-      final incomplete = _caseById('quiet-preparatory-uncertain');
+    test('ordinary missing motif evidence becomes incomplete evidence', () {
+      final incomplete = _caseById('quiet-preparatory-uncertain').copyWith(
+        id: 'quiet-preparatory-ordinary-incomplete',
+        evidenceIntent: GoldenEvidenceIntent.protectiveRegression,
+      );
 
       final result = const GoldenEvidenceReviewRunner().review(
         GoldenEvidenceReviewRequest(cases: [incomplete]),
@@ -360,6 +364,26 @@ void main() {
         GoldenEvidenceReviewStatus.incompleteEvidence,
       );
       expect(result.casesMissingMotifEvidence, 1);
+    });
+
+    test('default negative guard is separate from incomplete evidence', () {
+      final result = const GoldenEvidenceReviewRunner().review(
+        const GoldenEvidenceReviewRequest(),
+      );
+
+      expect(result.negativeGuards, 1);
+      expect(result.incomplete, 0);
+      expect(result.failed, 0);
+      expect(result.needsRealDeviceEvidenceCount, 0);
+      expect(
+        result.caseReviews
+            .where(
+              (review) =>
+                  review.status == GoldenEvidenceReviewStatus.negativeGuard,
+            )
+            .map((review) => review.caseId),
+        orderedEquals(['quiet-preparatory-uncertain']),
+      );
     });
 
     test('real-device reference mode clears owner-proven cases', () {
@@ -415,7 +439,7 @@ void main() {
         result.renderMarkdownReport(),
         contains('Motif Evidence Group Coverage'),
       );
-      expect(result.renderMarkdownReport(), contains('Motif Evidence Gaps'));
+      expect(result.renderMarkdownReport(), contains('Negative Guards'));
       expect(result.renderMarkdownReport(), contains('Category Coverage'));
       expect(
         result.renderMarkdownReport(),

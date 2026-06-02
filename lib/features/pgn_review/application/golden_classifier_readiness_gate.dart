@@ -61,13 +61,13 @@ enum GoldenClassifierScopeStatus {
 
 enum GoldenClassifierNextPhase {
   quietPreparatoryEvidenceResolution(
-    'Phase 30Z -- Quiet Preparatory Evidence Resolution',
+    'Phase 31A -- Quiet Preparatory Evidence Resolution',
   ),
   basicClassifierFoundationDesignOnly(
-    'Phase 30Z -- Basic Classifier Foundation Design Only',
+    'Phase 31A -- Basic Classifier Foundation Design With Quiet Scope Excluded',
   ),
-  ownerAndroidProofQueue('Phase 30Z -- Owner Android Proof Queue'),
-  mismatchInvestigation('Phase 30Z -- Mismatch Investigation');
+  ownerAndroidProofQueue('Phase 31A -- Owner Android Proof Queue'),
+  mismatchInvestigation('Phase 31A -- Mismatch Investigation');
 
   const GoldenClassifierNextPhase(this.wire);
 
@@ -164,6 +164,7 @@ class GoldenClassifierReadinessResult {
     required this.advancedLabelStatus,
     required this.totalCaseCount,
     required this.protectedCount,
+    required this.negativeGuardCount,
     required this.incompleteCount,
     required this.realDeviceNeededCount,
     required this.mismatchCount,
@@ -173,6 +174,7 @@ class GoldenClassifierReadinessResult {
     required this.ownerProofQueueCount,
     required this.capturedAndroidProofCount,
     required this.capturedAndroidProofCaseIds,
+    required this.negativeGuardCaseIds,
     required this.incompleteCaseIds,
     required this.realDeviceNeededCaseIds,
     required this.ownerProofQueueCaseIds,
@@ -188,6 +190,7 @@ class GoldenClassifierReadinessResult {
   final GoldenClassifierReadinessStatus advancedLabelStatus;
   final int totalCaseCount;
   final int protectedCount;
+  final int negativeGuardCount;
   final int incompleteCount;
   final int realDeviceNeededCount;
   final int mismatchCount;
@@ -197,6 +200,7 @@ class GoldenClassifierReadinessResult {
   final int ownerProofQueueCount;
   final int capturedAndroidProofCount;
   final List<String> capturedAndroidProofCaseIds;
+  final List<String> negativeGuardCaseIds;
   final List<String> incompleteCaseIds;
   final List<String> realDeviceNeededCaseIds;
   final List<String> ownerProofQueueCaseIds;
@@ -228,6 +232,7 @@ class GoldenClassifierReadinessResult {
       mismatchCount > 0 ||
       realDeviceNeededCount > 0 ||
       ownerProofQueueCount > 0 ||
+      negativeGuardCount > 0 ||
       incompleteCount > 0 ||
       status !=
           GoldenClassifierReadinessStatus.readyForBasicClassifierFoundation;
@@ -248,6 +253,7 @@ class GoldenClassifierReadinessResult {
       ..writeln('## Summary')
       ..writeln('- total cases: $totalCaseCount')
       ..writeln('- protected count: $protectedCount')
+      ..writeln('- negative guard count: $negativeGuardCount')
       ..writeln('- incomplete count: $incompleteCount')
       ..writeln('- real-device-needed count: $realDeviceNeededCount')
       ..writeln('- mismatch count: $mismatchCount')
@@ -305,6 +311,7 @@ class GoldenClassifierReadinessResult {
     buffer
       ..writeln()
       ..writeln('## Evidence Lists')
+      ..writeln('- negative guard case IDs: ${_ids(negativeGuardCaseIds)}')
       ..writeln('- incomplete case IDs: ${_ids(incompleteCaseIds)}')
       ..writeln(
         '- real-device-needed case IDs: ${_ids(realDeviceNeededCaseIds)}',
@@ -340,6 +347,7 @@ class GoldenClassifierReadinessResult {
       'summary': <String, Object?>{
         'totalCases': totalCaseCount,
         'protectedCount': protectedCount,
+        'negativeGuardCount': negativeGuardCount,
         'incompleteCount': incompleteCount,
         'realDeviceNeededCount': realDeviceNeededCount,
         'mismatchCount': mismatchCount,
@@ -351,6 +359,7 @@ class GoldenClassifierReadinessResult {
       },
       'scopes': [for (final scope in scopes) scope.toJson()],
       'blockers': blockers,
+      'negativeGuardCaseIds': negativeGuardCaseIds,
       'incompleteCaseIds': incompleteCaseIds,
       'realDeviceNeededCaseIds': realDeviceNeededCaseIds,
       'ownerProofQueueCaseIds': ownerProofQueueCaseIds,
@@ -405,6 +414,10 @@ class GoldenClassifierReadinessGate {
     final incompleteCaseIds = _caseIdsWithStatus(
       review,
       GoldenEvidenceReviewStatus.incompleteEvidence,
+    );
+    final negativeGuardCaseIds = _caseIdsWithStatus(
+      review,
+      GoldenEvidenceReviewStatus.negativeGuard,
     );
     final realDeviceNeededCaseIds =
         review.caseReviews
@@ -582,6 +595,8 @@ class GoldenClassifierReadinessGate {
       ...globalBlockers,
       if (incompleteCaseIds.isNotEmpty)
         'incomplete evidence remains visible: ${incompleteCaseIds.join(", ")}',
+      if (negativeGuardCaseIds.isNotEmpty)
+        'quiet/preparatory excluded by negative guard: ${negativeGuardCaseIds.join(", ")}',
       'product-facing labels are blocked by policy',
       'advanced candidate gates are blocked by policy',
     }.toList()..sort();
@@ -592,6 +607,7 @@ class GoldenClassifierReadinessGate {
         mismatchCount: mismatchCount,
         realDeviceNeededCount: realDeviceNeededCaseIds.length,
         ownerProofQueueCount: ownerProofQueueCaseIds.length,
+        negativeGuardCount: negativeGuardCaseIds.length,
         incompleteCount: incompleteCaseIds.length,
         scopes: scopes,
       ),
@@ -599,6 +615,7 @@ class GoldenClassifierReadinessGate {
           GoldenClassifierReadinessStatus.notReadyForAdvancedLabels,
       totalCaseCount: review.totalCases,
       protectedCount: protectedCount,
+      negativeGuardCount: negativeGuardCaseIds.length,
       incompleteCount: incompleteCaseIds.length,
       realDeviceNeededCount: realDeviceNeededCaseIds.length,
       mismatchCount: mismatchCount,
@@ -610,6 +627,7 @@ class GoldenClassifierReadinessGate {
       capturedAndroidProofCaseIds: List<String>.unmodifiable(
         capturedProofCaseIds,
       ),
+      negativeGuardCaseIds: List<String>.unmodifiable(negativeGuardCaseIds),
       incompleteCaseIds: List<String>.unmodifiable(incompleteCaseIds),
       realDeviceNeededCaseIds: List<String>.unmodifiable(
         realDeviceNeededCaseIds,
@@ -706,7 +724,7 @@ GoldenClassifierScopeReadiness _basicScope({
     missingCaseIds: const <String>[],
     recommendation: excludeQuietPreparatory
         ? 'Allowed only as developer-only prototype design; emit no labels and '
-              'exclude incomplete quiet-preparatory motifs.'
+              'exclude quiet/preparatory scope by negative guard or unresolved evidence.'
         : 'Allowed only as developer-only prototype design; emit no labels. '
               'Quiet-preparatory evidence may be considered only as internal '
               'evidence, not product output.',
@@ -761,6 +779,23 @@ GoldenClassifierScopeReadiness _motifScope({
       supportingCaseIds: supporting,
       missingCaseIds: missingProof,
       recommendation: 'Queue owner Android proof before this scope advances.',
+    );
+  }
+  final negativeGuards = missing
+      .where(
+        (id) =>
+            reviewById[id]?.status == GoldenEvidenceReviewStatus.negativeGuard,
+      )
+      .toList(growable: false);
+  if (negativeGuards.isNotEmpty) {
+    return _blockedScope(
+      scope: scope,
+      status: GoldenClassifierScopeStatus.blockedByEvidence,
+      blockers: ['quiet/preparatory excluded by negative guard'],
+      supportingCaseIds: supporting,
+      missingCaseIds: negativeGuards,
+      recommendation:
+          'Keep unsupported quiet/preparatory evidence excluded from this scope.',
     );
   }
   if (missing.isNotEmpty) {
@@ -842,6 +877,7 @@ GoldenClassifierReadinessStatus _overallStatus({
   required int mismatchCount,
   required int realDeviceNeededCount,
   required int ownerProofQueueCount,
+  required int negativeGuardCount,
   required int incompleteCount,
   required List<GoldenClassifierScopeReadiness> scopes,
 }) {
@@ -859,7 +895,7 @@ GoldenClassifierReadinessStatus _overallStatus({
   );
   if (basic.status ==
       GoldenClassifierScopeStatus.allowedForDeveloperPrototype) {
-    return incompleteCount > 0
+    return incompleteCount > 0 || negativeGuardCount > 0
         ? GoldenClassifierReadinessStatus.readyForLimitedClassifierFoundation
         : GoldenClassifierReadinessStatus.readyForBasicClassifierFoundation;
   }

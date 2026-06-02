@@ -10,6 +10,7 @@ import 'package:apex_chess/features/pgn_review/application/quiet_preparatory_evi
 enum GoldenEvidenceReviewStatus {
   passed('passed'),
   passedWithWarnings('passedWithWarnings'),
+  negativeGuard('negativeGuard'),
   incompleteEvidence('incompleteEvidence'),
   needsRealEngineEvidence('needsRealEngineEvidence'),
   behaviorMismatch('behaviorMismatch'),
@@ -125,6 +126,7 @@ class GoldenEvidenceReviewResult {
     required this.totalCases,
     required this.passed,
     required this.warnings,
+    required this.negativeGuards,
     required this.incomplete,
     required this.failed,
     required this.needsRealDeviceEvidenceCount,
@@ -145,6 +147,7 @@ class GoldenEvidenceReviewResult {
   }) : assert(totalCases >= 0),
        assert(passed >= 0),
        assert(warnings >= 0),
+       assert(negativeGuards >= 0),
        assert(incomplete >= 0),
        assert(failed >= 0),
        assert(needsRealDeviceEvidenceCount >= 0),
@@ -157,6 +160,7 @@ class GoldenEvidenceReviewResult {
   final int totalCases;
   final int passed;
   final int warnings;
+  final int negativeGuards;
   final int incomplete;
   final int failed;
   final int needsRealDeviceEvidenceCount;
@@ -183,6 +187,7 @@ class GoldenEvidenceReviewResult {
       ..writeln('- total cases: $totalCases')
       ..writeln('- passed: $passed')
       ..writeln('- warnings: $warnings')
+      ..writeln('- negative guards: $negativeGuards')
       ..writeln('- incomplete: $incomplete')
       ..writeln('- failed: $failed')
       ..writeln('- needs real-device evidence: $needsRealDeviceEvidenceCount')
@@ -235,8 +240,28 @@ class GoldenEvidenceReviewResult {
       buffer.writeln('- ${entry.key.wire}: ${entry.value}');
     }
 
+    final negativeGuardRows = caseReviews
+        .where(
+          (review) => review.status == GoldenEvidenceReviewStatus.negativeGuard,
+        )
+        .toList(growable: false);
+    if (negativeGuardRows.isNotEmpty) {
+      buffer
+        ..writeln()
+        ..writeln('## Negative Guards');
+      for (final review in negativeGuardRows) {
+        buffer.writeln(
+          '- ${review.caseId}: quiet/preparatory excluded unless stronger evidence exists',
+        );
+      }
+    }
+
     final missingMotif = caseReviews
-        .where((review) => review.missingMotifEvidence.isNotEmpty)
+        .where(
+          (review) =>
+              review.status != GoldenEvidenceReviewStatus.negativeGuard &&
+              review.missingMotifEvidence.isNotEmpty,
+        )
         .toList(growable: false);
     if (missingMotif.isNotEmpty) {
       buffer
@@ -369,6 +394,12 @@ class GoldenEvidenceReviewRunner {
       totalCases: request.cases.length,
       passed: reviews.where((review) => review.passedLike).length,
       warnings: reviews.where((review) => review.warnings.isNotEmpty).length,
+      negativeGuards: reviews
+          .where(
+            (review) =>
+                review.status == GoldenEvidenceReviewStatus.negativeGuard,
+          )
+          .length,
       incomplete: reviews
           .where(
             (review) =>
@@ -416,7 +447,11 @@ class GoldenEvidenceReviewRunner {
         motifEvidencePolicy,
       ),
       casesMissingMotifEvidence: reviews
-          .where((review) => review.missingMotifEvidence.isNotEmpty)
+          .where(
+            (review) =>
+                review.status != GoldenEvidenceReviewStatus.negativeGuard &&
+                review.missingMotifEvidence.isNotEmpty,
+          )
           .length,
       categoryCoverage: _categoryCoverage(request.cases),
       androidProofEvidenceSourceId: request.androidProofEvidence?.sourceId,
@@ -638,13 +673,16 @@ GoldenEvidenceReviewStatus _caseStatusFor({
   if (quietEvidenceMismatch) {
     return GoldenEvidenceReviewStatus.behaviorMismatch;
   }
-  if (missingMotifEvidence.isNotEmpty) {
-    return GoldenEvidenceReviewStatus.incompleteEvidence;
-  }
   if (failures.isNotEmpty) {
     return GoldenEvidenceReviewStatus.behaviorMismatch;
   }
   if (needsReal) return GoldenEvidenceReviewStatus.needsRealEngineEvidence;
+  if (item.evidenceIntent == GoldenEvidenceIntent.negativeGuard) {
+    return GoldenEvidenceReviewStatus.negativeGuard;
+  }
+  if (missingMotifEvidence.isNotEmpty) {
+    return GoldenEvidenceReviewStatus.incompleteEvidence;
+  }
   if (warnings.isNotEmpty) {
     return GoldenEvidenceReviewStatus.passedWithWarnings;
   }
@@ -680,6 +718,11 @@ GoldenEvidenceReviewStatus _aggregateStatus(
     (review) => review.status == GoldenEvidenceReviewStatus.incompleteEvidence,
   )) {
     return GoldenEvidenceReviewStatus.incompleteEvidence;
+  }
+  if (reviews.any(
+    (review) => review.status == GoldenEvidenceReviewStatus.negativeGuard,
+  )) {
+    return GoldenEvidenceReviewStatus.negativeGuard;
   }
   if ((requireAllEvidence || referenceOnly) &&
       reviews.any(
@@ -1079,6 +1122,9 @@ String _recommendationFor(GoldenEvidenceReviewStatus status) {
     GoldenEvidenceReviewStatus.passedWithWarnings =>
       'Golden evidence is usable, but incomplete evidence rows should be '
           'tracked before classifier work.',
+    GoldenEvidenceReviewStatus.negativeGuard =>
+      'Keep negative guard rows visible and exclude their scope from future '
+          'classifier design until stronger evidence exists.',
     GoldenEvidenceReviewStatus.incompleteEvidence =>
       'Add fake evidence or clarify expectations before relying on these cases.',
     GoldenEvidenceReviewStatus.needsRealEngineEvidence =>
@@ -1098,6 +1144,8 @@ String _nextActionFor(GoldenEvidenceReviewStatus status) {
   return switch (status) {
     GoldenEvidenceReviewStatus.passed => 'protected',
     GoldenEvidenceReviewStatus.passedWithWarnings => 'review warnings',
+    GoldenEvidenceReviewStatus.negativeGuard =>
+      'exclude quiet/preparatory scope',
     GoldenEvidenceReviewStatus.incompleteEvidence => 'add fake evidence',
     GoldenEvidenceReviewStatus.needsRealEngineEvidence =>
       'run real-device proof later',

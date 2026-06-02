@@ -39,6 +39,17 @@ enum GoldenAnalysisSourceType {
   final String wire;
 }
 
+enum GoldenEvidenceIntent {
+  protectiveRegression('protectiveRegression'),
+  negativeGuard('negativeGuard'),
+  intentionallyUnresolved('intentionallyUnresolved'),
+  futureProofTarget('futureProofTarget');
+
+  const GoldenEvidenceIntent(this.wire);
+
+  final String wire;
+}
+
 enum GoldenMotifTag {
   sacrifice('sacrifice'),
   temporarySacrifice('temporarySacrifice'),
@@ -750,6 +761,7 @@ class GoldenAnalysisCase {
     this.safety = const GoldenAnalysisSafetyFlags(),
     this.fakeEvidence = const <GameLevelProvidedFastEvidence>[],
     this.quietPreparatoryEvidence = const QuietPreparatoryEvidence(),
+    this.evidenceIntent = GoldenEvidenceIntent.protectiveRegression,
   });
 
   final String id;
@@ -768,6 +780,7 @@ class GoldenAnalysisCase {
   final GoldenExpectedBehavior expected;
   final List<GameLevelProvidedFastEvidence> fakeEvidence;
   final QuietPreparatoryEvidence quietPreparatoryEvidence;
+  final GoldenEvidenceIntent evidenceIntent;
 
   bool get hasSource {
     return switch (sourceType) {
@@ -789,6 +802,7 @@ class GoldenAnalysisCase {
       ...expectedCandidateMovesUci,
       ...notes,
       ...quietPreparatoryEvidence.searchableText,
+      evidenceIntent.wire,
     ].join(' ');
     return _containsBlockedTerm(searchable);
   }
@@ -808,6 +822,7 @@ class GoldenAnalysisCase {
     GoldenExpectedBehavior? expected,
     List<GameLevelProvidedFastEvidence>? fakeEvidence,
     QuietPreparatoryEvidence? quietPreparatoryEvidence,
+    GoldenEvidenceIntent? evidenceIntent,
   }) {
     return GoldenAnalysisCase(
       id: id ?? this.id,
@@ -827,6 +842,7 @@ class GoldenAnalysisCase {
       fakeEvidence: fakeEvidence ?? this.fakeEvidence,
       quietPreparatoryEvidence:
           quietPreparatoryEvidence ?? this.quietPreparatoryEvidence,
+      evidenceIntent: evidenceIntent ?? this.evidenceIntent,
     );
   }
 }
@@ -1642,6 +1658,7 @@ class GoldenAnalysisCases {
         uncertaintyReason: 'quiet preparatory support is intentionally absent',
         noImmediateCaptureCheckPromotion: true,
       ),
+      evidenceIntent: GoldenEvidenceIntent.negativeGuard,
       expected: GoldenExpectedBehavior(
         behaviors: {GoldenExpectedBehaviorCode.shouldNotEmitFinalLabel},
         evidence: GoldenEvidenceExpectation(
