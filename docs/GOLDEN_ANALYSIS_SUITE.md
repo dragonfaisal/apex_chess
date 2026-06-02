@@ -736,6 +736,40 @@ dart run tool/internal_evidence_area_coverage_matrix_report.dart
 
 It renders deterministic markdown or JSON, supports `--strict`, `--safe-demo`, and `--include-partial`, does not run Android, does not load real Stockfish, does not call `LocalEvalService`, does not read network, does not write files, and does not execute proof commands.
 
+## Phase 31G Internal Non-Label Coverage-Informed Scoring Design
+
+Phase 31G adds a developer-only `InternalNonLabelScoringDesign` layer above the Phase 31F coverage matrix. This phase designs a future internal signal structure only. It does not compute scores, rank moves, create thresholds, classify moves, or emit user-facing judgments.
+
+Design dimensions are internal planning dimensions only:
+
+- tactical pressure, material swing, forcing line, king safety, endgame precision, suppression safety, candidate spread, PV/MultiPV support, Android proof confidence, and budget risk;
+- quiet/preparatory exclusion;
+- product-label, advanced-label, official-metric, CP-loss, and win-probability blocked or future-only dimensions.
+
+Dimension readiness statuses are explicit: `designReady`, `designReadyWithWarnings`, `partialNeedsMoreCases`, `futureOnly`, `excluded`, `blockedByPolicy`, `unsupported`, or `invalid`. These statuses describe whether a future internal non-label prototype may consider a dimension. They are not move scores and they are not product labels.
+
+Qualitative signal types are also design-only: `primarySignal`, `secondarySignal`, `supportingSignal`, `suppressionSignal`, `confidenceSignal`, `riskSignal`, `excludedSignal`, `blockedSignal`, and `futureSignal`. Phase 31G uses no numeric weights and no score thresholds.
+
+Current post-31G decision:
+
+- scoring design status: `designReadyWithWarnings`, because several dimensions are intentionally limited or partial;
+- design-ready dimensions: tactical pressure, material swing, forcing line, candidate spread, PV/MultiPV support, and Android proof confidence;
+- warning-ready dimensions: king safety, endgame precision, and suppression safety;
+- partial dimension: budget risk, requiring more Golden cases before prototype use;
+- quiet/preparatory dimension: excluded by `quiet-preparatory-uncertain`;
+- product-label, advanced-label, and official-metric dimensions: blocked by policy;
+- CP-loss and win-probability dimensions: future-only and not implemented;
+- Android proof confidence remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`;
+- no labels, numeric scores, official metrics, CP-loss computation, or win-probability computation are emitted.
+
+The optional command is:
+
+```powershell
+dart run tool/internal_non_label_scoring_design_report.dart
+```
+
+It renders deterministic markdown or JSON, supports `--strict`, `--safe-demo`, and `--include-partial`, does not run Android, does not load real Stockfish, does not call `LocalEvalService`, does not read network, does not write files, and does not execute proof commands.
+
 ## Initial V1 Cases
 
 The initial suite includes compact cases for:

@@ -431,6 +431,8 @@ Phase 31E status: the internal non-label bucket experiment harness is pure model
 
 Phase 31F status: the internal evidence area coverage matrix is pure model/report work only; it adds no direct engine calls, no scheduler/product integration, no Android collector requirement, and no new real-device proof need.
 
+Phase 31G status: the internal non-label coverage-informed scoring design is pure model/report work only; it adds no direct engine calls, no scheduler/product integration, no Android collector requirement, and no new real-device proof need.
+
 ## Phase 30G Recommendation
 
 Scheduler design: [LOCAL_SMART_SCHEDULER.md](LOCAL_SMART_SCHEDULER.md).

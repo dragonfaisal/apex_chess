@@ -784,3 +784,9 @@ No scheduler or product integration is added in Phase 31E. The local engine stac
 Phase 31F adds a pure `InternalEvidenceAreaCoverageMatrix` model and report command. It consumes approved Phase 31E harness output and summarizes evidence coverage by internal area: strong, adequate, partial, excluded, blocked, or future-only.
 
 No scheduler or product integration is added in Phase 31F. The local engine stack, selected-deep scheduler, product review flow, saved analysis, UI, backend, persistence, and Android proof collector are unchanged. The matrix does not classify moves, score moves, compute official metrics, compute CP loss, compute win probability, call the engine, run Android, or emit product-facing labels. Quiet/preparatory scope remains excluded by `quiet-preparatory-uncertain`.
+
+## Phase 31G Internal Non-Label Coverage-Informed Scoring Design
+
+Phase 31G adds a pure `InternalNonLabelScoringDesign` model and report command. It consumes the Phase 31F coverage matrix and turns area coverage into developer-only design dimensions with qualitative signal types and future prerequisites.
+
+No scheduler or product integration is added in Phase 31G. The local engine stack, selected-deep scheduler, product review flow, saved analysis, UI, backend, persistence, and Android proof collector are unchanged. The design layer does not classify moves, compute scores, add numeric weights, create thresholds, compute official metrics, compute CP loss, compute win probability, call the engine, run Android, or emit product-facing labels. Quiet/preparatory scope remains excluded by `quiet-preparatory-uncertain`.
