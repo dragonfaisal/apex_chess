@@ -496,6 +496,55 @@ Current post-30Z decision:
 
 Evidence review, triage, and classifier-readiness reports now include negative guard counts, negative guard case IDs, excluded scope information, and the readiness effect. They still do not emit classifier labels, raw UCI logs, long PV dumps, official accuracy, ACPL, backend URLs, or secrets.
 
+## Phase 31A Basic Classifier Foundation Design
+
+Phase 31A adds a developer-only `BasicClassifierFoundationDesign` layer. This is not classifier implementation. It defines the evidence contract, scope support mapping, output policy, and blockers that a future basic classifier would have to respect. It does not classify moves, does not emit move-quality labels, does not compute official metrics, and is not wired into UI, saved analysis, product review output, backend, persistence, or the engine.
+
+Allowed Phase 31A design scopes are non-quiet only:
+
+- `nonQuietBasicEvidenceDesign`;
+- `tacticalEvidenceDesign`;
+- `materialSwingEvidenceDesign`;
+- `forcingLineEvidenceDesign`;
+- `kingSafetyEvidenceDesign`;
+- `endgameEvidenceDesign`;
+- `safetySuppressionEvidenceDesign`.
+
+The design maps each allowed scope to supporting protected golden cases. Tactical, material, forcing-line, king-safety, conservative endgame, and safety/suppression evidence can be studied as developer-only inputs. That support is evidence taxonomy only; it is not a user-facing claim and it does not tune classifier thresholds.
+
+Blocked Phase 31A scopes are:
+
+- `quietPreparatoryEvidenceClassification`;
+- `productFacingLabels`;
+- `advancedBrilliantGate`;
+- `advancedGreatMoveGate`;
+- `advancedMissedWinGate`;
+- `officialAccuracy`;
+- `officialAcpl`.
+
+Quiet/preparatory classification remains excluded by `quiet-preparatory-uncertain`. `quiet-preparatory-hard-case` remains protected evidence, but one supported quiet row is not enough to override the negative guard. Product-facing labels and advanced gates remain blocked regardless of non-quiet evidence strength.
+
+The evidence contract is a checklist, not computation. It records which future inputs are already represented by golden evidence, such as candidate spread, PV/MultiPV proof, material swing, tactical signal, forcing-line signal, king-safety signal, mate signal, opening/forced/invalid-FEN suppression, budget pressure, and negative-guard exclusion. It also records future product inputs that are not implemented in this phase, such as previous eval, played-move eval, best-move eval, centipawn loss, and win probability.
+
+Current post-31A decision:
+
+- foundation status: `readyForLimitedDeveloperPrototype`;
+- non-quiet basic evidence design: allowed only for developer-only design/prototype;
+- quiet/preparatory classification: excluded;
+- product-facing labels: blocked;
+- advanced candidate gates: blocked;
+- official metrics: blocked;
+- evidence contract complete for product: false;
+- next recommended phase: `Phase 31B -- Evidence Contract Prototype With Product Labels Blocked`.
+
+The optional command is:
+
+```powershell
+dart run tool/basic_classifier_foundation_design_report.dart
+```
+
+It renders deterministic markdown or JSON, supports `--strict`, does not run Android, does not load real Stockfish, does not call `LocalEvalService`, does not read network, and does not write files.
+
 ## Initial V1 Cases
 
 The initial suite includes compact cases for:

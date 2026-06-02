@@ -744,3 +744,13 @@ Current post-30Z state:
 - `quiet-preparatory-uncertain` is visible, not protected, not failed, and not queued for Android proof.
 
 This remains readiness and evidence work only. Product-facing labels and advanced candidate gates stay blocked. Basic developer-only classifier design may proceed later only with quiet/preparatory scope excluded, and reports must keep that exclusion visible.
+
+## Phase 31A Basic Classifier Foundation Design
+
+Phase 31A adds a pure `BasicClassifierFoundationDesign` model and report command. It is design/prototype infrastructure only. It consumes the current golden suite, evidence review, triage, Android proof evidence, and classifier-readiness gate to describe future classifier inputs without adding classifier output.
+
+Allowed scopes are limited to developer-only non-quiet evidence design: non-quiet basic evidence, tactical evidence, material swing evidence, forcing-line evidence, king-safety evidence, conservative endgame evidence, and safety/suppression evidence. These scopes can list supporting golden case IDs and required future input fields, but they do not create move labels.
+
+Blocked scopes remain quiet/preparatory classification, product-facing labels, advanced candidate gates, officialAccuracy, and officialAcpl. `quiet-preparatory-uncertain` remains the negative guard that excludes quiet/preparatory classification, while `quiet-preparatory-hard-case` remains protected evidence only.
+
+No scheduler integration is added in Phase 31A. The local engine stack, selected-deep scheduler, product review flow, saved analysis, UI, backend, persistence, and real-device proof collector are unchanged. Normal tests still do not require real Stockfish or Android.
