@@ -589,6 +589,43 @@ dart run tool/basic_classifier_evidence_contract_report.dart
 
 It renders deterministic markdown or JSON, supports `--strict`, does not run Android, does not load real Stockfish, does not call `LocalEvalService`, does not read network, does not write files, and does not execute proof commands.
 
+## Phase 31C Internal Non-Label Evidence Buckets
+
+Phase 31C adds a developer-only `InternalEvidenceBucketPrototype` layer. It consumes the Phase 31B evidence contract and groups current evidence into internal buckets that future non-label experiments can inspect. Buckets are evidence groupings only. They are not user-facing labels, do not classify moves, do not tune thresholds, and do not connect to UI, saved analysis, product review output, backend, persistence, or the engine.
+
+Supported internal buckets include tactical support, material-swing support, forcing-line support, king-safety support, conservative endgame support, safety/suppression support, invalid-FEN suppression, opening suppression, forced-move suppression, budget-pressure visibility, Android-proof backing, candidate-spread support, and PV/MultiPV support. Each supported bucket lists supporting golden case IDs.
+
+Bucket statuses are explicit:
+
+- `supported`: the bucket has current protected golden support;
+- `partial`: the bucket has some structure but is not fully supported;
+- `excluded`: the bucket is intentionally out of scope;
+- `blockedByPolicy`: the bucket is blocked from output or implementation;
+- `futureOnly`: the bucket is a future input and is not implemented;
+- `unsupported` or `invalid`: the bucket must not be consumed by later experiments.
+
+Quiet/preparatory remains excluded by `quiet-preparatory-uncertain`. `quiet-preparatory-hard-case` may be listed as protected quiet evidence, but it does not unblock the quiet/preparatory bucket. Product output, advanced gates, and official metrics remain blocked. CP-loss and win-probability computation remain future-only/not implemented.
+
+Current post-31C decision:
+
+- bucket prototype status: `readyForInternalBucketPrototype`;
+- ready for Phase 31D internal bucket experiment guards: true;
+- product-facing labels: blocked;
+- advanced gates: blocked;
+- quiet/preparatory classification: excluded;
+- official metrics: blocked;
+- CP-loss and win-probability computation: not implemented;
+- Android-proof-backed bucket is limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`;
+- no labels are emitted.
+
+The optional command is:
+
+```powershell
+dart run tool/internal_evidence_buckets_report.dart
+```
+
+It renders deterministic markdown or JSON, supports `--strict`, does not run Android, does not load real Stockfish, does not call `LocalEvalService`, does not read network, does not write files, and does not execute proof commands.
+
 ## Initial V1 Cases
 
 The initial suite includes compact cases for:

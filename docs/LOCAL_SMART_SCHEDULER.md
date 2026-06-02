@@ -760,3 +760,9 @@ No scheduler integration is added in Phase 31A. The local engine stack, selected
 Phase 31B adds a pure `BasicClassifierEvidenceContract` prototype and report command. It consumes the Phase 31A foundation design and golden evidence review data to describe developer-only evidence fields, group readiness, support mapping, blocked future fields, and the quiet/preparatory exclusion.
 
 No scheduler or product integration is added in Phase 31B. The local engine stack, selected-deep scheduler, product review flow, saved analysis, UI, backend, persistence, and Android proof collector are unchanged. The contract does not compute CP loss, win probability, official metrics, or move labels. Quiet/preparatory classification remains excluded by `quiet-preparatory-uncertain`; non-quiet evidence groups may proceed only toward internal non-label bucket design.
+
+## Phase 31C Internal Non-Label Evidence Buckets
+
+Phase 31C adds a pure `InternalEvidenceBucketPrototype` model and report command. It consumes the Phase 31B evidence contract to group current developer-only evidence into internal buckets such as tactical support, material swing support, forcing-line support, king-safety support, conservative endgame support, suppression support, Android-proof backing, candidate spread, and PV/MultiPV support.
+
+No scheduler or product integration is added in Phase 31C. The local engine stack, selected-deep scheduler, product review flow, saved analysis, UI, backend, persistence, and Android proof collector are unchanged. Buckets are not move labels. Product output remains blocked, official metrics remain blocked, CP-loss and win-probability computation remain unimplemented, and quiet/preparatory classification remains excluded by `quiet-preparatory-uncertain`.
