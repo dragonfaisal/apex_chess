@@ -443,6 +443,8 @@ Phase 31K status: the internal signal observation review matrix is pure model/re
 
 Phase 31L status: the internal non-label prototype readiness gate is pure model/report work only; it adds no direct engine calls, no scheduler/product integration, no Android collector requirement, and no new real-device proof need.
 
+Phase 32A status: the narrow internal non-label analysis prototype is pure model/report work only; it creates developer-only packets from readiness-approved observations and adds no direct engine calls, no scheduler/product integration, no Android collector requirement, and no new real-device proof need.
+
 ## Phase 30G Recommendation
 
 Scheduler design: [LOCAL_SMART_SCHEDULER.md](LOCAL_SMART_SCHEDULER.md).

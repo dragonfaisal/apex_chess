@@ -918,6 +918,44 @@ dart run tool/internal_non_label_prototype_readiness_gate_report.dart
 
 It renders deterministic markdown or JSON, supports `--strict`, `--safe-demo`, and `--include-warnings`, does not run Android, does not load real Stockfish, does not call `LocalEvalService`, does not read network, does not write files, and does not execute proof commands.
 
+## Phase 32A Narrow Internal Non-Label Analysis Prototype
+
+Phase 32A adds a developer-only `NarrowInternalNonLabelAnalysisPrototype` layer above the Phase 31L readiness gate and Phase 31K observation review matrix. This is the first internal prototype after the readiness ladder. It creates structured internal packets from stable allowed observations only; packets are not labels, scores, rankings, official metrics, product output, or engine execution.
+
+Allowed packet scopes are narrow and internal-only:
+
+- tactical pressure;
+- material swing;
+- forcing line;
+- candidate spread;
+- PV/MultiPV support;
+- Android proof confidence.
+
+Warning-limited scopes remain warnings and coverage gaps rather than core packets: king safety, endgame support, suppression safety, and budget risk. Blocked scopes remain blocked: quiet/preparatory, product-label, advanced-label, official-metric, CP-loss, win-probability, UI/product integration, backend integration, persistence, and direct engine access.
+
+Each packet keeps its allowed scope ID, source internal signal IDs, evidence areas, bucket IDs, support case IDs, valid Android proof case IDs, qualitative confidence, warning-limited scope visibility, coverage gaps, blocked boundaries, and future prerequisites. Android proof references remain limited to:
+
+- `mate-threat-fast-evidence`;
+- `queen-win-major-swing`;
+- `simple-tactical-capture-check`.
+
+Current Phase 32A decision:
+
+- safe demo prototype status: `completedWithCoverageWarnings`;
+- readiness gate status: `readyWithCoverageWarnings`;
+- generated packets: tactical, material swing, forcing line, candidate spread, PV/MultiPV support, and Android proof confidence;
+- warning-limited scopes stay warning-limited;
+- blocked, excluded, future-only, UI, backend, persistence, and direct-engine scopes stay inactive;
+- no labels, numeric scores, aggregate scores, rankings, official metrics, CP-loss computation, win-probability computation, product output, Android execution, or engine calls are emitted.
+
+The optional command is:
+
+```powershell
+dart run tool/narrow_internal_non_label_analysis_prototype_report.dart
+```
+
+It renders deterministic markdown or JSON, supports `--strict`, `--safe-demo`, and `--include-warnings`, does not run Android, does not load real Stockfish, does not call `LocalEvalService`, does not read network, does not write files, and does not execute proof commands.
+
 ## Initial V1 Cases
 
 The initial suite includes compact cases for:
