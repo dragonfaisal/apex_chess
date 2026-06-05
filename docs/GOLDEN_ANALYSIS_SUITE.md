@@ -956,6 +956,28 @@ dart run tool/narrow_internal_non_label_analysis_prototype_report.dart
 
 It renders deterministic markdown or JSON, supports `--strict`, `--safe-demo`, and `--include-warnings`, does not run Android, does not load real Stockfish, does not call `LocalEvalService`, does not read network, does not write files, and does not execute proof commands.
 
+## Phase 32B Internal Packet Review and Aggregation Matrix
+
+Phase 32B adds a developer-only `InternalPacketReviewAggregationMatrix` layer above the Phase 32A prototype, Phase 31L readiness gate, Phase 31K observation review matrix, static Android proof evidence, and Golden cases. It reviews and aggregates the packets created by Phase 32A; it does not convert packets into move labels, scores, rankings, official metrics, product output, or engine work.
+
+Review rows distinguish stable packets, stable-with-warning packets, proof-limited packets, warning-limited scopes, blocked scopes, and future-only boundaries:
+
+- tactical, material swing, forcing line, and candidate spread packets are reviewed as stable with Golden support;
+- PV/MultiPV support remains stable with warnings because it is limited to proof-backed or explicitly PV-supported cases;
+- Android proof confidence remains proof-limited and valid only for `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`;
+- king safety, endgame, suppression safety, and budget risk remain warning-limited rows with coverage gaps visible;
+- quiet/preparatory, product-label, advanced-label, official-metric, CP-loss, win-probability, UI, backend, persistence, and direct-engine scopes remain blocked or future-only rows.
+
+The aggregation result reports packet counts, support case IDs, Android proof IDs, coverage gaps, unsafe packet count, and a Phase 32C recommendation. Current safe-demo status is `readyWithWarnings`, unsafe packet count is `0`, `safeForPhase32C` is `true`, and the recommendation is `proceedToInternalPacketStabilityPrototype`.
+
+The optional command is:
+
+```powershell
+dart run tool/internal_packet_review_aggregation_matrix_report.dart
+```
+
+It renders deterministic markdown or JSON, supports `--strict`, `--safe-demo`, and `--include-warnings`, does not run Android, does not load real Stockfish, does not call `LocalEvalService`, does not read network, does not write files, and does not execute proof commands. Reports exclude raw UCI logs, long PV dumps, final labels, official metrics, numeric move values, move ordering output, backend URLs, and secrets.
+
 ## Initial V1 Cases
 
 The initial suite includes compact cases for:

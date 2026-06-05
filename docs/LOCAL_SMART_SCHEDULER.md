@@ -826,3 +826,9 @@ No scheduler or product integration is added in Phase 31L. The local engine stac
 Phase 32A adds a pure `NarrowInternalNonLabelAnalysisPrototype` model and report command. It consumes the Phase 31L readiness gate and Phase 31K observation review matrix, then creates internal packets only for the six allowed narrow scopes: tactical, material swing, forcing line, candidate spread, PV/MultiPV support, and Android proof confidence.
 
 No scheduler or product integration is added in Phase 32A. The local engine stack, selected-deep scheduler, product review flow, saved analysis, UI, backend, persistence, and Android proof collector are unchanged. Warning-limited scopes remain warnings and coverage gaps; blocked, excluded, future-only, UI, backend, persistence, and direct-engine scopes remain inactive. The prototype does not classify moves, compute numeric or aggregate scores, rank moves, create thresholds, compute official metrics, compute CP loss, compute win probability, call the engine, run Android, or emit product-facing labels.
+
+## Phase 32B Internal Packet Review and Aggregation Matrix
+
+Phase 32B adds a pure `InternalPacketReviewAggregationMatrix` model and report command. It reviews the Phase 32A internal packets for stability, proof limits, warning-limited coverage gaps, and blocked policy boundaries, then aggregates support case IDs, Android proof IDs, counts, unsafe packet status, and a Phase 32C recommendation.
+
+No scheduler or product integration is added in Phase 32B. The local engine stack, selected-deep scheduler, product review flow, saved analysis, UI, backend, persistence, and Android proof collector are unchanged. The matrix does not classify moves, compute numeric or aggregate scores, rank moves, create thresholds, compute official metrics, compute CP loss, compute win probability, call the engine, run Android, or emit product-facing labels.
