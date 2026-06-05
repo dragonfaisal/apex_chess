@@ -437,6 +437,8 @@ Phase 31H status: the guarded internal non-label signal profile prototype is pur
 
 Phase 31I status: the internal signal profile consistency matrix is pure model/report work only; it adds no direct engine calls, no scheduler/product integration, no Android collector requirement, and no new real-device proof need.
 
+Phase 31J status: the guarded internal signal experiment runner is pure model/report work only; it adds no direct engine calls, no scheduler/product integration, no Android collector requirement, and no new real-device proof need.
+
 ## Phase 30G Recommendation
 
 Scheduler design: [LOCAL_SMART_SCHEDULER.md](LOCAL_SMART_SCHEDULER.md).

@@ -829,6 +829,36 @@ dart run tool/internal_signal_profile_consistency_matrix_report.dart
 
 It renders deterministic markdown or JSON, supports `--strict`, `--safe-demo`, and `--include-partial`, does not run Android, does not load real Stockfish, does not call `LocalEvalService`, does not read network, does not write files, and does not execute proof commands.
 
+## Phase 31J Guarded Internal Signal Experiment Runner
+
+Phase 31J adds a developer-only `InternalSignalExperimentRunner` layer above the Phase 31I consistency matrix. The runner is gate-first: it creates observations only when the consistency matrix has zero blockers, zero criticals, and `safeForGuardedInternalExperiment` is true.
+
+Runner observations are internal signal visibility records only:
+
+- active signal observations keep source dimensions, evidence areas, buckets, supporting Golden case IDs, and valid Android proof references;
+- warning and partial signals remain warning observations and do not become scores;
+- quiet/preparatory, product-label, advanced-label, official-metric, CP-loss, and win-probability paths remain inactive as excluded, blocked, or future-only visibility rows;
+- Android proof references remain limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`.
+
+The runner does not classify moves, compute scores, rank moves, create thresholds, compute official metrics, call the engine, run Android, write files, or emit product-facing output.
+
+Current post-31J decision:
+
+- safe demo runner status: `completedWithWarnings`, because warning and partial signals remain visible;
+- consistency gate status: `consistentWithWarnings`;
+- active signals are observed as internal evidence only;
+- warning signals remain warning-only observations;
+- blocked, excluded, and future-only signals remain inactive;
+- no labels, numeric scores, aggregate signal scores, move rankings, official metrics, CP-loss computation, or win-probability computation are emitted.
+
+The optional command is:
+
+```powershell
+dart run tool/internal_signal_experiment_runner_report.dart
+```
+
+It renders deterministic markdown or JSON, supports `--strict`, `--safe-demo`, and `--include-warnings`, does not run Android, does not load real Stockfish, does not call `LocalEvalService`, does not read network, does not write files, and does not execute proof commands.
+
 ## Initial V1 Cases
 
 The initial suite includes compact cases for:
