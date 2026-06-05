@@ -808,3 +808,9 @@ No scheduler or product integration is added in Phase 31I. The local engine stac
 Phase 31J adds a pure `InternalSignalExperimentRunner` model and report command. It consumes the Phase 31I consistency matrix and Phase 31H signal profile, then runs only when the consistency gate has zero blockers, zero criticals, and is marked safe for guarded internal experiments.
 
 No scheduler or product integration is added in Phase 31J. The local engine stack, selected-deep scheduler, product review flow, saved analysis, UI, backend, persistence, and Android proof collector are unchanged. The runner produces internal signal observations only: active signals are visible, warning and partial signals remain warnings, and blocked/excluded/future-only paths stay inactive. It does not classify moves, compute numeric or aggregate scores, rank moves, create thresholds, compute official metrics, compute CP loss, compute win probability, call the engine, run Android, or emit product-facing labels. Quiet/preparatory scope remains excluded by `quiet-preparatory-uncertain`.
+
+## Phase 31K Internal Signal Observation Review Matrix
+
+Phase 31K adds a pure `InternalSignalObservationReviewMatrix` model and report command. It consumes Phase 31J runner observations and reviews them for stability, Golden support, Android proof validity, warning safety, and blocked/excluded/future-only policy correctness.
+
+No scheduler or product integration is added in Phase 31K. The local engine stack, selected-deep scheduler, product review flow, saved analysis, UI, backend, persistence, and Android proof collector are unchanged. The review matrix does not classify moves, compute numeric or aggregate scores, rank moves, create thresholds, compute official metrics, compute CP loss, compute win probability, call the engine, run Android, or emit product-facing labels. Quiet/preparatory scope remains excluded by `quiet-preparatory-uncertain`.

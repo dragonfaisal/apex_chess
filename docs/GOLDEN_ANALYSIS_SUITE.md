@@ -859,6 +859,36 @@ dart run tool/internal_signal_experiment_runner_report.dart
 
 It renders deterministic markdown or JSON, supports `--strict`, `--safe-demo`, and `--include-warnings`, does not run Android, does not load real Stockfish, does not call `LocalEvalService`, does not read network, does not write files, and does not execute proof commands.
 
+## Phase 31K Internal Signal Observation Review Matrix
+
+Phase 31K adds a developer-only `InternalSignalObservationReviewMatrix` layer above the Phase 31J runner. It reviews runner observations for stability, support, warning safety, and policy correctness. This is observation review only; it does not convert observations into labels or move-quality judgments.
+
+Observation review rows are deterministic:
+
+- active observations may be `stable` or `stableWithWarnings` only when they remain internal, source-backed, area-backed, bucket-backed, Golden-supported, and free of score, ranking, label, metric, quiet-scope, engine, UI, backend, and persistence output;
+- warning and partial observations remain `warningOnly` or `needsMoreGoldenCoverage`;
+- quiet/preparatory observations remain `excludedCorrectly`;
+- product-label, advanced-label, and official-metric observations remain `blockedCorrectly`;
+- CP-loss and win-probability observations remain `futureOnlyCorrectly`;
+- Android proof references remain limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`.
+
+Current post-31K decision:
+
+- review matrix status: `readyWithWarnings`, because warning and partial observations remain visible;
+- unsafe observation count: 0;
+- active tactical, material, forcing, candidate-spread, PV/MultiPV, and Android-proof observations are reviewed as stable or stable-with-warning internal observations;
+- king-safety, endgame, suppression, and budget observations stay warning or coverage-needed;
+- blocked, excluded, and future-only observations remain inactive;
+- no labels, numeric scores, aggregate signal scores, move rankings, official metrics, CP-loss computation, or win-probability computation are emitted.
+
+The optional command is:
+
+```powershell
+dart run tool/internal_signal_observation_review_matrix_report.dart
+```
+
+It renders deterministic markdown or JSON, supports `--strict`, `--safe-demo`, and `--include-warnings`, does not run Android, does not load real Stockfish, does not call `LocalEvalService`, does not read network, does not write files, and does not execute proof commands.
+
 ## Initial V1 Cases
 
 The initial suite includes compact cases for:
