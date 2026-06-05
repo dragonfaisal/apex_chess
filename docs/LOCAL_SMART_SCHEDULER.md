@@ -814,3 +814,9 @@ No scheduler or product integration is added in Phase 31J. The local engine stac
 Phase 31K adds a pure `InternalSignalObservationReviewMatrix` model and report command. It consumes Phase 31J runner observations and reviews them for stability, Golden support, Android proof validity, warning safety, and blocked/excluded/future-only policy correctness.
 
 No scheduler or product integration is added in Phase 31K. The local engine stack, selected-deep scheduler, product review flow, saved analysis, UI, backend, persistence, and Android proof collector are unchanged. The review matrix does not classify moves, compute numeric or aggregate scores, rank moves, create thresholds, compute official metrics, compute CP loss, compute win probability, call the engine, run Android, or emit product-facing labels. Quiet/preparatory scope remains excluded by `quiet-preparatory-uncertain`.
+
+## Phase 31L Internal Non-Label Prototype Readiness Gate
+
+Phase 31L adds a pure `InternalNonLabelPrototypeReadinessGate` model and report command. It consumes Phase 31K observation review, Phase 31J runner output, Phase 31I consistency, Phase 31H signal profile, and Phase 31F coverage, then decides whether Phase 32A is allowed only as a narrow internal non-label prototype.
+
+No scheduler or product integration is added in Phase 31L. The local engine stack, selected-deep scheduler, product review flow, saved analysis, UI, backend, persistence, and Android proof collector are unchanged. The readiness gate does not run a prototype, classify moves, compute numeric or aggregate scores, rank moves, create thresholds, compute official metrics, compute CP loss, compute win probability, call the engine, run Android, or emit product-facing labels. Allowed future scope is narrow and internal-only; warning-limited scopes keep Golden coverage gaps visible; quiet/preparatory, product-label, official-metric, future-only, UI, backend, persistence, and direct-engine scopes remain blocked.

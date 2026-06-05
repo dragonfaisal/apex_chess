@@ -889,6 +889,35 @@ dart run tool/internal_signal_observation_review_matrix_report.dart
 
 It renders deterministic markdown or JSON, supports `--strict`, `--safe-demo`, and `--include-warnings`, does not run Android, does not load real Stockfish, does not call `LocalEvalService`, does not read network, does not write files, and does not execute proof commands.
 
+## Phase 31L Internal Non-Label Prototype Readiness Gate
+
+Phase 31L adds a developer-only `InternalNonLabelPrototypeReadinessGate` layer above the Phase 31K observation review matrix. This is a readiness decision only. It does not run the future prototype, classify moves, compute scores, rank moves, emit labels, compute official metrics, call the engine, or wire anything into product output.
+
+The gate decides whether Phase 32A may proceed in a narrow internal-only mode:
+
+- allowed narrow internal scopes are tactical pressure, material swing, forcing line, candidate spread, PV/MultiPV support, and Android proof confidence;
+- warning-limited scopes are king safety, endgame support, suppression safety, and budget risk;
+- blocked scopes are quiet/preparatory, product-label, advanced-label, official-metric, CP-loss, win-probability, UI/product integration, backend integration, persistence, and direct engine access;
+- warning-limited scopes keep coverage gaps visible and require more Golden coverage before any broader internal prototype;
+- Android proof references remain limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`.
+
+Current post-31L decision:
+
+- readiness status: `readyWithCoverageWarnings`;
+- Phase 32A recommendation: `proceedToNarrowInternalPrototype`;
+- safe for Phase 32A only as an internal, non-label, non-scoring, non-product prototype;
+- quiet/preparatory remains excluded by `quiet-preparatory-uncertain`;
+- product-label, advanced-label, official-metric, CP-loss, win-probability, UI, backend, persistence, and direct-engine scopes remain blocked;
+- no labels, numeric scores, aggregate signal scores, move rankings, official metrics, CP-loss computation, or win-probability computation are emitted.
+
+The optional command is:
+
+```powershell
+dart run tool/internal_non_label_prototype_readiness_gate_report.dart
+```
+
+It renders deterministic markdown or JSON, supports `--strict`, `--safe-demo`, and `--include-warnings`, does not run Android, does not load real Stockfish, does not call `LocalEvalService`, does not read network, does not write files, and does not execute proof commands.
+
 ## Initial V1 Cases
 
 The initial suite includes compact cases for:
