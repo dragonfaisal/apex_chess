@@ -832,3 +832,9 @@ No scheduler or product integration is added in Phase 32A. The local engine stac
 Phase 32B adds a pure `InternalPacketReviewAggregationMatrix` model and report command. It reviews the Phase 32A internal packets for stability, proof limits, warning-limited coverage gaps, and blocked policy boundaries, then aggregates support case IDs, Android proof IDs, counts, unsafe packet status, and a Phase 32C recommendation.
 
 No scheduler or product integration is added in Phase 32B. The local engine stack, selected-deep scheduler, product review flow, saved analysis, UI, backend, persistence, and Android proof collector are unchanged. The matrix does not classify moves, compute numeric or aggregate scores, rank moves, create thresholds, compute official metrics, compute CP loss, compute win probability, call the engine, run Android, or emit product-facing labels.
+
+## Phase 32C Internal Packet Stability Prototype
+
+Phase 32C adds a pure `InternalPacketStabilityPrototype` model and report command. It consumes the Phase 32B packet review aggregation matrix and preserves only the current internal packet stability states: stable, stable-with-warning, proof-limited stable, warning-limited-only, blocked, and future-only.
+
+No scheduler or product integration is added in Phase 32C. The local engine stack, selected-deep scheduler, product review flow, saved analysis, UI, backend, persistence, and Android proof collector are unchanged. The prototype does not classify moves, compute numeric or aggregate scores, rank moves, create thresholds, compute official metrics, compute CP loss, compute win probability, call the engine, run Android, or emit product-facing labels. Warning-limited scopes remain outside core packet generation.

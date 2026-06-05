@@ -978,6 +978,28 @@ dart run tool/internal_packet_review_aggregation_matrix_report.dart
 
 It renders deterministic markdown or JSON, supports `--strict`, `--safe-demo`, and `--include-warnings`, does not run Android, does not load real Stockfish, does not call `LocalEvalService`, does not read network, does not write files, and does not execute proof commands. Reports exclude raw UCI logs, long PV dumps, final labels, official metrics, numeric move values, move ordering output, backend URLs, and secrets.
 
+## Phase 32C Internal Packet Stability Prototype
+
+Phase 32C adds a developer-only `InternalPacketStabilityPrototype` layer above the Phase 32B packet review aggregation matrix, the Phase 32A prototype, the Phase 31L readiness gate, static Android proof evidence, and Golden cases. It stabilizes current internal packet behavior; it does not convert packets into move labels, scores, rankings, official metrics, product output, or engine work.
+
+Stability records distinguish stable packets, stable-with-warning packets, proof-limited stable packets, warning-limited-only scopes, blocked scopes, and future-only boundaries:
+
+- tactical, material swing, forcing line, and candidate spread packets are preserved as stable internal packet types;
+- PV/MultiPV support remains stable with warnings visible;
+- Android proof confidence remains proof-limited stable and valid only for `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`;
+- king safety, endgame, suppression safety, and budget risk remain warning-limited-only records outside core packet generation;
+- quiet/preparatory, product-label, advanced-label, official-metric, CP-loss, win-probability, UI, backend, persistence, and direct-engine scopes remain blocked or future-only records.
+
+The aggregate stability result reports stable counts, proof-limited stable counts, warning-limited and blocked/future-only counts, support case IDs, Android proof IDs, coverage gaps, unsafe count, and a Phase 32D recommendation. Current safe-demo status is `stableWithWarnings`, unsafe count is `0`, `safeForPhase32D` is `true`, and the recommendation is `proceedToInternalPacketEvidenceHardeningPlan`.
+
+The optional command is:
+
+```powershell
+dart run tool/internal_packet_stability_prototype_report.dart
+```
+
+It renders deterministic markdown or JSON, supports `--strict`, `--safe-demo`, and `--include-warnings`, does not run Android, does not load real Stockfish, does not call `LocalEvalService`, does not read network, does not write files, and does not execute proof commands. Reports exclude raw UCI logs, long PV dumps, final labels, official metrics, numeric move values, move ordering output, backend URLs, and secrets.
+
 ## Initial V1 Cases
 
 The initial suite includes compact cases for:
