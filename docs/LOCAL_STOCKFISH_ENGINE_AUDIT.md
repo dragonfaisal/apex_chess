@@ -24,4 +24,8 @@ Phase 32I refreshes internal packet evidence records from validated developer-on
 
 Phase 32J reviews refreshed internal packet evidence records only. It does not load Stockfish, call FFI/native bridges, execute Android collector flows, or add engine-facing production integration.
 
+## Phase 32K Status
+
+Phase 32K gates reviewed refreshed packet evidence readiness only. It does not load Stockfish, call FFI/native bridges, execute Android collector flows, or add engine-facing production integration.
+
 Decision record: `LOCAL_ENGINE_SUBSTRATE_DECISION.md`.

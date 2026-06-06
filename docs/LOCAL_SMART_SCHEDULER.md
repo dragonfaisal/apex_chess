@@ -37,3 +37,9 @@ No scheduler behavior, scheduler thresholds, product review output, UI flow, bac
 Phase 32J reviews the Phase 32I refreshed internal packet evidence records. It checks that preserved, improved, watch-listed, proof-limited, warning-limited, blocked, and future-only rows remain coherent and safe for the next internal gate.
 
 No scheduler behavior, scheduler thresholds, product review output, UI flow, backend flow, persistence, cache, database use, analyzer integration, engine execution, Android collection, or proof command execution is added. The review remains a pure model/report/test layer and does not change local smart scheduling decisions.
+
+## Phase 32K Refreshed Packet Evidence Readiness Gate
+
+Phase 32K gates the Phase 32J reviewed refreshed packet evidence records. It marks preserved-stable and improved-support records as allowed for a narrow developer-only internal summary while keeping watch-listed, proof-limited, warning-limited, blocked, and future-only records constrained or inactive.
+
+No scheduler behavior, scheduler thresholds, product review output, UI flow, backend flow, persistence, cache, database use, analyzer integration, engine execution, Android collection, or proof command execution is added. The readiness gate remains a pure model/report/test layer and does not change local smart scheduling decisions.
