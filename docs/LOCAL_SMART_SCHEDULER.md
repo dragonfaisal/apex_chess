@@ -25,3 +25,9 @@ No scheduler behavior, scheduler thresholds, product review output, UI flow, bac
 Phase 32H validates the refreshed internal packet hardening plan from Phase 32G. It checks impact support, preserved targets, warning-limited targets, blocked/future-only scopes, Android proof boundaries, and owner proof queue status.
 
 No scheduler behavior, scheduler thresholds, product review output, UI flow, backend flow, persistence, cache, database use, analyzer integration, engine execution, or Android collection is added. The validation layer remains pure developer-only model/report/test coverage.
+
+## Phase 32I Internal Packet Evidence Refresh
+
+Phase 32I refreshes developer-only internal packet evidence records from the validated Phase 32H result. It records which packets are preserved, which gained Phase 32E support, which remain watch-listed or proof-limited, and which warning-limited, blocked, or future-only scopes stay outside core packet generation.
+
+No scheduler behavior, scheduler thresholds, product review output, UI flow, backend flow, persistence, cache, database use, analyzer integration, engine execution, Android collection, or proof command execution is added. The refresh remains a pure model/report/test layer and does not change local smart scheduling decisions.

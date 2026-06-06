@@ -75,3 +75,23 @@ Validation summary:
 Owner proof queue status: empty by default. No Phase 32E case is treated as captured Android proof, and owner proof is not required unless an explicit future PV/MultiPV proof reason is added.
 
 Phase 32I recommendation: `proceedToInternalPacketEvidenceRefresh`. Phase 32H is validation only. It adds no product labels, scores, rankings, official metrics, CP-loss, win probability, UI integration, backend integration, persistence, direct engine access, engine calls, or Android collector requirement.
+
+## Phase 32I Internal Packet Evidence Refresh
+
+Phase 32I adds a developer-only internal packet evidence refresh layer that consumes the validated Phase 32H result and the refreshed Phase 32G hardening plan. It produces refreshed internal packet evidence records only; it does not judge moves and does not convert packet evidence into product-facing claims.
+
+Refresh summary:
+
+- tactical and material-swing packet evidence remains preserved stable.
+- forcing-line and candidate-spread packet evidence records refreshed Phase 32E support while staying internal-only.
+- PV/MultiPV support remains watch-listed and boundary-only; the Phase 32E PV/MultiPV case improves support without claiming captured Android proof.
+- Android proof confidence remains proof-limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`.
+- king safety, endgame, suppression safety, and budget risk produce warning-limited records with improved support, but remain outside core packet generation.
+- quiet/preparatory remains excluded by the negative guard.
+- product labels, advanced labels, official metrics, CP-loss, win probability, UI, backend, persistence, cache/database, and direct engine access remain blocked or future-only.
+
+The refreshed record set reports support cases, newly added Phase 32E support, existing Android proof IDs, signal/area/bucket mappings, qualitative confidence, warning reasons, proof-limit reasons, coverage gaps, future prerequisites, and blocked boundaries. These records are evidence artifacts for developers; they are not final labels, numeric values, rankings, official metrics, scheduler behavior, analyzer flow, backend state, UI output, saved analysis, or engine output.
+
+Owner proof queue status: empty by default. No Phase 32E case is treated as captured Android proof. Owner proof remains opt-in only for an explicit future PV/MultiPV proof reason.
+
+Phase 32J recommendation: `reviewRefreshedPacketEvidence`. Phase 32I adds no Golden cases, product labels, scores, rankings, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence, direct engine access, engine calls, Android collector requirement, or third-party data.
