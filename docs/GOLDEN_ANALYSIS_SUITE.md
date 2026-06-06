@@ -175,3 +175,20 @@ Core adapter records come only from allowed and improved support summaries. Cont
 Owner proof queue status: empty by default. Android proof remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`. No Phase 32E case is treated as captured Android proof.
 
 Phase 32N recommendation: `proceedToInternalEvidenceAdapterPrototype`. Phase 32M adds no Golden cases, product labels, scores, rankings, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence, direct engine access, engine calls, Android collector requirement, or third-party data.
+
+## Phase 32N Internal Evidence Adapter Prototype
+
+Phase 32N adds a developer-only internal evidence adapter prototype over the Phase 32M adapter design. It creates internal adapter prototype packets from the approved adapter contract only. The packets are not connected to product analysis, UI, analyzer flow, saved analysis, backend, persistence, cache/database, scheduler behavior, direct engine access, or engine execution.
+
+Prototype packet behavior:
+
+- core evidence packets are generated only from `allowedEvidenceSummary` and `improvedSupportSummary`.
+- context-only packets are generated from `constrainedWatchListSummary`, `proofLimitedSummary`, and `warningLimitedSummary`; they remain context-only and cannot become core output.
+- blocked boundary packets represent `blockedBoundarySummary` only and remain inactive.
+- future-only packets represent `futureOnlySummary` only and remain inactive.
+
+Active output fields remain limited to internal evidence-safe packet fields such as adapter packet IDs, source summary group IDs, allowed evidence record IDs, support case IDs, newly added Phase 32E support IDs, evidence area IDs, bucket IDs, qualitative confidence, internal warnings, internal constraints, future prerequisites, and context-only proof/watch/warning reasons. Blocked output fields remain explicit denials for product labels, final move labels, classifier-style label families, numeric move scores, official metrics, CP-loss, win probability, move ranking, UI output, backend/persistence output, and direct engine call fields.
+
+Owner proof queue status: empty by default. Android proof remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`. No Phase 32E case is treated as captured Android proof.
+
+Phase 32O recommendation: `reviewInternalEvidenceAdapterPrototype`. Phase 32N adds no Golden cases, product labels, scores, rankings, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence, direct engine access, engine calls, Android collector requirement, or third-party data.

@@ -55,3 +55,9 @@ No scheduler behavior, scheduler thresholds, product review output, UI flow, bac
 Phase 32M designs a developer-only adapter contract over the Phase 32L summary. It allows only allowed/improved-support summaries as future internal core input, keeps watch-listed/proof-limited/warning-limited summaries context-only, and keeps blocked/future-only summaries inactive.
 
 No scheduler behavior, scheduler thresholds, product review output, UI flow, backend flow, persistence, cache, database use, analyzer integration, engine execution, Android collection, proof command execution, or adapter wiring is added. The adapter design remains a pure model/report/test layer and does not change local smart scheduling decisions.
+
+## Phase 32N Internal Evidence Adapter Prototype
+
+Phase 32N creates developer-only internal adapter prototype packets from the Phase 32M design. Core packets come only from allowed/improved-support summaries, context-only packets stay context-only, and blocked/future-only packets remain inactive.
+
+No scheduler behavior, scheduler thresholds, product review output, UI flow, backend flow, persistence, cache, database use, analyzer integration, engine execution, Android collection, proof command execution, or product adapter wiring is added. The adapter prototype remains a pure model/report/test layer and does not change local smart scheduling decisions.
