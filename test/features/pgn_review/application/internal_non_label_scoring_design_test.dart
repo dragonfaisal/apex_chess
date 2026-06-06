@@ -171,7 +171,10 @@ void main() {
         dimension.signalType,
         InternalNonLabelScoringSignalType.riskSignal,
       );
-      expect(dimension.supportingCaseIds, ['budget-pressure-candidates']);
+      expect(dimension.supportingCaseIds, [
+        'budget-pressure-candidates',
+        'budget-pressure-wide-candidate-32e',
+      ]);
     });
 
     test('candidate spread dimension is designReady', () {

@@ -17,6 +17,7 @@ void main() {
       final result = _run();
 
       expect(result.totalCases, GoldenAnalysisCases.defaults.length);
+      expect(result.totalCases, 20);
       expect(
         result.entries.map((entry) => entry.caseId),
         containsAll(GoldenAnalysisCases.defaults.map((item) => item.id)),
@@ -218,6 +219,11 @@ void main() {
       expect(ids, isNot(contains('mate-threat-fast-evidence')));
       expect(ids, isNot(contains('queen-win-major-swing')));
       expect(ids, isNot(contains('simple-tactical-capture-check')));
+      expect(ids, isNot(contains('king-safety-mating-net-pressure-32e')));
+      expect(ids, isNot(contains('endgame-precision-candidate-spread-32e')));
+      expect(ids, isNot(contains('suppression-forced-only-legal-32e')));
+      expect(ids, isNot(contains('budget-pressure-wide-candidate-32e')));
+      expect(ids, isNot(contains('pv-multipv-support-boundary-32e')));
       expect(ids, isEmpty);
     });
 
@@ -309,6 +315,25 @@ void main() {
         ),
       );
     });
+
+    test('Phase 32E targeted cases are protected triage inputs', () {
+      final result = _run();
+
+      for (final id in const <String>[
+        'king-safety-mating-net-pressure-32e',
+        'endgame-precision-candidate-spread-32e',
+        'suppression-forced-only-legal-32e',
+        'budget-pressure-wide-candidate-32e',
+        'pv-multipv-support-boundary-32e',
+      ]) {
+        final entry = _entry(result, id);
+        expect(entry.currentReviewStatus, GoldenEvidenceReviewStatus.passed);
+        expect(entry.priority, GoldenEvidenceTriagePriority.none);
+        expect(entry.nextAction, GoldenEvidenceTriageNextAction.keepProtected);
+        expect(entry.realDeviceProofRequired, isFalse);
+      }
+      expect(result.recommendedOwnerRunProofQueue.targetCaseIds, isEmpty);
+    });
   });
 
   group('GoldenEvidenceTriage report and guardrails', () {
@@ -321,6 +346,9 @@ void main() {
       expect(first, contains('Proof Queue'));
       expect(first, contains('Weak Motif Groups'));
       expect(first, contains('Quiet Preparatory Evidence'));
+      expect(first, contains('total cases: 20'));
+      expect(first, contains('forcingAndTactical: 13 case(s)'));
+      expect(first, contains('kingSafetyAndMate: 3 case(s)'));
     });
 
     test('json report is valid and deterministic', () {

@@ -369,8 +369,8 @@ void main() {
       );
     });
 
-    test('partial area recommends adding coverage', () {
-      final area = _run().area(InternalEvidenceAreaId.budgetPressureArea);
+    test('remaining partial area recommends adding coverage', () {
+      final area = _run().area(InternalEvidenceAreaId.openingSuppressionArea);
 
       expect(area.status, InternalEvidenceAreaCoverageStatus.partial);
       expect(

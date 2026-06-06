@@ -267,7 +267,10 @@ void main() {
       );
       expect(row.severity, InternalSignalProfileConsistencySeverity.warning);
       expect(row.signalIds, [InternalNonLabelSignalId.budgetRiskSignal]);
-      expect(row.supportCaseIds, ['budget-pressure-candidates']);
+      expect(row.supportCaseIds, [
+        'budget-pressure-candidates',
+        'budget-pressure-wide-candidate-32e',
+      ]);
     });
 
     test('quiet, blocked, and future-only signals are correct', () {

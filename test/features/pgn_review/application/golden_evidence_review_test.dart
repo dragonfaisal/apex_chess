@@ -15,6 +15,7 @@ void main() {
       );
 
       expect(result.totalCases, GoldenAnalysisCases.defaults.length);
+      expect(result.totalCases, 20);
       expect(
         result.caseReviews.map((review) => review.caseId),
         containsAll(GoldenAnalysisCases.defaults.map((item) => item.id)),
@@ -327,6 +328,83 @@ void main() {
       );
     });
 
+    test('Phase 32E king-safety row reviews as protected coverage', () {
+      final review = _reviewSingle('king-safety-mating-net-pressure-32e');
+
+      expect(review.status, GoldenEvidenceReviewStatus.passed);
+      expect(
+        review.motifEvidenceGroups,
+        contains(GoldenMotifEvidenceGroup.kingSafety),
+      );
+      expect(
+        review.motifEvidenceGroups,
+        contains(GoldenMotifEvidenceGroup.forcing),
+      );
+      expect(
+        review.satisfiedReasonCodes,
+        contains(DeepCandidateReasonCode.givesCheck),
+      );
+      expect(review.realEngineEvidenceNeeded, isFalse);
+    });
+
+    test('Phase 32E endgame row reviews with broad positional evidence', () {
+      final review = _reviewSingle('endgame-precision-candidate-spread-32e');
+
+      expect(review.status, GoldenEvidenceReviewStatus.passed);
+      expect(
+        review.motifEvidenceGroups,
+        contains(GoldenMotifEvidenceGroup.positional),
+      );
+      expect(
+        review.satisfiedReasonCodes,
+        contains(DeepCandidateReasonCode.candidateEvalSpread),
+      );
+      expect(review.realEngineEvidenceNeeded, isFalse);
+    });
+
+    test('Phase 32E suppression row reviews forced suppression safely', () {
+      final review = _reviewSingle('suppression-forced-only-legal-32e');
+
+      expect(review.status, GoldenEvidenceReviewStatus.passed);
+      expect(
+        review.expectedSuppressionsSatisfied,
+        contains(DeepCandidateReasonCode.forcedSuppressed),
+      );
+      expect(
+        review.motifEvidenceGroups,
+        contains(GoldenMotifEvidenceGroup.suppression),
+      );
+    });
+
+    test('Phase 32E budget row reviews budget pressure visibility', () {
+      final review = _reviewSingle('budget-pressure-wide-candidate-32e');
+
+      expect(review.status, GoldenEvidenceReviewStatus.passed);
+      expect(
+        review.expectedSuppressionsSatisfied,
+        contains(DeepCandidateReasonCode.budgetSuppressed),
+      );
+      expect(
+        review.budgetExpectationStatus,
+        GoldenEvidenceBudgetStatus.satisfied,
+      );
+    });
+
+    test('Phase 32E PV boundary row does not request owner proof', () {
+      final review = _reviewSingle('pv-multipv-support-boundary-32e');
+
+      expect(review.status, GoldenEvidenceReviewStatus.passed);
+      expect(
+        review.satisfiedReasonCodes,
+        contains(DeepCandidateReasonCode.candidateEvalSpread),
+      );
+      expect(
+        review.missingMotifEvidence,
+        isNot(contains('tactical:multiPvEvidence')),
+      );
+      expect(review.realEngineEvidenceNeeded, isFalse);
+    });
+
     test('new hard cases do not need real-device proof by default', () {
       final result = const GoldenEvidenceReviewRunner().review(
         GoldenEvidenceReviewRequest(
@@ -336,6 +414,11 @@ void main() {
             _caseById('sacrifice-compensation-hard-case'),
             _caseById('endgame-precision-hard-case'),
             _caseById('forcing-line-variation-hard-case'),
+            _caseById('king-safety-mating-net-pressure-32e'),
+            _caseById('endgame-precision-candidate-spread-32e'),
+            _caseById('suppression-forced-only-legal-32e'),
+            _caseById('budget-pressure-wide-candidate-32e'),
+            _caseById('pv-multipv-support-boundary-32e'),
           ],
           mode: GoldenEvidenceReviewMode.realDeviceEvidenceReferenceOnly,
           requireAllEvidence: true,
@@ -438,6 +521,14 @@ void main() {
       expect(
         result.renderMarkdownReport(),
         contains('Motif Evidence Group Coverage'),
+      );
+      expect(
+        result.renderMarkdownReport(),
+        contains('king-safety-mating-net-pressure-32e'),
+      );
+      expect(
+        result.renderMarkdownReport(),
+        contains('budget-pressure-wide-candidate-32e'),
       );
       expect(result.renderMarkdownReport(), contains('Negative Guards'));
       expect(result.renderMarkdownReport(), contains('Category Coverage'));

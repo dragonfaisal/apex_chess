@@ -2055,6 +2055,237 @@ class GoldenAnalysisCases {
         maxTotalEngineCalls: 2,
       ),
     ),
+    GoldenAnalysisCase(
+      id: 'king-safety-mating-net-pressure-32e',
+      title: 'King safety mating-net coverage row',
+      category: GoldenAnalysisCategory.forcedMateThreat,
+      sourceType: GoldenAnalysisSourceType.fenPosition,
+      fen: _mateThreatFen,
+      inputs: [
+        LocalAnalysisPositionInput(
+          fen: _mateThreatFen,
+          plyIndex: 42,
+          legalMoveCount: 30,
+          givesCheck: true,
+          candidateEvalSpreadCp: 260,
+        ),
+      ],
+      motifTags: [
+        GoldenMotifTag.exposedKing,
+        GoldenMotifTag.matingNet,
+        GoldenMotifTag.kingHunt,
+        GoldenMotifTag.forcingLine,
+      ],
+      notes: ['handcrafted license-safe Phase 32E hardening coverage'],
+      expected: GoldenExpectedBehavior(
+        behaviors: {
+          GoldenExpectedBehaviorCode.shouldGenerateDeepCandidate,
+          GoldenExpectedBehaviorCode.shouldSelectDeepUnderBalanced,
+          GoldenExpectedBehaviorCode.shouldNotEmitFinalLabel,
+        },
+        evidence: GoldenEvidenceExpectation(
+          candidateSpreadMinCp: 220,
+          expectedReasonCodes: {
+            DeepCandidateReasonCode.tacticalSignal,
+            DeepCandidateReasonCode.givesCheck,
+            DeepCandidateReasonCode.candidateEvalSpread,
+          },
+          tactical: GoldenTacticalEvidenceExpectation(
+            requiresKingSafetySignal: true,
+            requiresForcingLineSignal: true,
+            requiresCandidateSpread: true,
+            kingSafetyReasons: {
+              DeepCandidateReasonCode.tacticalSignal,
+              DeepCandidateReasonCode.givesCheck,
+            },
+            forcingReasons: {
+              DeepCandidateReasonCode.tacticalSignal,
+              DeepCandidateReasonCode.givesCheck,
+              DeepCandidateReasonCode.candidateEvalSpread,
+            },
+          ),
+        ),
+        maxDeepCandidates: 1,
+        maxDeepEngineCalls: 2,
+        maxTotalEngineCalls: 2,
+      ),
+    ),
+    GoldenAnalysisCase(
+      id: 'endgame-precision-candidate-spread-32e',
+      title: 'Endgame precision candidate-spread row',
+      category: GoldenAnalysisCategory.endgamePrecision,
+      sourceType: GoldenAnalysisSourceType.fenPosition,
+      fen: _endgameFen,
+      inputs: [
+        LocalAnalysisPositionInput(
+          fen: _endgameFen,
+          plyIndex: 62,
+          legalMoveCount: 12,
+          candidateEvalSpreadCp: 180,
+        ),
+      ],
+      motifTags: [
+        GoldenMotifTag.endgamePrecision,
+        GoldenMotifTag.passedPawn,
+        GoldenMotifTag.restriction,
+      ],
+      notes: ['handcrafted license-safe Phase 32E hardening coverage'],
+      expected: GoldenExpectedBehavior(
+        behaviors: {
+          GoldenExpectedBehaviorCode.shouldGenerateDeepCandidate,
+          GoldenExpectedBehaviorCode.shouldStayWithinBalancedBudget,
+          GoldenExpectedBehaviorCode.shouldNotEmitFinalLabel,
+        },
+        evidence: GoldenEvidenceExpectation(
+          candidateSpreadMinCp: 160,
+          expectedReasonCodes: {DeepCandidateReasonCode.candidateEvalSpread},
+          tactical: GoldenTacticalEvidenceExpectation(
+            requiresCandidateSpread: true,
+            positionalReasons: {DeepCandidateReasonCode.candidateEvalSpread},
+            declaredGroups: {GoldenMotifEvidenceGroup.positional},
+          ),
+        ),
+        maxDeepCandidates: 1,
+        maxDeepEngineCalls: 2,
+        maxTotalEngineCalls: 2,
+      ),
+    ),
+    GoldenAnalysisCase(
+      id: 'suppression-forced-only-legal-32e',
+      title: 'Suppression forced-only legal row',
+      category: GoldenAnalysisCategory.forcedMoveSkip,
+      sourceType: GoldenAnalysisSourceType.syntheticSafetyCase,
+      fen: _tacticalFen,
+      inputs: [
+        LocalAnalysisPositionInput(
+          fen: _tacticalFen,
+          plyIndex: 46,
+          isOnlyLegalMove: true,
+          legalMoveCount: 1,
+          candidateEvalSpreadCp: 320,
+        ),
+      ],
+      motifTags: [GoldenMotifTag.onlyMove, GoldenMotifTag.forcingLine],
+      notes: ['handcrafted license-safe Phase 32E hardening coverage'],
+      expected: GoldenExpectedBehavior(
+        behaviors: {
+          GoldenExpectedBehaviorCode.shouldSkipForced,
+          GoldenExpectedBehaviorCode.shouldNotEmitFinalLabel,
+        },
+        evidence: GoldenEvidenceExpectation(
+          expectedSuppressionReasons: {
+            DeepCandidateReasonCode.forcedSuppressed,
+          },
+          tactical: GoldenTacticalEvidenceExpectation(
+            requiresOnlyMoveSignal: true,
+            requiresForcingLineSignal: true,
+            requiresSuppressionReason: true,
+            suppressionReasons: {DeepCandidateReasonCode.forcedSuppressed},
+          ),
+        ),
+        maxSelectedDeepRatio: 0,
+      ),
+    ),
+    GoldenAnalysisCase(
+      id: 'budget-pressure-wide-candidate-32e',
+      title: 'Budget pressure wide-candidate row',
+      category: GoldenAnalysisCategory.budgetPressure,
+      sourceType: GoldenAnalysisSourceType.syntheticSafetyCase,
+      fen: _tacticalFen,
+      inputs: [
+        LocalAnalysisPositionInput(
+          fen: _tacticalFen,
+          plyIndex: 50,
+          givesCheck: true,
+          candidateEvalSpreadCp: 260,
+        ),
+        LocalAnalysisPositionInput(
+          fen: _tacticalFen,
+          plyIndex: 51,
+          materialDeltaAfterMoveCp: -360,
+          isCapture: true,
+        ),
+        LocalAnalysisPositionInput(
+          fen: _tacticalFen,
+          plyIndex: 52,
+          previousEvalCp: 180,
+          provisionalEvalCp: -180,
+        ),
+        LocalAnalysisPositionInput(
+          fen: _tacticalFen,
+          plyIndex: 53,
+          legalMoveCount: 40,
+          candidateEvalSpreadCp: 240,
+        ),
+        LocalAnalysisPositionInput(
+          fen: _tacticalFen,
+          plyIndex: 54,
+          isCapture: true,
+          candidateEvalSpreadCp: 210,
+        ),
+      ],
+      motifTags: [GoldenMotifTag.budgetPressure, GoldenMotifTag.forcingLine],
+      notes: ['handcrafted license-safe Phase 32E hardening coverage'],
+      expected: GoldenExpectedBehavior(
+        behaviors: {
+          GoldenExpectedBehaviorCode.shouldGenerateDeepCandidate,
+          GoldenExpectedBehaviorCode.shouldReportBudgetPressure,
+          GoldenExpectedBehaviorCode.shouldNotEmitFinalLabel,
+        },
+        evidence: GoldenEvidenceExpectation(
+          expectedSuppressionReasons: {
+            DeepCandidateReasonCode.budgetSuppressed,
+          },
+          tactical: GoldenTacticalEvidenceExpectation(
+            requiresBudgetPressure: true,
+            requiresSuppressionReason: true,
+            suppressionReasons: {DeepCandidateReasonCode.budgetSuppressed},
+          ),
+        ),
+        maxDeepCandidates: 2,
+        maxDeepEngineCalls: 4,
+        maxTotalEngineCalls: 4,
+        maxSelectedDeepRatio: 0.4,
+      ),
+    ),
+    GoldenAnalysisCase(
+      id: 'pv-multipv-support-boundary-32e',
+      title: 'PV MultiPV support boundary row',
+      category: GoldenAnalysisCategory.tacticalShot,
+      sourceType: GoldenAnalysisSourceType.syntheticSafetyCase,
+      fen: _tacticalFen,
+      inputs: [
+        LocalAnalysisPositionInput(
+          fen: _tacticalFen,
+          plyIndex: 56,
+          legalMoveCount: 36,
+          candidateEvalSpreadCp: 230,
+        ),
+      ],
+      motifTags: [GoldenMotifTag.forcingLine, GoldenMotifTag.checkSequence],
+      notes: ['handcrafted Phase 32E boundary coverage without owner proof'],
+      expected: GoldenExpectedBehavior(
+        behaviors: {
+          GoldenExpectedBehaviorCode.shouldGenerateDeepCandidate,
+          GoldenExpectedBehaviorCode.shouldSelectDeepUnderBalanced,
+          GoldenExpectedBehaviorCode.shouldNotEmitFinalLabel,
+        },
+        evidence: GoldenEvidenceExpectation(
+          candidateSpreadMinCp: 220,
+          expectedReasonCodes: {DeepCandidateReasonCode.candidateEvalSpread},
+          tactical: GoldenTacticalEvidenceExpectation(
+            requiresForcingLineSignal: true,
+            requiresCandidateSpread: true,
+            declaredGroups: {GoldenMotifEvidenceGroup.tactical},
+            tacticalReasons: {DeepCandidateReasonCode.candidateEvalSpread},
+            forcingReasons: {DeepCandidateReasonCode.candidateEvalSpread},
+          ),
+        ),
+        maxDeepCandidates: 1,
+        maxDeepEngineCalls: 2,
+        maxTotalEngineCalls: 2,
+      ),
+    ),
   ];
 }
 

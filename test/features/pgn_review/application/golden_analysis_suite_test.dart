@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:apex_chess/features/pgn_review/application/game_level_deep_gating_experiment.dart';
+import 'package:apex_chess/features/pgn_review/application/golden_android_proof_evidence.dart';
 import 'package:apex_chess/features/pgn_review/application/golden_analysis_suite.dart';
 import 'package:apex_chess/features/pgn_review/application/local_smart_analysis_scheduler.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -122,6 +123,66 @@ void main() {
         expect(item.safety.handcrafted, isTrue, reason: item.id);
         expect(item.safety.noFinalLabel, isTrue, reason: item.id);
         expect(item.containsBlockedClaim, isFalse, reason: item.id);
+      }
+    });
+
+    test('existing fifteen cases remain present', () {
+      expect(
+        GoldenAnalysisCases.defaults.map((item) => item.id),
+        containsAll(_prePhase32eCaseIds),
+      );
+      expect(GoldenAnalysisCases.defaults, hasLength(20));
+    });
+
+    test('Phase 32E targeted cases are present and safe', () {
+      final cases = _phase32eCases();
+
+      expect(cases.map((item) => item.id), orderedEquals(_phase32eCaseIds));
+      for (final item in cases) {
+        expect(item.safety.licenseSafe, isTrue, reason: item.id);
+        expect(item.safety.handcrafted, isTrue, reason: item.id);
+        expect(item.safety.noFinalLabel, isTrue, reason: item.id);
+        expect(item.containsBlockedClaim, isFalse, reason: item.id);
+        expect(item.motifTags, isNotEmpty, reason: item.id);
+        expect(
+          item.expected.behaviors,
+          contains(GoldenExpectedBehaviorCode.shouldNotEmitFinalLabel),
+          reason: item.id,
+        );
+      }
+    });
+
+    test('Phase 32E cases keep broad evidence expectations', () {
+      for (final item in _phase32eCases()) {
+        expect(item.expected.evidence.mateScoreExpected, isFalse);
+        expect(item.expected.evidence.minMultiPvIfSelected, isNull);
+        expect(item.expected.evidence.pvShouldBeNonEmpty, isFalse);
+        expect(
+          item.expected.evidence.tactical.requiresRealDeviceProof,
+          isFalse,
+        );
+        expect(item.motifTags, isNot(contains(GoldenMotifTag.mateThreat)));
+        expect(
+          item.motifTags,
+          isNot(contains(GoldenMotifTag.realDeviceProofNeeded)),
+        );
+        expect(item.fakeEvidence, isEmpty);
+      }
+    });
+
+    test('Phase 32E cases do not cite Android proof as captured', () {
+      final proven = GoldenAndroidProofEvidence.phase30uS22Ultra.targetCaseIds;
+
+      expect(
+        proven,
+        orderedEquals(const [
+          'mate-threat-fast-evidence',
+          'queen-win-major-swing',
+          'simple-tactical-capture-check',
+        ]),
+      );
+      for (final item in _phase32eCases()) {
+        expect(proven, isNot(contains(item.id)));
       }
     });
   });
@@ -457,6 +518,75 @@ void main() {
       );
     });
 
+    test('Phase 32E king-safety row has mating-net pressure coverage', () {
+      final item = _caseById('king-safety-mating-net-pressure-32e');
+      final result = _runSingle(item.id);
+
+      expect(result.passed, isTrue);
+      expect(result.selectedDeepCount, 1);
+      expect(item.motifTags, contains(GoldenMotifTag.matingNet));
+      expect(item.motifTags, contains(GoldenMotifTag.kingHunt));
+      expect(item.expected.evidence.tactical.requiresKingSafetySignal, isTrue);
+      expect(
+        result.reasonCounts,
+        containsPair(DeepCandidateReasonCode.givesCheck, 1),
+      );
+    });
+
+    test('Phase 32E endgame row has broad candidate-spread coverage', () {
+      final item = _caseById('endgame-precision-candidate-spread-32e');
+      final result = _runSingle(item.id);
+
+      expect(result.passed, isTrue);
+      expect(result.selectedDeepCount, 1);
+      expect(item.motifTags, contains(GoldenMotifTag.endgamePrecision));
+      expect(
+        result.reasonCounts,
+        containsPair(DeepCandidateReasonCode.candidateEvalSpread, 1),
+      );
+      expect(item.expected.evidence.tactical.requiresCandidateSpread, isTrue);
+    });
+
+    test('Phase 32E suppression row preserves forced-move suppression', () {
+      final result = _runSingle('suppression-forced-only-legal-32e');
+
+      expect(result.passed, isTrue);
+      expect(result.selectedDeepCount, 0);
+      expect(
+        result.suppressionCounts,
+        containsPair(DeepCandidateReasonCode.forcedSuppressed, 1),
+      );
+    });
+
+    test('Phase 32E budget row exposes budget pressure', () {
+      final result = _runSingle('budget-pressure-wide-candidate-32e');
+
+      expect(result.passed, isTrue);
+      expect(result.candidateCount, greaterThan(result.selectedDeepCount));
+      expect(
+        result.suppressionCounts[DeepCandidateReasonCode.budgetSuppressed],
+        3,
+      );
+    });
+
+    test(
+      'Phase 32E PV and MultiPV boundary row remains fake-evidence safe',
+      () {
+        final item = _caseById('pv-multipv-support-boundary-32e');
+        final result = _runSingle(item.id);
+
+        expect(result.passed, isTrue);
+        expect(result.selectedDeepCount, 1);
+        expect(item.expected.evidence.minMultiPvIfSelected, isNull);
+        expect(item.expected.evidence.pvShouldBeNonEmpty, isFalse);
+        expect(result.requiresFutureRealEngineProof, isFalse);
+        expect(
+          result.reasonCounts,
+          containsPair(DeepCandidateReasonCode.candidateEvalSpread, 1),
+        );
+      },
+    );
+
     test('plan-only mode performs no real engine calls', () {
       final result = const GoldenAnalysisSuiteRunner().run(
         const GoldenAnalysisSuiteRequest(
@@ -506,6 +636,14 @@ void main() {
       expect(result.renderMarkdownReport(), contains('Category Coverage'));
       expect(result.renderMarkdownReport(), contains('Motif Coverage'));
       expect(result.renderMarkdownReport(), contains('Behavior Coverage'));
+      expect(
+        result.renderMarkdownReport(),
+        contains('king-safety-mating-net-pressure-32e'),
+      );
+      expect(
+        result.renderMarkdownReport(),
+        contains('pv-multipv-support-boundary-32e'),
+      );
     });
 
     test('report contains no raw UCI or PV spam', () {
@@ -586,6 +724,36 @@ List<GoldenAnalysisCase> _phase30wCases() {
   ];
   return ids.map(_caseById).toList(growable: false);
 }
+
+List<GoldenAnalysisCase> _phase32eCases() {
+  return _phase32eCaseIds.map(_caseById).toList(growable: false);
+}
+
+const _phase32eCaseIds = <String>[
+  'king-safety-mating-net-pressure-32e',
+  'endgame-precision-candidate-spread-32e',
+  'suppression-forced-only-legal-32e',
+  'budget-pressure-wide-candidate-32e',
+  'pv-multipv-support-boundary-32e',
+];
+
+const _prePhase32eCaseIds = <String>[
+  'quiet-opening-skip',
+  'invalid-fen-safety',
+  'forced-move-skip',
+  'simple-tactical-capture-check',
+  'material-sacrifice-compensation',
+  'mate-threat-fast-evidence',
+  'quiet-preparatory-uncertain',
+  'technical-endgame-conservative',
+  'budget-pressure-candidates',
+  'queen-win-major-swing',
+  'king-safety-mating-net-hard-case',
+  'quiet-preparatory-hard-case',
+  'sacrifice-compensation-hard-case',
+  'endgame-precision-hard-case',
+  'forcing-line-variation-hard-case',
+];
 
 String get _goldenSource => File(
   'lib/features/pgn_review/application/golden_analysis_suite.dart',

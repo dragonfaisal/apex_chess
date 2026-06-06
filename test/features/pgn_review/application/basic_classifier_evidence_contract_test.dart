@@ -15,9 +15,9 @@ void main() {
     test('contract includes all current golden evidence facts', () {
       final result = _run();
 
-      expect(result.totalCaseCount, 15);
+      expect(result.totalCaseCount, 20);
       expect(result.totalCaseCount, GoldenAnalysisCases.defaults.length);
-      expect(result.protectedCount, 14);
+      expect(result.protectedCount, 19);
       expect(result.negativeGuardCount, 1);
       expect(result.incompleteCount, 0);
       expect(result.realDeviceNeededCount, 0);
@@ -429,8 +429,8 @@ void main() {
 
       expect(first, second);
       expect(decoded['version'], basicClassifierEvidenceContractReportVersion);
-      expect(summary['totalCases'], 15);
-      expect(summary['protectedCount'], 14);
+      expect(summary['totalCases'], 20);
+      expect(summary['protectedCount'], 19);
       expect(summary['negativeGuardCount'], 1);
       expect(decoded['fields'], isA<List<Object?>>());
       expect(decoded['groups'], isA<List<Object?>>());

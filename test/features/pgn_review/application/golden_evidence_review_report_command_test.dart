@@ -107,7 +107,7 @@ void main() {
       final result = _run(args: const ['--format=markdown']);
 
       expect(result.exitCode, goldenEvidenceReviewReportExitSuccess);
-      expect(result.review!.totalCases, 15);
+      expect(result.review!.totalCases, 20);
       expect(result.stdoutText, contains('king-safety-mating-net-hard-case'));
       expect(result.stdoutText, contains('quiet-preparatory-hard-case'));
       expect(result.stdoutText, contains('sacrifice-compensation-hard-case'));
@@ -120,8 +120,8 @@ void main() {
       final decoded = jsonDecode(result.stdoutText) as Map<String, Object?>;
       final summary = decoded['summary'] as Map<String, Object?>;
 
-      expect(summary['totalCases'], 15);
-      expect(summary['passedCount'], 14);
+      expect(summary['totalCases'], 20);
+      expect(summary['passedCount'], 19);
       expect(summary['negativeGuardCount'], 1);
       expect(summary['incompleteCount'], 0);
       expect(summary['needsRealDeviceEvidenceCount'], 0);

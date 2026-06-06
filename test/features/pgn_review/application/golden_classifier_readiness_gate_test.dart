@@ -14,17 +14,17 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('GoldenClassifierReadinessGate default decision', () {
-    test('readiness gate includes all 15 golden cases', () {
+    test('readiness gate includes all current golden cases', () {
       final result = _run();
 
-      expect(result.totalCaseCount, 15);
+      expect(result.totalCaseCount, 20);
       expect(result.totalCaseCount, GoldenAnalysisCases.defaults.length);
     });
 
-    test('reports 14 protected, 1 negative guard, and 0 incomplete rows', () {
+    test('reports protected rows, negative guard, and no incomplete rows', () {
       final result = _run();
 
-      expect(result.protectedCount, 14);
+      expect(result.protectedCount, 19);
       expect(result.negativeGuardCount, 1);
       expect(result.incompleteCount, 0);
       expect(

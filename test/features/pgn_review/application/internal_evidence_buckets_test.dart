@@ -14,8 +14,8 @@ void main() {
     test('bucket prototype includes all expected bucket IDs', () {
       final result = _run();
 
-      expect(result.totalCaseCount, 15);
-      expect(result.protectedCount, 14);
+      expect(result.totalCaseCount, 20);
+      expect(result.protectedCount, 19);
       expect(result.negativeGuardCount, 1);
       expect(result.incompleteCount, 0);
       expect(result.realDeviceNeededCount, 0);
@@ -124,7 +124,9 @@ void main() {
           'invalid-fen-safety',
           'quiet-opening-skip',
           'forced-move-skip',
+          'suppression-forced-only-legal-32e',
           'budget-pressure-candidates',
+          'budget-pressure-wide-candidate-32e',
         ]),
       );
       expect(
@@ -143,13 +145,19 @@ void main() {
         result
             .bucket(InternalEvidenceBucketId.forcedMoveSuppressed)
             .supportingCaseIds,
-        orderedEquals(['forced-move-skip']),
+        orderedEquals([
+          'forced-move-skip',
+          'suppression-forced-only-legal-32e',
+        ]),
       );
       expect(
         result
             .bucket(InternalEvidenceBucketId.budgetPressureVisible)
             .supportingCaseIds,
-        orderedEquals(['budget-pressure-candidates']),
+        orderedEquals([
+          'budget-pressure-candidates',
+          'budget-pressure-wide-candidate-32e',
+        ]),
       );
     });
 
@@ -183,8 +191,10 @@ void main() {
           'simple-tactical-capture-check',
           'forcing-line-variation-hard-case',
           'king-safety-mating-net-hard-case',
+          'king-safety-mating-net-pressure-32e',
           'sacrifice-compensation-hard-case',
           'mate-threat-fast-evidence',
+          'pv-multipv-support-boundary-32e',
         ]),
       );
     });
@@ -456,8 +466,8 @@ void main() {
 
       expect(first, second);
       expect(decoded['version'], internalEvidenceBucketsReportVersion);
-      expect(summary['totalCases'], 15);
-      expect(summary['protectedCount'], 14);
+      expect(summary['totalCases'], 20);
+      expect(summary['protectedCount'], 19);
       expect(summary['negativeGuardCount'], 1);
       expect(decoded['buckets'], isA<List<Object?>>());
       expect(

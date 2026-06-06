@@ -77,6 +77,23 @@ void main() {
         contains('king-safety-mating-net-hard-case'),
       );
       expect(
+        first.supportCaseIds,
+        contains('king-safety-mating-net-pressure-32e'),
+      );
+      expect(
+        first.supportCaseIds,
+        contains('endgame-precision-candidate-spread-32e'),
+      );
+      expect(
+        first.supportCaseIds,
+        contains('suppression-forced-only-legal-32e'),
+      );
+      expect(
+        first.supportCaseIds,
+        contains('budget-pressure-wide-candidate-32e'),
+      );
+      expect(first.supportCaseIds, contains('pv-multipv-support-boundary-32e'));
+      expect(
         first.phase32ERecommendation,
         InternalPacketEvidencePhase32ERecommendation
             .addTargetedGoldenCoverageCases,
@@ -490,6 +507,8 @@ void main() {
         expect(report, contains('## Suggested Hard-Case Areas'));
         expect(report, contains('king-safety / mating-net coverage'));
         expect(report, contains('PV/MultiPV support coverage'));
+        expect(report, contains('king-safety-mating-net-pressure-32e'));
+        expect(report, contains('pv-multipv-support-boundary-32e'));
         expect(report, contains('## Phase 32E Recommendation'));
         expect(report, contains('addTargetedGoldenCoverageCases'));
       },

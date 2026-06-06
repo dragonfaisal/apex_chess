@@ -50,8 +50,8 @@ void main() {
       expect(decoded['version'], goldenEvidenceTriageReportVersion);
       expect(decoded['summary'], isA<Map<String, Object?>>());
       expect(decoded['proofQueue'], isA<Map<String, Object?>>());
-      expect(summary['totalCases'], 15);
-      expect(summary['protectedCount'], 14);
+      expect(summary['totalCases'], 20);
+      expect(summary['protectedCount'], 19);
       expect(summary['negativeGuardCount'], 1);
       expect(summary['incompleteCount'], 0);
       expect(decoded['quietPreparatoryEvidence'], isA<List<Object?>>());

@@ -33,7 +33,7 @@ void main() {
         result.stdoutText,
         contains('# Basic Classifier Foundation Design'),
       );
-      expect(result.result!.totalCaseCount, 15);
+      expect(result.result!.totalCaseCount, 20);
       expect(result.result!.negativeGuardCount, 1);
     });
 
@@ -46,8 +46,8 @@ void main() {
       expect(first.exitCode, basicClassifierFoundationDesignReportExitSuccess);
       expect(first.stdoutText, second.stdoutText);
       expect(decoded['version'], basicClassifierFoundationDesignReportVersion);
-      expect(summary['totalCases'], 15);
-      expect(summary['protectedCount'], 14);
+      expect(summary['totalCases'], 20);
+      expect(summary['protectedCount'], 19);
       expect(summary['negativeGuardCount'], 1);
       expect(summary['incompleteCount'], 0);
       expect(decoded['scopes'], isA<List<Object?>>());

@@ -28,7 +28,7 @@ void main() {
         result.stdoutText,
         contains('# Internal Evidence Buckets Prototype'),
       );
-      expect(result.result!.totalCaseCount, 15);
+      expect(result.result!.totalCaseCount, 20);
       expect(result.result!.negativeGuardCount, 1);
     });
 
@@ -41,8 +41,8 @@ void main() {
       expect(first.exitCode, internalEvidenceBucketsReportExitSuccess);
       expect(first.stdoutText, second.stdoutText);
       expect(decoded['version'], internalEvidenceBucketsReportVersion);
-      expect(summary['totalCases'], 15);
-      expect(summary['protectedCount'], 14);
+      expect(summary['totalCases'], 20);
+      expect(summary['protectedCount'], 19);
       expect(summary['negativeGuardCount'], 1);
       expect(decoded['buckets'], isA<List<Object?>>());
     });

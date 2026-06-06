@@ -197,7 +197,10 @@ void main() {
 
       expect(signal.status, InternalNonLabelSignalStatus.partial);
       expect(signal.confidence, InternalNonLabelSignalConfidence.warningOnly);
-      expect(signal.supportingCaseIds, ['budget-pressure-candidates']);
+      expect(signal.supportingCaseIds, [
+        'budget-pressure-candidates',
+        'budget-pressure-wide-candidate-32e',
+      ]);
     });
 
     test('quiet preparatory signal is excluded', () {

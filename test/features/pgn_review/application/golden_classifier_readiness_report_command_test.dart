@@ -25,7 +25,7 @@ void main() {
       expect(result.format, GoldenClassifierReadinessReportFormat.markdown);
       expect(result.strict, isFalse);
       expect(result.stdoutText, contains('# Golden Classifier Readiness Gate'));
-      expect(result.result!.totalCaseCount, 15);
+      expect(result.result!.totalCaseCount, 20);
     });
 
     test('json output is valid and deterministic', () {
@@ -37,8 +37,8 @@ void main() {
       expect(first.exitCode, goldenClassifierReadinessReportExitSuccess);
       expect(first.stdoutText, second.stdoutText);
       expect(decoded['version'], goldenClassifierReadinessReportVersion);
-      expect(summary['totalCases'], 15);
-      expect(summary['protectedCount'], 14);
+      expect(summary['totalCases'], 20);
+      expect(summary['protectedCount'], 19);
       expect(summary['negativeGuardCount'], 1);
       expect(summary['incompleteCount'], 0);
       expect(decoded['scopes'], isA<List<Object?>>());

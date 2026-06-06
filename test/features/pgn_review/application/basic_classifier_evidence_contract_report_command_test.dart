@@ -33,7 +33,7 @@ void main() {
         result.stdoutText,
         contains('# Basic Classifier Evidence Contract Prototype'),
       );
-      expect(result.result!.totalCaseCount, 15);
+      expect(result.result!.totalCaseCount, 20);
       expect(result.result!.negativeGuardCount, 1);
     });
 
@@ -46,8 +46,8 @@ void main() {
       expect(first.exitCode, basicClassifierEvidenceContractReportExitSuccess);
       expect(first.stdoutText, second.stdoutText);
       expect(decoded['version'], basicClassifierEvidenceContractReportVersion);
-      expect(summary['totalCases'], 15);
-      expect(summary['protectedCount'], 14);
+      expect(summary['totalCases'], 20);
+      expect(summary['protectedCount'], 19);
       expect(summary['negativeGuardCount'], 1);
       expect(summary['incompleteCount'], 0);
       expect(decoded['fields'], isA<List<Object?>>());
