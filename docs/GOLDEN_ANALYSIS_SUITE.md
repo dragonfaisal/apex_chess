@@ -135,3 +135,21 @@ The readiness records preserve source review IDs, support case IDs, newly added 
 Owner proof queue status: empty by default. No Phase 32E case is treated as captured Android proof. Any future proof need must remain explicit and tied to PV/MultiPV proof reasons only.
 
 Phase 32L recommendation: `proceedToInternalEvidenceSummaryLayer`. Phase 32K adds no Golden cases, product labels, scores, rankings, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence, direct engine access, engine calls, Android collector requirement, or third-party data.
+
+## Phase 32L Internal Evidence Summary Layer
+
+Phase 32L adds a developer-only internal evidence summary layer over the Phase 32K readiness gate. It produces a compact grouped summary for future internal-only layers. It summarizes evidence readiness only and does not judge chess moves.
+
+Summary groups:
+
+- allowed evidence summary contains readiness-allowed preserved stable tactical/material-swing evidence and improved forcing-line/candidate-spread support evidence.
+- improved support summary highlights Phase 32E support retained by the forcing-line and candidate-spread evidence records.
+- constrained watch-list summary keeps PV/MultiPV watch-listed and boundary-only.
+- proof-limited summary keeps Android proof confidence proof-limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`.
+- warning-limited summary keeps king safety, endgame, suppression safety, and budget risk visible but outside core packet output.
+- blocked boundary summary keeps quiet/preparatory, product labels, advanced labels, official metrics, UI, backend, persistence/cache/database, and direct engine access inactive.
+- future-only summary keeps CP-loss and win probability inactive.
+
+Owner proof queue status: empty by default. No Phase 32E case is treated as captured Android proof. Any future proof need must remain explicit and tied to PV/MultiPV proof reasons only.
+
+Phase 32M recommendation: `proceedToInternalEvidenceAdapterDesign`. Phase 32L adds no Golden cases, product labels, scores, rankings, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence, direct engine access, engine calls, Android collector requirement, or third-party data.

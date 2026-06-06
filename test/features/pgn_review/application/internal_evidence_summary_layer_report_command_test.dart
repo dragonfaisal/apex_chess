@@ -1,0 +1,191 @@
+@TestOn('vm')
+library;
+
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:apex_chess/features/pgn_review/application/internal_evidence_summary_layer.dart';
+import 'package:apex_chess/features/pgn_review/application/internal_packet_evidence_refresh_review.dart';
+import 'package:apex_chess/features/pgn_review/application/refreshed_internal_packet_hardening_plan.dart';
+import 'package:apex_chess/features/pgn_review/application/refreshed_packet_evidence_readiness_gate.dart';
+import 'package:apex_chess/features/pgn_review/application/refreshed_packet_hardening_validation.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import '../../../../tool/internal_evidence_summary_layer_report.dart';
+
+void main() {
+  group('Internal Evidence Summary Layer report command', () {
+    test('command file exists', () {
+      expect(
+        File('tool/internal_evidence_summary_layer_report.dart').existsSync(),
+        true,
+      );
+    });
+
+    test('markdown works for safe demo', () {
+      final result = _run();
+
+      expect(result.exitCode, internalEvidenceSummaryLayerReportExitSuccess);
+      expect(result.format, InternalEvidenceSummaryLayerReportFormat.markdown);
+      expect(result.stdoutText, contains('# Internal Evidence Summary Layer'));
+      expect(result.stdoutText, contains('## Summary Group Table'));
+      expect(result.stdoutText, contains('## Allowed Evidence Summary'));
+      expect(result.stdoutText, contains('owner proof queue count: 0'));
+      expect(result.stderrText, isEmpty);
+      expect(result.result!.safeForPhase32M, isTrue);
+    });
+
+    test('JSON works for safe demo', () {
+      final result = _run(args: const <String>['--format=json']);
+      final decoded = jsonDecode(result.stdoutText) as Map<String, Object?>;
+
+      expect(result.exitCode, internalEvidenceSummaryLayerReportExitSuccess);
+      expect(result.format, InternalEvidenceSummaryLayerReportFormat.json);
+      expect(decoded['version'], internalEvidenceSummaryLayerReportVersion);
+      expect(decoded['totalGroups'], 7);
+      expect(decoded['allowedRecordCount'], 4);
+      expect(decoded['constrainedRecordCount'], 6);
+      expect(decoded['blockedRecordCount'], 8);
+      expect(decoded['futureOnlyRecordCount'], 2);
+      expect(decoded['ownerProofQueueCount'], 0);
+      expect(decoded['safeForPhase32M'], isTrue);
+    });
+
+    test('strict passes for safe demo', () {
+      final result = _run(args: const <String>['--strict']);
+
+      expect(result.exitCode, internalEvidenceSummaryLayerReportExitSuccess);
+      expect(result.result!.safeForPhase32M, isTrue);
+      expect(result.result!.unsafeCount, 0);
+      expect(result.result!.criticalCount, 0);
+    });
+
+    test('strict fails on unsafe seam', () {
+      final unsafePlan = const RefreshedInternalPacketHardeningPlan()
+          .evaluate()
+          .copyWith(
+            refreshedStatus:
+                RefreshedInternalPacketHardeningStatus.blockedByUnsafeImpact,
+            unsafeCount: 1,
+            safeForPhase32H: false,
+          );
+      final unsafeValidation = const RefreshedPacketHardeningValidation()
+          .evaluate(
+            RefreshedPacketHardeningValidationRequest(
+              refreshedPlanResult: unsafePlan,
+            ),
+          );
+      final unsafeReview = const InternalPacketEvidenceRefreshReview().evaluate(
+        InternalPacketEvidenceRefreshReviewRequest(
+          validationResult: unsafeValidation,
+          refreshedPlanResult: unsafePlan,
+        ),
+      );
+      final unsafeReadiness = const RefreshedPacketEvidenceReadinessGate()
+          .evaluate(
+            RefreshedPacketEvidenceReadinessGateRequest(
+              reviewResult: unsafeReview,
+              validationResult: unsafeValidation,
+              refreshedPlanResult: unsafePlan,
+            ),
+          );
+      final result = _run(
+        args: const <String>['--strict'],
+        request: InternalEvidenceSummaryLayerRequest(
+          readinessResult: unsafeReadiness,
+          reviewResult: unsafeReview,
+          validationResult: unsafeValidation,
+          refreshedPlanResult: unsafePlan,
+        ),
+      );
+
+      expect(
+        result.exitCode,
+        internalEvidenceSummaryLayerReportExitUnsafePolicy,
+      );
+      expect(result.result!.hasUnsafeSummaryPolicyViolation, isTrue);
+    });
+
+    test('safe-demo and include-warnings flags are accepted', () {
+      final result = _run(
+        args: const <String>['--safe-demo', '--include-warnings'],
+      );
+
+      expect(result.exitCode, internalEvidenceSummaryLayerReportExitSuccess);
+      expect(result.safeDemo, isTrue);
+      expect(result.includeWarnings, isTrue);
+      expect(result.result!.constrainedGroupCount, 3);
+    });
+
+    test('usage errors return usage exit code', () {
+      final result = _run(args: const <String>['--format=xml']);
+
+      expect(result.exitCode, internalEvidenceSummaryLayerReportExitUsage);
+      expect(result.stderrText, contains('unknownFormat'));
+      expect(result.commandFailure, 'unknownFormat');
+    });
+
+    test('command output keeps report guardrails', () {
+      final report = _run().stdoutText;
+
+      for (final token in const <String>[
+        'uciok',
+        'readyok',
+        'info depth',
+        'bestmove e2e4',
+        ' pv ',
+        'pvMoves',
+        'Brilliant',
+        'Great',
+        'Miss',
+        'Best',
+        'Good',
+        'Inaccuracy',
+        'Mistake',
+        'Blunder',
+        'ACPL',
+        'accuracy',
+        'moveScore',
+        'scoreValue',
+        'rankedMoves',
+        'moveRanking',
+      ]) {
+        expect(report, isNot(contains(token)), reason: token);
+      }
+    });
+
+    test('command source does not execute proof or boundary integrations', () {
+      final source = File(
+        'tool/internal_evidence_summary_layer_report.dart',
+      ).readAsStringSync();
+      final imports = source
+          .split('\n')
+          .where((line) => line.trimLeft().startsWith('import '))
+          .join('\n');
+
+      expect(source, isNot(contains('Process.run')));
+      expect(source, isNot(contains('Process.start')));
+      expect(imports, isNot(contains('dart:ffi')));
+      expect(imports.toLowerCase(), isNot(contains('stockfish')));
+      expect(imports, isNot(contains('LocalEvalService')));
+      expect(imports, isNot(contains('package:flutter/')));
+      expect(imports, isNot(contains('Widget')));
+      expect(imports, isNot(contains('backend')));
+      expect(imports, isNot(contains('preflight')));
+      expect(imports, isNot(contains('server')));
+      expect(imports, isNot(contains('persistence')));
+      expect(imports, isNot(contains('cache')));
+      expect(imports, isNot(contains('database')));
+    });
+  });
+}
+
+InternalEvidenceSummaryLayerReportCommandResult _run({
+  List<String> args = const <String>[],
+  InternalEvidenceSummaryLayerRequest? request,
+}) {
+  return runInternalEvidenceSummaryLayerReportCommand(
+    args: args,
+    request: request,
+  );
+}
