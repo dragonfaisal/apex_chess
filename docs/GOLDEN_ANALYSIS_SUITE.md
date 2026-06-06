@@ -58,3 +58,20 @@ Refresh summary:
 Owner proof queue status: empty by default. No Phase 32E case is treated as captured Android proof.
 
 Phase 32H recommendation: `validateRefreshedHardeningPlan`. Phase 32G adds no product labels, scores, rankings, official metrics, CP-loss, win probability, UI integration, backend integration, persistence, direct engine access, engine calls, or Android collector requirement.
+
+## Phase 32H Refreshed Hardening Plan Validation
+
+Phase 32H adds a developer-only validation layer for the Phase 32G refreshed internal packet hardening plan. It validates that the refresh consumed the Phase 32F coverage impact review, that improved targets cite Phase 32E support, and that preserved packet targets remain internally stable.
+
+Validation summary:
+
+- tactical and material-swing targets remain preserved.
+- forcing-line and candidate-spread targets remain preserved or improved with Phase 32E support.
+- PV/MultiPV support remains watch-listed and boundary-only.
+- Android proof confidence remains proof-limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`.
+- king safety, endgame, suppression safety, and budget risk remain warning-limited but improved.
+- quiet/preparatory remains excluded by the negative guard, and product labels, advanced labels, official metrics, CP-loss, win probability, UI, backend, persistence, and direct engine access remain blocked or future-only.
+
+Owner proof queue status: empty by default. No Phase 32E case is treated as captured Android proof, and owner proof is not required unless an explicit future PV/MultiPV proof reason is added.
+
+Phase 32I recommendation: `proceedToInternalPacketEvidenceRefresh`. Phase 32H is validation only. It adds no product labels, scores, rankings, official metrics, CP-loss, win probability, UI integration, backend integration, persistence, direct engine access, engine calls, or Android collector requirement.
