@@ -208,3 +208,19 @@ Review behavior:
 Android proof remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`. No Phase 32E case is treated as captured Android proof, and the owner proof queue remains empty by default.
 
 Phase 32P recommendation: `proceedToAdapterPrototypeValidation`. Phase 32O adds no Golden cases, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, direct engine access, engine calls, Android collector requirement, or third-party data.
+
+## Phase 32P Internal Evidence Adapter Prototype Validation
+
+Phase 32P adds a developer-only validation layer for the Phase 32O internal evidence adapter prototype review. It validates that the reviewed Phase 32N prototype packets remain internally consistent with the Phase 32M adapter design contract and safe for a later internal adapter readiness gate. It validates adapter prototype packets only and does not judge chess moves.
+
+Validation behavior:
+
+- validation checks explicitly cover approved adapter design consumption, core packet sources, context-only preservation, inactive blocked/future-only packets, active output field safety, blocked output field denials, Android proof boundaries, owner-proof queue honesty, quiet/preparatory exclusion, and product boundary blocking.
+- core packet validation is valid only for packets sourced from `allowedEvidenceSummary` or `improvedSupportSummary`.
+- context-only packet validation preserves `constrainedWatchListSummary`, `proofLimitedSummary`, and `warningLimitedSummary` as context-only and does not promote them to core output.
+- blocked boundary and future-only packet validation keeps those packets inactive.
+- active output fields remain limited to internal evidence-safe fields; blocked output fields remain explicit denials for product labels, final move labels, classifier label families, numeric move scores, official metrics, CP-loss, win probability, move ranking, UI output, backend/persistence output, and direct engine call fields.
+
+Android proof remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`. No Phase 32E case is treated as captured Android proof, and the owner proof queue remains empty by default.
+
+Phase 32Q recommendation: `proceedToAdapterPrototypeReadinessGate`. Phase 32P adds no Golden cases, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, direct engine access, engine calls, Android collector requirement, or third-party data.

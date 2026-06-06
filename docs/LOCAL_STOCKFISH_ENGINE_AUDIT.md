@@ -44,4 +44,8 @@ Phase 32N creates internal evidence adapter prototype packets only. It does not 
 
 Phase 32O reviews internal evidence adapter prototype packets only. It does not load Stockfish, call FFI/native bridges, execute Android collector flows, or add engine-facing production integration.
 
+## Phase 32P Status
+
+Phase 32P validates reviewed internal evidence adapter prototype packets only. It does not load Stockfish, call FFI/native bridges, execute Android collector flows, or add engine-facing production integration.
+
 Decision record: `LOCAL_ENGINE_SUBSTRATE_DECISION.md`.
