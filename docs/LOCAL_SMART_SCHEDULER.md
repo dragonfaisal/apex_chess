@@ -13,3 +13,9 @@ Normal tests continue to use planned or fake evidence only. They do not require 
 Phase 32F reviews the impact of the Phase 32E targeted Golden cases on internal packet hardening. It reports improved support for king-safety / mating-net pressure, endgame precision, forced suppression, budget pressure, candidate spread, and PV/MultiPV boundary coverage.
 
 No scheduler behavior, scheduler thresholds, product review output, UI flow, backend flow, persistence, cache, database use, analyzer integration, engine execution, or Android collection is added. The review remains a pure developer-only reporting layer.
+
+## Phase 32G Refreshed Internal Packet Hardening Plan
+
+Phase 32G refreshes the internal packet hardening plan from the Phase 32F coverage impact review. It records which Phase 32D coverage actions are now reduced, which targets remain warning-limited but improved, and which scopes stay blocked or future-only.
+
+No scheduler behavior, scheduler thresholds, product review output, UI flow, backend flow, persistence, cache, database use, analyzer integration, engine execution, or Android collection is added. The refreshed plan remains a pure developer-only model/report layer.

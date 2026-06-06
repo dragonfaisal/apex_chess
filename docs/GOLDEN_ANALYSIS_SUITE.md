@@ -41,3 +41,20 @@ The impact review keeps warning-limited scopes visible. King safety, endgame, su
 Owner proof queue status: empty by default. Android proof remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`; no Phase 32E case is treated as captured Android proof.
 
 Phase 32G recommendation: `refreshInternalPacketHardeningPlanFromCoverageImpact`. This is still an internal evidence review path only. It adds no product labels, scores, rankings, official metrics, CP-loss, win probability, UI integration, backend integration, persistence, direct engine access, engine calls, or Android collector requirement.
+
+## Phase 32G Refreshed Internal Packet Hardening Plan
+
+Phase 32G adds a developer-only refreshed hardening plan that consumes the Phase 32F targeted coverage impact review. It updates the Phase 32D hardening actions from the actual Phase 32E coverage changes without adding new Golden cases and without converting any packet into product output.
+
+Refresh summary:
+
+- tactical and material-swing packets remain preserved as stable packet types.
+- forcing-line and candidate-spread packets keep their stable packet treatment while recording broadened Phase 32E support.
+- PV/MultiPV support is downgraded from an add-coverage action to a watch-listed warning-aware target because `pv-multipv-support-boundary-32e` improved boundary coverage without claiming captured Android proof.
+- Android proof confidence remains proof-limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`.
+- king safety, endgame, suppression safety, and budget risk are marked warning-limited but improved; they remain outside core packet generation.
+- quiet/preparatory remains excluded by the negative guard, and product labels, advanced labels, official metrics, CP-loss, win probability, UI, backend, persistence, and direct engine access remain blocked or future-only.
+
+Owner proof queue status: empty by default. No Phase 32E case is treated as captured Android proof.
+
+Phase 32H recommendation: `validateRefreshedHardeningPlan`. Phase 32G adds no product labels, scores, rankings, official metrics, CP-loss, win probability, UI integration, backend integration, persistence, direct engine access, engine calls, or Android collector requirement.
