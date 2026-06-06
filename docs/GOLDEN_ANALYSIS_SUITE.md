@@ -224,3 +224,19 @@ Validation behavior:
 Android proof remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`. No Phase 32E case is treated as captured Android proof, and the owner proof queue remains empty by default.
 
 Phase 32Q recommendation: `proceedToAdapterPrototypeReadinessGate`. Phase 32P adds no Golden cases, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, direct engine access, engine calls, Android collector requirement, or third-party data.
+
+## Phase 32Q Internal Evidence Adapter Prototype Readiness Gate
+
+Phase 32Q adds a developer-only readiness gate for the Phase 32P validated internal evidence adapter prototype. It decides whether validated adapter prototype packets are ready for a later internal-only readiness summary, debug-only adapter bridge design, or another validation layer. It gates adapter prototype packets only and does not judge chess moves.
+
+Readiness behavior:
+
+- valid core packets from `allowedEvidenceSummary` and `improvedSupportSummary` become allowed core adapter packets for the next internal-only layer.
+- valid context-only packets from `constrainedWatchListSummary`, `proofLimitedSummary`, and `warningLimitedSummary` remain constrained context adapter packets and preserve watch/proof/warning reasons.
+- blocked boundary packets remain inactive blocked adapter packets, and future-only packets remain inactive future-only adapter packets.
+- active output fields remain limited to internal evidence-safe fields.
+- blocked output fields remain explicit denials for product labels, final move labels, classifier label families, numeric move scores, official metrics, CP-loss, win probability, move ranking, UI output, backend/persistence output, and direct engine call fields.
+
+Android proof remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`. No Phase 32E case is treated as captured Android proof, and the owner proof queue remains empty by default.
+
+Phase 32R recommendation: `proceedToInternalAdapterReadinessSummary`. Phase 32Q adds no Golden cases, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, direct engine access, engine calls, Android collector requirement, or third-party data.
