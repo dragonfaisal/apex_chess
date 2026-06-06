@@ -1,0 +1,190 @@
+@TestOn('vm')
+library;
+
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:apex_chess/features/pgn_review/application/internal_evidence_adapter_prototype.dart';
+import 'package:apex_chess/features/pgn_review/application/internal_evidence_adapter_prototype_review.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import '../../../../tool/internal_evidence_adapter_prototype_review_report.dart';
+
+void main() {
+  group('Internal Evidence Adapter Prototype Review report command', () {
+    test('command file exists', () {
+      expect(
+        File(
+          'tool/internal_evidence_adapter_prototype_review_report.dart',
+        ).existsSync(),
+        true,
+      );
+    });
+
+    test('markdown works for safe demo', () {
+      final result = _run();
+
+      expect(
+        result.exitCode,
+        internalEvidenceAdapterPrototypeReviewReportExitSuccess,
+      );
+      expect(
+        result.format,
+        InternalEvidenceAdapterPrototypeReviewReportFormat.markdown,
+      );
+      expect(
+        result.stdoutText,
+        contains('# Internal Evidence Adapter Prototype Review'),
+      );
+      expect(result.stdoutText, contains('## Packet Review Table'));
+      expect(result.stdoutText, contains('## Core Packet Review Rows'));
+      expect(result.stdoutText, contains('## Blocked Output Field Summary'));
+      expect(result.stdoutText, contains('owner proof queue count: 0'));
+      expect(result.stderrText, isEmpty);
+      expect(result.result!.safeForPhase32P, isTrue);
+    });
+
+    test('JSON works for safe demo', () {
+      final result = _run(args: const <String>['--format=json']);
+      final decoded = jsonDecode(result.stdoutText) as Map<String, Object?>;
+
+      expect(
+        result.exitCode,
+        internalEvidenceAdapterPrototypeReviewReportExitSuccess,
+      );
+      expect(
+        result.format,
+        InternalEvidenceAdapterPrototypeReviewReportFormat.json,
+      );
+      expect(
+        decoded['version'],
+        internalEvidenceAdapterPrototypeReviewReportVersion,
+      );
+      expect(decoded['totalRows'], 7);
+      expect(decoded['validCorePacketCount'], 2);
+      expect(decoded['validContextOnlyPacketCount'], 3);
+      expect(decoded['validBlockedPacketCount'], 1);
+      expect(decoded['validFutureOnlyPacketCount'], 1);
+      expect(decoded['ownerProofQueueCount'], 0);
+      expect(decoded['safeForPhase32P'], isTrue);
+    });
+
+    test('strict passes for safe demo', () {
+      final result = _run(args: const <String>['--strict']);
+
+      expect(
+        result.exitCode,
+        internalEvidenceAdapterPrototypeReviewReportExitSuccess,
+      );
+      expect(result.result!.safeForPhase32P, isTrue);
+      expect(result.result!.unsafeCount, 0);
+      expect(result.result!.criticalCount, 0);
+    });
+
+    test('strict fails on unsafe seam', () {
+      final unsafePrototype = const InternalEvidenceAdapterPrototype()
+          .evaluate()
+          .copyWith(
+            prototypeStatus:
+                InternalEvidenceAdapterPrototypeStatus.skippedByUnsafeDesign,
+            unsafeCount: 1,
+            safeForPhase32O: false,
+          );
+      final result = _run(
+        args: const <String>['--strict'],
+        request: InternalEvidenceAdapterPrototypeReviewRequest(
+          prototypeResult: unsafePrototype,
+        ),
+      );
+
+      expect(
+        result.exitCode,
+        internalEvidenceAdapterPrototypeReviewReportExitUnsafePolicy,
+      );
+      expect(result.result!.hasUnsafeAdapterReviewPolicyViolation, isTrue);
+    });
+
+    test('safe-demo and include-warnings flags are accepted', () {
+      final result = _run(
+        args: const <String>['--safe-demo', '--include-warnings'],
+      );
+
+      expect(
+        result.exitCode,
+        internalEvidenceAdapterPrototypeReviewReportExitSuccess,
+      );
+      expect(result.safeDemo, isTrue);
+      expect(result.includeWarnings, isTrue);
+      expect(result.result!.validContextOnlyPacketCount, 3);
+    });
+
+    test('usage errors return usage exit code', () {
+      final result = _run(args: const <String>['--format=xml']);
+
+      expect(
+        result.exitCode,
+        internalEvidenceAdapterPrototypeReviewReportExitUsage,
+      );
+      expect(result.stderrText, contains('unknownFormat'));
+      expect(result.commandFailure, 'unknownFormat');
+    });
+
+    test('command output keeps active-output guardrails', () {
+      final report = _run().stdoutText;
+
+      for (final token in const <String>[
+        'uciok',
+        'readyok',
+        'info depth',
+        'bestmove e2e4',
+        ' pv ',
+        'pvMoves',
+        'active productLabel',
+        'active finalMoveLabel',
+        'numeric move score:',
+        'scoreValue',
+        'moveScore',
+        'rankedMoves',
+        'moveRanking active',
+        'ACPL',
+        'official accuracy',
+      ]) {
+        expect(report, isNot(contains(token)), reason: token);
+      }
+    });
+
+    test('command source does not execute proof or boundary integrations', () {
+      final source = File(
+        'tool/internal_evidence_adapter_prototype_review_report.dart',
+      ).readAsStringSync();
+      final imports = source
+          .split('\n')
+          .where((line) => line.trimLeft().startsWith('import '))
+          .join('\n');
+
+      expect(source, isNot(contains('Process.run')));
+      expect(source, isNot(contains('Process.start')));
+      expect(imports, isNot(contains('dart:ffi')));
+      expect(imports.toLowerCase(), isNot(contains('stockfish')));
+      expect(imports, isNot(contains('LocalEvalService')));
+      expect(imports, isNot(contains('package:flutter/')));
+      expect(imports, isNot(contains('Widget')));
+      expect(imports, isNot(contains('backend')));
+      expect(imports, isNot(contains('preflight')));
+      expect(imports, isNot(contains('server')));
+      expect(imports, isNot(contains('persistence')));
+      expect(imports, isNot(contains('cache')));
+      expect(imports, isNot(contains('database')));
+    });
+  });
+}
+
+InternalEvidenceAdapterPrototypeReviewReportCommandResult _run({
+  List<String> args = const <String>[],
+  InternalEvidenceAdapterPrototypeReviewRequest? request,
+}) {
+  return runInternalEvidenceAdapterPrototypeReviewReportCommand(
+    args: args,
+    request: request,
+  );
+}
