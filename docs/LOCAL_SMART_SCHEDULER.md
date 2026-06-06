@@ -49,3 +49,9 @@ No scheduler behavior, scheduler thresholds, product review output, UI flow, bac
 Phase 32L summarizes the Phase 32K readiness gate into developer-only allowed, improved-support, constrained, blocked, and future-only evidence groups for future internal-only layers.
 
 No scheduler behavior, scheduler thresholds, product review output, UI flow, backend flow, persistence, cache, database use, analyzer integration, engine execution, Android collection, or proof command execution is added. The summary layer remains a pure model/report/test layer and does not change local smart scheduling decisions.
+
+## Phase 32M Internal Evidence Adapter Design
+
+Phase 32M designs a developer-only adapter contract over the Phase 32L summary. It allows only allowed/improved-support summaries as future internal core input, keeps watch-listed/proof-limited/warning-limited summaries context-only, and keeps blocked/future-only summaries inactive.
+
+No scheduler behavior, scheduler thresholds, product review output, UI flow, backend flow, persistence, cache, database use, analyzer integration, engine execution, Android collection, proof command execution, or adapter wiring is added. The adapter design remains a pure model/report/test layer and does not change local smart scheduling decisions.
