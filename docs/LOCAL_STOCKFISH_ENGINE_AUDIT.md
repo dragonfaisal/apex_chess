@@ -52,4 +52,8 @@ Phase 32P validates reviewed internal evidence adapter prototype packets only. I
 
 Phase 32Q gates validated internal evidence adapter prototype packets only. It does not load Stockfish, call FFI/native bridges, execute Android collector flows, or add engine-facing production integration.
 
+## Phase 32R Status
+
+Phase 32R summarizes internal adapter readiness only. It does not load Stockfish, call FFI/native bridges, execute Android collector flows, or add engine-facing production integration.
+
 Decision record: `LOCAL_ENGINE_SUBSTRATE_DECISION.md`.

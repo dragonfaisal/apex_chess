@@ -240,3 +240,19 @@ Readiness behavior:
 Android proof remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`. No Phase 32E case is treated as captured Android proof, and the owner proof queue remains empty by default.
 
 Phase 32R recommendation: `proceedToInternalAdapterReadinessSummary`. Phase 32Q adds no Golden cases, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, direct engine access, engine calls, Android collector requirement, or third-party data.
+
+## Phase 32R Internal Adapter Readiness Summary
+
+Phase 32R adds a developer-only internal adapter readiness summary over the Phase 32Q readiness gate. It summarizes what the validated adapter prototype is ready to provide to a future internal-only layer. It summarizes readiness only and does not judge chess moves.
+
+Summary behavior:
+
+- allowed core packet summary lists only the two readiness-allowed core packets from `allowedEvidenceSummary` and `improvedSupportSummary`.
+- constrained context packet summary lists `constrainedWatchListSummary`, `proofLimitedSummary`, and `warningLimitedSummary` as constrained context-only packets.
+- inactive blocked and future-only summaries keep the blocked boundary packet and future-only packet inactive.
+- active output field summary lists only internal evidence-safe output fields.
+- blocked output field summary keeps explicit denials for product labels, final move labels, classifier label families, numeric move scores, official metrics, CP-loss, win probability, move ranking, UI output, backend/persistence output, and direct engine call fields.
+- Android proof boundary summary remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`.
+- owner proof status summary remains empty by default.
+
+Phase 32S recommendation: `proceedToAdapterReadinessSummaryValidation`. Phase 32R adds no Golden cases, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, direct engine access, engine calls, Android collector requirement, or third-party data.
