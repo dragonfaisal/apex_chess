@@ -273,3 +273,24 @@ Validation behavior:
 - owner proof status validation remains empty by default.
 
 Phase 32T recommendation: `proceedToDebugOnlyAdapterBridgeDesign`. Phase 32S adds no Golden cases, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, direct engine access, engine calls, Android collector requirement, or third-party data.
+
+## Phase 32T Debug-Only Adapter Bridge Design
+
+Phase 32T adds a developer-only design contract for a future debug-only adapter bridge over the Phase 32S validated internal adapter readiness summary. It designs bridge inputs and fields only. It does not create a bridge runtime, connect to product analysis, UI, analyzer flow, saved analysis, backend, persistence, cache/database, scheduler execution, direct engine access, or engine execution.
+
+Bridge input group behavior:
+
+- `debugCoreInputGroup` may consume only validated allowed core summary outputs from `allowedEvidenceSummary` and `improvedSupportSummary`.
+- `debugContextInputGroup` may consume only constrained context summary outputs from `constrainedWatchListSummary`, `proofLimitedSummary`, and `warningLimitedSummary`; they remain context-only.
+- `debugBlockedInputGroup` remains inactive for blocked boundary output.
+- `debugFutureOnlyInputGroup` remains inactive for future-only output.
+- `debugAllowedFieldGroup` lists only internal evidence-safe debug contract fields.
+- `debugBlockedFieldGroup` explicitly denies product labels, final move labels, classifier label families, numeric move scores, aggregate scores, official metrics, CP-loss, win probability, move ranking, UI output, backend output, persistence output, direct engine calls, Stockfish command fields, raw UCI fields, and PV dump fields.
+- `debugProofBoundaryGroup` remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`.
+- `debugOwnerProofStatusGroup` keeps the owner proof queue empty by default.
+
+Allowed bridge fields are developer-debug contract fields only: debug bridge record IDs, source adapter packet IDs, source summary group IDs, support case IDs, newly added support case IDs, evidence area IDs, bucket IDs, qualitative confidence, internal warnings, internal constraints, future prerequisites, proof-limit reasons, watch-list reasons, and warning-limited reasons.
+
+Android proof remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`. No Phase 32E case is treated as captured Android proof, and owner proof remains empty by default.
+
+Phase 32U recommendation: `validateDebugOnlyAdapterBridgeDesign`. Phase 32T adds no Golden cases, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, direct engine access, Stockfish command output, raw UCI output, PV dump output, engine calls, Android collector requirement, or third-party data.
