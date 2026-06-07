@@ -97,3 +97,9 @@ No scheduler behavior, scheduler thresholds, product review output, UI flow, bac
 Phase 32T designs a developer-only debug adapter bridge contract from the Phase 32S validated readiness summary. It defines debug core inputs, context-only inputs, inactive blocked/future-only inputs, allowed debug fields, blocked debug fields, Android proof boundaries, and empty owner-proof status for future internal-only work.
 
 No scheduler behavior, scheduler thresholds, product review output, UI flow, backend flow, persistence, cache, database use, analyzer integration, engine execution, Android collection, proof command execution, debug bridge runtime wiring, adapter bridge implementation, or product adapter wiring is added. The debug-only adapter bridge design remains a pure model/report/test layer and does not change local smart scheduling decisions.
+
+## Phase 32U Validate Debug-Only Adapter Bridge Design
+
+Phase 32U validates the Phase 32T debug-only adapter bridge design. It checks debug core inputs, context-only inputs, inactive blocked/future-only inputs, allowed and blocked bridge fields, Stockfish command/raw UCI/PV dump blocking, Android proof boundaries, and empty owner-proof status.
+
+No scheduler behavior, scheduler thresholds, product review output, UI flow, backend flow, persistence, cache, database use, analyzer integration, engine execution, Android collection, proof command execution, debug bridge runtime wiring, adapter bridge implementation, or product adapter wiring is added. The debug-only adapter bridge design validation remains a pure model/report/test layer and does not change local smart scheduling decisions.

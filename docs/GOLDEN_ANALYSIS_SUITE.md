@@ -294,3 +294,20 @@ Allowed bridge fields are developer-debug contract fields only: debug bridge rec
 Android proof remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`. No Phase 32E case is treated as captured Android proof, and owner proof remains empty by default.
 
 Phase 32U recommendation: `validateDebugOnlyAdapterBridgeDesign`. Phase 32T adds no Golden cases, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, direct engine access, Stockfish command output, raw UCI output, PV dump output, engine calls, Android collector requirement, or third-party data.
+
+## Phase 32U Validate Debug-Only Adapter Bridge Design
+
+Phase 32U adds a developer-only validation layer over the Phase 32T debug-only adapter bridge design. It validates bridge design checks, bridge group validation rows, and bridge contract record validation rows before any future debug-only bridge prototype or readiness gate. It validates the design only and does not create a bridge runtime or judge chess moves.
+
+Validation behavior:
+
+- validation checks cover validated summary consumption, debug core input source limits, debug context preservation, inactive blocked/future-only inputs, allowed field safety, blocked field denials, Stockfish command/raw UCI/PV dump blocking, Android proof boundaries, Phase 32E proof exclusion, owner-proof queue honesty, quiet/preparatory exclusion, and product boundary blocking.
+- `debugCoreInputGroup` validates only the allowed core summary outputs from `allowedEvidenceSummary` and `improvedSupportSummary`.
+- `debugContextInputGroup` validates only constrained context summary outputs from `constrainedWatchListSummary`, `proofLimitedSummary`, and `warningLimitedSummary`; they remain context-only and cannot become debug core.
+- `debugBlockedInputGroup` and `debugFutureOnlyInputGroup` remain inactive.
+- allowed bridge fields validate as internal evidence-safe debug contract fields only.
+- blocked bridge fields remain explicit denials for product labels, final move labels, classifier label families, numeric move scores, aggregate scores, official metrics, CP-loss, win probability, move ranking, UI output, backend output, persistence output, direct engine calls, Stockfish command fields, raw UCI fields, and PV dump fields.
+- Android proof validation remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`.
+- owner proof status validation remains empty by default.
+
+Phase 32V recommendation: `proceedToDebugBridgeDesignReadinessGate`. Phase 32U adds no Golden cases, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, direct engine access, Stockfish command output, raw UCI output, PV dump output, engine calls, Android collector requirement, or third-party data.

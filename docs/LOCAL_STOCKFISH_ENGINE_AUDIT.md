@@ -64,4 +64,8 @@ Phase 32S validates internal adapter readiness summary output only. It does not 
 
 Phase 32T designs a debug-only adapter bridge contract only. It does not load Stockfish, call FFI/native bridges, execute Android collector flows, expose Stockfish command/raw UCI/PV dump fields as active output, or add engine-facing production integration.
 
+## Phase 32U Status
+
+Phase 32U validates the debug-only adapter bridge design only. It does not load Stockfish, call FFI/native bridges, execute Android collector flows, expose Stockfish command/raw UCI/PV dump fields as active output, or add engine-facing production integration.
+
 Decision record: `LOCAL_ENGINE_SUBSTRATE_DECISION.md`.
