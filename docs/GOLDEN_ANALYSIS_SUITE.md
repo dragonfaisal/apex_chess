@@ -328,3 +328,20 @@ Readiness behavior:
 - `emptyOwnerProofStatusGroup` keeps the owner proof queue empty by default.
 
 Phase 32W recommendation: `proceedToDebugBridgeReadinessSummary`. Phase 32V adds no Golden cases, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, direct engine access, Stockfish command output, raw UCI output, PV dump output, engine calls, Android collector requirement, or third-party data.
+
+## Phase 32W Debug Bridge Readiness Summary
+
+Phase 32W adds a developer-only compact summary over the Phase 32V debug bridge design readiness gate. It summarizes what the validated debug-only bridge design may provide to future internal-only work. It is summary-only; it does not create a bridge runtime, bridge prototype, product output, or chess-move judgment.
+
+Summary behavior:
+
+- `readyDebugCoreInputSummary` lists only ready debug core inputs from the Phase 32V readiness gate.
+- `constrainedDebugContextInputSummary` lists only constrained debug context inputs and keeps them context-only.
+- `inactiveDebugBlockedInputSummary` and `inactiveDebugFutureOnlyInputSummary` remain inactive and cannot become debug core or context output.
+- `readyAllowedDebugFieldSummary` lists only internal evidence-safe debug fields.
+- `deniedBlockedDebugFieldSummary` keeps explicit denials for product labels, final move labels, classifier label families, numeric move scores, aggregate scores, official metrics, CP-loss, win probability, move ranking, UI output, backend output, persistence output, direct engine calls, Stockfish command fields, raw UCI fields, and PV dump fields.
+- `stockfishRawUciPvDumpBlockedSummary` explicitly confirms Stockfish command, raw UCI, and PV dump fields remain blocked.
+- `androidProofBoundarySummary` remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`.
+- `ownerProofStatusSummary` keeps the owner proof queue empty by default.
+
+Phase 32X recommendation: `proceedToDebugBridgeReadinessSummaryValidation`. Phase 32W adds no Golden cases, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, direct engine access, Stockfish command output, raw UCI output, PV dump output, engine calls, Android collector requirement, or third-party data.
