@@ -68,4 +68,8 @@ Phase 32T designs a debug-only adapter bridge contract only. It does not load St
 
 Phase 32U validates the debug-only adapter bridge design only. It does not load Stockfish, call FFI/native bridges, execute Android collector flows, expose Stockfish command/raw UCI/PV dump fields as active output, or add engine-facing production integration.
 
+## Phase 32V Status
+
+Phase 32V gates debug bridge design readiness only. It does not load Stockfish, call FFI/native bridges, execute Android collector flows, expose Stockfish command/raw UCI/PV dump fields as active output, or add engine-facing production integration.
+
 Decision record: `LOCAL_ENGINE_SUBSTRATE_DECISION.md`.
