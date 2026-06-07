@@ -256,3 +256,20 @@ Summary behavior:
 - owner proof status summary remains empty by default.
 
 Phase 32S recommendation: `proceedToAdapterReadinessSummaryValidation`. Phase 32R adds no Golden cases, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, direct engine access, engine calls, Android collector requirement, or third-party data.
+
+## Phase 32S Internal Adapter Readiness Summary Validation
+
+Phase 32S adds a developer-only validation layer over the Phase 32R internal adapter readiness summary. It validates that the readiness summary accurately reflects the Phase 32Q readiness gate before any future debug-only adapter bridge design. It validates summary groups only and does not judge chess moves.
+
+Validation behavior:
+
+- validation checks cover summary consumption of the readiness gate, allowed core summary matching, constrained context summary matching, inactive blocked/future-only summary matching, active output field safety, blocked output field denials, Android proof boundaries, Phase 32E proof exclusion, owner-proof queue honesty, quiet/preparatory exclusion, and product boundary blocking.
+- allowed core summary validation accepts only readiness-allowed core packets from `allowedEvidenceSummary` and `improvedSupportSummary`.
+- constrained context summary validation keeps `constrainedWatchListSummary`, `proofLimitedSummary`, and `warningLimitedSummary` constrained and outside allowed core output.
+- inactive blocked and future-only summary validation keeps the blocked boundary and future-only summaries inactive.
+- active output field validation allows only internal evidence-safe fields.
+- blocked output field validation keeps explicit denials for product labels, final move labels, classifier label families, numeric move scores, official metrics, CP-loss, win probability, move ranking, UI output, backend/persistence output, and direct engine call fields.
+- Android proof boundary validation remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`.
+- owner proof status validation remains empty by default.
+
+Phase 32T recommendation: `proceedToDebugOnlyAdapterBridgeDesign`. Phase 32S adds no Golden cases, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, direct engine access, engine calls, Android collector requirement, or third-party data.
