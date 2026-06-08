@@ -133,3 +133,9 @@ No scheduler behavior, scheduler thresholds, product review output, UI flow, bac
 Phase 32Z designs a future debug-only bridge prototype contract from the Phase 32Y readiness validation gate. It defines prototype core input design, context-only input design, inactive blocked/future-only designs, allowed/denied field design, Stockfish command/raw UCI/PV dump denial, Android proof boundaries, owner-proof boundaries, and the Phase 33A validation requirement.
 
 No scheduler behavior, scheduler thresholds, product review output, UI flow, backend flow, persistence, cache, database use, analyzer integration, engine execution, Android collection, proof command execution, debug bridge runtime wiring, executable debug bridge prototype, adapter bridge implementation, or product adapter wiring is added. The debug-only bridge prototype design remains a pure model/report/test layer and does not change local smart scheduling decisions.
+
+## Phase 33A Validate Debug-Only Bridge Prototype Design
+
+Phase 33A validates the Phase 32Z debug-only bridge prototype design. It checks prototype core/context/blocked/future design rows, allowed/denied field boundaries, Stockfish command/raw UCI/PV dump denial, Android proof boundaries, owner-proof boundaries, runtime/prototype execution exclusion, and the Phase 33A validation requirement before recommending the next readiness gate.
+
+No scheduler behavior, scheduler thresholds, product review output, UI flow, backend flow, persistence, cache, database use, analyzer integration, engine execution, Android collection, proof command execution, debug bridge runtime wiring, executable debug bridge prototype, adapter bridge implementation, or product adapter wiring is added. The debug-only bridge prototype design validation remains a pure model/report/test layer and does not change local smart scheduling decisions.

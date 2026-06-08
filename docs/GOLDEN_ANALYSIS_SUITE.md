@@ -398,3 +398,23 @@ Prototype design behavior:
 - `futurePrototypeValidationRequirements` requires Phase 33A to validate this design before any runtime bridge or executable prototype implementation.
 
 Phase 33A recommendation: `validateDebugOnlyBridgePrototypeDesign`. Phase 32Z adds no Golden cases, runtime bridge, executable prototype, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, direct engine access, Stockfish command output, raw UCI output, PV dump output, engine calls, Android collector requirement, or third-party data.
+
+## Phase 33A Validate Debug-Only Bridge Prototype Design
+
+Phase 33A adds a developer-only validation layer over the Phase 32Z debug-only bridge prototype design. It validates the design contract before any future prototype readiness gate, executable prototype, or debug bridge runtime work. It is validation-only; it does not create runtime behavior, executable prototype behavior, product output, or chess-move judgment.
+
+Validation behavior:
+
+- validation checks cover Phase 32Y readiness-gate consumption, prototype core design source limits, context-only preservation, inactive blocked/future-only designs, allowed field safety, denied field boundaries, Stockfish command/raw UCI/PV dump denial, Android proof boundaries, Phase 32E proof exclusion, owner-proof queue honesty, Phase 33A validation requirement satisfaction, runtime/prototype execution exclusion, quiet/preparatory exclusion, and product boundary blocking.
+- design section validation rows validate `prototypeCoreInputDesign`, `prototypeContextInputDesign`, inactive blocked/future-only input designs, allowed and denied field designs, Stockfish/raw UCI/PV dump denial, Android proof boundaries, owner-proof boundaries, and future validation requirements.
+- design record validation rows validate each Phase 32Z prototype design record and keep all rows design-only.
+- prototype core design validation accepts only Phase 32Y prototype-ready debug core records and does not allow context-only, blocked, or future-only records.
+- prototype context design validation keeps context records context-only and prevents promotion into prototype core output.
+- inactive blocked and future-only validation keeps both designs inactive.
+- allowed field validation permits only internal evidence/debug-safe fields.
+- denied field validation keeps explicit denials for product labels, final move labels, classifier label families, numeric move scores, aggregate scores, official metrics, CP-loss, win probability, move ranking, UI output, backend output, persistence output, direct engine calls, Stockfish command fields, raw UCI fields, and PV dump fields.
+- Android proof validation remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`.
+- owner proof boundary validation remains empty by default.
+- the Phase 33A validation requirement from Phase 32Z is satisfied by this phase.
+
+Phase 33B recommendation: `proceedToDebugBridgePrototypeDesignReadinessGate`. Phase 33A adds no Golden cases, runtime bridge, executable prototype, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, direct engine access, Stockfish command output, raw UCI output, PV dump output, engine calls, Android collector requirement, or third-party data.
