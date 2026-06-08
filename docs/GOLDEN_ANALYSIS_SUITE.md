@@ -363,3 +363,20 @@ Validation behavior:
 - owner proof status validation remains empty by default.
 
 Phase 32Y recommendation: `proceedToDebugBridgeReadinessValidationGate`. Phase 32X adds no Golden cases, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, direct engine access, Stockfish command output, raw UCI output, PV dump output, engine calls, Android collector requirement, or third-party data.
+
+## Phase 32Y Debug Bridge Readiness Validation Gate
+
+Phase 32Y adds a developer-only readiness validation gate over the Phase 32X debug bridge readiness summary validation. It decides whether the validated debug bridge readiness path is safe for future debug-only bridge prototype design. It is a gate only; it does not create a bridge prototype, bridge runtime, product output, or chess-move judgment.
+
+Gate behavior:
+
+- `prototypeReadyDebugCoreGroup` includes only validated ready debug core summary records.
+- `constrainedDebugContextGroup` includes only validated constrained context summary records and keeps them context-only.
+- `inactiveDebugBlockedGroup` and `inactiveDebugFutureOnlyGroup` remain inactive and cannot become prototype-ready core or context output.
+- `prototypeReadyAllowedFieldGroup` lists only internal evidence-safe debug fields that may pass to future prototype-design planning.
+- `deniedFieldBoundaryGroup` keeps explicit denials for product labels, final move labels, classifier label families, numeric move scores, aggregate scores, official metrics, CP-loss, win probability, move ranking, UI output, backend output, persistence output, and direct engine calls.
+- `stockfishRawUciPvDumpDeniedGroup` explicitly confirms Stockfish command, raw UCI, and PV dump fields remain denied and inactive.
+- `validatedAndroidProofBoundaryGroup` remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`.
+- `emptyOwnerProofGateGroup` keeps the owner proof queue empty by default.
+
+Phase 32Z recommendation: `proceedToDebugOnlyBridgePrototypeDesign`. Phase 32Y adds no Golden cases, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, direct engine access, Stockfish command output, raw UCI output, PV dump output, engine calls, Android collector requirement, or third-party data.
