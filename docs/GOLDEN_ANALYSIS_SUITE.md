@@ -418,3 +418,22 @@ Validation behavior:
 - the Phase 33A validation requirement from Phase 32Z is satisfied by this phase.
 
 Phase 33B recommendation: `proceedToDebugBridgePrototypeDesignReadinessGate`. Phase 33A adds no Golden cases, runtime bridge, executable prototype, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, direct engine access, Stockfish command output, raw UCI output, PV dump output, engine calls, Android collector requirement, or third-party data.
+
+## Phase 33B Debug Bridge Prototype Design Readiness Gate
+
+Phase 33B adds a developer-only readiness gate over the Phase 33A validated debug-only bridge prototype design. It decides whether the validated design is ready for a next internal-only checkpoint, such as a prototype design readiness summary or a later implementation-design checkpoint. It is readiness-gate only; it does not create runtime behavior, executable prototype behavior, product output, or chess-move judgment.
+
+Readiness behavior:
+
+- `readinessApprovedPrototypeCoreDesignGroup` includes only Phase 33A-valid prototype core design records and keeps them design-only for future internal prototype planning.
+- `constrainedPrototypeContextDesignGroup` includes only valid context-only design records and keeps them constrained.
+- `inactivePrototypeBlockedDesignGroup` and `inactivePrototypeFutureOnlyDesignGroup` remain inactive and cannot become prototype core or context output.
+- `readinessApprovedAllowedFieldGroup` lists only internal evidence/debug-safe fields that may pass to future internal planning.
+- `deniedFieldBoundaryGroup` keeps explicit denials for product labels, final move labels, classifier label families, numeric move scores, aggregate scores, official metrics, CP-loss, win probability, move ranking, UI output, backend output, persistence output, and direct engine calls.
+- `stockfishRawUciPvDumpDeniedGroup` explicitly confirms Stockfish command, raw UCI, and PV dump fields remain denied and inactive.
+- `runtimeExecutionBlockedGroup` confirms runtime bridge behavior and executable prototype behavior remain blocked.
+- `androidProofBoundaryGroup` remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`.
+- `emptyOwnerProofBoundaryGroup` keeps the owner proof queue empty by default.
+- `futurePhase33CRequirementGroup` records the next internal checkpoint requirement.
+
+Phase 33C recommendation: `proceedToDebugBridgePrototypeDesignReadinessSummary`. Phase 33B adds no Golden cases, runtime bridge, executable prototype, implementation wiring, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, direct engine access, Stockfish command output, raw UCI output, PV dump output, engine calls, Android collector requirement, or third-party data.
