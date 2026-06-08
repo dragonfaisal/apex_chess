@@ -345,3 +345,21 @@ Summary behavior:
 - `ownerProofStatusSummary` keeps the owner proof queue empty by default.
 
 Phase 32X recommendation: `proceedToDebugBridgeReadinessSummaryValidation`. Phase 32W adds no Golden cases, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, direct engine access, Stockfish command output, raw UCI output, PV dump output, engine calls, Android collector requirement, or third-party data.
+
+## Phase 32X Debug Bridge Readiness Summary Validation
+
+Phase 32X adds a developer-only validation layer over the Phase 32W debug bridge readiness summary. It validates that the summary accurately reflects the Phase 32V readiness gate and Phase 32U validation. It is validation-only; it does not create a bridge runtime, bridge prototype, product output, or chess-move judgment.
+
+Validation behavior:
+
+- validation checks cover summary consumption of the readiness gate, ready debug core summary matching, constrained debug context summary matching, inactive blocked/future-only summary matching, allowed field safety, denied field blocking, Stockfish command/raw UCI/PV dump blocking, Android proof boundaries, Phase 32E proof exclusion, owner-proof queue honesty, quiet/preparatory exclusion, and product boundary blocking.
+- ready debug core summary validation accepts only ready debug core inputs from the Phase 32V readiness gate and does not allow context-only, blocked, or future-only inputs.
+- constrained debug context summary validation keeps context inputs context-only and prevents promotion into debug core output.
+- inactive blocked and future-only summary validation keeps both summary groups inactive.
+- allowed debug field validation permits only internal evidence-safe fields.
+- denied field validation keeps explicit denials for product labels, final move labels, classifier label families, numeric move scores, aggregate scores, official metrics, CP-loss, win probability, move ranking, UI output, backend output, persistence output, direct engine calls, Stockfish command fields, raw UCI fields, and PV dump fields.
+- Stockfish command, raw UCI, and PV dump validation confirms those fields remain denied and inactive.
+- Android proof validation remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`.
+- owner proof status validation remains empty by default.
+
+Phase 32Y recommendation: `proceedToDebugBridgeReadinessValidationGate`. Phase 32X adds no Golden cases, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, direct engine access, Stockfish command output, raw UCI output, PV dump output, engine calls, Android collector requirement, or third-party data.
