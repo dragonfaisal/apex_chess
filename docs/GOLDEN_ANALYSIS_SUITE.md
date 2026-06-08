@@ -380,3 +380,21 @@ Gate behavior:
 - `emptyOwnerProofGateGroup` keeps the owner proof queue empty by default.
 
 Phase 32Z recommendation: `proceedToDebugOnlyBridgePrototypeDesign`. Phase 32Y adds no Golden cases, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, direct engine access, Stockfish command output, raw UCI output, PV dump output, engine calls, Android collector requirement, or third-party data.
+
+## Phase 32Z Debug-Only Bridge Prototype Design
+
+Phase 32Z adds a developer-only design contract for a future debug-only bridge prototype, sourced strictly from the Phase 32Y readiness validation gate. It is design-only; it does not create a bridge runtime, executable prototype, product output, or chess-move judgment.
+
+Prototype design behavior:
+
+- `prototypeCoreInputDesign` includes only Phase 32Y prototype-ready debug core records.
+- `prototypeContextInputDesign` includes only constrained context records and keeps them context-only.
+- `prototypeInactiveBlockedInputDesign` and `prototypeInactiveFutureOnlyInputDesign` remain inactive and cannot become prototype core or context output.
+- `prototypeAllowedFieldDesign` lists only internal evidence/debug-safe fields that may be described for future prototype planning.
+- `prototypeDeniedFieldDesign` keeps explicit denials for product labels, final move labels, classifier label families, numeric move scores, aggregate scores, official metrics, CP-loss, win probability, move ranking, UI output, backend output, persistence output, and direct engine calls.
+- `stockfishRawUciPvDumpDeniedDesign` explicitly confirms Stockfish command, raw UCI, and PV dump fields remain denied and inactive.
+- `androidProofBoundaryDesign` remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`.
+- `ownerProofBoundaryDesign` keeps the owner proof queue empty by default.
+- `futurePrototypeValidationRequirements` requires Phase 33A to validate this design before any runtime bridge or executable prototype implementation.
+
+Phase 33A recommendation: `validateDebugOnlyBridgePrototypeDesign`. Phase 32Z adds no Golden cases, runtime bridge, executable prototype, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, direct engine access, Stockfish command output, raw UCI output, PV dump output, engine calls, Android collector requirement, or third-party data.

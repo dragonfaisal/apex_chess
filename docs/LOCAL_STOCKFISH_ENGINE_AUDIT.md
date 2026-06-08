@@ -84,4 +84,8 @@ Phase 32X validates debug bridge readiness summary output only. It does not load
 
 Phase 32Y gates debug bridge readiness validation only. It does not load Stockfish, call FFI/native bridges, execute Android collector flows, expose Stockfish command/raw UCI/PV dump fields as active output, or add engine-facing production integration.
 
+## Phase 32Z Status
+
+Phase 32Z designs a future debug-only bridge prototype contract only. It does not load Stockfish, call FFI/native bridges, execute Android collector flows, expose Stockfish command/raw UCI/PV dump fields as active output, implement a runtime bridge, implement executable prototype behavior, or add engine-facing production integration.
+
 Decision record: `LOCAL_ENGINE_SUBSTRATE_DECISION.md`.
