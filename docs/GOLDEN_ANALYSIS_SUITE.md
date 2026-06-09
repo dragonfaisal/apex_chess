@@ -472,3 +472,21 @@ Validation behavior:
 - quiet/preparatory scope and product-facing boundaries remain blocked.
 
 Phase 33E recommendation: `proceedToDebugOnlyBridgeImplementationDesign` when the safe demo validates cleanly or with acceptable warnings. Phase 33D adds no Golden cases, runtime bridge, executable prototype behavior, implementation wiring, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, direct engine access, Stockfish command output, raw UCI output, PV dump output, engine calls, Android collector requirement, or third-party data.
+
+## Phase 33E Debug-Only Bridge Implementation Design
+
+Phase 33E is the first implementation-design step after the readiness-summary chain. It consumes the Phase 33D validated readiness summary path and defines the concrete metadata shape for a future non-executable developer-only debug bridge skeleton. It is implementation design only; it does not create runtime behavior, executable skeleton behavior, implementation wiring, product output, or chess-move judgment.
+
+Implementation-design behavior:
+
+- `bridgeInputContractDesign` describes a future `DebugOnlyBridgeInputPacket` sourced from the validated summary path.
+- `bridgeCoreRecordDesign`, `bridgeContextRecordDesign`, `bridgeInactiveBlockedRecordDesign`, and `bridgeInactiveFutureRecordDesign` define how future `DebugOnlyBridgeRecord` metadata may represent approved core, constrained context, blocked, and future-only rows while preserving core/context/inactive boundaries.
+- `bridgeAllowedFieldContractDesign` permits only internal evidence/debug-safe fields.
+- `bridgeDeniedFieldContractDesign` keeps product labels, final labels, classifier label families, numeric scores, aggregate scores, official metrics, CP-loss, win probability, rankings, UI/backend/persistence, direct-engine, Stockfish command, raw UCI, and PV dump fields impossible to activate.
+- `bridgeRuntimeBlockDesign` confirms runtime bridge behavior, executable skeleton behavior, executable prototype behavior, and implementation wiring remain blocked.
+- `bridgeProofBoundaryDesign` remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`.
+- `bridgeOwnerProofBoundaryDesign` keeps the owner proof queue empty by default.
+- `bridgeSkeletonPlanDesign` proposes Phase 33F metadata-only classes and methods: `DebugOnlyBridgeInputPacket`, `DebugOnlyBridgeOutputPacket`, `DebugOnlyBridgeRecord`, `DebugOnlyBridgePolicy`, `DebugOnlyBridgeSkeleton`, `DebugOnlyBridgeSkeletonResult`, and `DebugOnlyBridgeSkeletonValidator`, with safe method names such as `buildInputFromValidatedSummary`, `createCoreRecord`, `createContextRecord`, `preserveInactiveRecord`, `validateNoDeniedFields`, and `renderDeveloperOnlyDebugSnapshot`.
+- `phase33FImplementationSkeletonRequirement` requires Phase 33F to remain developer-only, non-product, non-executable, and unwired.
+
+Phase 33F recommendation: `proceedToDebugOnlyBridgeDeveloperSkeleton`. Phase 33E adds no Golden cases, runtime bridge, executable skeleton behavior, executable prototype behavior, implementation wiring, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, direct engine access, Stockfish command output, raw UCI output, PV dump output, engine calls, Android collector requirement, or third-party data.
