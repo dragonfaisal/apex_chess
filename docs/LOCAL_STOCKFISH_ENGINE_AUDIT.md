@@ -116,4 +116,8 @@ Phase 33F adds a developer-only in-memory bridge skeleton and report only. It do
 
 Phase 33G validates the developer-only bridge skeleton only. It does not load Stockfish, call FFI/native bridges, execute Android collector flows, expose Stockfish command/raw UCI/PV dump fields as active output, implement runtime or executable prototype behavior, implement wiring, scheduler execution, or add engine-facing production integration.
 
+## Phase 33H Status
+
+Phase 33H adds a developer-only inspection harness over the validated skeleton only. It does not load Stockfish, call FFI/native bridges, execute Android collector flows, expose Stockfish command/raw UCI/PV dump fields as active output, implement runtime or executable prototype behavior, implement wiring, scheduler execution, or add engine-facing production integration.
+
 Decision record: `LOCAL_ENGINE_SUBSTRATE_DECISION.md`.

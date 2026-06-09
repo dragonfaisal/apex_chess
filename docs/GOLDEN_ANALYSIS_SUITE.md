@@ -521,3 +521,20 @@ Developer-skeleton validation behavior:
 - report validation rejects raw UCI logs, PV dumps, active labels, official accuracy/ACPL, numeric move scores, move rankings, and backend secrets.
 
 Phase 33H recommendation: `proceedToDebugOnlyBridgeDeveloperInspectionHarness`. Phase 33G adds no Golden cases, runtime bridge, executable prototype behavior, implementation wiring, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, scheduler execution, direct engine access, Stockfish command output, raw UCI output, PV dump output, engine calls, Android collector requirement, or third-party data.
+
+## Phase 33H Debug-Only Bridge Developer Inspection Harness
+
+Phase 33H adds the first practical developer-only inspection harness over the Phase 33F debug-only bridge skeleton after the Phase 33G validation checkpoint. It consumes the validated skeleton validation result and safe skeleton result, then produces deterministic internal inspection rows and a developer-only inspection snapshot for review. The harness is not product output, not runtime behavior, and not analyzer/UI/engine integration.
+
+Developer-inspection behavior:
+
+- `DebugOnlyBridgeDeveloperInspectionSnapshot` summarizes source validation IDs, input/output packet IDs, skeleton version, packet/policy summaries, record role counts, allowed and denied fields, proof boundaries, runtime boundaries, blocked boundaries, warnings, future prerequisites, and the next recommendation.
+- input packet, output packet, and policy inspection rows keep the Phase 33F packet and policy contracts developer-only and skeleton-only.
+- bridge record inspection rows preserve core, context-only, inactive blocked/future, allowed-field boundary, denied-field boundary, Stockfish/raw UCI/PV dump denial, runtime-blocked, proof-boundary, owner-proof-boundary, and future-requirement roles.
+- denied fields remain explicit, including product labels, final labels, classifier-style labels, numeric scores, aggregate scores, official metrics, CP-loss, win probability, move ranking, UI/backend/persistence/direct-engine fields, scheduler execution, Stockfish command, raw UCI, and PV dump.
+- runtime bridge behavior, executable prototype behavior, implementation wiring, scheduler execution, UI/backend/persistence access, direct engine calls, Stockfish command fields, raw UCI fields, and PV dump fields remain blocked.
+- Android proof remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`; no Phase 32E case is captured Android proof.
+- owner-proof status remains empty by default, and non-empty owner proof requires an explicit owner-proof PV/MultiPV reason.
+- report validation rejects raw UCI logs, PV dumps, active labels, official accuracy/ACPL, numeric move scores, move rankings, and backend secrets.
+
+Phase 33I recommendation: `validateDebugOnlyBridgeDeveloperInspectionHarness`. Phase 33H adds no Golden cases, runtime bridge, executable prototype behavior, implementation wiring, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, scheduler execution, direct engine access, Stockfish command output, raw UCI output, PV dump output, engine calls, Android collector requirement, or third-party data.
