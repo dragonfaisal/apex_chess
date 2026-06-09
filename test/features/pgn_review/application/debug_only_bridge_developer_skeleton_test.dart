@@ -547,6 +547,7 @@ const _deniedFieldIds = <String>[
   'productLabel',
   'pvDump',
   'rawUci',
+  'schedulerExecution',
   'stockfishCommand',
   'uiOutput',
   'winProbability',

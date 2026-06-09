@@ -1241,7 +1241,10 @@ class DebugOnlyBridgeSkeleton {
       allowedFieldIds: _sortedStrings(
         implementationDesignResult.allowedFieldIds,
       ),
-      deniedFieldIds: _sortedStrings(implementationDesignResult.deniedFieldIds),
+      deniedFieldIds: _sortedStrings(<String>[
+        ...implementationDesignResult.deniedFieldIds,
+        ..._deniedFieldIds,
+      ]),
       approvedCoreRecordIds: _recordIdsForImplementationRoles(
         implementationDesignResult,
         const <DebugOnlyBridgeImplementationDesignComponentRole>[
@@ -1319,9 +1322,10 @@ class DebugOnlyBridgeSkeleton {
       allowedFieldIds: _sortedStrings(
         readinessSummaryValidationResult.allowedFieldIds,
       ),
-      deniedFieldIds: _sortedStrings(
-        readinessSummaryValidationResult.deniedFieldIds,
-      ),
+      deniedFieldIds: _sortedStrings(<String>[
+        ...readinessSummaryValidationResult.deniedFieldIds,
+        ..._deniedFieldIds,
+      ]),
       approvedCoreRecordIds: idsFor(
         DebugBridgePrototypeDesignReadinessSummaryRole
             .readinessApprovedPrototypeCoreSummaryRecord,
@@ -1397,7 +1401,7 @@ class DebugOnlyBridgeSkeleton {
       allowedFieldIds: const <String>[],
       deniedFieldIds: stockfishRawUciPvDumpOnly
           ? _engineDumpFieldIds
-          : source.deniedFieldIds,
+          : <String>[...source.deniedFieldIds, ..._deniedFieldIds],
     );
   }
 
@@ -2470,6 +2474,7 @@ const _deniedFieldIds = <String>[
   'backendOutput',
   'persistenceOutput',
   'directEngineCall',
+  'schedulerExecution',
   'stockfishCommand',
   'rawUci',
   'pvDump',
