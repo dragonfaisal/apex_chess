@@ -187,3 +187,9 @@ No scheduler behavior, scheduler thresholds, scheduler execution, product review
 Phase 33I validates the Phase 33H developer-only inspection harness before any future diagnostic command or selected Golden inspection run. It checks safe skeleton validation input, safe skeleton result input, developer-only snapshots, deterministic inspection rows, denied scheduler execution, and blocked product/UI/backend/persistence/engine boundaries.
 
 No scheduler behavior, scheduler thresholds, scheduler execution, product review output, UI flow, backend flow, persistence, cache, database use, analyzer integration, engine execution, Android collection, proof command execution, debug bridge runtime wiring, executable debug bridge prototype, implementation wiring, adapter bridge implementation, or product adapter wiring is added. The inspection harness validation remains pure model/report/test code and does not change local smart scheduling decisions.
+
+## Phase 33J Debug-Only Bridge Developer Diagnostic Command
+
+Phase 33J adds a developer-only command-line diagnostic over the validated inspection harness. It renders safe markdown/JSON sections for snapshot, packets, policy, records, boundaries, proof, runtime, and recommendation so developers can inspect bridge state without product integration.
+
+No scheduler behavior, scheduler thresholds, scheduler execution, product review output, UI flow, backend flow, persistence, cache, database use, analyzer integration, engine execution, Android collection, proof command execution, debug bridge runtime wiring, executable debug bridge prototype, implementation wiring, adapter bridge implementation, or product adapter wiring is added. The diagnostic command remains pure tool/report code and does not change local smart scheduling decisions.

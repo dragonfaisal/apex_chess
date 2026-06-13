@@ -552,3 +552,15 @@ Developer-inspection harness validation behavior:
 - report validation rejects raw UCI logs, PV dumps, active labels, official accuracy/ACPL, numeric move scores, move rankings, and backend secrets.
 
 Phase 33J recommendation: `proceedToDebugOnlyBridgeDeveloperDiagnosticCommand`. Phase 33I adds no Golden cases, runtime bridge, executable prototype behavior, implementation wiring, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, scheduler execution, direct engine access, Stockfish command output, raw UCI output, PV dump output, engine calls, Android collector requirement, or third-party data.
+
+## Phase 33J Debug-Only Bridge Developer Diagnostic Command
+
+Phase 33J adds the first practical command-line diagnostic over the validated Phase 33H inspection harness and Phase 33I validation path. Developers can run `dart run tool/debug_only_bridge_developer_diagnostic_command.dart` to inspect the safe bridge state in deterministic markdown or JSON without wiring it into product UI, analyzer flow, scheduler execution, persistence, backend, or engine execution.
+
+Developer diagnostic behavior:
+
+- the command consumes the safe Phase 33I validation path and exposes section filters for `all`, `snapshot`, `packets`, `policy`, `records`, `boundaries`, `proof`, `runtime`, and `recommendation`.
+- diagnostic output includes the source phase chain, inspection snapshot summary, input/output packet summary, policy summary, record role summary, allowed/denied field summary, Stockfish/raw UCI/PV dump denial summary, scheduler execution denial summary, runtime/prototype/wiring blocked summary, Android proof boundary, owner-proof boundary, warning summary, future prerequisite summary, safe-for-next-step flag, and recommendation.
+- strict mode fails on unsafe/blocker/critical counts, active denied fields, product output, labels, scores, rankings, metrics, CP-loss, win probability, UI/backend/persistence/direct-engine fields, scheduler execution, Stockfish command, raw UCI, PV dump, runtime/prototype/wiring flags, unproven Android proof, Phase 32E proof claims, or diagnostic text leaks.
+
+Next recommendation: `proceedToSelectedGoldenBridgeDiagnosticRun`. Phase 33J adds no Golden cases, runtime bridge, executable prototype behavior, implementation wiring, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, scheduler execution, direct engine access, Stockfish command output, raw UCI output, PV dump output, engine calls, Android collector requirement, or third-party data.
