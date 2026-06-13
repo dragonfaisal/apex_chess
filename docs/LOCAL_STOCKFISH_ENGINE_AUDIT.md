@@ -128,4 +128,8 @@ Phase 33I validates the developer-only inspection harness only. It does not load
 
 Phase 33J adds a developer-only diagnostic command over the validated inspection harness only. It does not load Stockfish, call FFI/native bridges, execute Android collector flows, expose Stockfish command/raw UCI/PV dump fields as active output, implement runtime or executable prototype behavior, implement wiring, scheduler execution, or add engine-facing production integration.
 
+## Phase 33K Status
+
+Phase 33K adds selected Golden case inspection to the developer-only diagnostic command only. It does not load Stockfish, call FFI/native bridges, execute Android collector flows, expose Stockfish command/raw UCI/PV dump fields as active output, implement runtime or executable prototype behavior, implement wiring, scheduler execution, or add engine-facing production integration.
+
 Decision record: `LOCAL_ENGINE_SUBSTRATE_DECISION.md`.

@@ -54,10 +54,11 @@ void main() {
         expect(result.stdoutText, contains('## Recommendation'));
         expect(
           result.stdoutText,
-          contains('proceedToSelectedGoldenBridgeDiagnosticRun'),
+          contains('proceedToSelectedGoldenBridgeDiagnosticValidation'),
         );
         expect(result.stderrText, isEmpty);
         expect(result.result!.safeForPhase33J, isTrue);
+        expect(result.selectedGoldenDiagnostic, isNull);
       },
     );
 
@@ -82,7 +83,7 @@ void main() {
       expect(decoded['safeForNextStep'], isTrue);
       expect(
         decoded['recommendation'],
-        'proceedToSelectedGoldenBridgeDiagnosticRun',
+        'proceedToSelectedGoldenBridgeDiagnosticValidation',
       );
       expect(decoded['sourcePhaseChain'], isA<Map<String, Object?>>());
       expect(decoded['snapshot'], isA<Map<String, Object?>>());
@@ -93,6 +94,7 @@ void main() {
       expect(decoded['proof'], isA<Map<String, Object?>>());
       expect(decoded['runtime'], isA<Map<String, Object?>>());
       expect(decoded['next'], isA<Map<String, Object?>>());
+      expect(decoded.containsKey('selectedGoldenDiagnostic'), isFalse);
     });
 
     test('strict mode succeeds for safe demo', () {
@@ -158,8 +160,96 @@ void main() {
       );
       expect(
         _run(args: const <String>['--section=recommendation']).stdoutText,
-        contains('proceedToSelectedGoldenBridgeDiagnosticRun'),
+        contains('proceedToSelectedGoldenBridgeDiagnosticValidation'),
       );
+      expect(
+        _run(args: const <String>['--section=golden']).stdoutText,
+        contains('## Selected Golden Diagnostic'),
+      );
+    });
+
+    test('--list-golden-cases succeeds', () {
+      final result = _run(args: const <String>['--list-golden-cases']);
+
+      expect(
+        result.exitCode,
+        debugOnlyBridgeDeveloperDiagnosticCommandExitSuccess,
+      );
+      expect(
+        result.stdoutText,
+        contains('# Debug-Only Bridge Golden Case Selection'),
+      );
+      expect(result.stdoutText, contains('default-selected'));
+      expect(result.stdoutText, contains('all-safe-selected'));
+      expect(result.stdoutText, contains('queen-win-major-swing'));
+      expect(result.stdoutText, contains('pv-multipv-support-boundary-32e'));
+      expect(result.stderrText, isEmpty);
+    });
+
+    test('selected Golden modes succeed', () {
+      for (final args in const <List<String>>[
+        <String>['--golden-case=default-selected'],
+        <String>['--golden-case=all-safe-selected'],
+        <String>['--golden-case=queen-win-major-swing'],
+        <String>['--golden-case=default-selected', '--section=golden'],
+      ]) {
+        final result = _run(args: args);
+
+        expect(
+          result.exitCode,
+          debugOnlyBridgeDeveloperDiagnosticCommandExitSuccess,
+          reason: args.join(' '),
+        );
+        expect(result.selectedGoldenDiagnostic, isNotNull);
+        expect(result.selectedGoldenDiagnostic!.safeForNextStep, isTrue);
+        expect(result.stdoutText, contains('## Selected Golden Diagnostic'));
+        expect(
+          result.stdoutText,
+          contains('proceedToSelectedGoldenBridgeDiagnosticValidation'),
+        );
+      }
+    });
+
+    test('selected Golden JSON is deterministic and parseable', () {
+      final result = _run(
+        args: const <String>['--golden-case=default-selected', '--format=json'],
+      );
+      final decoded = jsonDecode(result.stdoutText) as Map<String, Object?>;
+      final selected =
+          decoded['selectedGoldenDiagnostic'] as Map<String, Object?>;
+      final counts = selected['counts'] as Map<String, Object?>;
+      final rows = selected['rows'] as List<Object?>;
+
+      expect(
+        result.exitCode,
+        debugOnlyBridgeDeveloperDiagnosticCommandExitSuccess,
+      );
+      expect(selected['selection'], 'default-selected');
+      expect(selected['status'], 'selectedGoldenDiagnosticReadyWithWarnings');
+      expect(selected['safeForNextStep'], isTrue);
+      expect(counts['selectedRowCount'], 7);
+      expect(counts['unsafeCount'], 0);
+      expect(counts['activeDeniedFieldCount'], 0);
+      expect(counts['engineCallCount'], 0);
+      expect(counts['schedulerExecutionCount'], 0);
+      expect(rows.first, isA<Map<String, Object?>>());
+    });
+
+    test('selected Golden strict mode succeeds for safe default selection', () {
+      final result = _run(
+        args: const <String>['--golden-case=default-selected', '--strict'],
+      );
+
+      expect(
+        result.exitCode,
+        debugOnlyBridgeDeveloperDiagnosticCommandExitSuccess,
+      );
+      expect(result.selectedGoldenDiagnostic!.blockerCount, 0);
+      expect(result.selectedGoldenDiagnostic!.criticalCount, 0);
+      expect(result.selectedGoldenDiagnostic!.unsafeCount, 0);
+      expect(result.selectedGoldenDiagnostic!.activeDeniedFieldCount, 0);
+      expect(result.selectedGoldenDiagnostic!.engineCallCount, 0);
+      expect(result.selectedGoldenDiagnostic!.schedulerExecutionCount, 0);
     });
 
     test('invalid section fails with usage error', () {
@@ -171,6 +261,90 @@ void main() {
       );
       expect(result.stderrText, contains('unknownSection'));
       expect(result.commandFailure, 'unknownSection');
+    });
+
+    test('unknown Golden case fails with usage error', () {
+      final result = _run(
+        args: const <String>['--golden-case=not-a-golden-case'],
+      );
+
+      expect(
+        result.exitCode,
+        debugOnlyBridgeDeveloperDiagnosticCommandExitUsage,
+      );
+      expect(result.stderrText, contains('unknownGoldenCase'));
+      expect(result.commandFailure, 'unknownGoldenCase');
+    });
+
+    test('quiet preparatory case is excluded from active core output', () {
+      final result = _run(
+        args: const <String>[
+          '--golden-case=quiet-preparatory-hard-case',
+          '--section=golden',
+        ],
+      );
+      final row = result.selectedGoldenDiagnostic!.rows.single;
+
+      expect(row.caseId, 'quiet-preparatory-hard-case');
+      expect(
+        row.diagnosticRole,
+        DebugOnlyBridgeSelectedGoldenDiagnosticRole.excludedNegativeGuard,
+      );
+      expect(
+        row.blockedBoundaryIds,
+        contains('quietPreparatoryCoreActivation'),
+      );
+      expect(row.activeDeniedFields, isEmpty);
+      expect(
+        result.selectedGoldenDiagnostic!.quietPreparatoryCoreActivationCount,
+        0,
+      );
+    });
+
+    test('Phase 32E selected cases do not claim captured Android proof', () {
+      final result = _run(
+        args: const <String>['--golden-case=default-selected'],
+      );
+      final phase32ERows = result.selectedGoldenDiagnostic!.rows.where(
+        (row) => row.sourcePhase == 'Phase 32E',
+      );
+
+      expect(phase32ERows, isNotEmpty);
+      for (final row in phase32ERows) {
+        expect(row.androidProofCaseIds, isEmpty, reason: row.caseId);
+        expect(
+          row.proofLimitReasons,
+          contains('phase32ECaseIsNotCapturedProof'),
+          reason: row.caseId,
+        );
+      }
+      expect(
+        result.selectedGoldenDiagnostic!.phase32ECapturedProofClaimCount,
+        0,
+      );
+      expect(result.selectedGoldenDiagnostic!.unprovenAndroidProofCount, 0);
+    });
+
+    test('PV MultiPV selected case remains boundary watch-list only', () {
+      final result = _run(
+        args: const <String>[
+          '--golden-case=pv-multipv-support-boundary-32e',
+          '--section=golden',
+        ],
+      );
+      final row = result.selectedGoldenDiagnostic!.rows.single;
+
+      expect(
+        row.diagnosticRole,
+        DebugOnlyBridgeSelectedGoldenDiagnosticRole.proofBoundaryOnly,
+      );
+      expect(row.androidProofCaseIds, isEmpty);
+      expect(row.ownerProofRequired, isFalse);
+      expect(row.blockedBoundaryIds, contains('pvMultiPvOwnerProofEscalation'));
+      expect(
+        row.proofLimitReasons,
+        contains('pvMultiPvBoundaryWatchListOnlyNoOwnerProof'),
+      );
     });
 
     test('strict mode fails on unsafe validation seam', () {
@@ -237,6 +411,47 @@ void main() {
         'executable bridge skeleton implemented: true',
         'executable debug bridge prototype implemented: true',
         'implementation wiring implemented: true',
+      ]) {
+        expect(report, isNot(contains(token)), reason: token);
+      }
+    });
+
+    test('selected Golden output keeps diagnostic guardrails', () {
+      final report = _run(
+        args: const <String>[
+          '--golden-case=default-selected',
+          '--section=golden',
+        ],
+      ).stdoutText;
+
+      expect(report, contains('active denied field count: 0'));
+      expect(report, contains('product output count: 0'));
+      expect(report, contains('engine call count: 0'));
+      expect(report, contains('scheduler execution count: 0'));
+      for (final token in const <String>[
+        'uciok',
+        'readyok',
+        'info depth',
+        'bestmove e2e4',
+        'pv e2e4',
+        'position fen',
+        'go depth',
+        'active fields: productLabel',
+        'active fields: finalMoveLabel',
+        'numeric move score:',
+        'scoreValue',
+        'moveScore',
+        'rankedMoves',
+        'moveRanking active',
+        'ACPL active',
+        'official accuracy active',
+        'cpLoss active',
+        'winProbability active',
+        'http://',
+        'https://',
+        'apiKey',
+        'secret=',
+        'token=',
       ]) {
         expect(report, isNot(contains(token)), reason: token);
       }

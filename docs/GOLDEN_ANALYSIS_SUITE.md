@@ -564,3 +564,18 @@ Developer diagnostic behavior:
 - strict mode fails on unsafe/blocker/critical counts, active denied fields, product output, labels, scores, rankings, metrics, CP-loss, win probability, UI/backend/persistence/direct-engine fields, scheduler execution, Stockfish command, raw UCI, PV dump, runtime/prototype/wiring flags, unproven Android proof, Phase 32E proof claims, or diagnostic text leaks.
 
 Next recommendation: `proceedToSelectedGoldenBridgeDiagnosticRun`. Phase 33J adds no Golden cases, runtime bridge, executable prototype behavior, implementation wiring, product labels, scores, rankings, thresholds, aggregate scores, official metrics, CP-loss computation, win probability computation, UI integration, backend integration, persistence/cache/database, scheduler execution, direct engine access, Stockfish command output, raw UCI output, PV dump output, engine calls, Android collector requirement, or third-party data.
+
+## Phase 33K Selected Golden Bridge Diagnostic Run
+
+Phase 33K extends the Phase 33J developer diagnostic command with selected Golden case inspection. Developers can run `dart run tool/debug_only_bridge_developer_diagnostic_command.dart --golden-case=default-selected`, `--golden-case=all-safe-selected`, `--golden-case=<caseId>`, `--list-golden-cases`, or `--section=golden` to inspect how existing Golden Analysis Suite cases appear through the safe bridge diagnostic path.
+
+Selected Golden diagnostic behavior:
+
+- the default selected set covers a tactical/material swing case, a forcing-line case, a candidate-spread material case, Phase 32E king-safety/mating-net coverage, Phase 32E endgame/candidate-spread coverage, Phase 32E budget-pressure coverage, and the Phase 32E PV/MultiPV boundary watch-list case.
+- diagnostic rows include case ID, title, source phase, selected reason, diagnostic role, support areas, blocked boundaries, warning reasons, proof-limit reasons, Android proof IDs, owner-proof status, active denied fields, and recommendation.
+- Phase 32E cases remain selected Golden diagnostics only and are not claimed as captured Android proof; captured proof remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`.
+- quiet/preparatory cases may appear only as excluded negative guards and are not promoted to active core output.
+- the PV/MultiPV case remains boundary/watch-list evidence only with owner proof not required by default.
+- strict mode includes the selected Golden diagnostic counts and fails on unsafe, blocker, critical, active denied-field, product, label, score, metric, CP-loss, win-probability, UI/backend/persistence/direct-engine, scheduler execution, Stockfish command, raw UCI, PV dump, unproven Android proof, Phase 32E proof-claim, or diagnostic text leak conditions.
+
+Next recommendation: `proceedToSelectedGoldenBridgeDiagnosticValidation`. Phase 33K does not run Stockfish, execute Android collector flows, call analyzer flow, classify moves, emit product labels, compute scores, rank moves, add official metrics, compute CP-loss, compute win probability, expose Stockfish command/raw UCI/PV dump fields as active output, add UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine access, implement runtime bridge behavior, implement executable prototype behavior, implement wiring, or add third-party data.

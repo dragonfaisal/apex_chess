@@ -193,3 +193,9 @@ No scheduler behavior, scheduler thresholds, scheduler execution, product review
 Phase 33J adds a developer-only command-line diagnostic over the validated inspection harness. It renders safe markdown/JSON sections for snapshot, packets, policy, records, boundaries, proof, runtime, and recommendation so developers can inspect bridge state without product integration.
 
 No scheduler behavior, scheduler thresholds, scheduler execution, product review output, UI flow, backend flow, persistence, cache, database use, analyzer integration, engine execution, Android collection, proof command execution, debug bridge runtime wiring, executable debug bridge prototype, implementation wiring, adapter bridge implementation, or product adapter wiring is added. The diagnostic command remains pure tool/report code and does not change local smart scheduling decisions.
+
+## Phase 33K Selected Golden Bridge Diagnostic Run
+
+Phase 33K extends the developer-only diagnostic command with selected Golden case inspection via `--golden-case`, `--list-golden-cases`, and `--section=golden`. The selected rows expose deterministic case IDs, diagnostic roles, safe support areas, blocked boundaries, proof limits, and recommendations for developer inspection only.
+
+No scheduler behavior, scheduler thresholds, scheduler execution, product review output, UI flow, backend flow, persistence, cache, database use, analyzer integration, engine execution, Android collection, proof command execution, debug bridge runtime wiring, executable debug bridge prototype, implementation wiring, adapter bridge implementation, or product adapter wiring is added. Selected Golden diagnostics remain pure tool/report metadata and do not change local smart scheduling decisions.
