@@ -579,3 +579,15 @@ Selected Golden diagnostic behavior:
 - strict mode includes the selected Golden diagnostic counts and fails on unsafe, blocker, critical, active denied-field, product, label, score, metric, CP-loss, win-probability, UI/backend/persistence/direct-engine, scheduler execution, Stockfish command, raw UCI, PV dump, unproven Android proof, Phase 32E proof-claim, or diagnostic text leak conditions.
 
 Next recommendation: `proceedToSelectedGoldenBridgeDiagnosticValidation`. Phase 33K does not run Stockfish, execute Android collector flows, call analyzer flow, classify moves, emit product labels, compute scores, rank moves, add official metrics, compute CP-loss, compute win probability, expose Stockfish command/raw UCI/PV dump fields as active output, add UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine access, implement runtime bridge behavior, implement executable prototype behavior, implement wiring, or add third-party data.
+
+## Phase 33L Validate Selected Golden Bridge Diagnostic Run
+
+Phase 33L adds focused validation for the Phase 33K selected Golden diagnostic path. It validates the `default-selected`, `all-safe-selected`, single-case, list, markdown, JSON, `--section=golden`, and strict diagnostic surfaces without creating another readiness-summary chain.
+
+Selected Golden diagnostic validation behavior:
+
+- validation checks confirm the default and all-safe selected sets are safe, selected rows are deterministic, diagnostic roles are allowed, quiet/preparatory cases remain excluded negative guards, Phase 32E cases do not claim captured Android proof, PV/MultiPV remains boundary/watch-list only, Android proof IDs remain captured-only, owner proof remains empty, denied fields remain inactive, report text contains no raw UCI or PV dump spam, and the Phase 33M requirement is present.
+- selected row validation preserves case ID, source phase, selected reason, diagnostic role, support areas, blocked boundaries, warning reasons, proof-limit reasons, Android proof IDs, owner-proof status, active denied fields, status, findings, and recommendation.
+- strict validation fails on unsafe/blocker/critical counts, active denied fields, product labels, final labels, classifier labels, numeric scores, aggregate scores, move ranking, official metrics, CP-loss, win probability, UI/backend/persistence/direct-engine fields, scheduler execution, Android collector execution, Stockfish command, raw UCI, PV dump, unproven Android proof, Phase 32E proof claims, owner proof without PV/MultiPV reason, or report text leaks.
+
+Next recommendation: `proceedToDebugOnlyBridgeAnalyzerAdapterBoundaryDesign`. Phase 33L does not run Stockfish, execute Android collector flows, call analyzer flow, add product labels, compute scores, rank moves, add official metrics, compute CP-loss, compute win probability, expose Stockfish command/raw UCI/PV dump fields as active output, add UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine access, implement runtime bridge behavior, implement executable prototype behavior, implement wiring, or add third-party data.

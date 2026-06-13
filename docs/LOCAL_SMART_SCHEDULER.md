@@ -199,3 +199,9 @@ No scheduler behavior, scheduler thresholds, scheduler execution, product review
 Phase 33K extends the developer-only diagnostic command with selected Golden case inspection via `--golden-case`, `--list-golden-cases`, and `--section=golden`. The selected rows expose deterministic case IDs, diagnostic roles, safe support areas, blocked boundaries, proof limits, and recommendations for developer inspection only.
 
 No scheduler behavior, scheduler thresholds, scheduler execution, product review output, UI flow, backend flow, persistence, cache, database use, analyzer integration, engine execution, Android collection, proof command execution, debug bridge runtime wiring, executable debug bridge prototype, implementation wiring, adapter bridge implementation, or product adapter wiring is added. Selected Golden diagnostics remain pure tool/report metadata and do not change local smart scheduling decisions.
+
+## Phase 33L Validate Selected Golden Bridge Diagnostic Run
+
+Phase 33L validates the selected Golden diagnostic path added in Phase 33K. It checks selected set safety, deterministic selected rows, quiet/preparatory exclusion, Phase 32E proof honesty, PV/MultiPV boundary-only behavior, inactive denied fields, and blocked scheduler/product/engine boundaries.
+
+No scheduler behavior, scheduler thresholds, scheduler execution, product review output, UI flow, backend flow, persistence, cache, database use, analyzer integration, engine execution, Android collection, proof command execution, debug bridge runtime wiring, executable debug bridge prototype, implementation wiring, adapter bridge implementation, or product adapter wiring is added. The validation remains pure tool/report/test code and does not change local smart scheduling decisions.
