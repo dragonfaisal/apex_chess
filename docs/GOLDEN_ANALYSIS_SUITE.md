@@ -634,3 +634,18 @@ Boundary prototype design behavior:
 - Phase 32E cases still do not claim captured Android proof; Android proof remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`; owner proof remains empty by default.
 
 Next recommendation: `validateDebugOnlyBridgeAnalyzerAdapterBoundaryPrototypeDesign`. Phase 33O does not run Stockfish, execute Android collector flows, call analyzer flow, wire analyzer internals, add product labels, compute scores, rank moves, add official metrics, compute CP-loss, compute win probability, expose Stockfish command/raw UCI/PV dump fields as active output, add UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine access, implement analyzer runtime, implement runtime bridge behavior, implement executable prototype behavior, implement wiring, or add third-party data.
+
+## Phase 33P Validate Debug-Only Bridge Analyzer Adapter Boundary Prototype Design
+
+Phase 33P validates the Phase 33O boundary prototype design before any future prototype contract design. It checks deterministic prototype packet roles, record-level safety, proof honesty, and blocked integration boundaries while remaining developer-only, analyzer-unwired, non-runtime, non-product, UI-free, scheduler-free, persistence-free, backend-free, engine-free, label-free, and score-free.
+
+Boundary prototype validation behavior:
+
+- validation rows are produced for every prototype packet design record and preserve input, context, warning-limited, proof-boundary, excluded-guard, denied-field, and future-requirement packet roles.
+- input packet designs remain future-internal only and cannot become analyzer runtime input.
+- context packets remain context-only, warning-limited packets remain warning-limited, PV/MultiPV remains proof-boundary/watch-list only, and quiet/preparatory remains an excluded negative guard.
+- Phase 32E cases still do not claim captured Android proof; Android proof remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`; owner proof remains empty by default.
+- denied labels, final labels, classifier labels, numeric scores, aggregate scores, rankings, official metrics, CP-loss, win probability, UI/backend/persistence/direct-engine fields, scheduler execution, analyzer wiring, Stockfish command, raw UCI, and PV dump remain blocked.
+- strict validation rejects product labels, final labels, classifier labels, scores, rankings, official metrics, CP-loss, win probability, UI/backend/persistence/direct-engine targets, scheduler execution, analyzer wiring, runtime implementation, executable prototype implementation, Stockfish command, raw UCI, PV dump, Phase 32E captured-proof claims, quiet/preparatory promotion, and PV/MultiPV promotion to scoring or core proof.
+
+Next recommendation: `proceedToDebugOnlyBridgeAnalyzerAdapterPrototypeContractDesign`. Phase 33P does not run Stockfish, execute Android collector flows, call analyzer flow, wire analyzer internals, add product labels, compute scores, rank moves, add official metrics, compute CP-loss, compute win probability, expose Stockfish command/raw UCI/PV dump fields as active output, add UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine access, implement analyzer runtime, implement runtime bridge behavior, implement executable prototype behavior, implement wiring, or add third-party data.
