@@ -229,3 +229,9 @@ No scheduler behavior, scheduler thresholds, scheduler execution, product review
 Phase 33P validates the Phase 33O boundary prototype packet design. It checks deterministic packet roles, future-internal input packet constraints, context-only and warning-limited preservation, PV/MultiPV proof-boundary limits, quiet/preparatory exclusion, inactive denied fields, blocked analyzer wiring, and blocked runtime/scheduler/persistence/backend/UI/engine boundaries.
 
 No scheduler behavior, scheduler thresholds, scheduler execution, product review output, UI flow, backend flow, persistence, cache, database use, analyzer wiring, engine execution, Android collection, proof command execution, debug bridge runtime wiring, executable debug bridge prototype, implementation wiring, adapter bridge runtime, analyzer adapter runtime, or product adapter wiring is added. The validation remains pure application model/report/test code and does not change local smart scheduling decisions.
+
+## Phase 33Q Debug-Only Bridge Analyzer Adapter Prototype Contract Design
+
+Phase 33Q designs the developer-only contract over the validated Phase 33P prototype packet design. It defines future internal input, context-only, warning-limited, proof-boundary, excluded-guard, allowed-field, denied-field, runtime-blocked, analyzer-wiring-blocked, engine-blocked, scheduler-blocked, and Phase 33R requirement contract groups.
+
+No scheduler behavior, scheduler thresholds, scheduler execution, product review output, UI flow, backend flow, persistence, cache, database use, analyzer wiring, engine execution, Android collection, proof command execution, debug bridge runtime wiring, executable debug bridge prototype, implementation wiring, adapter bridge runtime, analyzer adapter runtime, product adapter wiring, or saved analysis integration is added. The contract design remains pure application model/report/test code and does not change local smart scheduling decisions.
