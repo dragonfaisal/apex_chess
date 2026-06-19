@@ -677,3 +677,28 @@ Prototype contract validation behavior:
 - Phase 32E cases still do not claim captured Android proof; Android proof remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`; owner proof remains empty by default.
 
 Next recommendation: `proceedToDebugOnlyBridgeAnalyzerAdapterPrototypeImplementationDesign`. Phase 33R does not run Stockfish, execute Android collector flows, call analyzer flow, wire analyzer internals, add product labels, compute scores, rank moves, add official metrics, compute CP-loss, compute win probability, expose Stockfish command/raw UCI/PV dump fields as active output, add UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine access, implement analyzer runtime, implement runtime bridge behavior, implement executable prototype behavior, implement wiring, product adapter behavior, saved analysis integration, or third-party data.
+
+## Phase 33S Debug-Only Bridge Analyzer Adapter Prototype Implementation Design
+
+Phase 33S designs the implementation shape for a future debug-only analyzer adapter prototype over the validated Phase 33R contract. It is implementation design only: it names future classes, packet concepts, mapper, validator, result, policy, and developer debug snapshot shapes without implementing runtime behavior or analyzer wiring.
+
+Future implementation design names:
+
+- `DebugOnlyBridgeAnalyzerAdapterPrototypeInputPacket`
+- `DebugOnlyBridgeAnalyzerAdapterPrototypeContextPacket`
+- `DebugOnlyBridgeAnalyzerAdapterPrototypeRecord`
+- `DebugOnlyBridgeAnalyzerAdapterPrototypePolicy`
+- `DebugOnlyBridgeAnalyzerAdapterPrototypeMapper`
+- `DebugOnlyBridgeAnalyzerAdapterPrototypeResult`
+- `DebugOnlyBridgeAnalyzerAdapterPrototypeValidator`
+- `DebugOnlyBridgeAnalyzerAdapterPrototypeDebugSnapshot`
+
+Implementation design behavior:
+
+- input packet designs remain future-internal only; context packet designs remain context-only; warning-limited packet designs remain warning-limited; PV/MultiPV remains proof-boundary/watch-list only; quiet/preparatory remains excluded guard.
+- mapper, validator, and debug snapshot designs are metadata-only and do not execute analysis, call an engine, wire analyzer flow, emit product labels, or write persistence.
+- allowed internal fields are limited to implementation/source IDs, source phase, packet/contract/design roles, support metadata, warning/proof reasons, Android proof boundary IDs, blocked boundary IDs, and future prerequisites.
+- denied fields remain inactive, including product labels, final labels, classifier labels, Brilliant/Great/Miss, Best/Good/Inaccuracy/Mistake/Blunder, numeric scores, aggregate scores, rankings, official metrics, accuracy, ACPL, CP-loss, win probability, thresholds, UI/backend/persistence/direct-engine targets, scheduler execution, Stockfish command, raw UCI, PV dump, Android collector requirement, analyzer wiring, runtime implementation, executable prototype behavior, product adapter behavior, and saved analysis integration.
+- Phase 32E cases still do not claim captured Android proof; Android proof remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`; owner proof remains empty by default.
+
+Next recommendation: `validateDebugOnlyBridgeAnalyzerAdapterPrototypeImplementationDesign`. Phase 33S does not run Stockfish, execute Android collector flows, call analyzer flow, wire analyzer internals, add product labels, compute scores, rank moves, add official metrics, compute CP-loss, compute win probability, expose Stockfish command/raw UCI/PV dump fields as active output, add UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine access, implement analyzer runtime, implement runtime bridge behavior, implement executable prototype behavior, implement wiring, product adapter behavior, saved analysis integration, or third-party data.
