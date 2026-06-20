@@ -798,3 +798,34 @@ scores, rank moves, add official metrics, compute CP-loss, compute win probabili
 UCI/PV dump fields as active output, add UI/backend/persistence/cache/database integration, add scheduler execution,
 add direct engine access, implement analyzer runtime, implement runtime bridge behavior, implement executable prototype
 behavior, implement wiring, product adapter behavior, saved analysis integration, or third-party data.
+
+## Phase 33Y Debug-Only Bridge Analyzer Adapter Prototype Diagnostic Command
+
+Phase 33Y adds a practical developer-only diagnostic command over the validated Phase 33W inspection harness and Phase
+33X validation path. Developers can run
+`dart run tool/debug_only_bridge_analyzer_adapter_prototype_diagnostic_command.dart` to inspect the safe analyzer adapter
+prototype state in deterministic markdown or JSON without wiring it into analyzer flow, product review, UI, backend,
+persistence, scheduler execution, saved analysis, or engine execution.
+
+Command behavior:
+
+- supports `--format=markdown`, `--format=json`, `--strict`, `--safe-demo`, `--include-warnings`, and
+`--section=all|snapshot|packets|policy|records|proof|boundaries|runtime|recommendation`.
+- reports the source phase chain, inspection validation status, snapshot summary, packet summary, policy flags, record
+role summary, allowed/denied fields, Android proof boundary, owner proof boundary, blocked runtime/analyzer/engine/
+scheduler/product/saved-analysis boundaries, warnings, future prerequisites, safe-for-next-step flag, and next
+recommendation.
+- strict mode fails on unsafe Phase 33X/33W inputs, active denied fields, product/final/classifier labels, Brilliant/
+Great/Miss, Best/Good/Inaccuracy/Mistake/Blunder, scores, rankings, metrics, accuracy/ACPL, CP-loss, win probability,
+thresholds, UI/backend/persistence/direct-engine targets, scheduler execution, analyzer wiring, runtime/executable
+prototype behavior, product adapter behavior, saved analysis integration, Stockfish command, raw UCI, PV dump, Android
+collector requirement, Phase 32E captured-proof claims, quiet/preparatory promotion, PV/MultiPV promotion, or report
+text leaks.
+
+Next recommendation: `proceedToSelectedGoldenAnalyzerAdapterPrototypeDiagnosticRun`. Phase 33Y does not run Stockfish,
+execute Android collector flows, call analyzer flow, wire analyzer internals, add product labels, compute scores, rank
+moves, add official metrics, compute CP-loss, compute win probability, expose Stockfish command/raw UCI/PV dump fields
+as active output, add UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine
+access, implement analyzer runtime, implement runtime bridge behavior, implement executable prototype behavior,
+implement wiring, product adapter behavior, saved analysis integration, readiness summary chains, readiness gates, or
+third-party data.
