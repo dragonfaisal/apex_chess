@@ -741,3 +741,32 @@ Validation behavior:
 - Phase 32E cases still do not claim captured Android proof; Android proof remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`; owner proof remains empty by default.
 
 Next recommendation: `proceedToDebugOnlyBridgeAnalyzerAdapterPrototypeInspectionHarness`. Phase 33V does not run Stockfish, execute Android collector flows, call analyzer flow, wire analyzer internals, add product labels, compute scores, rank moves, add official metrics, compute CP-loss, compute win probability, expose Stockfish command/raw UCI/PV dump fields as active output, add UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine access, implement analyzer runtime, implement runtime bridge behavior, implement executable prototype behavior, implement wiring, product adapter behavior, saved analysis integration, or third-party data.
+
+## Phase 33W Debug-Only Bridge Analyzer Adapter Prototype Inspection Harness
+
+Phase 33W adds a developer-only inspection harness over the validated Phase 33U analyzer adapter prototype skeleton and
+the Phase 33V skeleton validation result. It produces deterministic inspection rows and a safe inspection snapshot for
+developer review only; it does not create analyzer runtime behavior, analyzer wiring, product adapter behavior, saved
+analysis integration, UI, backend, persistence, scheduler execution, or engine execution.
+
+Inspection behavior:
+
+- input and context packet summaries remain developer-only, in-memory, and analyzer-unwired.
+- policy inspection confirms product output, analyzer wiring, runtime implementation, executable prototype behavior,
+engine calls, scheduler execution, persistence writes, UI/backend targets, product adapter behavior, saved analysis
+integration, classifier/final labels, numeric and aggregate scores, official metrics, CP-loss, win probability, move
+ranking, Stockfish command, raw UCI, PV dump, and Android collector access stay disabled.
+- record inspections preserve internal input, context-only, warning-limited, proof-boundary, excluded-guard,
+allowed-field, denied-field, mapper metadata, validator metadata, debug snapshot metadata, runtime-blocked,
+analyzer-wiring-blocked, engine-blocked, scheduler-blocked, product-adapter-blocked, saved-analysis-blocked, and future
+requirement roles.
+- PV/MultiPV remains proof-boundary/watch-list only; quiet/preparatory remains excluded guard; Phase 32E cases still do
+not claim captured Android proof; Android proof remains limited to `mate-threat-fast-evidence`,
+`queen-win-major-swing`, and `simple-tactical-capture-check`; owner proof remains empty by default.
+
+Next recommendation: `validateDebugOnlyBridgeAnalyzerAdapterPrototypeInspectionHarness`. Phase 33W does not run
+Stockfish, execute Android collector flows, call analyzer flow, wire analyzer internals, add product labels, compute
+scores, rank moves, add official metrics, compute CP-loss, compute win probability, expose Stockfish command/raw
+UCI/PV dump fields as active output, add UI/backend/persistence/cache/database integration, add scheduler execution,
+add direct engine access, implement analyzer runtime, implement runtime bridge behavior, implement executable prototype
+behavior, implement wiring, product adapter behavior, saved analysis integration, or third-party data.
