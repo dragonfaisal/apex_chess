@@ -190,11 +190,190 @@ void main() {
           'proceedToSelectedGoldenAnalyzerAdapterPrototypeDiagnosticRun',
         ),
       );
+      expect(
+        _run(args: const <String>['--section=golden']).stdoutText,
+        contains('## Selected Golden Analyzer Adapter Prototype Diagnostic'),
+      );
+    });
+
+    test('list Golden cases succeeds', () {
+      final markdown = _run(args: const <String>['--list-golden-cases']);
+      final json = _run(
+        args: const <String>['--list-golden-cases', '--format=json'],
+      );
+      final decoded = jsonDecode(json.stdoutText) as Map<String, Object?>;
+
+      expect(
+        markdown.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+      );
+      expect(markdown.listGoldenCases, isTrue);
+      expect(markdown.stdoutText, contains('queen-win-major-swing'));
+      expect(markdown.stdoutText, contains('quiet-preparatory-hard-case'));
+      expect(
+        json.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+      );
+      expect(decoded['cases'], isA<List<Object?>>());
+    });
+
+    test('default selected Golden diagnostic succeeds', () {
+      final result = _run(
+        args: const <String>['--golden-case=default-selected'],
+      );
+      final selected = result.selectedGoldenDiagnostic!;
+
+      expect(
+        result.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+      );
+      expect(selected.selection, 'default-selected');
+      expect(
+        selected.status,
+        DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticStatus
+            .selectedGoldenAnalyzerAdapterPrototypeDiagnosticReadyWithWarnings,
+      );
+      expect(selected.safeForPhase34A, isTrue);
+      expect(
+        selected.nextRecommendation,
+        'validateSelectedGoldenAnalyzerAdapterPrototypeDiagnosticRun',
+      );
+      expect(selected.unsafeCount, 0);
+      expect(selected.blockerCount, 0);
+      expect(selected.criticalCount, 0);
+      expect(selected.analyzerWiringCount, 0);
+      expect(selected.runtimeImplementationCount, 0);
+      expect(selected.executablePrototypeCount, 0);
+      expect(selected.engineCallCount, 0);
+      expect(selected.schedulerExecutionCount, 0);
+      expect(selected.persistenceWriteCount, 0);
+      expect(selected.productOutputCount, 0);
+      expect(selected.activeDeniedFieldCount, 0);
+      expect(
+        result.stdoutText,
+        contains(
+          'selectedGoldenAnalyzerAdapterPrototypeDiagnosticReadyWithWarnings',
+        ),
+      );
+      expect(result.stdoutText, contains('quiet-preparatory-hard-case'));
+    });
+
+    test('all-safe selected Golden diagnostic succeeds', () {
+      final result = _run(
+        args: const <String>['--golden-case=all-safe-selected'],
+      );
+      final selected = result.selectedGoldenDiagnostic!;
+
+      expect(
+        result.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+      );
+      expect(selected.selection, 'all-safe-selected');
+      expect(selected.safeForPhase34A, isTrue);
+      expect(selected.rows.length, greaterThan(8));
+      expect(
+        selected.rows.map((row) => row.caseId),
+        contains('quiet-preparatory-uncertain'),
+      );
+    });
+
+    test('single known selected Golden case succeeds', () {
+      final result = _run(
+        args: const <String>['--golden-case=queen-win-major-swing'],
+      );
+      final selected = result.selectedGoldenDiagnostic!;
+
+      expect(
+        result.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+      );
+      expect(selected.rows, hasLength(1));
+      expect(selected.rows.single.caseId, 'queen-win-major-swing');
+      expect(
+        selected.rows.single.diagnosticRole,
+        DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRole
+            .developerDiagnosticInputSupport,
+      );
+      expect(selected.rows.single.androidProofIds, ['queen-win-major-swing']);
+    });
+
+    test('selected Golden JSON and strict modes succeed', () {
+      final json = _run(
+        args: const <String>['--golden-case=default-selected', '--format=json'],
+      );
+      final strict = _run(
+        args: const <String>['--golden-case=default-selected', '--strict'],
+      );
+      final decoded = jsonDecode(json.stdoutText) as Map<String, Object?>;
+      final selected =
+          decoded['selectedGoldenDiagnostic'] as Map<String, Object?>;
+      final counts = selected['counts'] as Map<String, Object?>;
+
+      expect(
+        json.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+      );
+      expect(
+        selected['status'],
+        'selectedGoldenAnalyzerAdapterPrototypeDiagnosticReadyWithWarnings',
+      );
+      expect(selected['safeForPhase34A'], isTrue);
+      expect(
+        selected['nextRecommendation'],
+        'validateSelectedGoldenAnalyzerAdapterPrototypeDiagnosticRun',
+      );
+      expect(counts['unsafeCount'], 0);
+      expect(counts['blockerCount'], 0);
+      expect(counts['criticalCount'], 0);
+      expect(counts['activeDeniedFieldCount'], 0);
+      expect(
+        strict.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+      );
+    });
+
+    test('selected Golden role guardrails are preserved', () {
+      final selected = _run(
+        args: const <String>['--golden-case=default-selected'],
+      ).selectedGoldenDiagnostic!;
+      final byId = {for (final row in selected.rows) row.caseId: row};
+
+      expect(
+        byId['quiet-preparatory-hard-case']!.diagnosticRole,
+        DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRole
+            .excludedNegativeGuard,
+      );
+      expect(
+        byId['pv-multipv-support-boundary-32e']!.diagnosticRole,
+        DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRole
+            .proofBoundaryOnly,
+      );
+      expect(
+        byId['king-safety-mating-net-pressure-32e']!.diagnosticRole,
+        DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRole
+            .warningLimited,
+      );
+      expect(
+        byId['endgame-precision-candidate-spread-32e']!.diagnosticRole,
+        DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRole
+            .warningLimited,
+      );
+      expect(
+        byId['budget-pressure-wide-candidate-32e']!.diagnosticRole,
+        DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRole
+            .warningLimited,
+      );
+      expect(selected.phase32EProofClaimCount, 0);
+      expect(selected.unprovenAndroidProofCount, 0);
+      expect(selected.ownerProofQueueCount, 0);
+      expect(selected.quietPreparatoryPromotionCount, 0);
+      expect(selected.pvMultiPvPromotionCount, 0);
     });
 
     test('invalid section and format fail with usage error', () {
       final badSection = _run(args: const <String>['--section=unknown']);
       final badFormat = _run(args: const <String>['--format=yaml']);
+      final badGolden = _run(args: const <String>['--golden-case=missing']);
 
       expect(
         badSection.exitCode,
@@ -208,14 +387,28 @@ void main() {
       );
       expect(badFormat.commandFailure, 'unknownFormat');
       expect(badFormat.stderrText, contains('usage:'));
+      expect(
+        badGolden.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitUsage,
+      );
+      expect(badGolden.commandFailure, 'unknownGoldenCase');
+      expect(badGolden.stderrText, contains('usage:'));
     });
 
     test('output contains no raw engine spam or active product data', () {
       final markdown = _run().stdoutText;
       final json = _run(args: const <String>['--format=json']).stdoutText;
+      final golden = _run(
+        args: const <String>['--golden-case=default-selected'],
+      ).stdoutText;
+      final goldenJson = _run(
+        args: const <String>['--golden-case=default-selected', '--format=json'],
+      ).stdoutText;
 
       _expectReportGuardrails(markdown);
       _expectReportGuardrails(json);
+      _expectReportGuardrails(golden);
+      _expectReportGuardrails(goldenJson);
     });
 
     test('source imports remain command-only and integration-free', () {

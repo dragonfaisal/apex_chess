@@ -829,3 +829,37 @@ as active output, add UI/backend/persistence/cache/database integration, add sch
 access, implement analyzer runtime, implement runtime bridge behavior, implement executable prototype behavior,
 implement wiring, product adapter behavior, saved analysis integration, readiness summary chains, readiness gates, or
 third-party data.
+
+## Phase 33Z Selected Golden Analyzer Adapter Prototype Diagnostic Run
+
+Phase 33Z extends the developer-only analyzer adapter prototype diagnostic command with selected Golden case inspection.
+Developers can run `dart run tool/debug_only_bridge_analyzer_adapter_prototype_diagnostic_command.dart
+--golden-case=default-selected`, `--golden-case=all-safe-selected`, a single `--golden-case=<caseId>`,
+`--list-golden-cases`, or `--section=golden` to inspect selected Golden rows through the safe Phase 33W/33X diagnostic
+path.
+
+Selected Golden behavior:
+
+- the default selected set covers tactical/material-swing, forcing-line, candidate-spread material, Phase 32E
+king-safety/mating-net, Phase 32E endgame/candidate-spread, Phase 32E budget-pressure, Phase 32E PV/MultiPV boundary,
+and quiet/preparatory negative guard coverage.
+- tactical/material/forcing/candidate-spread cases appear only as safe developer diagnostic input/support rows.
+- king-safety, endgame, and budget cases remain warning-limited; PV/MultiPV remains proof-boundary/watch-list only; and
+quiet/preparatory remains excluded negative guard only.
+- Phase 32E cases still do not claim captured Android proof; Android proof remains limited to
+`mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`; owner proof remains empty by
+default.
+- strict selected diagnostics fail on unsafe selected rows, unknown Golden cases or roles, active denied fields,
+product/final/classifier labels, Brilliant/Great/Miss, Best/Good/Inaccuracy/Mistake/Blunder, numeric or aggregate
+scores, rankings, official metrics, accuracy/ACPL, CP-loss, win probability, thresholds, UI/backend/persistence/
+direct-engine targets, scheduler execution, analyzer wiring, runtime/executable prototype behavior, product adapter
+behavior, saved analysis integration, Stockfish command, raw UCI, PV dump, Android collector requirement, Phase 32E
+captured-proof claims, quiet/preparatory promotion, PV/MultiPV promotion, or report text leaks.
+
+Next recommendation: `validateSelectedGoldenAnalyzerAdapterPrototypeDiagnosticRun`. Phase 33Z does not run Stockfish,
+execute Android collector flows, call analyzer flow, wire analyzer internals, add product labels, compute scores, rank
+moves, add official metrics, compute CP-loss, compute win probability, expose Stockfish command/raw UCI/PV dump fields
+as active output, add UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine
+access, implement analyzer runtime, implement runtime bridge behavior, implement executable prototype behavior,
+implement wiring, product adapter behavior, saved analysis integration, readiness summaries, readiness gates, or
+third-party data.

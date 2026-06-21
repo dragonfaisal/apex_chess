@@ -3,6 +3,7 @@ import 'dart:io' as io;
 
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_inspection_harness.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_inspection_harness_validation.dart';
+import 'package:apex_chess/features/pgn_review/application/golden_analysis_suite.dart';
 
 const debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandVersion =
     'debug-only-bridge-analyzer-adapter-prototype-diagnostic-command-v1';
@@ -32,7 +33,8 @@ enum DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection {
   proof('proof'),
   boundaries('boundaries'),
   runtime('runtime'),
-  recommendation('recommendation');
+  recommendation('recommendation'),
+  golden('golden');
 
   const DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection(this.wire);
 
@@ -55,6 +57,308 @@ enum DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticStatus {
   final String wire;
 }
 
+enum DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticStatus {
+  selectedGoldenAnalyzerAdapterPrototypeDiagnosticReadyWithWarnings(
+    'selectedGoldenAnalyzerAdapterPrototypeDiagnosticReadyWithWarnings',
+  ),
+  selectedGoldenAnalyzerAdapterPrototypeDiagnosticReadyClean(
+    'selectedGoldenAnalyzerAdapterPrototypeDiagnosticReadyClean',
+  ),
+  blockedByUnsafeGoldenSelection('blockedByUnsafeGoldenSelection'),
+  blockedByPolicyBoundary('blockedByPolicyBoundary'),
+  invalidGoldenSelection('invalidGoldenSelection');
+
+  const DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticStatus(
+    this.wire,
+  );
+
+  final String wire;
+}
+
+enum DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRole {
+  developerDiagnosticInputSupport('developerDiagnosticInputSupport'),
+  contextOnly('contextOnly'),
+  warningLimited('warningLimited'),
+  proofBoundaryOnly('proofBoundaryOnly'),
+  excludedNegativeGuard('excludedNegativeGuard');
+
+  const DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRole(
+    this.wire,
+  );
+
+  final String wire;
+}
+
+class DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRow {
+  const DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRow({
+    required this.caseId,
+    required this.title,
+    required this.sourcePhase,
+    required this.selectedReason,
+    required this.diagnosticRole,
+    required this.supportAreaIds,
+    required this.warningReasons,
+    required this.proofLimitReasons,
+    required this.androidProofIds,
+    required this.ownerProofRequired,
+    required this.activeDeniedFieldIds,
+    required this.blockedBoundaryIds,
+    required this.recommendation,
+  });
+
+  final String caseId;
+  final String title;
+  final String sourcePhase;
+  final String selectedReason;
+  final DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRole
+  diagnosticRole;
+  final List<String> supportAreaIds;
+  final List<String> warningReasons;
+  final List<String> proofLimitReasons;
+  final List<String> androidProofIds;
+  final bool ownerProofRequired;
+  final List<String> activeDeniedFieldIds;
+  final List<String> blockedBoundaryIds;
+  final String recommendation;
+
+  Map<String, Object?> toJson() {
+    return <String, Object?>{
+      'caseId': caseId,
+      'title': title,
+      'sourcePhase': sourcePhase,
+      'selectedReason': selectedReason,
+      'diagnosticRole': diagnosticRole.wire,
+      'supportAreaIds': supportAreaIds,
+      'warningReasons': warningReasons,
+      'proofLimitReasons': proofLimitReasons,
+      'androidProofIds': androidProofIds,
+      'ownerProofRequired': ownerProofRequired,
+      'activeDeniedFieldIds': activeDeniedFieldIds,
+      'blockedBoundaryIds': blockedBoundaryIds,
+      'recommendation': recommendation,
+    };
+  }
+}
+
+class DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticResult {
+  DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticResult({
+    required this.selection,
+    required this.rows,
+    required this.sourceDiagnostic,
+  }) : activeDeniedFieldCount = rows.fold<int>(
+         0,
+         (total, row) => total + row.activeDeniedFieldIds.length,
+       ),
+       unprovenAndroidProofCount = rows
+           .where(
+             (row) => row.androidProofIds.any(
+               (caseId) => !_capturedAndroidProofIds.contains(caseId),
+             ),
+           )
+           .length,
+       phase32EProofClaimCount = rows
+           .where((row) => row.androidProofIds.any(_phase32ECaseIds.contains))
+           .length,
+       quietPreparatoryPromotionCount = rows
+           .where(
+             (row) =>
+                 row.diagnosticRole ==
+                     DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRole
+                         .developerDiagnosticInputSupport &&
+                 (row.supportAreaIds.contains('quietMove') ||
+                     row.supportAreaIds.contains('quietPreparatoryMove')),
+           )
+           .length,
+       pvMultiPvPromotionCount = rows
+           .where(
+             (row) =>
+                 row.caseId == _pvMultiPvBoundaryCaseId &&
+                 row.diagnosticRole !=
+                     DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRole
+                         .proofBoundaryOnly,
+           )
+           .length,
+       ownerProofQueueCount = rows
+           .where((row) => row.ownerProofRequired)
+           .length {
+    final hasPolicyLeak =
+        !sourceDiagnostic.safeForPhase33Z ||
+        sourceDiagnostic.hasUnsafePolicyViolation ||
+        activeDeniedFieldCount > 0 ||
+        unprovenAndroidProofCount > 0 ||
+        phase32EProofClaimCount > 0 ||
+        quietPreparatoryPromotionCount > 0 ||
+        pvMultiPvPromotionCount > 0 ||
+        ownerProofQueueCount > 0;
+    safeForPhase34A = !hasPolicyLeak;
+    nextRecommendation = _phase34ARecommendation;
+    productOutputCount = 0;
+    labelLeakCount = 0;
+    finalLabelLeakCount = 0;
+    scoreLeakCount = 0;
+    metricLeakCount = 0;
+    cpLossLeakCount = 0;
+    winProbabilityLeakCount = 0;
+    moveRankingLeakCount = 0;
+    thresholdLeakCount = 0;
+    uiTargetCount = 0;
+    backendTargetCount = 0;
+    persistenceWriteCount = 0;
+    engineCallCount = 0;
+    schedulerExecutionCount = 0;
+    analyzerWiringCount = 0;
+    runtimeImplementationCount = 0;
+    executablePrototypeCount = 0;
+    productAdapterBehaviorCount = 0;
+    savedAnalysisIntegrationCount = 0;
+    stockfishCommandLeakCount = 0;
+    rawUciLeakCount = 0;
+    pvDumpLeakCount = 0;
+    androidCollectorRequirementCount = 0;
+    blockerCount = hasPolicyLeak ? 1 : 0;
+    criticalCount = 0;
+    unsafeCount = hasPolicyLeak ? 1 : 0;
+    status = hasPolicyLeak
+        ? DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticStatus
+              .blockedByUnsafeGoldenSelection
+        : rows.any(
+            (row) =>
+                row.warningReasons.isNotEmpty ||
+                row.proofLimitReasons.isNotEmpty,
+          )
+        ? DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticStatus
+              .selectedGoldenAnalyzerAdapterPrototypeDiagnosticReadyWithWarnings
+        : DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticStatus
+              .selectedGoldenAnalyzerAdapterPrototypeDiagnosticReadyClean;
+  }
+
+  final String selection;
+  final List<DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRow>
+  rows;
+  final DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticResult
+  sourceDiagnostic;
+  late final DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticStatus
+  status;
+  late final bool safeForPhase34A;
+  late final String nextRecommendation;
+  late final int blockerCount;
+  late final int criticalCount;
+  late final int unsafeCount;
+  final int activeDeniedFieldCount;
+  late final int productOutputCount;
+  late final int labelLeakCount;
+  late final int finalLabelLeakCount;
+  late final int scoreLeakCount;
+  late final int metricLeakCount;
+  late final int cpLossLeakCount;
+  late final int winProbabilityLeakCount;
+  late final int moveRankingLeakCount;
+  late final int thresholdLeakCount;
+  late final int uiTargetCount;
+  late final int backendTargetCount;
+  late final int persistenceWriteCount;
+  late final int engineCallCount;
+  late final int schedulerExecutionCount;
+  late final int analyzerWiringCount;
+  late final int runtimeImplementationCount;
+  late final int executablePrototypeCount;
+  late final int productAdapterBehaviorCount;
+  late final int savedAnalysisIntegrationCount;
+  late final int stockfishCommandLeakCount;
+  late final int rawUciLeakCount;
+  late final int pvDumpLeakCount;
+  late final int androidCollectorRequirementCount;
+  final int unprovenAndroidProofCount;
+  final int phase32EProofClaimCount;
+  final int quietPreparatoryPromotionCount;
+  final int pvMultiPvPromotionCount;
+  final int ownerProofQueueCount;
+
+  bool get hasUnsafePolicyViolation =>
+      !safeForPhase34A ||
+      nextRecommendation != _phase34ARecommendation ||
+      blockerCount > 0 ||
+      criticalCount > 0 ||
+      unsafeCount > 0 ||
+      activeDeniedFieldCount > 0 ||
+      productOutputCount > 0 ||
+      labelLeakCount > 0 ||
+      finalLabelLeakCount > 0 ||
+      scoreLeakCount > 0 ||
+      metricLeakCount > 0 ||
+      cpLossLeakCount > 0 ||
+      winProbabilityLeakCount > 0 ||
+      moveRankingLeakCount > 0 ||
+      thresholdLeakCount > 0 ||
+      uiTargetCount > 0 ||
+      backendTargetCount > 0 ||
+      persistenceWriteCount > 0 ||
+      engineCallCount > 0 ||
+      schedulerExecutionCount > 0 ||
+      analyzerWiringCount > 0 ||
+      runtimeImplementationCount > 0 ||
+      executablePrototypeCount > 0 ||
+      productAdapterBehaviorCount > 0 ||
+      savedAnalysisIntegrationCount > 0 ||
+      stockfishCommandLeakCount > 0 ||
+      rawUciLeakCount > 0 ||
+      pvDumpLeakCount > 0 ||
+      androidCollectorRequirementCount > 0 ||
+      unprovenAndroidProofCount > 0 ||
+      phase32EProofClaimCount > 0 ||
+      quietPreparatoryPromotionCount > 0 ||
+      pvMultiPvPromotionCount > 0 ||
+      ownerProofQueueCount > 0;
+
+  bool get hasStrictBlocker => hasUnsafePolicyViolation;
+
+  Map<String, Object?> toJson() {
+    return <String, Object?>{
+      'selection': selection,
+      'status': status.wire,
+      'safeForPhase34A': safeForPhase34A,
+      'safeForNextStep': safeForPhase34A,
+      'nextRecommendation': nextRecommendation,
+      'counts': <String, Object?>{
+        'selectedRowCount': rows.length,
+        'blockerCount': blockerCount,
+        'criticalCount': criticalCount,
+        'unsafeCount': unsafeCount,
+        'analyzerWiringCount': analyzerWiringCount,
+        'runtimeImplementationCount': runtimeImplementationCount,
+        'executablePrototypeCount': executablePrototypeCount,
+        'engineCallCount': engineCallCount,
+        'schedulerExecutionCount': schedulerExecutionCount,
+        'persistenceWriteCount': persistenceWriteCount,
+        'productOutputCount': productOutputCount,
+        'activeDeniedFieldCount': activeDeniedFieldCount,
+        'labelLeakCount': labelLeakCount,
+        'finalLabelLeakCount': finalLabelLeakCount,
+        'scoreLeakCount': scoreLeakCount,
+        'metricLeakCount': metricLeakCount,
+        'cpLossLeakCount': cpLossLeakCount,
+        'winProbabilityLeakCount': winProbabilityLeakCount,
+        'moveRankingLeakCount': moveRankingLeakCount,
+        'thresholdLeakCount': thresholdLeakCount,
+        'uiTargetCount': uiTargetCount,
+        'backendTargetCount': backendTargetCount,
+        'productAdapterBehaviorCount': productAdapterBehaviorCount,
+        'savedAnalysisIntegrationCount': savedAnalysisIntegrationCount,
+        'stockfishCommandLeakCount': stockfishCommandLeakCount,
+        'rawUciLeakCount': rawUciLeakCount,
+        'pvDumpLeakCount': pvDumpLeakCount,
+        'androidCollectorRequirementCount': androidCollectorRequirementCount,
+        'unprovenAndroidProofCount': unprovenAndroidProofCount,
+        'phase32EProofClaimCount': phase32EProofClaimCount,
+        'quietPreparatoryPromotionCount': quietPreparatoryPromotionCount,
+        'pvMultiPvPromotionCount': pvMultiPvPromotionCount,
+        'ownerProofQueueCount': ownerProofQueueCount,
+      },
+      'rows': rows.map((row) => row.toJson()).toList(growable: false),
+    };
+  }
+}
+
 class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandResult {
   const DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandResult({
     required this.exitCode,
@@ -65,7 +369,10 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandResult {
     required this.includeWarnings,
     required this.stdoutText,
     required this.stderrText,
+    this.goldenCaseSelection,
+    this.listGoldenCases = false,
     this.diagnosticResult,
+    this.selectedGoldenDiagnostic,
     this.commandFailure,
   });
 
@@ -77,8 +384,12 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandResult {
   final bool includeWarnings;
   final String stdoutText;
   final String stderrText;
+  final String? goldenCaseSelection;
+  final bool listGoldenCases;
   final DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticResult?
   diagnosticResult;
+  final DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticResult?
+  selectedGoldenDiagnostic;
   final String? commandFailure;
 }
 
@@ -89,6 +400,8 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest {
     required this.strict,
     required this.safeDemo,
     required this.includeWarnings,
+    this.goldenCaseSelection,
+    this.listGoldenCases = false,
     this.showHelp = false,
   }) : isValid = true,
        failure = '';
@@ -101,6 +414,8 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest {
       strict = false,
       safeDemo = true,
       includeWarnings = true,
+      goldenCaseSelection = null,
+      listGoldenCases = false,
       showHelp = false;
 
   final bool isValid;
@@ -110,6 +425,8 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest {
   final bool strict;
   final bool safeDemo;
   final bool includeWarnings;
+  final String? goldenCaseSelection;
+  final bool listGoldenCases;
   final bool showHelp;
 }
 
@@ -299,6 +616,7 @@ void main(List<String> args) {
 DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandResult
 runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
   required List<String> args,
+  List<GoldenAnalysisCase> cases = GoldenAnalysisCases.defaults,
   DebugOnlyBridgeAnalyzerAdapterPrototypeInspectionHarness harness =
       const DebugOnlyBridgeAnalyzerAdapterPrototypeInspectionHarness(),
   DebugOnlyBridgeAnalyzerAdapterPrototypeInspectionHarnessValidation
@@ -317,6 +635,8 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
       strict: request.strict,
       safeDemo: request.safeDemo,
       includeWarnings: request.includeWarnings,
+      goldenCaseSelection: request.goldenCaseSelection,
+      listGoldenCases: request.listGoldenCases,
       stdoutText: '',
       stderrText: _usage(request.failure),
       commandFailure: request.failure,
@@ -331,7 +651,35 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
       strict: request.strict,
       safeDemo: request.safeDemo,
       includeWarnings: request.includeWarnings,
+      goldenCaseSelection: request.goldenCaseSelection,
+      listGoldenCases: request.listGoldenCases,
       stdoutText: _usage('help'),
+      stderrText: '',
+    );
+  }
+
+  if (request.listGoldenCases) {
+    final stdoutText = switch (request.format) {
+      DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticFormat.markdown =>
+        _renderGoldenCaseListMarkdown(cases),
+      DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticFormat.json =>
+        '${_renderGoldenCaseListJson(cases)}\n',
+    };
+    final reportFindings =
+        const DebugOnlyBridgeAnalyzerAdapterPrototypeInspectionHarnessValidationValidator()
+            .validateReportText(stdoutText);
+    return DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandResult(
+      exitCode: reportFindings.any(_isCriticalFinding)
+          ? debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitUnsafePolicy
+          : debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+      format: request.format,
+      section: request.section,
+      strict: request.strict,
+      safeDemo: request.safeDemo,
+      includeWarnings: request.includeWarnings,
+      goldenCaseSelection: request.goldenCaseSelection,
+      listGoldenCases: true,
+      stdoutText: stdoutText,
       stderrText: '',
     );
   }
@@ -342,11 +690,37 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
     validationResult: validationResult,
     harnessResult: harnessResult,
   );
+  final selectedGoldenBuildResult = _buildSelectedGoldenDiagnosticIfRequested(
+    request,
+    cases,
+    diagnostic,
+  );
+  if (selectedGoldenBuildResult.failure != null) {
+    return DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandResult(
+      exitCode:
+          debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitUsage,
+      format: request.format,
+      section: request.section,
+      strict: request.strict,
+      safeDemo: request.safeDemo,
+      includeWarnings: request.includeWarnings,
+      goldenCaseSelection: request.goldenCaseSelection,
+      listGoldenCases: request.listGoldenCases,
+      stdoutText: '',
+      stderrText: _usage(selectedGoldenBuildResult.failure!),
+      commandFailure: selectedGoldenBuildResult.failure,
+    );
+  }
+  final selectedGoldenDiagnostic = selectedGoldenBuildResult.result;
   final stdoutText = switch (request.format) {
     DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticFormat.markdown =>
-      _renderMarkdown(diagnostic, request.section),
+      _renderMarkdown(
+        diagnostic,
+        request.section,
+        selectedGoldenDiagnostic: selectedGoldenDiagnostic,
+      ),
     DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticFormat.json =>
-      '${_renderJson(diagnostic, request.section)}\n',
+      '${_renderJson(diagnostic, request.section, selectedGoldenDiagnostic: selectedGoldenDiagnostic)}\n',
   };
   final reportFindings =
       const DebugOnlyBridgeAnalyzerAdapterPrototypeInspectionHarnessValidationValidator()
@@ -357,15 +731,19 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
       diagnostic,
       request,
       reportFindings: reportFindings,
+      selectedGoldenDiagnostic: selectedGoldenDiagnostic,
     ),
     format: request.format,
     section: request.section,
     strict: request.strict,
     safeDemo: request.safeDemo,
     includeWarnings: request.includeWarnings,
+    goldenCaseSelection: request.goldenCaseSelection,
+    listGoldenCases: request.listGoldenCases,
     stdoutText: stdoutText,
     stderrText: '',
     diagnosticResult: diagnostic,
+    selectedGoldenDiagnostic: selectedGoldenDiagnostic,
   );
 }
 
@@ -382,6 +760,9 @@ validateDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticArgs(
   var sectionSeen = false;
   var safeDemoSeen = false;
   var includeWarningsSeen = false;
+  var goldenCaseSelectionSeen = false;
+  var listGoldenCasesSeen = false;
+  String? goldenCaseSelection;
 
   for (final arg in args) {
     if (arg == '--help' || arg == '-h') {
@@ -397,6 +778,8 @@ validateDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticArgs(
         strict: false,
         safeDemo: true,
         includeWarnings: true,
+        goldenCaseSelection: null,
+        listGoldenCases: false,
         showHelp: true,
       );
     }
@@ -432,6 +815,30 @@ validateDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticArgs(
       sectionSeen = true;
       continue;
     }
+    if (arg.startsWith(_goldenCaseFlag)) {
+      if (goldenCaseSelectionSeen) {
+        return const DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest.invalid(
+          'duplicateGoldenCase',
+        );
+      }
+      goldenCaseSelection = arg.substring(_goldenCaseFlag.length).trim();
+      if (goldenCaseSelection.isEmpty) {
+        return const DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest.invalid(
+          'emptyGoldenCase',
+        );
+      }
+      goldenCaseSelectionSeen = true;
+      continue;
+    }
+    if (arg == _listGoldenCasesFlag) {
+      if (listGoldenCasesSeen) {
+        return const DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest.invalid(
+          'duplicateListGoldenCases',
+        );
+      }
+      listGoldenCasesSeen = true;
+      continue;
+    }
     if (arg == _strictFlag) {
       strict = true;
       continue;
@@ -461,12 +868,20 @@ validateDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticArgs(
     );
   }
 
+  if (listGoldenCasesSeen && goldenCaseSelectionSeen) {
+    return const DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest.invalid(
+      'listGoldenCasesCannotBeCombinedWithGoldenCase',
+    );
+  }
+
   return DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest.valid(
     format: format,
     section: section,
     strict: strict,
     safeDemo: safeDemo,
     includeWarnings: includeWarnings,
+    goldenCaseSelection: goldenCaseSelection,
+    listGoldenCases: listGoldenCasesSeen,
   );
 }
 
@@ -474,9 +889,13 @@ int debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitCode(
   DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticResult diagnostic,
   DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest request, {
   List<String> reportFindings = const <String>[],
+  DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticResult?
+  selectedGoldenDiagnostic,
 }) {
   final hasReportLeak = reportFindings.any(_isCriticalFinding);
-  if (diagnostic.hasUnsafePolicyViolation || hasReportLeak) {
+  if (diagnostic.hasUnsafePolicyViolation ||
+      hasReportLeak ||
+      (selectedGoldenDiagnostic?.hasUnsafePolicyViolation ?? false)) {
     return debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitUnsafePolicy;
   }
   if (request.strict &&
@@ -510,7 +929,8 @@ int debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitCode(
           diagnostic.unprovenAndroidProofCount > 0 ||
           diagnostic.phase32EProofClaimCount > 0 ||
           diagnostic.nextRecommendation != _phase33ZRecommendation ||
-          !diagnostic.safeForPhase33Z)) {
+          !diagnostic.safeForPhase33Z ||
+          (selectedGoldenDiagnostic?.hasStrictBlocker ?? false))) {
     return debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitBlockedStrict;
   }
   return debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess;
@@ -518,8 +938,10 @@ int debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitCode(
 
 String _renderMarkdown(
   DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticResult diagnostic,
-  DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection section,
-) {
+  DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection section, {
+  DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticResult?
+  selectedGoldenDiagnostic,
+}) {
   final buffer = StringBuffer()
     ..writeln('# Debug-Only Bridge Analyzer Adapter Prototype Diagnostic')
     ..writeln()
@@ -590,22 +1012,37 @@ String _renderMarkdown(
   )) {
     _writeRecommendation(buffer, diagnostic);
   }
+  if (selectedGoldenDiagnostic != null &&
+      _includeSection(
+        section,
+        DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection.golden,
+      )) {
+    _writeSelectedGoldenDiagnostic(buffer, selectedGoldenDiagnostic);
+  }
   return buffer.toString();
 }
 
 String _renderJson(
   DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticResult diagnostic,
-  DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection section,
-) {
-  return const JsonEncoder.withIndent(
-    ' ',
-  ).convert(_jsonPayload(diagnostic, section));
+  DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection section, {
+  DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticResult?
+  selectedGoldenDiagnostic,
+}) {
+  return const JsonEncoder.withIndent(' ').convert(
+    _jsonPayload(
+      diagnostic,
+      section,
+      selectedGoldenDiagnostic: selectedGoldenDiagnostic,
+    ),
+  );
 }
 
 Map<String, Object?> _jsonPayload(
   DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticResult diagnostic,
-  DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection section,
-) {
+  DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection section, {
+  DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticResult?
+  selectedGoldenDiagnostic,
+}) {
   final payload = <String, Object?>{
     'version': debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandVersion,
     'diagnosticStatus': diagnostic.status.wire,
@@ -668,6 +1105,13 @@ Map<String, Object?> _jsonPayload(
     DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection.recommendation,
   )) {
     payload['next'] = _recommendationJson(diagnostic);
+  }
+  if (selectedGoldenDiagnostic != null &&
+      _includeSection(
+        section,
+        DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection.golden,
+      )) {
+    payload['selectedGoldenDiagnostic'] = selectedGoldenDiagnostic.toJson();
   }
   return payload;
 }
@@ -1074,6 +1518,327 @@ Map<String, Object?> _countsJson(
   };
 }
 
+void _writeSelectedGoldenDiagnostic(
+  StringBuffer buffer,
+  DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticResult result,
+) {
+  buffer
+    ..writeln('## Selected Golden Analyzer Adapter Prototype Diagnostic')
+    ..writeln('- selection: ${result.selection}')
+    ..writeln('- selected Golden status: ${result.status.wire}')
+    ..writeln('- safe for Phase 34A: ${result.safeForPhase34A}')
+    ..writeln('- safe for next step: ${result.safeForPhase34A}')
+    ..writeln('- next recommendation: ${result.nextRecommendation}')
+    ..writeln('- selected row count: ${result.rows.length}')
+    ..writeln('- blocker count: ${result.blockerCount}')
+    ..writeln('- critical count: ${result.criticalCount}')
+    ..writeln('- unsafe count: ${result.unsafeCount}')
+    ..writeln('- active denied field count: ${result.activeDeniedFieldCount}')
+    ..writeln('- product output count: ${result.productOutputCount}')
+    ..writeln('- analyzer wiring count: ${result.analyzerWiringCount}')
+    ..writeln(
+      '- runtime implementation count: ${result.runtimeImplementationCount}',
+    )
+    ..writeln(
+      '- executable prototype count: ${result.executablePrototypeCount}',
+    )
+    ..writeln('- engine call count: ${result.engineCallCount}')
+    ..writeln('- scheduler execution count: ${result.schedulerExecutionCount}')
+    ..writeln('- persistence write count: ${result.persistenceWriteCount}')
+    ..writeln(
+      '- Phase 32E proof claim count: ${result.phase32EProofClaimCount}',
+    )
+    ..writeln(
+      '- unproven Android proof count: ${result.unprovenAndroidProofCount}',
+    )
+    ..writeln(
+      '- quiet/preparatory promotion count: ${result.quietPreparatoryPromotionCount}',
+    )
+    ..writeln('- PV/MultiPV promotion count: ${result.pvMultiPvPromotionCount}')
+    ..writeln('- owner proof queue count: ${result.ownerProofQueueCount}')
+    ..writeln()
+    ..writeln(
+      '| Case ID | Title | Source phase | Role | Reason | Support areas | Warnings | Proof limits | Android proof IDs | Owner proof | Active denied fields | Blocked boundaries | Recommendation |',
+    )
+    ..writeln(
+      '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    );
+  for (final row in result.rows) {
+    buffer.writeln(
+      '| ${row.caseId} | ${row.title} | ${row.sourcePhase} | '
+      '${row.diagnosticRole.wire} | ${row.selectedReason} | '
+      '${_ids(row.supportAreaIds)} | ${_ids(row.warningReasons)} | '
+      '${_ids(row.proofLimitReasons)} | ${_ids(row.androidProofIds)} | '
+      '${row.ownerProofRequired} | ${_ids(row.activeDeniedFieldIds)} | '
+      '${_ids(row.blockedBoundaryIds)} | ${row.recommendation} |',
+    );
+  }
+  buffer.writeln();
+}
+
+String _renderGoldenCaseListMarkdown(List<GoldenAnalysisCase> cases) {
+  final sorted = cases.toList()..sort((a, b) => a.id.compareTo(b.id));
+  final buffer = StringBuffer()
+    ..writeln(
+      '# Debug-Only Bridge Analyzer Adapter Prototype Golden Case Selection',
+    )
+    ..writeln()
+    ..writeln(
+      '- version: $debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandVersion',
+    )
+    ..writeln('- default selection: $_defaultSelectedGoldenSelection')
+    ..writeln('- expanded selection: $_allSafeSelectedGoldenSelection')
+    ..writeln('- next recommendation: $_phase34ARecommendation')
+    ..writeln()
+    ..writeln(
+      '| Case ID | Title | Category | Source phase | Default | All safe |',
+    )
+    ..writeln('| --- | --- | --- | --- | --- | --- |');
+  for (final item in sorted) {
+    buffer.writeln(
+      '| ${item.id} | ${item.title} | ${item.category.wire} | '
+      '${_sourcePhaseForCase(item)} | '
+      '${_defaultSelectedGoldenCaseIds.contains(item.id)} | '
+      '${_allSafeSelectedGoldenCaseIds.contains(item.id)} |',
+    );
+  }
+  return buffer.toString();
+}
+
+String _renderGoldenCaseListJson(List<GoldenAnalysisCase> cases) {
+  final sorted = cases.toList()..sort((a, b) => a.id.compareTo(b.id));
+  return const JsonEncoder.withIndent(' ').convert(<String, Object?>{
+    'version': debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandVersion,
+    'defaultSelection': _defaultSelectedGoldenSelection,
+    'expandedSelection': _allSafeSelectedGoldenSelection,
+    'nextRecommendation': _phase34ARecommendation,
+    'cases': sorted
+        .map(
+          (item) => <String, Object?>{
+            'caseId': item.id,
+            'title': item.title,
+            'category': item.category.wire,
+            'sourcePhase': _sourcePhaseForCase(item),
+            'includedInDefaultSelection': _defaultSelectedGoldenCaseIds
+                .contains(item.id),
+            'includedInAllSafeSelection': _allSafeSelectedGoldenCaseIds
+                .contains(item.id),
+          },
+        )
+        .toList(growable: false),
+  });
+}
+
+class _SelectedGoldenDiagnosticBuildResult {
+  const _SelectedGoldenDiagnosticBuildResult.result(this.result)
+    : failure = null;
+
+  const _SelectedGoldenDiagnosticBuildResult.failure(this.failure)
+    : result = null;
+
+  final DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticResult?
+  result;
+  final String? failure;
+}
+
+_SelectedGoldenDiagnosticBuildResult _buildSelectedGoldenDiagnosticIfRequested(
+  DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest request,
+  List<GoldenAnalysisCase> cases,
+  DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticResult sourceDiagnostic,
+) {
+  if (request.goldenCaseSelection == null &&
+      request.section !=
+          DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection.golden) {
+    return const _SelectedGoldenDiagnosticBuildResult.result(null);
+  }
+
+  final selection =
+      request.goldenCaseSelection ?? _defaultSelectedGoldenSelection;
+  final ids = _resolveSelectedGoldenCaseIds(selection, cases);
+  if (ids == null) {
+    return const _SelectedGoldenDiagnosticBuildResult.failure(
+      'unknownGoldenCase',
+    );
+  }
+  final byId = {for (final item in cases) item.id: item};
+  if (ids.any((id) => !byId.containsKey(id))) {
+    return const _SelectedGoldenDiagnosticBuildResult.failure(
+      'configuredGoldenCaseMissing',
+    );
+  }
+
+  final rows = ids
+      .map((id) => _selectedGoldenRowForCase(byId[id]!))
+      .toList(growable: false);
+  return _SelectedGoldenDiagnosticBuildResult.result(
+    DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticResult(
+      selection: selection,
+      rows: rows,
+      sourceDiagnostic: sourceDiagnostic,
+    ),
+  );
+}
+
+List<String>? _resolveSelectedGoldenCaseIds(
+  String selection,
+  List<GoldenAnalysisCase> cases,
+) {
+  if (selection == _defaultSelectedGoldenSelection) {
+    return _defaultSelectedGoldenCaseIds;
+  }
+  if (selection == _allSafeSelectedGoldenSelection) {
+    return _allSafeSelectedGoldenCaseIds;
+  }
+  if (cases.any((item) => item.id == selection)) {
+    return <String>[selection];
+  }
+  return null;
+}
+
+DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRow
+_selectedGoldenRowForCase(GoldenAnalysisCase item) {
+  final role = _selectedGoldenRoleForCase(item);
+  final supportAreaIds = _supportAreaIdsForCase(item);
+  final proofLimitReasons = <String>[
+    if (_phase32ECaseIds.contains(item.id)) 'phase32ECaseIsNotCapturedProof',
+    if (item.id == _pvMultiPvBoundaryCaseId)
+      'pvMultiPvBoundaryWatchListOnlyNoOwnerProof',
+    if (role ==
+        DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRole
+            .excludedNegativeGuard)
+      'quietPreparatoryExcludedFromActiveDiagnosticInput',
+  ];
+  final warningReasons = <String>[
+    'developerOnlySelectedGoldenAnalyzerAdapterPrototypeDiagnosticNoEngineExecution',
+    if (role ==
+        DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRole
+            .warningLimited)
+      'diagnosticCoverageIsWarningLimited',
+    if (role ==
+        DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRole
+            .proofBoundaryOnly)
+      'proofBoundaryOnlyNoCapturedAndroidProofClaim',
+    if (role ==
+        DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRole
+            .excludedNegativeGuard)
+      'negativeGuardOnlyNotDiagnosticInputSupport',
+  ];
+  final androidProofIds =
+      _capturedAndroidProofIds.contains(item.id) &&
+          !_phase32ECaseIds.contains(item.id)
+      ? <String>[item.id]
+      : const <String>[];
+
+  return DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRow(
+    caseId: item.id,
+    title: item.title,
+    sourcePhase: _sourcePhaseForCase(item),
+    selectedReason: _selectedReasonForCase(item),
+    diagnosticRole: role,
+    supportAreaIds: supportAreaIds,
+    warningReasons: warningReasons,
+    proofLimitReasons: proofLimitReasons,
+    androidProofIds: androidProofIds,
+    ownerProofRequired: false,
+    activeDeniedFieldIds: const <String>[],
+    blockedBoundaryIds: _blockedBoundaryIdsForCase(item, role),
+    recommendation: _phase34ARecommendation,
+  );
+}
+
+DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRole
+_selectedGoldenRoleForCase(GoldenAnalysisCase item) {
+  if (_isQuietPreparatoryCase(item)) {
+    return DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRole
+        .excludedNegativeGuard;
+  }
+  if (item.id == _pvMultiPvBoundaryCaseId) {
+    return DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRole
+        .proofBoundaryOnly;
+  }
+  if (_phase32ECaseIds.contains(item.id) ||
+      item.category == GoldenAnalysisCategory.budgetPressure) {
+    return DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRole
+        .warningLimited;
+  }
+  if (item.category == GoldenAnalysisCategory.endgamePrecision ||
+      item.category == GoldenAnalysisCategory.openingKnownSkip ||
+      item.category == GoldenAnalysisCategory.forcedMoveSkip) {
+    return DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRole
+        .contextOnly;
+  }
+  return DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRole
+      .developerDiagnosticInputSupport;
+}
+
+List<String> _supportAreaIdsForCase(GoldenAnalysisCase item) {
+  return <String>{
+    item.category.wire,
+    item.sourceType.wire,
+    item.evidenceIntent.wire,
+    ...item.motifTags.map((tag) => tag.wire),
+    if (_phase32ECaseIds.contains(item.id)) 'phase32E',
+    if (item.id == _pvMultiPvBoundaryCaseId) 'pvMultiPvBoundary',
+    if (_capturedAndroidProofIds.contains(item.id)) 'capturedAndroidProof',
+  }.where((value) => value.trim().isNotEmpty).toList()..sort();
+}
+
+List<String> _blockedBoundaryIdsForCase(
+  GoldenAnalysisCase item,
+  DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRole role,
+) {
+  return <String>{
+    ..._selectedGoldenAlwaysBlockedBoundaryIds,
+    if (_phase32ECaseIds.contains(item.id)) 'phase32ECapturedAndroidProofClaim',
+    if (item.id == _pvMultiPvBoundaryCaseId) 'pvMultiPvOwnerProofEscalation',
+    if (role ==
+        DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRole
+            .excludedNegativeGuard)
+      'quietPreparatoryDiagnosticInputPromotion',
+  }.toList()..sort();
+}
+
+String _selectedReasonForCase(GoldenAnalysisCase item) {
+  return _selectedReasonByCaseId[item.id] ??
+      switch (_selectedGoldenRoleForCase(item)) {
+        DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRole
+            .excludedNegativeGuard =>
+          'quiet/preparatory negative guard remains excluded from active diagnostic input',
+        DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRole
+            .proofBoundaryOnly =>
+          'PV/MultiPV boundary watch-list evidence only',
+        DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRole
+            .warningLimited =>
+          'warning-limited selected Golden diagnostic coverage',
+        DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRole
+            .contextOnly =>
+          'context-only selected Golden diagnostic coverage',
+        DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticRole
+            .developerDiagnosticInputSupport =>
+          'developer-only analyzer adapter prototype diagnostic support coverage',
+      };
+}
+
+String _sourcePhaseForCase(GoldenAnalysisCase item) {
+  if (_phase32ECaseIds.contains(item.id) ||
+      item.notes.any((note) => note.contains('Phase 32E'))) {
+    return 'Phase 32E';
+  }
+  if (item.notes.any((note) => note.contains('Phase 30W'))) {
+    return 'Phase 30W';
+  }
+  return 'existing';
+}
+
+bool _isQuietPreparatoryCase(GoldenAnalysisCase item) {
+  return item.category == GoldenAnalysisCategory.quietPreparatoryMove ||
+      item.motifTags.any(
+        (tag) =>
+            tag == GoldenMotifTag.quietMove ||
+            tag == GoldenMotifTag.quietPreparatoryMove,
+      );
+}
+
 DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticStatus _diagnosticStatus(
   DebugOnlyBridgeAnalyzerAdapterPrototypeInspectionHarnessValidationResult
   validation,
@@ -1187,16 +1952,18 @@ List<String> _sorted(Iterable<String> values) {
 String _usage(String failure) {
   return [
     if (failure.isNotEmpty && failure != 'help') 'error: $failure',
-    'usage: dart run tool/debug_only_bridge_analyzer_adapter_prototype_diagnostic_command.dart [--format=markdown|json] [--strict] [--safe-demo] [--include-warnings] [--section=all|snapshot|packets|policy|records|proof|boundaries|runtime|recommendation]',
+    'usage: dart run tool/debug_only_bridge_analyzer_adapter_prototype_diagnostic_command.dart [--format=markdown|json] [--strict] [--safe-demo] [--include-warnings] [--section=all|snapshot|packets|policy|records|proof|boundaries|runtime|recommendation|golden] [--golden-case=<caseId>|default-selected|all-safe-selected] [--list-golden-cases]',
     'defaults: --format=markdown --safe-demo --include-warnings --section=all',
   ].join('\n');
 }
 
 const _formatFlag = '--format=';
 const _sectionFlag = '--section=';
+const _goldenCaseFlag = '--golden-case=';
 const _strictFlag = '--strict';
 const _safeDemoFlag = '--safe-demo';
 const _includeWarningsFlag = '--include-warnings';
+const _listGoldenCasesFlag = '--list-golden-cases';
 
 const _phase33XRequirement =
     'validateDebugOnlyBridgeAnalyzerAdapterPrototypeInspectionHarness';
@@ -1204,3 +1971,107 @@ const _phase33YRequirement =
     'proceedToDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand';
 const _phase33ZRecommendation =
     'proceedToSelectedGoldenAnalyzerAdapterPrototypeDiagnosticRun';
+const _phase34ARecommendation =
+    'validateSelectedGoldenAnalyzerAdapterPrototypeDiagnosticRun';
+
+const _defaultSelectedGoldenSelection = 'default-selected';
+const _allSafeSelectedGoldenSelection = 'all-safe-selected';
+const _pvMultiPvBoundaryCaseId = 'pv-multipv-support-boundary-32e';
+
+const _defaultSelectedGoldenCaseIds = <String>[
+  'queen-win-major-swing',
+  'forcing-line-variation-hard-case',
+  'sacrifice-compensation-hard-case',
+  'king-safety-mating-net-pressure-32e',
+  'endgame-precision-candidate-spread-32e',
+  'budget-pressure-wide-candidate-32e',
+  _pvMultiPvBoundaryCaseId,
+  'quiet-preparatory-hard-case',
+];
+
+const _allSafeSelectedGoldenCaseIds = <String>[
+  ..._defaultSelectedGoldenCaseIds,
+  'simple-tactical-capture-check',
+  'mate-threat-fast-evidence',
+  'material-sacrifice-compensation',
+  'king-safety-mating-net-hard-case',
+  'technical-endgame-conservative',
+  'budget-pressure-candidates',
+  'quiet-preparatory-uncertain',
+  'suppression-forced-only-legal-32e',
+];
+
+const _phase32ECaseIds = <String>{
+  'king-safety-mating-net-pressure-32e',
+  'endgame-precision-candidate-spread-32e',
+  'suppression-forced-only-legal-32e',
+  'budget-pressure-wide-candidate-32e',
+  _pvMultiPvBoundaryCaseId,
+};
+
+const _capturedAndroidProofIds = <String>{
+  'mate-threat-fast-evidence',
+  'queen-win-major-swing',
+  'simple-tactical-capture-check',
+};
+
+const _selectedGoldenAlwaysBlockedBoundaryIds = <String>{
+  'androidCollectorExecution',
+  'analyzerWiring',
+  'backendTarget',
+  'classifierLabels',
+  'cpLoss',
+  'directEngineCall',
+  'engineResults',
+  'executablePrototypeBehavior',
+  'finalMoveLabels',
+  'moveRanking',
+  'numericMoveScores',
+  'officialMetrics',
+  'persistenceWrite',
+  'productAdapterBehavior',
+  'productOutput',
+  'pvDump',
+  'rawUci',
+  'runtimeImplementation',
+  'savedAnalysisIntegration',
+  'schedulerExecution',
+  'stockfishCommand',
+  'thresholds',
+  'uiTarget',
+  'winProbability',
+};
+
+const _selectedReasonByCaseId = <String, String>{
+  'queen-win-major-swing':
+      'tactical/material swing case inspected as safe developer diagnostic support',
+  'forcing-line-variation-hard-case':
+      'forcing-line case inspected as safe developer diagnostic support',
+  'sacrifice-compensation-hard-case':
+      'candidate-spread material case inspected as safe developer diagnostic support',
+  'king-safety-mating-net-pressure-32e':
+      'Phase 32E king-safety and mating-net case kept warning-limited without captured proof claim',
+  'endgame-precision-candidate-spread-32e':
+      'Phase 32E endgame candidate-spread case kept warning-limited',
+  'budget-pressure-wide-candidate-32e':
+      'Phase 32E budget-pressure case kept warning-limited',
+  _pvMultiPvBoundaryCaseId:
+      'Phase 32E PV/MultiPV case kept proof-boundary and watch-list only',
+  'quiet-preparatory-hard-case':
+      'quiet/preparatory negative guard inspected only as excluded guard',
+  'simple-tactical-capture-check':
+      'tactical capture/check case inspected with captured Android proof boundary preserved',
+  'mate-threat-fast-evidence':
+      'mate-threat fast-evidence case inspected with captured Android proof boundary preserved',
+  'material-sacrifice-compensation':
+      'material compensation case inspected as safe developer diagnostic support',
+  'king-safety-mating-net-hard-case':
+      'king-safety hard case inspected as safe developer diagnostic support',
+  'technical-endgame-conservative':
+      'technical endgame case kept context-only for conservative inspection',
+  'budget-pressure-candidates': 'budget-pressure case kept warning-limited',
+  'quiet-preparatory-uncertain':
+      'quiet/preparatory uncertain negative guard inspected only as excluded guard',
+  'suppression-forced-only-legal-32e':
+      'Phase 32E forced-only suppression case kept warning-limited',
+};
