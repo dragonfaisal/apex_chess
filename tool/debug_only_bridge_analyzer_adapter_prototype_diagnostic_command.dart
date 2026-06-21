@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'dart:io' as io;
 
+import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_action_plan_patch_set.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_inspection_harness.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_inspection_harness_validation.dart';
+import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_selected_diagnostic_action_plan.dart';
 import 'package:apex_chess/features/pgn_review/application/golden_analysis_suite.dart';
 
 const debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandVersion =
@@ -34,6 +36,8 @@ enum DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection {
   boundaries('boundaries'),
   runtime('runtime'),
   recommendation('recommendation'),
+  actionPlan('action-plan'),
+  patches('patches'),
   golden('golden');
 
   const DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection(this.wire);
@@ -1012,6 +1016,18 @@ String _renderMarkdown(
   )) {
     _writeRecommendation(buffer, diagnostic);
   }
+  if (_includeSection(
+    section,
+    DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection.actionPlan,
+  )) {
+    _writeActionPlan(buffer);
+  }
+  if (_includeSection(
+    section,
+    DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection.patches,
+  )) {
+    _writePatches(buffer);
+  }
   if (selectedGoldenDiagnostic != null &&
       _includeSection(
         section,
@@ -1105,6 +1121,18 @@ Map<String, Object?> _jsonPayload(
     DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection.recommendation,
   )) {
     payload['next'] = _recommendationJson(diagnostic);
+  }
+  if (_includeSection(
+    section,
+    DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection.actionPlan,
+  )) {
+    payload['actionPlan'] = _actionPlanJson();
+  }
+  if (_includeSection(
+    section,
+    DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection.patches,
+  )) {
+    payload['patches'] = _patchSetJson();
   }
   if (selectedGoldenDiagnostic != null &&
       _includeSection(
@@ -1576,6 +1604,137 @@ void _writeSelectedGoldenDiagnostic(
   buffer.writeln();
 }
 
+void _writeActionPlan(StringBuffer buffer) {
+  final result =
+      const DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedDiagnosticActionPlan()
+          .evaluate();
+  buffer
+    ..writeln('## Action Plan Metadata Summary')
+    ..writeln('- action plan status: ${result.status.wire}')
+    ..writeln('- safe for Phase 34C: ${result.safeForPhase34C}')
+    ..writeln('- next recommendation: ${result.nextRecommendation}')
+    ..writeln('- total actions: ${result.totalActions}')
+    ..writeln(
+      '- safe internal support actions: ${result.safeInternalSupportActionCount}',
+    )
+    ..writeln(
+      '- warning-limited follow-up actions: ${result.warningLimitedFollowupActionCount}',
+    )
+    ..writeln('- proof boundary actions: ${result.proofBoundaryActionCount}')
+    ..writeln('- excluded guard actions: ${result.excludedGuardActionCount}')
+    ..writeln(
+      '- denied-field protection actions: ${result.deniedFieldProtectionActionCount}',
+    )
+    ..writeln(
+      '- blocked integration actions: ${result.blockedIntegrationActionCount}',
+    )
+    ..writeln('- active denied field count: ${result.activeDeniedFieldCount}')
+    ..writeln('- analyzer wiring count: ${result.analyzerWiringCount}')
+    ..writeln(
+      '- runtime implementation count: ${result.runtimeImplementationCount}',
+    )
+    ..writeln('- engine call count: ${result.engineCallCount}')
+    ..writeln('- scheduler execution count: ${result.schedulerExecutionCount}')
+    ..writeln();
+}
+
+void _writePatches(StringBuffer buffer) {
+  final result =
+      const DebugOnlyBridgeAnalyzerAdapterPrototypeActionPlanPatchSet()
+          .evaluate();
+  buffer
+    ..writeln('## Action Plan Patch Set Metadata Summary')
+    ..writeln('- patch set status: ${result.status.wire}')
+    ..writeln('- safe for Phase 34D: ${result.safeForPhase34D}')
+    ..writeln('- next recommendation: ${result.nextRecommendation}')
+    ..writeln('- total patch records: ${result.totalPatchRecords}')
+    ..writeln(
+      '- support traceability patches: ${result.supportTraceabilityPatchCount}',
+    )
+    ..writeln(
+      '- warning follow-up marker patches: ${result.warningFollowupMarkerPatchCount}',
+    )
+    ..writeln(
+      '- proof boundary marker patches: ${result.proofBoundaryMarkerPatchCount}',
+    )
+    ..writeln(
+      '- excluded guard preservation patches: ${result.excludedGuardPreservationPatchCount}',
+    )
+    ..writeln(
+      '- denied-field protection patches: ${result.deniedFieldProtectionPatchCount}',
+    )
+    ..writeln(
+      '- blocked integration sentinel patches: ${result.blockedIntegrationSentinelPatchCount}',
+    )
+    ..writeln(
+      '- Phase 34D practical diagnostic requirement patches: ${result.phase34DPracticalDiagnosticRequirementPatchCount}',
+    )
+    ..writeln('- active denied field count: ${result.activeDeniedFieldCount}')
+    ..writeln('- analyzer wiring count: ${result.analyzerWiringCount}')
+    ..writeln(
+      '- runtime implementation count: ${result.runtimeImplementationCount}',
+    )
+    ..writeln('- engine call count: ${result.engineCallCount}')
+    ..writeln('- scheduler execution count: ${result.schedulerExecutionCount}')
+    ..writeln();
+}
+
+Map<String, Object?> _actionPlanJson() {
+  final result =
+      const DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedDiagnosticActionPlan()
+          .evaluate();
+  return <String, Object?>{
+    'status': result.status.wire,
+    'safeForPhase34C': result.safeForPhase34C,
+    'nextRecommendation': result.nextRecommendation,
+    'counts': <String, Object?>{
+      'totalActions': result.totalActions,
+      'safeInternalSupportActionCount': result.safeInternalSupportActionCount,
+      'warningLimitedFollowupActionCount':
+          result.warningLimitedFollowupActionCount,
+      'proofBoundaryActionCount': result.proofBoundaryActionCount,
+      'excludedGuardActionCount': result.excludedGuardActionCount,
+      'deniedFieldProtectionActionCount':
+          result.deniedFieldProtectionActionCount,
+      'blockedIntegrationActionCount': result.blockedIntegrationActionCount,
+      'activeDeniedFieldCount': result.activeDeniedFieldCount,
+      'analyzerWiringCount': result.analyzerWiringCount,
+      'runtimeImplementationCount': result.runtimeImplementationCount,
+      'engineCallCount': result.engineCallCount,
+      'schedulerExecutionCount': result.schedulerExecutionCount,
+    },
+  };
+}
+
+Map<String, Object?> _patchSetJson() {
+  final result =
+      const DebugOnlyBridgeAnalyzerAdapterPrototypeActionPlanPatchSet()
+          .evaluate();
+  return <String, Object?>{
+    'status': result.status.wire,
+    'safeForPhase34D': result.safeForPhase34D,
+    'nextRecommendation': result.nextRecommendation,
+    'counts': <String, Object?>{
+      'totalPatchRecords': result.totalPatchRecords,
+      'supportTraceabilityPatchCount': result.supportTraceabilityPatchCount,
+      'warningFollowupMarkerPatchCount': result.warningFollowupMarkerPatchCount,
+      'proofBoundaryMarkerPatchCount': result.proofBoundaryMarkerPatchCount,
+      'excludedGuardPreservationPatchCount':
+          result.excludedGuardPreservationPatchCount,
+      'deniedFieldProtectionPatchCount': result.deniedFieldProtectionPatchCount,
+      'blockedIntegrationSentinelPatchCount':
+          result.blockedIntegrationSentinelPatchCount,
+      'phase34DPracticalDiagnosticRequirementPatchCount':
+          result.phase34DPracticalDiagnosticRequirementPatchCount,
+      'activeDeniedFieldCount': result.activeDeniedFieldCount,
+      'analyzerWiringCount': result.analyzerWiringCount,
+      'runtimeImplementationCount': result.runtimeImplementationCount,
+      'engineCallCount': result.engineCallCount,
+      'schedulerExecutionCount': result.schedulerExecutionCount,
+    },
+  };
+}
+
 String _renderGoldenCaseListMarkdown(List<GoldenAnalysisCase> cases) {
   final sorted = cases.toList()..sort((a, b) => a.id.compareTo(b.id));
   final buffer = StringBuffer()
@@ -1952,7 +2111,7 @@ List<String> _sorted(Iterable<String> values) {
 String _usage(String failure) {
   return [
     if (failure.isNotEmpty && failure != 'help') 'error: $failure',
-    'usage: dart run tool/debug_only_bridge_analyzer_adapter_prototype_diagnostic_command.dart [--format=markdown|json] [--strict] [--safe-demo] [--include-warnings] [--section=all|snapshot|packets|policy|records|proof|boundaries|runtime|recommendation|golden] [--golden-case=<caseId>|default-selected|all-safe-selected] [--list-golden-cases]',
+    'usage: dart run tool/debug_only_bridge_analyzer_adapter_prototype_diagnostic_command.dart [--format=markdown|json] [--strict] [--safe-demo] [--include-warnings] [--section=all|snapshot|packets|policy|records|proof|boundaries|runtime|recommendation|action-plan|patches|golden] [--golden-case=<caseId>|default-selected|all-safe-selected] [--list-golden-cases]',
     'defaults: --format=markdown --safe-demo --include-warnings --section=all',
   ].join('\n');
 }

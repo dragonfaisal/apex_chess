@@ -55,6 +55,11 @@ void main() {
         ),
       );
       expect(result.stdoutText, contains('## Recommendation'));
+      expect(result.stdoutText, contains('## Action Plan Metadata Summary'));
+      expect(
+        result.stdoutText,
+        contains('## Action Plan Patch Set Metadata Summary'),
+      );
       expect(
         result.stdoutText,
         contains(
@@ -112,6 +117,8 @@ void main() {
       expect(decoded['boundaries'], isA<Map<String, Object?>>());
       expect(decoded['runtime'], isA<Map<String, Object?>>());
       expect(decoded['next'], isA<Map<String, Object?>>());
+      expect(decoded['actionPlan'], isA<Map<String, Object?>>());
+      expect(decoded['patches'], isA<Map<String, Object?>>());
     });
 
     test('strict mode succeeds for safe demo', () {
@@ -189,6 +196,14 @@ void main() {
         contains(
           'proceedToSelectedGoldenAnalyzerAdapterPrototypeDiagnosticRun',
         ),
+      );
+      expect(
+        _run(args: const <String>['--section=action-plan']).stdoutText,
+        contains('## Action Plan Metadata Summary'),
+      );
+      expect(
+        _run(args: const <String>['--section=patches']).stdoutText,
+        contains('## Action Plan Patch Set Metadata Summary'),
       );
       expect(
         _run(args: const <String>['--section=golden']).stdoutText,

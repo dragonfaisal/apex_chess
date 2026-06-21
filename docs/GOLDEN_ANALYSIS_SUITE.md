@@ -922,3 +922,27 @@ add official metrics, compute CP-loss, compute win probability, expose Stockfish
 active output, add UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine access,
 implement analyzer runtime, implement runtime bridge behavior, implement executable prototype behavior, implement
 wiring, product adapter behavior, saved analysis integration, readiness summaries, readiness gates, or third-party data.
+
+## Phase 34C Implement Analyzer Adapter Prototype Action Plan Patch Set
+
+Phase 34C applies the Phase 34B action plan as a small developer-only metadata patch set. It adds traceability from
+selected Golden diagnostics to action records and then to patch intents, without creating runtime behavior, analyzer
+wiring, product output, readiness summaries, or readiness gates.
+
+Patch set behavior:
+
+- safe support actions become `supportTraceabilityPatches` on diagnostic metadata only.
+- warning-limited actions become `warningFollowupMarkerPatches` only.
+- PV/MultiPV actions become `proofBoundaryMarkerPatches` and remain watch-list/proof-boundary only.
+- quiet/preparatory actions become `excludedGuardPreservationPatches` only.
+- denied-field actions become inactive `deniedFieldProtectionPatches` only.
+- runtime, analyzer wiring, engine, scheduler, product adapter, saved analysis, UI, backend, persistence, cache, and
+database integrations remain `blockedIntegrationSentinelPatches` or future prerequisite markers only.
+- the analyzer adapter prototype diagnostic command now exposes developer-only `action-plan` and `patches` sections.
+
+Next recommendation: `runAnalyzerAdapterPrototypeActionPlanPatchSetDiagnostic`. Phase 34C does not run Stockfish,
+execute Android collector flows, call analyzer flow, wire analyzer internals, add product labels, compute scores, rank
+moves, add official metrics, compute CP-loss, compute win probability, expose Stockfish command/raw UCI/PV dump fields
+as active output, add UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine
+access, implement analyzer runtime, implement runtime bridge behavior, implement executable prototype behavior, implement
+wiring, product adapter behavior, saved analysis integration, readiness summaries, readiness gates, or third-party data.
