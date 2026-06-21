@@ -863,3 +863,35 @@ as active output, add UI/backend/persistence/cache/database integration, add sch
 access, implement analyzer runtime, implement runtime bridge behavior, implement executable prototype behavior,
 implement wiring, product adapter behavior, saved analysis integration, readiness summaries, readiness gates, or
 third-party data.
+
+## Phase 34A Validate Selected Golden Analyzer Adapter Prototype Diagnostic Run
+
+Phase 34A validates the selected Golden analyzer adapter prototype diagnostic run added in Phase 33Z. It checks the
+default-selected, all-safe-selected, single-case, list-cases, and golden-section outputs for deterministic safe behavior
+across markdown, JSON, and strict modes.
+
+Validation behavior:
+
+- selected rows preserve case ID, title, source phase, selected reason, diagnostic role, support areas, warning reasons,
+proof-limit reasons, Android proof IDs, owner-proof status, active denied fields, blocked boundaries, and recommendation.
+- tactical/material/forcing/candidate-spread rows remain developer diagnostic support only.
+- Phase 32E king-safety, endgame, and budget rows remain warning-limited; PV/MultiPV remains proof-boundary/watch-list
+only; quiet/preparatory remains excluded negative guard only.
+- Phase 32E cases still do not claim captured Android proof; Android proof remains limited to
+`mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`; owner proof remains empty by
+default.
+- strict validation rejects unsafe Phase 33Z or Phase 33Y command paths, unknown Golden cases or roles, duplicate or
+missing default selections, active denied fields, product/final/classifier labels, Brilliant/Great/Miss,
+Best/Good/Inaccuracy/Mistake/Blunder, scores, rankings, metrics, accuracy/ACPL, CP-loss, win probability, thresholds,
+UI/backend/persistence/direct-engine targets, scheduler execution, analyzer wiring, runtime/executable prototype
+behavior, product adapter behavior, saved analysis integration, Stockfish command, raw UCI, PV dump, Android collector
+requirement, readiness summary chains, readiness gates, Phase 32E captured-proof claims, quiet/preparatory promotion,
+PV/MultiPV promotion, owner-proof misuse, or report text leaks.
+
+Next recommendation: `proceedToAnalyzerAdapterPrototypeSelectedDiagnosticActionPlan`. Phase 34A does not run Stockfish,
+execute Android collector flows, call analyzer flow, wire analyzer internals, add product labels, compute scores, rank
+moves, add official metrics, compute CP-loss, compute win probability, expose Stockfish command/raw UCI/PV dump fields
+as active output, add UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine
+access, implement analyzer runtime, implement runtime bridge behavior, implement executable prototype behavior,
+implement wiring, product adapter behavior, saved analysis integration, readiness summaries, readiness gates, or
+third-party data.
