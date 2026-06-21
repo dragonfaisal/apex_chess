@@ -895,3 +895,30 @@ as active output, add UI/backend/persistence/cache/database integration, add sch
 access, implement analyzer runtime, implement runtime bridge behavior, implement executable prototype behavior,
 implement wiring, product adapter behavior, saved analysis integration, readiness summaries, readiness gates, or
 third-party data.
+
+## Phase 34B Analyzer Adapter Prototype Selected Diagnostic Action Plan
+
+Phase 34B converts the validated selected Golden analyzer adapter prototype diagnostic findings into a practical
+developer-only action plan. It groups future tasks by purpose and risk instead of creating another readiness summary or
+readiness gate.
+
+Action plan behavior:
+
+- tactical/material/forcing/candidate-spread rows become `safeInternalSupportActions` only, with medium-priority future
+internal prototype improvement tasks.
+- Phase 32E king-safety, endgame, and budget rows become `warningLimitedFollowupActions` only.
+- PV/MultiPV remains a high-priority `proofBoundaryActions` watch-list item, not runtime/scoring proof.
+- quiet/preparatory remains a high-priority `excludedGuardActions` guardrail preservation item only.
+- denied fields become critical inactive `deniedFieldProtectionActions`.
+- runtime, analyzer wiring, engine, scheduler, product adapter, saved analysis, UI, backend, and persistence remain
+`blockedIntegrationActions` or future prerequisite actions only.
+- Phase 32E cases still do not claim captured Android proof; Android proof remains limited to
+`mate-threat-fast-evidence`, `queen-win-major-swing`, and `simple-tactical-capture-check`; owner proof remains empty by
+default.
+
+Next recommendation: `implementAnalyzerAdapterPrototypeActionPlanPatchSet`. Phase 34B does not run Stockfish, execute
+Android collector flows, call analyzer flow, wire analyzer internals, add product labels, compute scores, rank moves,
+add official metrics, compute CP-loss, compute win probability, expose Stockfish command/raw UCI/PV dump fields as
+active output, add UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine access,
+implement analyzer runtime, implement runtime bridge behavior, implement executable prototype behavior, implement
+wiring, product adapter behavior, saved analysis integration, readiness summaries, readiness gates, or third-party data.
