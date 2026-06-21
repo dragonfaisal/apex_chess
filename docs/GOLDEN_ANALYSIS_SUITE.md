@@ -946,3 +946,28 @@ moves, add official metrics, compute CP-loss, compute win probability, expose St
 as active output, add UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine
 access, implement analyzer runtime, implement runtime bridge behavior, implement executable prototype behavior, implement
 wiring, product adapter behavior, saved analysis integration, readiness summaries, readiness gates, or third-party data.
+
+## Phase 34D Run Analyzer Adapter Prototype Action Plan Patch Set Diagnostic
+
+Phase 34D adds a practical developer-only diagnostic run over the Phase 34C patch set. It lets developers inspect all
+patches or narrow to support, warning, proof, guard, denied, blocked, and recommendation modes without creating another
+validation layer, readiness summary, or readiness gate.
+
+Patch diagnostic behavior:
+
+- support traceability remains metadata-only.
+- warning markers remain warning-only.
+- PV/MultiPV remains proof-boundary/watch-list only.
+- quiet/preparatory remains excluded guard only.
+- denied-field protection remains inactive.
+- blocked integration sentinel patches remain blocked.
+- allowed target surfaces stay diagnostic/report/proof/guardrail metadata only, while product review output, analyzer
+runtime input, analyzer wiring, saved analysis, UI, backend, persistence, cache, database, scheduler execution, engine
+calls, Stockfish bridge, Android collector, and product adapter surfaces remain blocked.
+
+Next recommendation: `implementAnalyzerAdapterPrototypeMetadataRefinementPatch`. Phase 34D does not run Stockfish,
+execute Android collector flows, call analyzer flow, wire analyzer internals, add product labels, compute scores, rank
+moves, add official metrics, compute CP-loss, compute win probability, expose Stockfish command/raw UCI/PV dump fields
+as active output, add UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine
+access, implement analyzer runtime, implement runtime bridge behavior, implement executable prototype behavior, implement
+wiring, product adapter behavior, saved analysis integration, readiness summaries, readiness gates, or third-party data.

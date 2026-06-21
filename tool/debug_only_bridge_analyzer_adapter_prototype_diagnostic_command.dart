@@ -4,6 +4,7 @@ import 'dart:io' as io;
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_action_plan_patch_set.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_inspection_harness.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_inspection_harness_validation.dart';
+import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_patch_set_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_selected_diagnostic_action_plan.dart';
 import 'package:apex_chess/features/pgn_review/application/golden_analysis_suite.dart';
 
@@ -374,9 +375,11 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandResult {
     required this.stdoutText,
     required this.stderrText,
     this.goldenCaseSelection,
+    this.patchDiagnosticMode,
     this.listGoldenCases = false,
     this.diagnosticResult,
     this.selectedGoldenDiagnostic,
+    this.patchSetDiagnostic,
     this.commandFailure,
   });
 
@@ -389,11 +392,15 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandResult {
   final String stdoutText;
   final String stderrText;
   final String? goldenCaseSelection;
+  final DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticMode?
+  patchDiagnosticMode;
   final bool listGoldenCases;
   final DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticResult?
   diagnosticResult;
   final DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticResult?
   selectedGoldenDiagnostic;
+  final DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticResult?
+  patchSetDiagnostic;
   final String? commandFailure;
 }
 
@@ -405,6 +412,7 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest {
     required this.safeDemo,
     required this.includeWarnings,
     this.goldenCaseSelection,
+    this.patchDiagnosticMode,
     this.listGoldenCases = false,
     this.showHelp = false,
   }) : isValid = true,
@@ -419,6 +427,7 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest {
       safeDemo = true,
       includeWarnings = true,
       goldenCaseSelection = null,
+      patchDiagnosticMode = null,
       listGoldenCases = false,
       showHelp = false;
 
@@ -430,6 +439,8 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest {
   final bool safeDemo;
   final bool includeWarnings;
   final String? goldenCaseSelection;
+  final DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticMode?
+  patchDiagnosticMode;
   final bool listGoldenCases;
   final bool showHelp;
 }
@@ -640,6 +651,7 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
       safeDemo: request.safeDemo,
       includeWarnings: request.includeWarnings,
       goldenCaseSelection: request.goldenCaseSelection,
+      patchDiagnosticMode: request.patchDiagnosticMode,
       listGoldenCases: request.listGoldenCases,
       stdoutText: '',
       stderrText: _usage(request.failure),
@@ -656,6 +668,7 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
       safeDemo: request.safeDemo,
       includeWarnings: request.includeWarnings,
       goldenCaseSelection: request.goldenCaseSelection,
+      patchDiagnosticMode: request.patchDiagnosticMode,
       listGoldenCases: request.listGoldenCases,
       stdoutText: _usage('help'),
       stderrText: '',
@@ -682,6 +695,7 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
       safeDemo: request.safeDemo,
       includeWarnings: request.includeWarnings,
       goldenCaseSelection: request.goldenCaseSelection,
+      patchDiagnosticMode: request.patchDiagnosticMode,
       listGoldenCases: true,
       stdoutText: stdoutText,
       stderrText: '',
@@ -709,6 +723,7 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
       safeDemo: request.safeDemo,
       includeWarnings: request.includeWarnings,
       goldenCaseSelection: request.goldenCaseSelection,
+      patchDiagnosticMode: request.patchDiagnosticMode,
       listGoldenCases: request.listGoldenCases,
       stdoutText: '',
       stderrText: _usage(selectedGoldenBuildResult.failure!),
@@ -716,19 +731,28 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
     );
   }
   final selectedGoldenDiagnostic = selectedGoldenBuildResult.result;
+  final patchSetDiagnostic = request.patchDiagnosticMode == null
+      ? null
+      : const DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnostic()
+            .evaluate(mode: request.patchDiagnosticMode!);
   final stdoutText = switch (request.format) {
     DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticFormat.markdown =>
       _renderMarkdown(
         diagnostic,
         request.section,
         selectedGoldenDiagnostic: selectedGoldenDiagnostic,
+        patchSetDiagnostic: patchSetDiagnostic,
       ),
     DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticFormat.json =>
-      '${_renderJson(diagnostic, request.section, selectedGoldenDiagnostic: selectedGoldenDiagnostic)}\n',
+      '${_renderJson(diagnostic, request.section, selectedGoldenDiagnostic: selectedGoldenDiagnostic, patchSetDiagnostic: patchSetDiagnostic)}\n',
   };
-  final reportFindings =
-      const DebugOnlyBridgeAnalyzerAdapterPrototypeInspectionHarnessValidationValidator()
-          .validateReportText(stdoutText);
+  final reportFindings = <String>[
+    ...const DebugOnlyBridgeAnalyzerAdapterPrototypeInspectionHarnessValidationValidator()
+        .validateReportText(stdoutText),
+    if (patchSetDiagnostic != null)
+      ...const DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticValidator()
+          .validateReportText(stdoutText),
+  ];
 
   return DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandResult(
     exitCode: debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitCode(
@@ -736,6 +760,7 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
       request,
       reportFindings: reportFindings,
       selectedGoldenDiagnostic: selectedGoldenDiagnostic,
+      patchSetDiagnostic: patchSetDiagnostic,
     ),
     format: request.format,
     section: request.section,
@@ -743,11 +768,13 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
     safeDemo: request.safeDemo,
     includeWarnings: request.includeWarnings,
     goldenCaseSelection: request.goldenCaseSelection,
+    patchDiagnosticMode: request.patchDiagnosticMode,
     listGoldenCases: request.listGoldenCases,
     stdoutText: stdoutText,
     stderrText: '',
     diagnosticResult: diagnostic,
     selectedGoldenDiagnostic: selectedGoldenDiagnostic,
+    patchSetDiagnostic: patchSetDiagnostic,
   );
 }
 
@@ -765,8 +792,11 @@ validateDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticArgs(
   var safeDemoSeen = false;
   var includeWarningsSeen = false;
   var goldenCaseSelectionSeen = false;
+  var patchDiagnosticSeen = false;
   var listGoldenCasesSeen = false;
   String? goldenCaseSelection;
+  DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticMode?
+  patchDiagnosticMode;
 
   for (final arg in args) {
     if (arg == '--help' || arg == '-h') {
@@ -783,6 +813,7 @@ validateDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticArgs(
         safeDemo: true,
         includeWarnings: true,
         goldenCaseSelection: null,
+        patchDiagnosticMode: null,
         listGoldenCases: false,
         showHelp: true,
       );
@@ -832,6 +863,24 @@ validateDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticArgs(
         );
       }
       goldenCaseSelectionSeen = true;
+      continue;
+    }
+    if (arg.startsWith(_patchDiagnosticFlag)) {
+      if (patchDiagnosticSeen) {
+        return const DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest.invalid(
+          'duplicatePatchDiagnostic',
+        );
+      }
+      final parsed = _patchDiagnosticModeByWire(
+        arg.substring(_patchDiagnosticFlag.length).trim(),
+      );
+      if (parsed == null) {
+        return const DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest.invalid(
+          'unknownPatchDiagnostic',
+        );
+      }
+      patchDiagnosticMode = parsed;
+      patchDiagnosticSeen = true;
       continue;
     }
     if (arg == _listGoldenCasesFlag) {
@@ -885,6 +934,7 @@ validateDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticArgs(
     safeDemo: safeDemo,
     includeWarnings: includeWarnings,
     goldenCaseSelection: goldenCaseSelection,
+    patchDiagnosticMode: patchDiagnosticMode,
     listGoldenCases: listGoldenCasesSeen,
   );
 }
@@ -895,11 +945,14 @@ int debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitCode(
   List<String> reportFindings = const <String>[],
   DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticResult?
   selectedGoldenDiagnostic,
+  DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticResult?
+  patchSetDiagnostic,
 }) {
   final hasReportLeak = reportFindings.any(_isCriticalFinding);
   if (diagnostic.hasUnsafePolicyViolation ||
       hasReportLeak ||
-      (selectedGoldenDiagnostic?.hasUnsafePolicyViolation ?? false)) {
+      (selectedGoldenDiagnostic?.hasUnsafePolicyViolation ?? false) ||
+      (patchSetDiagnostic?.hasUnsafePolicyViolation ?? false)) {
     return debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitUnsafePolicy;
   }
   if (request.strict &&
@@ -934,7 +987,8 @@ int debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitCode(
           diagnostic.phase32EProofClaimCount > 0 ||
           diagnostic.nextRecommendation != _phase33ZRecommendation ||
           !diagnostic.safeForPhase33Z ||
-          (selectedGoldenDiagnostic?.hasStrictBlocker ?? false))) {
+          (selectedGoldenDiagnostic?.hasStrictBlocker ?? false) ||
+          (patchSetDiagnostic?.hasUnsafePolicyViolation ?? false))) {
     return debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitBlockedStrict;
   }
   return debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess;
@@ -945,6 +999,8 @@ String _renderMarkdown(
   DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection section, {
   DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticResult?
   selectedGoldenDiagnostic,
+  DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticResult?
+  patchSetDiagnostic,
 }) {
   final buffer = StringBuffer()
     ..writeln('# Debug-Only Bridge Analyzer Adapter Prototype Diagnostic')
@@ -1035,6 +1091,9 @@ String _renderMarkdown(
       )) {
     _writeSelectedGoldenDiagnostic(buffer, selectedGoldenDiagnostic);
   }
+  if (patchSetDiagnostic != null) {
+    _writePatchSetDiagnostic(buffer, patchSetDiagnostic);
+  }
   return buffer.toString();
 }
 
@@ -1043,12 +1102,15 @@ String _renderJson(
   DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection section, {
   DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticResult?
   selectedGoldenDiagnostic,
+  DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticResult?
+  patchSetDiagnostic,
 }) {
   return const JsonEncoder.withIndent(' ').convert(
     _jsonPayload(
       diagnostic,
       section,
       selectedGoldenDiagnostic: selectedGoldenDiagnostic,
+      patchSetDiagnostic: patchSetDiagnostic,
     ),
   );
 }
@@ -1058,6 +1120,8 @@ Map<String, Object?> _jsonPayload(
   DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection section, {
   DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedGoldenDiagnosticResult?
   selectedGoldenDiagnostic,
+  DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticResult?
+  patchSetDiagnostic,
 }) {
   final payload = <String, Object?>{
     'version': debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandVersion,
@@ -1140,6 +1204,9 @@ Map<String, Object?> _jsonPayload(
         DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection.golden,
       )) {
     payload['selectedGoldenDiagnostic'] = selectedGoldenDiagnostic.toJson();
+  }
+  if (patchSetDiagnostic != null) {
+    payload['patchSetDiagnostic'] = patchSetDiagnostic.toJson();
   }
   return payload;
 }
@@ -1679,6 +1746,58 @@ void _writePatches(StringBuffer buffer) {
     ..writeln();
 }
 
+void _writePatchSetDiagnostic(
+  StringBuffer buffer,
+  DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticResult result,
+) {
+  buffer
+    ..writeln('## Patch Set Diagnostic Run')
+    ..writeln('- patch diagnostic status: ${result.status.wire}')
+    ..writeln('- patch diagnostic mode: ${result.mode.wire}')
+    ..writeln(
+      '- Phase 34B action plan status: ${result.sourceActionPlanStatus}',
+    )
+    ..writeln('- Phase 34C patch set status: ${result.sourcePatchSetStatus}')
+    ..writeln('- safe for Phase 34E: ${result.safeForPhase34E}')
+    ..writeln('- next recommendation: ${result.nextRecommendation}')
+    ..writeln('- total diagnostic rows: ${result.totalDiagnosticRows}')
+    ..writeln(
+      '- support traceability rows: ${result.supportTraceabilityRowCount}',
+    )
+    ..writeln('- warning marker rows: ${result.warningFollowupMarkerRowCount}')
+    ..writeln(
+      '- proof-boundary marker rows: ${result.proofBoundaryMarkerRowCount}',
+    )
+    ..writeln(
+      '- excluded guard rows: ${result.excludedGuardPreservationRowCount}',
+    )
+    ..writeln(
+      '- denied-field protection rows: ${result.deniedFieldProtectionRowCount}',
+    )
+    ..writeln(
+      '- blocked integration sentinel rows: ${result.blockedIntegrationSentinelRowCount}',
+    )
+    ..writeln('- active denied field count: ${result.activeDeniedFieldCount}')
+    ..writeln('- analyzer wiring count: ${result.analyzerWiringCount}')
+    ..writeln(
+      '- runtime implementation count: ${result.runtimeImplementationCount}',
+    )
+    ..writeln('- engine call count: ${result.engineCallCount}')
+    ..writeln('- scheduler execution count: ${result.schedulerExecutionCount}')
+    ..writeln('- owner proof queue count: ${result.ownerProofQueueCount}')
+    ..writeln()
+    ..writeln(
+      '| Row | Patch | Group | Type | Target surface | Metadata-only | Findings |',
+    )
+    ..writeln('| --- | --- | --- | --- | --- | --- | --- |');
+  for (final row in result.rows) {
+    buffer.writeln(
+      '| ${row.diagnosticRowId} | ${row.patchId} | ${row.patchGroup} | ${row.patchType} | ${row.targetSurface} | ${row.appliedAsMetadataOnly} | ${_ids(row.findings)} |',
+    );
+  }
+  buffer.writeln();
+}
+
 Map<String, Object?> _actionPlanJson() {
   final result =
       const DebugOnlyBridgeAnalyzerAdapterPrototypeSelectedDiagnosticActionPlan()
@@ -2088,6 +2207,15 @@ DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection? _sectionByWire(
   return null;
 }
 
+DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticMode?
+_patchDiagnosticModeByWire(String wire) {
+  for (final mode
+      in DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticMode.values) {
+    if (mode.wire == wire) return mode;
+  }
+  return null;
+}
+
 bool _isCriticalFinding(String finding) =>
     finding.startsWith('reportTextLeak:');
 
@@ -2111,7 +2239,7 @@ List<String> _sorted(Iterable<String> values) {
 String _usage(String failure) {
   return [
     if (failure.isNotEmpty && failure != 'help') 'error: $failure',
-    'usage: dart run tool/debug_only_bridge_analyzer_adapter_prototype_diagnostic_command.dart [--format=markdown|json] [--strict] [--safe-demo] [--include-warnings] [--section=all|snapshot|packets|policy|records|proof|boundaries|runtime|recommendation|action-plan|patches|golden] [--golden-case=<caseId>|default-selected|all-safe-selected] [--list-golden-cases]',
+    'usage: dart run tool/debug_only_bridge_analyzer_adapter_prototype_diagnostic_command.dart [--format=markdown|json] [--strict] [--safe-demo] [--include-warnings] [--section=all|snapshot|packets|policy|records|proof|boundaries|runtime|recommendation|action-plan|patches|golden] [--patch-diagnostic=default|all-safe|support|warning|proof|guards|denied|blocked|recommendation] [--golden-case=<caseId>|default-selected|all-safe-selected] [--list-golden-cases]',
     'defaults: --format=markdown --safe-demo --include-warnings --section=all',
   ].join('\n');
 }
@@ -2119,6 +2247,7 @@ String _usage(String failure) {
 const _formatFlag = '--format=';
 const _sectionFlag = '--section=';
 const _goldenCaseFlag = '--golden-case=';
+const _patchDiagnosticFlag = '--patch-diagnostic=';
 const _strictFlag = '--strict';
 const _safeDemoFlag = '--safe-demo';
 const _includeWarningsFlag = '--include-warnings';

@@ -4,6 +4,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_patch_set_diagnostic.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../../tool/debug_only_bridge_analyzer_adapter_prototype_diagnostic_command.dart';
@@ -347,6 +348,73 @@ void main() {
       );
     });
 
+    test('patch diagnostic JSON and strict modes succeed', () {
+      final json = _run(
+        args: const <String>['--patch-diagnostic=default', '--format=json'],
+      );
+      final strict = _run(
+        args: const <String>['--patch-diagnostic=default', '--strict'],
+      );
+      final decoded = jsonDecode(json.stdoutText) as Map<String, Object?>;
+      final patchDiagnostic =
+          decoded['patchSetDiagnostic'] as Map<String, Object?>;
+      final counts = patchDiagnostic['counts'] as Map<String, Object?>;
+
+      expect(
+        json.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+      );
+      expect(json.patchDiagnosticMode!.wire, 'default');
+      expect(
+        json.patchSetDiagnostic!.status,
+        DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticStatus
+            .analyzerAdapterPrototypePatchSetDiagnosticReadyWithWarnings,
+      );
+      expect(
+        patchDiagnostic['status'],
+        'analyzerAdapterPrototypePatchSetDiagnosticReadyWithWarnings',
+      );
+      expect(patchDiagnostic['safeForPhase34E'], isTrue);
+      expect(
+        patchDiagnostic['nextRecommendation'],
+        'implementAnalyzerAdapterPrototypeMetadataRefinementPatch',
+      );
+      expect(counts['unsafeCount'], 0);
+      expect(counts['blockerCount'], 0);
+      expect(counts['criticalCount'], 0);
+      expect(counts['activeDeniedFieldCount'], 0);
+      expect(
+        strict.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+      );
+      expect(strict.patchSetDiagnostic!.safeForPhase34E, isTrue);
+    });
+
+    test('each patch diagnostic mode succeeds through diagnostic command', () {
+      for (final mode in const <String>[
+        'default',
+        'all-safe',
+        'support',
+        'warning',
+        'proof',
+        'guards',
+        'denied',
+        'blocked',
+        'recommendation',
+      ]) {
+        final result = _run(args: <String>['--patch-diagnostic=$mode']);
+
+        expect(
+          result.exitCode,
+          debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+          reason: mode,
+        );
+        expect(result.patchDiagnosticMode!.wire, mode);
+        expect(result.patchSetDiagnostic!.safeForPhase34E, isTrue);
+        expect(result.stdoutText, contains('patch diagnostic mode: $mode'));
+      }
+    });
+
     test('selected Golden role guardrails are preserved', () {
       final selected = _run(
         args: const <String>['--golden-case=default-selected'],
@@ -389,6 +457,9 @@ void main() {
       final badSection = _run(args: const <String>['--section=unknown']);
       final badFormat = _run(args: const <String>['--format=yaml']);
       final badGolden = _run(args: const <String>['--golden-case=missing']);
+      final badPatchDiagnostic = _run(
+        args: const <String>['--patch-diagnostic=missing'],
+      );
 
       expect(
         badSection.exitCode,
@@ -408,6 +479,12 @@ void main() {
       );
       expect(badGolden.commandFailure, 'unknownGoldenCase');
       expect(badGolden.stderrText, contains('usage:'));
+      expect(
+        badPatchDiagnostic.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitUsage,
+      );
+      expect(badPatchDiagnostic.commandFailure, 'unknownPatchDiagnostic');
+      expect(badPatchDiagnostic.stderrText, contains('usage:'));
     });
 
     test('output contains no raw engine spam or active product data', () {
@@ -419,11 +496,15 @@ void main() {
       final goldenJson = _run(
         args: const <String>['--golden-case=default-selected', '--format=json'],
       ).stdoutText;
+      final patchDiagnostic = _run(
+        args: const <String>['--patch-diagnostic=default'],
+      ).stdoutText;
 
       _expectReportGuardrails(markdown);
       _expectReportGuardrails(json);
       _expectReportGuardrails(golden);
       _expectReportGuardrails(goldenJson);
+      _expectReportGuardrails(patchDiagnostic);
     });
 
     test('source imports remain command-only and integration-free', () {
