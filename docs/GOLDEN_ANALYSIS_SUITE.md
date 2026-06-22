@@ -971,3 +971,29 @@ moves, add official metrics, compute CP-loss, compute win probability, expose St
 as active output, add UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine
 access, implement analyzer runtime, implement runtime bridge behavior, implement executable prototype behavior, implement
 wiring, product adapter behavior, saved analysis integration, readiness summaries, readiness gates, or third-party data.
+
+## Phase 34E Analyzer Adapter Prototype Metadata Refinement Patch
+
+Phase 34E applies a small developer-only metadata refinement patch over the Phase 34D patch-set diagnostic run. It makes
+the existing diagnostic surfaces easier to inspect by adding metadata-only refinement records for support traceability,
+warning reasons, proof-boundary summaries, excluded guards, denied-field protection, blocked integrations, target
+surfaces, diagnostic counts, and the Phase 34F practical diagnostic requirement.
+
+Metadata refinement behavior:
+
+- support traceability refinements only clarify display labels, reason summaries, and source chains.
+- warning-limited refinements remain warning metadata only.
+- PV/MultiPV remains proof-boundary/watch-list metadata only.
+- quiet/preparatory remains excluded guard metadata only.
+- denied-field refinements remain inactive protection metadata only.
+- blocked integration refinements keep analyzer runtime, analyzer wiring, engine calls, scheduler execution, UI, backend,
+persistence, product adapter behavior, saved analysis, Stockfish bridge, and Android collector surfaces blocked.
+- `tool/debug_only_bridge_analyzer_adapter_prototype_diagnostic_command.dart --section=metadata-refinement` exposes the
+safe metadata summary without product output.
+
+Next recommendation: `runAnalyzerAdapterPrototypeMetadataRefinementDiagnostic`. Phase 34E does not run Stockfish,
+execute Android collector flows, call analyzer flow, wire analyzer internals, add product labels, compute scores, rank
+moves, add official metrics, compute CP-loss, compute win probability, expose Stockfish command/raw UCI/PV dump fields
+as active output, add UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine
+access, implement analyzer runtime, implement runtime bridge behavior, implement executable prototype behavior, implement
+wiring, product adapter behavior, saved analysis integration, readiness summaries, readiness gates, or third-party data.

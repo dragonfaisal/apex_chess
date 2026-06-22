@@ -61,6 +61,7 @@ void main() {
         result.stdoutText,
         contains('## Action Plan Patch Set Metadata Summary'),
       );
+      expect(result.stdoutText, contains('## Metadata Refinement Summary'));
       expect(
         result.stdoutText,
         contains(
@@ -120,6 +121,7 @@ void main() {
       expect(decoded['next'], isA<Map<String, Object?>>());
       expect(decoded['actionPlan'], isA<Map<String, Object?>>());
       expect(decoded['patches'], isA<Map<String, Object?>>());
+      expect(decoded['metadataRefinement'], isA<Map<String, Object?>>());
     });
 
     test('strict mode succeeds for safe demo', () {
@@ -205,6 +207,10 @@ void main() {
       expect(
         _run(args: const <String>['--section=patches']).stdoutText,
         contains('## Action Plan Patch Set Metadata Summary'),
+      );
+      expect(
+        _run(args: const <String>['--section=metadata-refinement']).stdoutText,
+        contains('## Metadata Refinement Summary'),
       );
       expect(
         _run(args: const <String>['--section=golden']).stdoutText,
@@ -499,12 +505,16 @@ void main() {
       final patchDiagnostic = _run(
         args: const <String>['--patch-diagnostic=default'],
       ).stdoutText;
+      final metadataRefinement = _run(
+        args: const <String>['--section=metadata-refinement'],
+      ).stdoutText;
 
       _expectReportGuardrails(markdown);
       _expectReportGuardrails(json);
       _expectReportGuardrails(golden);
       _expectReportGuardrails(goldenJson);
       _expectReportGuardrails(patchDiagnostic);
+      _expectReportGuardrails(metadataRefinement);
     });
 
     test('source imports remain command-only and integration-free', () {

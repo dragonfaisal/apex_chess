@@ -4,6 +4,7 @@ import 'dart:io' as io;
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_action_plan_patch_set.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_inspection_harness.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_inspection_harness_validation.dart';
+import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_metadata_refinement_patch.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_patch_set_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_selected_diagnostic_action_plan.dart';
 import 'package:apex_chess/features/pgn_review/application/golden_analysis_suite.dart';
@@ -39,6 +40,7 @@ enum DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection {
   recommendation('recommendation'),
   actionPlan('action-plan'),
   patches('patches'),
+  metadataRefinement('metadata-refinement'),
   golden('golden');
 
   const DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection(this.wire);
@@ -380,6 +382,7 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandResult {
     this.diagnosticResult,
     this.selectedGoldenDiagnostic,
     this.patchSetDiagnostic,
+    this.metadataRefinement,
     this.commandFailure,
   });
 
@@ -401,6 +404,8 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandResult {
   selectedGoldenDiagnostic;
   final DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticResult?
   patchSetDiagnostic;
+  final DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementPatchResult?
+  metadataRefinement;
   final String? commandFailure;
 }
 
@@ -735,6 +740,15 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
       ? null
       : const DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnostic()
             .evaluate(mode: request.patchDiagnosticMode!);
+  final metadataRefinement =
+      _includeSection(
+        request.section,
+        DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection
+            .metadataRefinement,
+      )
+      ? const DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementPatch()
+            .evaluate()
+      : null;
   final stdoutText = switch (request.format) {
     DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticFormat.markdown =>
       _renderMarkdown(
@@ -742,15 +756,19 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
         request.section,
         selectedGoldenDiagnostic: selectedGoldenDiagnostic,
         patchSetDiagnostic: patchSetDiagnostic,
+        metadataRefinement: metadataRefinement,
       ),
     DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticFormat.json =>
-      '${_renderJson(diagnostic, request.section, selectedGoldenDiagnostic: selectedGoldenDiagnostic, patchSetDiagnostic: patchSetDiagnostic)}\n',
+      '${_renderJson(diagnostic, request.section, selectedGoldenDiagnostic: selectedGoldenDiagnostic, patchSetDiagnostic: patchSetDiagnostic, metadataRefinement: metadataRefinement)}\n',
   };
   final reportFindings = <String>[
     ...const DebugOnlyBridgeAnalyzerAdapterPrototypeInspectionHarnessValidationValidator()
         .validateReportText(stdoutText),
     if (patchSetDiagnostic != null)
       ...const DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticValidator()
+          .validateReportText(stdoutText),
+    if (metadataRefinement != null)
+      ...const DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementPatchValidator()
           .validateReportText(stdoutText),
   ];
 
@@ -761,6 +779,7 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
       reportFindings: reportFindings,
       selectedGoldenDiagnostic: selectedGoldenDiagnostic,
       patchSetDiagnostic: patchSetDiagnostic,
+      metadataRefinement: metadataRefinement,
     ),
     format: request.format,
     section: request.section,
@@ -775,6 +794,7 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
     diagnosticResult: diagnostic,
     selectedGoldenDiagnostic: selectedGoldenDiagnostic,
     patchSetDiagnostic: patchSetDiagnostic,
+    metadataRefinement: metadataRefinement,
   );
 }
 
@@ -947,12 +967,15 @@ int debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitCode(
   selectedGoldenDiagnostic,
   DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticResult?
   patchSetDiagnostic,
+  DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementPatchResult?
+  metadataRefinement,
 }) {
   final hasReportLeak = reportFindings.any(_isCriticalFinding);
   if (diagnostic.hasUnsafePolicyViolation ||
       hasReportLeak ||
       (selectedGoldenDiagnostic?.hasUnsafePolicyViolation ?? false) ||
-      (patchSetDiagnostic?.hasUnsafePolicyViolation ?? false)) {
+      (patchSetDiagnostic?.hasUnsafePolicyViolation ?? false) ||
+      (metadataRefinement?.hasUnsafePolicyViolation ?? false)) {
     return debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitUnsafePolicy;
   }
   if (request.strict &&
@@ -988,7 +1011,8 @@ int debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitCode(
           diagnostic.nextRecommendation != _phase33ZRecommendation ||
           !diagnostic.safeForPhase33Z ||
           (selectedGoldenDiagnostic?.hasStrictBlocker ?? false) ||
-          (patchSetDiagnostic?.hasUnsafePolicyViolation ?? false))) {
+          (patchSetDiagnostic?.hasUnsafePolicyViolation ?? false) ||
+          (metadataRefinement?.hasUnsafePolicyViolation ?? false))) {
     return debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitBlockedStrict;
   }
   return debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess;
@@ -1001,6 +1025,8 @@ String _renderMarkdown(
   selectedGoldenDiagnostic,
   DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticResult?
   patchSetDiagnostic,
+  DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementPatchResult?
+  metadataRefinement,
 }) {
   final buffer = StringBuffer()
     ..writeln('# Debug-Only Bridge Analyzer Adapter Prototype Diagnostic')
@@ -1084,6 +1110,14 @@ String _renderMarkdown(
   )) {
     _writePatches(buffer);
   }
+  if (metadataRefinement != null &&
+      _includeSection(
+        section,
+        DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection
+            .metadataRefinement,
+      )) {
+    _writeMetadataRefinement(buffer, metadataRefinement);
+  }
   if (selectedGoldenDiagnostic != null &&
       _includeSection(
         section,
@@ -1104,6 +1138,8 @@ String _renderJson(
   selectedGoldenDiagnostic,
   DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticResult?
   patchSetDiagnostic,
+  DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementPatchResult?
+  metadataRefinement,
 }) {
   return const JsonEncoder.withIndent(' ').convert(
     _jsonPayload(
@@ -1111,6 +1147,7 @@ String _renderJson(
       section,
       selectedGoldenDiagnostic: selectedGoldenDiagnostic,
       patchSetDiagnostic: patchSetDiagnostic,
+      metadataRefinement: metadataRefinement,
     ),
   );
 }
@@ -1122,6 +1159,8 @@ Map<String, Object?> _jsonPayload(
   selectedGoldenDiagnostic,
   DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticResult?
   patchSetDiagnostic,
+  DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementPatchResult?
+  metadataRefinement,
 }) {
   final payload = <String, Object?>{
     'version': debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandVersion,
@@ -1197,6 +1236,14 @@ Map<String, Object?> _jsonPayload(
     DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection.patches,
   )) {
     payload['patches'] = _patchSetJson();
+  }
+  if (metadataRefinement != null &&
+      _includeSection(
+        section,
+        DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection
+            .metadataRefinement,
+      )) {
+    payload['metadataRefinement'] = _metadataRefinementJson(metadataRefinement);
   }
   if (selectedGoldenDiagnostic != null &&
       _includeSection(
@@ -1746,6 +1793,69 @@ void _writePatches(StringBuffer buffer) {
     ..writeln();
 }
 
+void _writeMetadataRefinement(
+  StringBuffer buffer,
+  DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementPatchResult result,
+) {
+  buffer
+    ..writeln('## Metadata Refinement Summary')
+    ..writeln('- metadata refinement status: ${result.status.wire}')
+    ..writeln('- source diagnostic status: ${result.sourceDiagnosticStatus}')
+    ..writeln('- source patch set status: ${result.sourcePatchSetStatus}')
+    ..writeln('- safe for Phase 34F: ${result.safeForPhase34F}')
+    ..writeln('- next recommendation: ${result.nextRecommendation}')
+    ..writeln(
+      '- source chain: Phase 34B action plan -> Phase 34C patch set -> Phase 34D patch-set diagnostic -> Phase 34E metadata refinement',
+    )
+    ..writeln('- total refinements: ${result.totalRefinementRecords}')
+    ..writeln(
+      '- support reason refinements: ${result.supportTraceabilityMetadataRefinementCount}',
+    )
+    ..writeln(
+      '- warning reason refinements: ${result.warningReasonMetadataRefinementCount}',
+    )
+    ..writeln(
+      '- proof-boundary refinements: ${result.proofBoundaryMetadataRefinementCount}',
+    )
+    ..writeln(
+      '- excluded guard refinements: ${result.excludedGuardMetadataRefinementCount}',
+    )
+    ..writeln(
+      '- denied-field refinements: ${result.deniedFieldMetadataRefinementCount}',
+    )
+    ..writeln(
+      '- blocked integration refinements: ${result.blockedIntegrationMetadataRefinementCount}',
+    )
+    ..writeln(
+      '- target surface refinements: ${result.targetSurfaceMetadataRefinementCount}',
+    )
+    ..writeln(
+      '- diagnostic summary refinements: ${result.diagnosticSummaryMetadataRefinementCount}',
+    )
+    ..writeln(
+      '- Phase 34F diagnostic requirement refinements: ${result.phase34FDiagnosticRequirementRefinementCount}',
+    )
+    ..writeln(
+      '- target surfaces: ${_mapSummary(Map<String, Object?>.from(result.targetSurfaceCounts))}',
+    )
+    ..writeln(
+      '- allowed target surfaces: ${_ids(result.allowedTargetSurfaces)}',
+    )
+    ..writeln(
+      '- forbidden target surfaces blocked: ${_ids(result.forbiddenTargetSurfaces)}',
+    )
+    ..writeln('- active denied field count: ${result.activeDeniedFieldCount}')
+    ..writeln('- analyzer wiring count: ${result.analyzerWiringCount}')
+    ..writeln(
+      '- runtime implementation count: ${result.runtimeImplementationCount}',
+    )
+    ..writeln('- engine call count: ${result.engineCallCount}')
+    ..writeln('- scheduler execution count: ${result.schedulerExecutionCount}')
+    ..writeln('- product output count: ${result.productOutputCount}')
+    ..writeln('- owner proof queue count: ${result.ownerProofQueueCount}')
+    ..writeln();
+}
+
 void _writePatchSetDiagnostic(
   StringBuffer buffer,
   DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticResult result,
@@ -1850,6 +1960,58 @@ Map<String, Object?> _patchSetJson() {
       'runtimeImplementationCount': result.runtimeImplementationCount,
       'engineCallCount': result.engineCallCount,
       'schedulerExecutionCount': result.schedulerExecutionCount,
+    },
+  };
+}
+
+Map<String, Object?> _metadataRefinementJson(
+  DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementPatchResult result,
+) {
+  return <String, Object?>{
+    'status': result.status.wire,
+    'sourceDiagnosticStatus': result.sourceDiagnosticStatus,
+    'sourcePatchSetStatus': result.sourcePatchSetStatus,
+    'safeForPhase34F': result.safeForPhase34F,
+    'nextRecommendation': result.nextRecommendation,
+    'sourcePhaseChain': const <String>[
+      'Phase 34B action plan',
+      'Phase 34C patch set',
+      'Phase 34D patch-set diagnostic',
+      'Phase 34E metadata refinement',
+    ],
+    'targetSurfaceCounts': result.targetSurfaceCounts,
+    'allowedTargetSurfaces': result.allowedTargetSurfaces,
+    'forbiddenTargetSurfaces': result.forbiddenTargetSurfaces,
+    'counts': <String, Object?>{
+      'totalRefinementRecords': result.totalRefinementRecords,
+      'supportTraceabilityMetadataRefinementCount':
+          result.supportTraceabilityMetadataRefinementCount,
+      'warningReasonMetadataRefinementCount':
+          result.warningReasonMetadataRefinementCount,
+      'proofBoundaryMetadataRefinementCount':
+          result.proofBoundaryMetadataRefinementCount,
+      'excludedGuardMetadataRefinementCount':
+          result.excludedGuardMetadataRefinementCount,
+      'deniedFieldMetadataRefinementCount':
+          result.deniedFieldMetadataRefinementCount,
+      'blockedIntegrationMetadataRefinementCount':
+          result.blockedIntegrationMetadataRefinementCount,
+      'targetSurfaceMetadataRefinementCount':
+          result.targetSurfaceMetadataRefinementCount,
+      'diagnosticSummaryMetadataRefinementCount':
+          result.diagnosticSummaryMetadataRefinementCount,
+      'phase34FDiagnosticRequirementRefinementCount':
+          result.phase34FDiagnosticRequirementRefinementCount,
+      'unsafeCount': result.unsafeCount,
+      'blockerCount': result.blockerCount,
+      'criticalCount': result.criticalCount,
+      'activeDeniedFieldCount': result.activeDeniedFieldCount,
+      'analyzerWiringCount': result.analyzerWiringCount,
+      'runtimeImplementationCount': result.runtimeImplementationCount,
+      'engineCallCount': result.engineCallCount,
+      'schedulerExecutionCount': result.schedulerExecutionCount,
+      'productOutputCount': result.productOutputCount,
+      'ownerProofQueueCount': result.ownerProofQueueCount,
     },
   };
 }
@@ -2239,7 +2401,7 @@ List<String> _sorted(Iterable<String> values) {
 String _usage(String failure) {
   return [
     if (failure.isNotEmpty && failure != 'help') 'error: $failure',
-    'usage: dart run tool/debug_only_bridge_analyzer_adapter_prototype_diagnostic_command.dart [--format=markdown|json] [--strict] [--safe-demo] [--include-warnings] [--section=all|snapshot|packets|policy|records|proof|boundaries|runtime|recommendation|action-plan|patches|golden] [--patch-diagnostic=default|all-safe|support|warning|proof|guards|denied|blocked|recommendation] [--golden-case=<caseId>|default-selected|all-safe-selected] [--list-golden-cases]',
+    'usage: dart run tool/debug_only_bridge_analyzer_adapter_prototype_diagnostic_command.dart [--format=markdown|json] [--strict] [--safe-demo] [--include-warnings] [--section=all|snapshot|packets|policy|records|proof|boundaries|runtime|recommendation|action-plan|patches|metadata-refinement|golden] [--patch-diagnostic=default|all-safe|support|warning|proof|guards|denied|blocked|recommendation] [--golden-case=<caseId>|default-selected|all-safe-selected] [--list-golden-cases]',
     'defaults: --format=markdown --safe-demo --include-warnings --section=all',
   ].join('\n');
 }
