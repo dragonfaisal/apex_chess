@@ -216,4 +216,8 @@ Phase 34E applies a developer-only analyzer adapter prototype metadata refinemen
 
 Phase 34F adds a developer-only analyzer adapter prototype metadata refinement diagnostic run only. It does not load Stockfish, call FFI/native bridges, execute Android collector flows, expose Stockfish command/raw UCI/PV dump fields as active output, wire analyzer runtime, implement runtime or executable prototype behavior, implement wiring, scheduler execution, product adapter behavior, saved analysis integration, readiness gates, readiness summaries, or add engine-facing production integration.
 
+## Phase 34G Status
+
+Phase 34G adds disabled developer-only analyzer adapter runtime-preparation envelopes, preconditions, policy, and blocked seam metadata only. It does not load Stockfish, call FFI/native bridges, execute Android collector flows, expose Stockfish command/raw UCI/PV dump fields as active output, wire analyzer runtime, execute runtime behavior, implement executable prototype behavior, scheduler execution, product adapter behavior, saved analysis integration, readiness gates, readiness summaries, or add engine-facing production integration.
+
 Decision record: `LOCAL_ENGINE_SUBSTRATE_DECISION.md`.

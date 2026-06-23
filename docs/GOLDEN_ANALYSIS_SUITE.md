@@ -1021,3 +1021,28 @@ moves, add official metrics, compute CP-loss, compute win probability, expose St
 as active output, add UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine
 access, implement analyzer runtime, implement runtime bridge behavior, implement executable prototype behavior, implement
 wiring, product adapter behavior, saved analysis integration, readiness summaries, readiness gates, or third-party data.
+
+## Phase 34G Controlled Analyzer Adapter Runtime Preparation Patch
+
+Phase 34G adds the first controlled runtime-preparation surface for the debug-only analyzer adapter prototype. It defines
+safe request/response envelope metadata, explicit non-executable runtime preconditions, a disabled execution policy, and
+blocked seam records for analyzer runtime, analyzer wiring, engine calls, Stockfish bridge, Android collector, scheduler
+execution, persistence, product adapter, saved analysis, UI, backend, cache, and database paths.
+
+Runtime-preparation behavior:
+
+- `executionAllowed`, `analyzerWiringAllowed`, `engineCallsAllowed`, `schedulerAllowed`, `persistenceAllowed`,
+  `productOutputAllowed`, `productAdapterAllowed`, and `savedAnalysisAllowed` remain false.
+- input and output envelopes carry source-chain metadata only and do not execute analysis.
+- quiet/preparatory support IDs remain excluded from active runtime-preparation support.
+- PV/MultiPV remains proof-boundary/watch-list metadata only.
+- Phase 32E cases still do not claim captured Android proof.
+- Android proof remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and
+  `simple-tactical-capture-check`.
+
+Next recommendation: `runControlledAnalyzerAdapterRuntimePreparationDiagnostic`. Phase 34G does not run Stockfish,
+execute Android collector flows, call analyzer flow, wire analyzer internals, add product labels, compute scores, rank
+moves, add official metrics, compute CP-loss, compute win probability, expose Stockfish command/raw UCI/PV dump fields
+as active output, add UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine
+access, implement analyzer runtime, implement runtime bridge behavior, implement executable prototype behavior, implement
+wiring, product adapter behavior, saved analysis integration, readiness summaries, readiness gates, or third-party data.

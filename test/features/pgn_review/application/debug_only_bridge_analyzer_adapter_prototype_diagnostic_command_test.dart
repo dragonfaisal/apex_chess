@@ -214,6 +214,10 @@ void main() {
         contains('## Metadata Refinement Summary'),
       );
       expect(
+        _run(args: const <String>['--section=runtime-preparation']).stdoutText,
+        contains('## Controlled Runtime Preparation'),
+      );
+      expect(
         _run(args: const <String>['--section=golden']).stdoutText,
         contains('## Selected Golden Analyzer Adapter Prototype Diagnostic'),
       );
@@ -601,6 +605,9 @@ void main() {
       final refinementDiagnostic = _run(
         args: const <String>['--refinement-diagnostic=default'],
       ).stdoutText;
+      final runtimePreparation = _run(
+        args: const <String>['--section=runtime-preparation'],
+      ).stdoutText;
 
       _expectReportGuardrails(markdown);
       _expectReportGuardrails(json);
@@ -609,6 +616,7 @@ void main() {
       _expectReportGuardrails(patchDiagnostic);
       _expectReportGuardrails(metadataRefinement);
       _expectReportGuardrails(refinementDiagnostic);
+      _expectReportGuardrails(runtimePreparation);
     });
 
     test('source imports remain command-only and integration-free', () {

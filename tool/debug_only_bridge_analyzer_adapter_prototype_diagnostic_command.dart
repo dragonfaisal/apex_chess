@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io' as io;
 
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_action_plan_patch_set.dart';
+import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_controlled_runtime_preparation.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_inspection_harness.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_inspection_harness_validation.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_metadata_refinement_diagnostic.dart';
@@ -42,6 +43,7 @@ enum DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection {
   actionPlan('action-plan'),
   patches('patches'),
   metadataRefinement('metadata-refinement'),
+  runtimePreparation('runtime-preparation'),
   golden('golden');
 
   const DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection(this.wire);
@@ -386,6 +388,7 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandResult {
     this.patchSetDiagnostic,
     this.metadataRefinement,
     this.metadataRefinementDiagnostic,
+    this.runtimePreparation,
     this.commandFailure,
   });
 
@@ -413,6 +416,7 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandResult {
   metadataRefinement;
   final DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementDiagnosticResult?
   metadataRefinementDiagnostic;
+  final ControlledAnalyzerAdapterRuntimePreparationResult? runtimePreparation;
   final String? commandFailure;
 }
 
@@ -769,6 +773,15 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
       ? null
       : const DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementDiagnostic()
             .evaluate(mode: request.refinementDiagnosticMode!);
+  final runtimePreparation =
+      _includeSection(
+        request.section,
+        DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection
+            .runtimePreparation,
+      )
+      ? const DebugOnlyBridgeAnalyzerAdapterControlledRuntimePreparation()
+            .evaluate()
+      : null;
   final stdoutText = switch (request.format) {
     DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticFormat.markdown =>
       _renderMarkdown(
@@ -778,9 +791,10 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
         patchSetDiagnostic: patchSetDiagnostic,
         metadataRefinement: metadataRefinement,
         metadataRefinementDiagnostic: metadataRefinementDiagnostic,
+        runtimePreparation: runtimePreparation,
       ),
     DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticFormat.json =>
-      '${_renderJson(diagnostic, request.section, selectedGoldenDiagnostic: selectedGoldenDiagnostic, patchSetDiagnostic: patchSetDiagnostic, metadataRefinement: metadataRefinement, metadataRefinementDiagnostic: metadataRefinementDiagnostic)}\n',
+      '${_renderJson(diagnostic, request.section, selectedGoldenDiagnostic: selectedGoldenDiagnostic, patchSetDiagnostic: patchSetDiagnostic, metadataRefinement: metadataRefinement, metadataRefinementDiagnostic: metadataRefinementDiagnostic, runtimePreparation: runtimePreparation)}\n',
   };
   final reportFindings = <String>[
     ...const DebugOnlyBridgeAnalyzerAdapterPrototypeInspectionHarnessValidationValidator()
@@ -794,6 +808,9 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
     if (metadataRefinementDiagnostic != null)
       ...const DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementDiagnosticValidator()
           .validateReportText(stdoutText),
+    if (runtimePreparation != null)
+      ...const DebugOnlyBridgeAnalyzerAdapterControlledRuntimePreparationValidator()
+          .validateReportText(stdoutText),
   ];
 
   return DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandResult(
@@ -805,6 +822,7 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
       patchSetDiagnostic: patchSetDiagnostic,
       metadataRefinement: metadataRefinement,
       metadataRefinementDiagnostic: metadataRefinementDiagnostic,
+      runtimePreparation: runtimePreparation,
     ),
     format: request.format,
     section: request.section,
@@ -822,6 +840,7 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
     patchSetDiagnostic: patchSetDiagnostic,
     metadataRefinement: metadataRefinement,
     metadataRefinementDiagnostic: metadataRefinementDiagnostic,
+    runtimePreparation: runtimePreparation,
   );
 }
 
@@ -1021,6 +1040,7 @@ int debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitCode(
   metadataRefinement,
   DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementDiagnosticResult?
   metadataRefinementDiagnostic,
+  ControlledAnalyzerAdapterRuntimePreparationResult? runtimePreparation,
 }) {
   final hasReportLeak = reportFindings.any(_isCriticalFinding);
   if (diagnostic.hasUnsafePolicyViolation ||
@@ -1028,7 +1048,8 @@ int debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitCode(
       (selectedGoldenDiagnostic?.hasUnsafePolicyViolation ?? false) ||
       (patchSetDiagnostic?.hasUnsafePolicyViolation ?? false) ||
       (metadataRefinement?.hasUnsafePolicyViolation ?? false) ||
-      (metadataRefinementDiagnostic?.hasUnsafePolicyViolation ?? false)) {
+      (metadataRefinementDiagnostic?.hasUnsafePolicyViolation ?? false) ||
+      (runtimePreparation?.hasUnsafePolicyViolation ?? false)) {
     return debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitUnsafePolicy;
   }
   if (request.strict &&
@@ -1066,7 +1087,8 @@ int debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitCode(
           (selectedGoldenDiagnostic?.hasStrictBlocker ?? false) ||
           (patchSetDiagnostic?.hasUnsafePolicyViolation ?? false) ||
           (metadataRefinement?.hasUnsafePolicyViolation ?? false) ||
-          (metadataRefinementDiagnostic?.hasUnsafePolicyViolation ?? false))) {
+          (metadataRefinementDiagnostic?.hasUnsafePolicyViolation ?? false) ||
+          (runtimePreparation?.hasUnsafePolicyViolation ?? false))) {
     return debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitBlockedStrict;
   }
   return debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess;
@@ -1083,6 +1105,7 @@ String _renderMarkdown(
   metadataRefinement,
   DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementDiagnosticResult?
   metadataRefinementDiagnostic,
+  ControlledAnalyzerAdapterRuntimePreparationResult? runtimePreparation,
 }) {
   final buffer = StringBuffer()
     ..writeln('# Debug-Only Bridge Analyzer Adapter Prototype Diagnostic')
@@ -1187,6 +1210,14 @@ String _renderMarkdown(
   if (metadataRefinementDiagnostic != null) {
     _writeMetadataRefinementDiagnostic(buffer, metadataRefinementDiagnostic);
   }
+  if (runtimePreparation != null &&
+      _includeSection(
+        section,
+        DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection
+            .runtimePreparation,
+      )) {
+    _writeRuntimePreparation(buffer, runtimePreparation);
+  }
   return buffer.toString();
 }
 
@@ -1201,6 +1232,7 @@ String _renderJson(
   metadataRefinement,
   DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementDiagnosticResult?
   metadataRefinementDiagnostic,
+  ControlledAnalyzerAdapterRuntimePreparationResult? runtimePreparation,
 }) {
   return const JsonEncoder.withIndent(' ').convert(
     _jsonPayload(
@@ -1210,6 +1242,7 @@ String _renderJson(
       patchSetDiagnostic: patchSetDiagnostic,
       metadataRefinement: metadataRefinement,
       metadataRefinementDiagnostic: metadataRefinementDiagnostic,
+      runtimePreparation: runtimePreparation,
     ),
   );
 }
@@ -1225,6 +1258,7 @@ Map<String, Object?> _jsonPayload(
   metadataRefinement,
   DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementDiagnosticResult?
   metadataRefinementDiagnostic,
+  ControlledAnalyzerAdapterRuntimePreparationResult? runtimePreparation,
 }) {
   final payload = <String, Object?>{
     'version': debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandVersion,
@@ -1322,6 +1356,14 @@ Map<String, Object?> _jsonPayload(
   if (metadataRefinementDiagnostic != null) {
     payload['metadataRefinementDiagnostic'] = metadataRefinementDiagnostic
         .toJson();
+  }
+  if (runtimePreparation != null &&
+      _includeSection(
+        section,
+        DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection
+            .runtimePreparation,
+      )) {
+    payload['runtimePreparation'] = runtimePreparation.toJson();
   }
   return payload;
 }
@@ -1966,6 +2008,43 @@ void _writeMetadataRefinementDiagnostic(
     ..writeln();
 }
 
+void _writeRuntimePreparation(
+  StringBuffer buffer,
+  ControlledAnalyzerAdapterRuntimePreparationResult result,
+) {
+  buffer
+    ..writeln('## Controlled Runtime Preparation')
+    ..writeln('- preparation status: ${result.status.wire}')
+    ..writeln(
+      '- source metadata refinement diagnostic status: ${result.sourceMetadataRefinementDiagnosticStatus}',
+    )
+    ..writeln('- safe for Phase 34H: ${result.safeForPhase34H}')
+    ..writeln('- next recommendation: ${result.nextRecommendation}')
+    ..writeln('- executionAllowed: ${result.policy.executionAllowed}')
+    ..writeln('- analyzerWiringAllowed: ${result.policy.analyzerWiringAllowed}')
+    ..writeln('- engineCallsAllowed: ${result.policy.engineCallsAllowed}')
+    ..writeln('- schedulerAllowed: ${result.policy.schedulerAllowed}')
+    ..writeln('- persistenceAllowed: ${result.policy.persistenceAllowed}')
+    ..writeln('- productOutputAllowed: ${result.policy.productOutputAllowed}')
+    ..writeln('- productAdapterAllowed: ${result.policy.productAdapterAllowed}')
+    ..writeln('- savedAnalysisAllowed: ${result.policy.savedAnalysisAllowed}')
+    ..writeln('- precondition count: ${result.totalPreconditions}')
+    ..writeln('- envelope count: ${result.totalEnvelopes}')
+    ..writeln('- blocked seam count: ${result.totalBlockedSeams}')
+    ..writeln('- denied field count: ${result.deniedFieldCount}')
+    ..writeln('- source diagnostics: ${_ids(result.input.sourceDiagnosticIds)}')
+    ..writeln('- source cases: ${_ids(result.input.sourceCaseIds)}')
+    ..writeln('- active denied field count: ${result.activeDeniedFieldCount}')
+    ..writeln('- runtime execution count: ${result.runtimeExecutionCount}')
+    ..writeln('- analyzer wiring count: ${result.analyzerWiringCount}')
+    ..writeln('- engine call count: ${result.engineCallCount}')
+    ..writeln('- scheduler execution count: ${result.schedulerExecutionCount}')
+    ..writeln('- persistence write count: ${result.persistenceWriteCount}')
+    ..writeln('- product output count: ${result.productOutputCount}')
+    ..writeln('- owner proof queue count: ${result.ownerProofQueueCount}')
+    ..writeln();
+}
+
 void _writePatchSetDiagnostic(
   StringBuffer buffer,
   DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticResult result,
@@ -2521,7 +2600,7 @@ List<String> _sorted(Iterable<String> values) {
 String _usage(String failure) {
   return [
     if (failure.isNotEmpty && failure != 'help') 'error: $failure',
-    'usage: dart run tool/debug_only_bridge_analyzer_adapter_prototype_diagnostic_command.dart [--format=markdown|json] [--strict] [--safe-demo] [--include-warnings] [--section=all|snapshot|packets|policy|records|proof|boundaries|runtime|recommendation|action-plan|patches|metadata-refinement|golden] [--patch-diagnostic=default|all-safe|support|warning|proof|guards|denied|blocked|recommendation] [--refinement-diagnostic=default|all-safe|support|warning|proof|guards|denied|blocked|surfaces|recommendation] [--golden-case=<caseId>|default-selected|all-safe-selected] [--list-golden-cases]',
+    'usage: dart run tool/debug_only_bridge_analyzer_adapter_prototype_diagnostic_command.dart [--format=markdown|json] [--strict] [--safe-demo] [--include-warnings] [--section=all|snapshot|packets|policy|records|proof|boundaries|runtime|recommendation|action-plan|patches|metadata-refinement|runtime-preparation|golden] [--patch-diagnostic=default|all-safe|support|warning|proof|guards|denied|blocked|recommendation] [--refinement-diagnostic=default|all-safe|support|warning|proof|guards|denied|blocked|surfaces|recommendation] [--golden-case=<caseId>|default-selected|all-safe-selected] [--list-golden-cases]',
     'defaults: --format=markdown --safe-demo --include-warnings --section=all',
   ].join('\n');
 }
