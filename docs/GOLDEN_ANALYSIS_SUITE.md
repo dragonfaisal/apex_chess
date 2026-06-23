@@ -997,3 +997,27 @@ moves, add official metrics, compute CP-loss, compute win probability, expose St
 as active output, add UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine
 access, implement analyzer runtime, implement runtime bridge behavior, implement executable prototype behavior, implement
 wiring, product adapter behavior, saved analysis integration, readiness summaries, readiness gates, or third-party data.
+
+## Phase 34F Run Analyzer Adapter Prototype Metadata Refinement Diagnostic
+
+Phase 34F adds a practical developer-only diagnostic run over the Phase 34E metadata refinement patch. It lets developers
+inspect refined support, warning, proof-boundary, excluded-guard, denied-field, blocked-integration, target-surface, and
+recommendation metadata through deterministic markdown/JSON reports and `--refinement-diagnostic` modes.
+
+Metadata refinement diagnostic behavior:
+
+- support refinements remain metadata-only traceability.
+- warning refinements remain warning-only.
+- PV/MultiPV remains proof-boundary/watch-list only.
+- quiet/preparatory remains excluded guard only.
+- denied-field refinements remain inactive.
+- blocked integrations remain blocked.
+- target surfaces remain diagnostic/report/proof/guardrail metadata surfaces only.
+- no row becomes product output or analyzer runtime input.
+
+Next recommendation: `implementControlledAnalyzerAdapterRuntimePreparationPatch`. Phase 34F does not run Stockfish,
+execute Android collector flows, call analyzer flow, wire analyzer internals, add product labels, compute scores, rank
+moves, add official metrics, compute CP-loss, compute win probability, expose Stockfish command/raw UCI/PV dump fields
+as active output, add UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine
+access, implement analyzer runtime, implement runtime bridge behavior, implement executable prototype behavior, implement
+wiring, product adapter behavior, saved analysis integration, readiness summaries, readiness gates, or third-party data.

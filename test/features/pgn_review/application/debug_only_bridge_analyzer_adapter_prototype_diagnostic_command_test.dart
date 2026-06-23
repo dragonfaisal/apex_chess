@@ -4,6 +4,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_metadata_refinement_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_patch_set_diagnostic.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -396,6 +397,51 @@ void main() {
       expect(strict.patchSetDiagnostic!.safeForPhase34E, isTrue);
     });
 
+    test('refinement diagnostic JSON and strict modes succeed', () {
+      final json = _run(
+        args: const <String>[
+          '--refinement-diagnostic=default',
+          '--format=json',
+        ],
+      );
+      final strict = _run(
+        args: const <String>['--refinement-diagnostic=default', '--strict'],
+      );
+      final decoded = jsonDecode(json.stdoutText) as Map<String, Object?>;
+      final refinementDiagnostic =
+          decoded['metadataRefinementDiagnostic'] as Map<String, Object?>;
+      final counts = refinementDiagnostic['counts'] as Map<String, Object?>;
+
+      expect(
+        json.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+      );
+      expect(json.refinementDiagnosticMode!.wire, 'default');
+      expect(
+        json.metadataRefinementDiagnostic!.status,
+        DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementDiagnosticStatus
+            .analyzerAdapterPrototypeMetadataRefinementDiagnosticReadyWithWarnings,
+      );
+      expect(
+        refinementDiagnostic['status'],
+        'analyzerAdapterPrototypeMetadataRefinementDiagnosticReadyWithWarnings',
+      );
+      expect(refinementDiagnostic['safeForPhase34G'], isTrue);
+      expect(
+        refinementDiagnostic['nextRecommendation'],
+        'implementControlledAnalyzerAdapterRuntimePreparationPatch',
+      );
+      expect(counts['unsafeCount'], 0);
+      expect(counts['blockerCount'], 0);
+      expect(counts['criticalCount'], 0);
+      expect(counts['activeDeniedFieldCount'], 0);
+      expect(
+        strict.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+      );
+      expect(strict.metadataRefinementDiagnostic!.safeForPhase34G, isTrue);
+    });
+
     test('each patch diagnostic mode succeeds through diagnostic command', () {
       for (final mode in const <String>[
         'default',
@@ -420,6 +466,38 @@ void main() {
         expect(result.stdoutText, contains('patch diagnostic mode: $mode'));
       }
     });
+
+    test(
+      'each refinement diagnostic mode succeeds through diagnostic command',
+      () {
+        for (final mode in const <String>[
+          'default',
+          'all-safe',
+          'support',
+          'warning',
+          'proof',
+          'guards',
+          'denied',
+          'blocked',
+          'surfaces',
+          'recommendation',
+        ]) {
+          final result = _run(args: <String>['--refinement-diagnostic=$mode']);
+
+          expect(
+            result.exitCode,
+            debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+            reason: mode,
+          );
+          expect(result.refinementDiagnosticMode!.wire, mode);
+          expect(result.metadataRefinementDiagnostic!.safeForPhase34G, isTrue);
+          expect(
+            result.stdoutText,
+            contains('refinement diagnostic mode: $mode'),
+          );
+        }
+      },
+    );
 
     test('selected Golden role guardrails are preserved', () {
       final selected = _run(
@@ -466,6 +544,9 @@ void main() {
       final badPatchDiagnostic = _run(
         args: const <String>['--patch-diagnostic=missing'],
       );
+      final badRefinementDiagnostic = _run(
+        args: const <String>['--refinement-diagnostic=missing'],
+      );
 
       expect(
         badSection.exitCode,
@@ -491,6 +572,15 @@ void main() {
       );
       expect(badPatchDiagnostic.commandFailure, 'unknownPatchDiagnostic');
       expect(badPatchDiagnostic.stderrText, contains('usage:'));
+      expect(
+        badRefinementDiagnostic.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitUsage,
+      );
+      expect(
+        badRefinementDiagnostic.commandFailure,
+        'unknownRefinementDiagnostic',
+      );
+      expect(badRefinementDiagnostic.stderrText, contains('usage:'));
     });
 
     test('output contains no raw engine spam or active product data', () {
@@ -508,6 +598,9 @@ void main() {
       final metadataRefinement = _run(
         args: const <String>['--section=metadata-refinement'],
       ).stdoutText;
+      final refinementDiagnostic = _run(
+        args: const <String>['--refinement-diagnostic=default'],
+      ).stdoutText;
 
       _expectReportGuardrails(markdown);
       _expectReportGuardrails(json);
@@ -515,6 +608,7 @@ void main() {
       _expectReportGuardrails(goldenJson);
       _expectReportGuardrails(patchDiagnostic);
       _expectReportGuardrails(metadataRefinement);
+      _expectReportGuardrails(refinementDiagnostic);
     });
 
     test('source imports remain command-only and integration-free', () {

@@ -4,6 +4,7 @@ import 'dart:io' as io;
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_action_plan_patch_set.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_inspection_harness.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_inspection_harness_validation.dart';
+import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_metadata_refinement_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_metadata_refinement_patch.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_patch_set_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_selected_diagnostic_action_plan.dart';
@@ -378,11 +379,13 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandResult {
     required this.stderrText,
     this.goldenCaseSelection,
     this.patchDiagnosticMode,
+    this.refinementDiagnosticMode,
     this.listGoldenCases = false,
     this.diagnosticResult,
     this.selectedGoldenDiagnostic,
     this.patchSetDiagnostic,
     this.metadataRefinement,
+    this.metadataRefinementDiagnostic,
     this.commandFailure,
   });
 
@@ -397,6 +400,8 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandResult {
   final String? goldenCaseSelection;
   final DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticMode?
   patchDiagnosticMode;
+  final DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementDiagnosticMode?
+  refinementDiagnosticMode;
   final bool listGoldenCases;
   final DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticResult?
   diagnosticResult;
@@ -406,6 +411,8 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandResult {
   patchSetDiagnostic;
   final DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementPatchResult?
   metadataRefinement;
+  final DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementDiagnosticResult?
+  metadataRefinementDiagnostic;
   final String? commandFailure;
 }
 
@@ -418,6 +425,7 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest {
     required this.includeWarnings,
     this.goldenCaseSelection,
     this.patchDiagnosticMode,
+    this.refinementDiagnosticMode,
     this.listGoldenCases = false,
     this.showHelp = false,
   }) : isValid = true,
@@ -433,6 +441,7 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest {
       includeWarnings = true,
       goldenCaseSelection = null,
       patchDiagnosticMode = null,
+      refinementDiagnosticMode = null,
       listGoldenCases = false,
       showHelp = false;
 
@@ -446,6 +455,8 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest {
   final String? goldenCaseSelection;
   final DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticMode?
   patchDiagnosticMode;
+  final DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementDiagnosticMode?
+  refinementDiagnosticMode;
   final bool listGoldenCases;
   final bool showHelp;
 }
@@ -657,6 +668,7 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
       includeWarnings: request.includeWarnings,
       goldenCaseSelection: request.goldenCaseSelection,
       patchDiagnosticMode: request.patchDiagnosticMode,
+      refinementDiagnosticMode: request.refinementDiagnosticMode,
       listGoldenCases: request.listGoldenCases,
       stdoutText: '',
       stderrText: _usage(request.failure),
@@ -674,6 +686,7 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
       includeWarnings: request.includeWarnings,
       goldenCaseSelection: request.goldenCaseSelection,
       patchDiagnosticMode: request.patchDiagnosticMode,
+      refinementDiagnosticMode: request.refinementDiagnosticMode,
       listGoldenCases: request.listGoldenCases,
       stdoutText: _usage('help'),
       stderrText: '',
@@ -701,6 +714,7 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
       includeWarnings: request.includeWarnings,
       goldenCaseSelection: request.goldenCaseSelection,
       patchDiagnosticMode: request.patchDiagnosticMode,
+      refinementDiagnosticMode: request.refinementDiagnosticMode,
       listGoldenCases: true,
       stdoutText: stdoutText,
       stderrText: '',
@@ -729,6 +743,7 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
       includeWarnings: request.includeWarnings,
       goldenCaseSelection: request.goldenCaseSelection,
       patchDiagnosticMode: request.patchDiagnosticMode,
+      refinementDiagnosticMode: request.refinementDiagnosticMode,
       listGoldenCases: request.listGoldenCases,
       stdoutText: '',
       stderrText: _usage(selectedGoldenBuildResult.failure!),
@@ -742,13 +757,18 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
             .evaluate(mode: request.patchDiagnosticMode!);
   final metadataRefinement =
       _includeSection(
-        request.section,
-        DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection
-            .metadataRefinement,
-      )
+            request.section,
+            DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection
+                .metadataRefinement,
+          ) ||
+          request.refinementDiagnosticMode != null
       ? const DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementPatch()
             .evaluate()
       : null;
+  final metadataRefinementDiagnostic = request.refinementDiagnosticMode == null
+      ? null
+      : const DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementDiagnostic()
+            .evaluate(mode: request.refinementDiagnosticMode!);
   final stdoutText = switch (request.format) {
     DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticFormat.markdown =>
       _renderMarkdown(
@@ -757,9 +777,10 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
         selectedGoldenDiagnostic: selectedGoldenDiagnostic,
         patchSetDiagnostic: patchSetDiagnostic,
         metadataRefinement: metadataRefinement,
+        metadataRefinementDiagnostic: metadataRefinementDiagnostic,
       ),
     DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticFormat.json =>
-      '${_renderJson(diagnostic, request.section, selectedGoldenDiagnostic: selectedGoldenDiagnostic, patchSetDiagnostic: patchSetDiagnostic, metadataRefinement: metadataRefinement)}\n',
+      '${_renderJson(diagnostic, request.section, selectedGoldenDiagnostic: selectedGoldenDiagnostic, patchSetDiagnostic: patchSetDiagnostic, metadataRefinement: metadataRefinement, metadataRefinementDiagnostic: metadataRefinementDiagnostic)}\n',
   };
   final reportFindings = <String>[
     ...const DebugOnlyBridgeAnalyzerAdapterPrototypeInspectionHarnessValidationValidator()
@@ -769,6 +790,9 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
           .validateReportText(stdoutText),
     if (metadataRefinement != null)
       ...const DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementPatchValidator()
+          .validateReportText(stdoutText),
+    if (metadataRefinementDiagnostic != null)
+      ...const DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementDiagnosticValidator()
           .validateReportText(stdoutText),
   ];
 
@@ -780,6 +804,7 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
       selectedGoldenDiagnostic: selectedGoldenDiagnostic,
       patchSetDiagnostic: patchSetDiagnostic,
       metadataRefinement: metadataRefinement,
+      metadataRefinementDiagnostic: metadataRefinementDiagnostic,
     ),
     format: request.format,
     section: request.section,
@@ -788,6 +813,7 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
     includeWarnings: request.includeWarnings,
     goldenCaseSelection: request.goldenCaseSelection,
     patchDiagnosticMode: request.patchDiagnosticMode,
+    refinementDiagnosticMode: request.refinementDiagnosticMode,
     listGoldenCases: request.listGoldenCases,
     stdoutText: stdoutText,
     stderrText: '',
@@ -795,6 +821,7 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
     selectedGoldenDiagnostic: selectedGoldenDiagnostic,
     patchSetDiagnostic: patchSetDiagnostic,
     metadataRefinement: metadataRefinement,
+    metadataRefinementDiagnostic: metadataRefinementDiagnostic,
   );
 }
 
@@ -813,10 +840,13 @@ validateDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticArgs(
   var includeWarningsSeen = false;
   var goldenCaseSelectionSeen = false;
   var patchDiagnosticSeen = false;
+  var refinementDiagnosticSeen = false;
   var listGoldenCasesSeen = false;
   String? goldenCaseSelection;
   DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticMode?
   patchDiagnosticMode;
+  DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementDiagnosticMode?
+  refinementDiagnosticMode;
 
   for (final arg in args) {
     if (arg == '--help' || arg == '-h') {
@@ -834,6 +864,7 @@ validateDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticArgs(
         includeWarnings: true,
         goldenCaseSelection: null,
         patchDiagnosticMode: null,
+        refinementDiagnosticMode: null,
         listGoldenCases: false,
         showHelp: true,
       );
@@ -903,6 +934,24 @@ validateDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticArgs(
       patchDiagnosticSeen = true;
       continue;
     }
+    if (arg.startsWith(_refinementDiagnosticFlag)) {
+      if (refinementDiagnosticSeen) {
+        return const DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest.invalid(
+          'duplicateRefinementDiagnostic',
+        );
+      }
+      final parsed = _refinementDiagnosticModeByWire(
+        arg.substring(_refinementDiagnosticFlag.length).trim(),
+      );
+      if (parsed == null) {
+        return const DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest.invalid(
+          'unknownRefinementDiagnostic',
+        );
+      }
+      refinementDiagnosticMode = parsed;
+      refinementDiagnosticSeen = true;
+      continue;
+    }
     if (arg == _listGoldenCasesFlag) {
       if (listGoldenCasesSeen) {
         return const DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest.invalid(
@@ -955,6 +1004,7 @@ validateDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticArgs(
     includeWarnings: includeWarnings,
     goldenCaseSelection: goldenCaseSelection,
     patchDiagnosticMode: patchDiagnosticMode,
+    refinementDiagnosticMode: refinementDiagnosticMode,
     listGoldenCases: listGoldenCasesSeen,
   );
 }
@@ -969,13 +1019,16 @@ int debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitCode(
   patchSetDiagnostic,
   DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementPatchResult?
   metadataRefinement,
+  DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementDiagnosticResult?
+  metadataRefinementDiagnostic,
 }) {
   final hasReportLeak = reportFindings.any(_isCriticalFinding);
   if (diagnostic.hasUnsafePolicyViolation ||
       hasReportLeak ||
       (selectedGoldenDiagnostic?.hasUnsafePolicyViolation ?? false) ||
       (patchSetDiagnostic?.hasUnsafePolicyViolation ?? false) ||
-      (metadataRefinement?.hasUnsafePolicyViolation ?? false)) {
+      (metadataRefinement?.hasUnsafePolicyViolation ?? false) ||
+      (metadataRefinementDiagnostic?.hasUnsafePolicyViolation ?? false)) {
     return debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitUnsafePolicy;
   }
   if (request.strict &&
@@ -1012,7 +1065,8 @@ int debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitCode(
           !diagnostic.safeForPhase33Z ||
           (selectedGoldenDiagnostic?.hasStrictBlocker ?? false) ||
           (patchSetDiagnostic?.hasUnsafePolicyViolation ?? false) ||
-          (metadataRefinement?.hasUnsafePolicyViolation ?? false))) {
+          (metadataRefinement?.hasUnsafePolicyViolation ?? false) ||
+          (metadataRefinementDiagnostic?.hasUnsafePolicyViolation ?? false))) {
     return debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitBlockedStrict;
   }
   return debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess;
@@ -1027,6 +1081,8 @@ String _renderMarkdown(
   patchSetDiagnostic,
   DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementPatchResult?
   metadataRefinement,
+  DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementDiagnosticResult?
+  metadataRefinementDiagnostic,
 }) {
   final buffer = StringBuffer()
     ..writeln('# Debug-Only Bridge Analyzer Adapter Prototype Diagnostic')
@@ -1128,6 +1184,9 @@ String _renderMarkdown(
   if (patchSetDiagnostic != null) {
     _writePatchSetDiagnostic(buffer, patchSetDiagnostic);
   }
+  if (metadataRefinementDiagnostic != null) {
+    _writeMetadataRefinementDiagnostic(buffer, metadataRefinementDiagnostic);
+  }
   return buffer.toString();
 }
 
@@ -1140,6 +1199,8 @@ String _renderJson(
   patchSetDiagnostic,
   DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementPatchResult?
   metadataRefinement,
+  DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementDiagnosticResult?
+  metadataRefinementDiagnostic,
 }) {
   return const JsonEncoder.withIndent(' ').convert(
     _jsonPayload(
@@ -1148,6 +1209,7 @@ String _renderJson(
       selectedGoldenDiagnostic: selectedGoldenDiagnostic,
       patchSetDiagnostic: patchSetDiagnostic,
       metadataRefinement: metadataRefinement,
+      metadataRefinementDiagnostic: metadataRefinementDiagnostic,
     ),
   );
 }
@@ -1161,6 +1223,8 @@ Map<String, Object?> _jsonPayload(
   patchSetDiagnostic,
   DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementPatchResult?
   metadataRefinement,
+  DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementDiagnosticResult?
+  metadataRefinementDiagnostic,
 }) {
   final payload = <String, Object?>{
     'version': debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandVersion,
@@ -1254,6 +1318,10 @@ Map<String, Object?> _jsonPayload(
   }
   if (patchSetDiagnostic != null) {
     payload['patchSetDiagnostic'] = patchSetDiagnostic.toJson();
+  }
+  if (metadataRefinementDiagnostic != null) {
+    payload['metadataRefinementDiagnostic'] = metadataRefinementDiagnostic
+        .toJson();
   }
   return payload;
 }
@@ -1856,6 +1924,48 @@ void _writeMetadataRefinement(
     ..writeln();
 }
 
+void _writeMetadataRefinementDiagnostic(
+  StringBuffer buffer,
+  DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementDiagnosticResult
+  result,
+) {
+  buffer
+    ..writeln('## Metadata Refinement Diagnostic Run')
+    ..writeln('- refinement diagnostic status: ${result.status.wire}')
+    ..writeln('- refinement diagnostic mode: ${result.mode.wire}')
+    ..writeln(
+      '- source metadata refinement status: ${result.sourceMetadataRefinementStatus}',
+    )
+    ..writeln('- source diagnostic status: ${result.sourceDiagnosticStatus}')
+    ..writeln('- source patch set status: ${result.sourcePatchSetStatus}')
+    ..writeln('- safe for Phase 34G: ${result.safeForPhase34G}')
+    ..writeln('- next recommendation: ${result.nextRecommendation}')
+    ..writeln('- total diagnostic rows: ${result.totalDiagnosticRows}')
+    ..writeln('- support diagnostic rows: ${result.supportDiagnosticRowCount}')
+    ..writeln('- warning diagnostic rows: ${result.warningDiagnosticRowCount}')
+    ..writeln('- proof diagnostic rows: ${result.proofDiagnosticRowCount}')
+    ..writeln('- guard diagnostic rows: ${result.guardDiagnosticRowCount}')
+    ..writeln('- denied diagnostic rows: ${result.deniedDiagnosticRowCount}')
+    ..writeln('- blocked diagnostic rows: ${result.blockedDiagnosticRowCount}')
+    ..writeln('- surface diagnostic rows: ${result.surfaceDiagnosticRowCount}')
+    ..writeln(
+      '- recommendation diagnostic rows: ${result.recommendationDiagnosticRowCount}',
+    )
+    ..writeln(
+      '- target surfaces: ${_mapSummary(Map<String, Object?>.from(result.targetSurfaceCounts))}',
+    )
+    ..writeln('- active denied field count: ${result.activeDeniedFieldCount}')
+    ..writeln('- analyzer wiring count: ${result.analyzerWiringCount}')
+    ..writeln(
+      '- runtime implementation count: ${result.runtimeImplementationCount}',
+    )
+    ..writeln('- engine call count: ${result.engineCallCount}')
+    ..writeln('- scheduler execution count: ${result.schedulerExecutionCount}')
+    ..writeln('- product output count: ${result.productOutputCount}')
+    ..writeln('- owner proof queue count: ${result.ownerProofQueueCount}')
+    ..writeln();
+}
+
 void _writePatchSetDiagnostic(
   StringBuffer buffer,
   DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticResult result,
@@ -2378,6 +2488,16 @@ _patchDiagnosticModeByWire(String wire) {
   return null;
 }
 
+DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementDiagnosticMode?
+_refinementDiagnosticModeByWire(String wire) {
+  for (final mode
+      in DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementDiagnosticMode
+          .values) {
+    if (mode.wire == wire) return mode;
+  }
+  return null;
+}
+
 bool _isCriticalFinding(String finding) =>
     finding.startsWith('reportTextLeak:');
 
@@ -2401,7 +2521,7 @@ List<String> _sorted(Iterable<String> values) {
 String _usage(String failure) {
   return [
     if (failure.isNotEmpty && failure != 'help') 'error: $failure',
-    'usage: dart run tool/debug_only_bridge_analyzer_adapter_prototype_diagnostic_command.dart [--format=markdown|json] [--strict] [--safe-demo] [--include-warnings] [--section=all|snapshot|packets|policy|records|proof|boundaries|runtime|recommendation|action-plan|patches|metadata-refinement|golden] [--patch-diagnostic=default|all-safe|support|warning|proof|guards|denied|blocked|recommendation] [--golden-case=<caseId>|default-selected|all-safe-selected] [--list-golden-cases]',
+    'usage: dart run tool/debug_only_bridge_analyzer_adapter_prototype_diagnostic_command.dart [--format=markdown|json] [--strict] [--safe-demo] [--include-warnings] [--section=all|snapshot|packets|policy|records|proof|boundaries|runtime|recommendation|action-plan|patches|metadata-refinement|golden] [--patch-diagnostic=default|all-safe|support|warning|proof|guards|denied|blocked|recommendation] [--refinement-diagnostic=default|all-safe|support|warning|proof|guards|denied|blocked|surfaces|recommendation] [--golden-case=<caseId>|default-selected|all-safe-selected] [--list-golden-cases]',
     'defaults: --format=markdown --safe-demo --include-warnings --section=all',
   ].join('\n');
 }
@@ -2410,6 +2530,7 @@ const _formatFlag = '--format=';
 const _sectionFlag = '--section=';
 const _goldenCaseFlag = '--golden-case=';
 const _patchDiagnosticFlag = '--patch-diagnostic=';
+const _refinementDiagnosticFlag = '--refinement-diagnostic=';
 const _strictFlag = '--strict';
 const _safeDemoFlag = '--safe-demo';
 const _includeWarningsFlag = '--include-warnings';
