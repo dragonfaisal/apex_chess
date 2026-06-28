@@ -4,6 +4,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_controlled_runtime_preparation_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_metadata_refinement_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_patch_set_diagnostic.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -446,6 +447,57 @@ void main() {
       expect(strict.metadataRefinementDiagnostic!.safeForPhase34G, isTrue);
     });
 
+    test('runtime preparation diagnostic JSON and strict modes succeed', () {
+      final json = _run(
+        args: const <String>[
+          '--runtime-preparation-diagnostic=default',
+          '--format=json',
+        ],
+      );
+      final strict = _run(
+        args: const <String>[
+          '--runtime-preparation-diagnostic=default',
+          '--strict',
+        ],
+      );
+      final decoded = jsonDecode(json.stdoutText) as Map<String, Object?>;
+      final runtimePreparationDiagnostic =
+          decoded['runtimePreparationDiagnostic'] as Map<String, Object?>;
+      final counts =
+          runtimePreparationDiagnostic['counts'] as Map<String, Object?>;
+
+      expect(
+        json.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+      );
+      expect(json.runtimePreparationDiagnosticMode!.wire, 'default');
+      expect(
+        json.runtimePreparationDiagnostic!.status,
+        DebugOnlyBridgeAnalyzerAdapterControlledRuntimePreparationDiagnosticStatus
+            .controlledAnalyzerAdapterRuntimePreparationDiagnosticReadyWithWarnings,
+      );
+      expect(
+        runtimePreparationDiagnostic['status'],
+        'controlledAnalyzerAdapterRuntimePreparationDiagnosticReadyWithWarnings',
+      );
+      expect(runtimePreparationDiagnostic['safeForPhase34I'], isTrue);
+      expect(
+        runtimePreparationDiagnostic['nextRecommendation'],
+        'implementDisabledAnalyzerAdapterRuntimeSkeleton',
+      );
+      expect(counts['unsafeCount'], 0);
+      expect(counts['blockerCount'], 0);
+      expect(counts['criticalCount'], 0);
+      expect(counts['activeDeniedFieldCount'], 0);
+      expect(counts['runtimeExecutionCount'], 0);
+      expect(counts['analyzerWiringCount'], 0);
+      expect(
+        strict.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+      );
+      expect(strict.runtimePreparationDiagnostic!.safeForPhase34I, isTrue);
+    });
+
     test('each patch diagnostic mode succeeds through diagnostic command', () {
       for (final mode in const <String>[
         'default',
@@ -503,6 +555,28 @@ void main() {
       },
     );
 
+    test('each runtime preparation diagnostic mode succeeds through command', () {
+      for (final mode
+          in DebugOnlyBridgeAnalyzerAdapterControlledRuntimePreparationDiagnosticMode
+              .values) {
+        final result = _run(
+          args: <String>['--runtime-preparation-diagnostic=${mode.wire}'],
+        );
+
+        expect(
+          result.exitCode,
+          debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+          reason: mode.wire,
+        );
+        expect(result.runtimePreparationDiagnosticMode, mode);
+        expect(result.runtimePreparationDiagnostic!.safeForPhase34I, isTrue);
+        expect(
+          result.stdoutText,
+          contains('runtime preparation diagnostic mode: ${mode.wire}'),
+        );
+      }
+    });
+
     test('selected Golden role guardrails are preserved', () {
       final selected = _run(
         args: const <String>['--golden-case=default-selected'],
@@ -551,6 +625,9 @@ void main() {
       final badRefinementDiagnostic = _run(
         args: const <String>['--refinement-diagnostic=missing'],
       );
+      final badRuntimePreparationDiagnostic = _run(
+        args: const <String>['--runtime-preparation-diagnostic=missing'],
+      );
 
       expect(
         badSection.exitCode,
@@ -585,6 +662,15 @@ void main() {
         'unknownRefinementDiagnostic',
       );
       expect(badRefinementDiagnostic.stderrText, contains('usage:'));
+      expect(
+        badRuntimePreparationDiagnostic.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitUsage,
+      );
+      expect(
+        badRuntimePreparationDiagnostic.commandFailure,
+        'unknownRuntimePreparationDiagnostic',
+      );
+      expect(badRuntimePreparationDiagnostic.stderrText, contains('usage:'));
     });
 
     test('output contains no raw engine spam or active product data', () {
@@ -608,6 +694,9 @@ void main() {
       final runtimePreparation = _run(
         args: const <String>['--section=runtime-preparation'],
       ).stdoutText;
+      final runtimePreparationDiagnostic = _run(
+        args: const <String>['--runtime-preparation-diagnostic=default'],
+      ).stdoutText;
 
       _expectReportGuardrails(markdown);
       _expectReportGuardrails(json);
@@ -617,6 +706,7 @@ void main() {
       _expectReportGuardrails(metadataRefinement);
       _expectReportGuardrails(refinementDiagnostic);
       _expectReportGuardrails(runtimePreparation);
+      _expectReportGuardrails(runtimePreparationDiagnostic);
     });
 
     test('source imports remain command-only and integration-free', () {

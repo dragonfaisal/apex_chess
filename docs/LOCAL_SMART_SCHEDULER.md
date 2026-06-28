@@ -331,3 +331,9 @@ No scheduler behavior, scheduler thresholds, scheduler execution, product review
 Phase 34G adds developer-only controlled runtime-preparation envelopes, non-executable preconditions, a disabled execution policy, and blocked seam records for analyzer runtime, analyzer wiring, engine, Stockfish bridge, Android collector, scheduler, persistence, product adapter, saved analysis, UI, backend, cache, and database paths.
 
 No scheduler behavior, scheduler thresholds, scheduler execution, product review output, UI flow, backend flow, persistence, cache, database use, analyzer wiring, engine execution, Android collection, proof command execution, debug bridge runtime wiring, executable debug bridge prototype, implementation wiring, adapter bridge runtime execution, product adapter wiring, saved analysis integration, readiness summary chain, or readiness gate is added. The preparation patch remains disabled and does not change local smart scheduling decisions.
+
+## Phase 34H Controlled Analyzer Adapter Runtime Preparation Diagnostic
+
+Phase 34H adds a developer-only diagnostic run over the Phase 34G runtime-preparation patch, with modes for envelopes, preconditions, policy, blocked seams, denied fields, proof boundary, and recommendation metadata. It reports that execution, analyzer wiring, engine calls, scheduler execution, persistence, product output, product adapter, and saved analysis permissions remain false.
+
+No scheduler behavior, scheduler thresholds, scheduler execution, product review output, UI flow, backend flow, persistence, cache, database use, analyzer wiring, engine execution, Android collection, proof command execution, debug bridge runtime wiring, executable debug bridge prototype, implementation wiring, adapter bridge runtime execution, product adapter wiring, saved analysis integration, readiness summary chain, or readiness gate is added. The diagnostic run remains report-only and does not change local smart scheduling decisions.

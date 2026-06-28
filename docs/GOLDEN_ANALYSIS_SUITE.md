@@ -1046,3 +1046,29 @@ moves, add official metrics, compute CP-loss, compute win probability, expose St
 as active output, add UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine
 access, implement analyzer runtime, implement runtime bridge behavior, implement executable prototype behavior, implement
 wiring, product adapter behavior, saved analysis integration, readiness summaries, readiness gates, or third-party data.
+
+## Phase 34H Run Controlled Analyzer Adapter Runtime Preparation Diagnostic
+
+Phase 34H adds a practical developer-only diagnostic run over the Phase 34G controlled runtime-preparation patch. It
+inspects runtime-preparation envelopes, non-executable preconditions, the disabled execution policy, denied fields, proof
+boundaries, and blocked seams with deterministic modes for `default`, `all-safe`, `envelopes`, `preconditions`,
+`policy`, `blocked-seams`, `denied`, `proof`, and `recommendation`.
+
+Diagnostic behavior:
+
+- `executionAllowed`, `analyzerWiringAllowed`, `engineCallsAllowed`, `schedulerAllowed`, `persistenceAllowed`,
+  `productOutputAllowed`, `productAdapterAllowed`, and `savedAnalysisAllowed` are reported as false.
+- input/output envelopes remain metadata-only and never become analyzer runtime input.
+- runtime preconditions remain non-executable.
+- analyzer runtime, analyzer wiring, engine, Stockfish bridge, Android collector, scheduler, persistence, product
+  adapter, saved analysis, UI, backend, cache, and database seams remain blocked.
+- Phase 32E cases still do not claim captured Android proof.
+- Android proof remains limited to `mate-threat-fast-evidence`, `queen-win-major-swing`, and
+  `simple-tactical-capture-check`.
+
+Next recommendation: `implementDisabledAnalyzerAdapterRuntimeSkeleton`. Phase 34H does not run Stockfish, execute
+Android collector flows, call analyzer flow, wire analyzer internals, add product labels, compute scores, rank moves,
+add official metrics, compute CP-loss, compute win probability, expose Stockfish command/raw UCI/PV dump fields as
+active output, add UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine access,
+implement analyzer runtime, implement runtime bridge behavior, implement executable prototype behavior, implement wiring,
+product adapter behavior, saved analysis integration, readiness summaries, readiness gates, or third-party data.
