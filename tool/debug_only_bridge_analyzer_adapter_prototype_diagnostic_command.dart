@@ -9,6 +9,7 @@ import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_ana
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_skeleton.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_skeleton_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_execution_seam_probe.dart';
+import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_execution_seam_probe_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_inspection_harness.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_inspection_harness_validation.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_metadata_refinement_diagnostic.dart';
@@ -407,6 +408,8 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandResult {
     this.runtimeExecutionPreflightDiagnosticMode,
     this.runtimeExecutionPreflightDiagnostic,
     this.disabledRuntimeExecutionSeamProbe,
+    this.disabledRuntimeExecutionSeamProbeDiagnosticMode,
+    this.disabledRuntimeExecutionSeamProbeDiagnostic,
     this.commandFailure,
   });
 
@@ -452,6 +455,10 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandResult {
   runtimeExecutionPreflightDiagnostic;
   final DisabledAnalyzerAdapterRuntimeExecutionSeamProbeResult?
   disabledRuntimeExecutionSeamProbe;
+  final DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeExecutionSeamProbeDiagnosticMode?
+  disabledRuntimeExecutionSeamProbeDiagnosticMode;
+  final DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeExecutionSeamProbeDiagnosticResult?
+  disabledRuntimeExecutionSeamProbeDiagnostic;
   final String? commandFailure;
 }
 
@@ -468,6 +475,7 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest {
     this.runtimePreparationDiagnosticMode,
     this.disabledRuntimeSkeletonDiagnosticMode,
     this.runtimeExecutionPreflightDiagnosticMode,
+    this.disabledRuntimeExecutionSeamProbeDiagnosticMode,
     this.listGoldenCases = false,
     this.showHelp = false,
   }) : isValid = true,
@@ -487,6 +495,7 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest {
       runtimePreparationDiagnosticMode = null,
       disabledRuntimeSkeletonDiagnosticMode = null,
       runtimeExecutionPreflightDiagnosticMode = null,
+      disabledRuntimeExecutionSeamProbeDiagnosticMode = null,
       listGoldenCases = false,
       showHelp = false;
 
@@ -508,6 +517,8 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest {
   disabledRuntimeSkeletonDiagnosticMode;
   final DebugOnlyBridgeAnalyzerAdapterControlledRuntimeExecutionPreflightDiagnosticMode?
   runtimeExecutionPreflightDiagnosticMode;
+  final DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeExecutionSeamProbeDiagnosticMode?
+  disabledRuntimeExecutionSeamProbeDiagnosticMode;
   final bool listGoldenCases;
   final bool showHelp;
 }
@@ -726,6 +737,8 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
           request.disabledRuntimeSkeletonDiagnosticMode,
       runtimeExecutionPreflightDiagnosticMode:
           request.runtimeExecutionPreflightDiagnosticMode,
+      disabledRuntimeExecutionSeamProbeDiagnosticMode:
+          request.disabledRuntimeExecutionSeamProbeDiagnosticMode,
       listGoldenCases: request.listGoldenCases,
       stdoutText: '',
       stderrText: _usage(request.failure),
@@ -750,6 +763,8 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
           request.disabledRuntimeSkeletonDiagnosticMode,
       runtimeExecutionPreflightDiagnosticMode:
           request.runtimeExecutionPreflightDiagnosticMode,
+      disabledRuntimeExecutionSeamProbeDiagnosticMode:
+          request.disabledRuntimeExecutionSeamProbeDiagnosticMode,
       listGoldenCases: request.listGoldenCases,
       stdoutText: _usage('help'),
       stderrText: '',
@@ -784,6 +799,8 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
           request.disabledRuntimeSkeletonDiagnosticMode,
       runtimeExecutionPreflightDiagnosticMode:
           request.runtimeExecutionPreflightDiagnosticMode,
+      disabledRuntimeExecutionSeamProbeDiagnosticMode:
+          request.disabledRuntimeExecutionSeamProbeDiagnosticMode,
       listGoldenCases: true,
       stdoutText: stdoutText,
       stderrText: '',
@@ -819,6 +836,8 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
           request.disabledRuntimeSkeletonDiagnosticMode,
       runtimeExecutionPreflightDiagnosticMode:
           request.runtimeExecutionPreflightDiagnosticMode,
+      disabledRuntimeExecutionSeamProbeDiagnosticMode:
+          request.disabledRuntimeExecutionSeamProbeDiagnosticMode,
       listGoldenCases: request.listGoldenCases,
       stdoutText: '',
       stderrText: _usage(selectedGoldenBuildResult.failure!),
@@ -844,11 +863,15 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
       ? null
       : const DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementDiagnostic()
             .evaluate(mode: request.refinementDiagnosticMode!);
-  final includeDisabledRuntimeExecutionSeamProbe = _includeSection(
-    request.section,
-    DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection
-        .disabledRuntimeExecutionSeamProbe,
-  );
+  final includeDisabledRuntimeExecutionSeamProbeDiagnostic =
+      request.disabledRuntimeExecutionSeamProbeDiagnosticMode != null;
+  final includeDisabledRuntimeExecutionSeamProbe =
+      _includeSection(
+        request.section,
+        DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection
+            .disabledRuntimeExecutionSeamProbe,
+      ) ||
+      includeDisabledRuntimeExecutionSeamProbeDiagnostic;
   final includeRuntimeExecutionPreflight =
       _includeSection(
         request.section,
@@ -950,6 +973,25 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
               runtimePreparationResult: runtimePreparation,
             )
       : null;
+  final disabledRuntimeExecutionSeamProbeDiagnostic =
+      includeDisabledRuntimeExecutionSeamProbeDiagnostic
+      ? const DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeExecutionSeamProbeDiagnostic()
+            .evaluate(
+              seamProbeResult: disabledRuntimeExecutionSeamProbe,
+              runtimeExecutionPreflightDiagnosticResult:
+                  runtimeExecutionPreflightDiagnostic,
+              runtimeExecutionPreflightResult: runtimeExecutionPreflight,
+              disabledRuntimeSkeletonDiagnosticResult:
+                  disabledRuntimeSkeletonDiagnostic,
+              disabledRuntimeSkeletonResult: disabledRuntimeSkeleton,
+              runtimePreparationDiagnosticResult: runtimePreparationDiagnostic,
+              runtimePreparationResult: runtimePreparation,
+              mode:
+                  request.disabledRuntimeExecutionSeamProbeDiagnosticMode ??
+                  DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeExecutionSeamProbeDiagnosticMode
+                      .defaultMode,
+            )
+      : null;
   final stdoutText = switch (request.format) {
     DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticFormat.markdown =>
       _renderMarkdown(
@@ -967,9 +1009,11 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
         runtimeExecutionPreflightDiagnostic:
             runtimeExecutionPreflightDiagnostic,
         disabledRuntimeExecutionSeamProbe: disabledRuntimeExecutionSeamProbe,
+        disabledRuntimeExecutionSeamProbeDiagnostic:
+            disabledRuntimeExecutionSeamProbeDiagnostic,
       ),
     DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticFormat.json =>
-      '${_renderJson(diagnostic, request.section, selectedGoldenDiagnostic: selectedGoldenDiagnostic, patchSetDiagnostic: patchSetDiagnostic, metadataRefinement: metadataRefinement, metadataRefinementDiagnostic: metadataRefinementDiagnostic, runtimePreparation: runtimePreparation, runtimePreparationDiagnostic: runtimePreparationDiagnostic, disabledRuntimeSkeleton: disabledRuntimeSkeleton, disabledRuntimeSkeletonDiagnostic: disabledRuntimeSkeletonDiagnostic, runtimeExecutionPreflight: runtimeExecutionPreflight, runtimeExecutionPreflightDiagnostic: runtimeExecutionPreflightDiagnostic, disabledRuntimeExecutionSeamProbe: disabledRuntimeExecutionSeamProbe)}\n',
+      '${_renderJson(diagnostic, request.section, selectedGoldenDiagnostic: selectedGoldenDiagnostic, patchSetDiagnostic: patchSetDiagnostic, metadataRefinement: metadataRefinement, metadataRefinementDiagnostic: metadataRefinementDiagnostic, runtimePreparation: runtimePreparation, runtimePreparationDiagnostic: runtimePreparationDiagnostic, disabledRuntimeSkeleton: disabledRuntimeSkeleton, disabledRuntimeSkeletonDiagnostic: disabledRuntimeSkeletonDiagnostic, runtimeExecutionPreflight: runtimeExecutionPreflight, runtimeExecutionPreflightDiagnostic: runtimeExecutionPreflightDiagnostic, disabledRuntimeExecutionSeamProbe: disabledRuntimeExecutionSeamProbe, disabledRuntimeExecutionSeamProbeDiagnostic: disabledRuntimeExecutionSeamProbeDiagnostic)}\n',
   };
   final reportFindings = <String>[
     ...const DebugOnlyBridgeAnalyzerAdapterPrototypeInspectionHarnessValidationValidator()
@@ -1004,6 +1048,9 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
     if (disabledRuntimeExecutionSeamProbe != null)
       ...const DisabledAnalyzerAdapterRuntimeExecutionSeamProbeValidator()
           .validateReportText(stdoutText),
+    if (disabledRuntimeExecutionSeamProbeDiagnostic != null)
+      ...const DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeExecutionSeamProbeDiagnosticValidator()
+          .validateReportText(stdoutText),
   ];
 
   return DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandResult(
@@ -1022,6 +1069,8 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
       runtimeExecutionPreflight: runtimeExecutionPreflight,
       runtimeExecutionPreflightDiagnostic: runtimeExecutionPreflightDiagnostic,
       disabledRuntimeExecutionSeamProbe: disabledRuntimeExecutionSeamProbe,
+      disabledRuntimeExecutionSeamProbeDiagnostic:
+          disabledRuntimeExecutionSeamProbeDiagnostic,
     ),
     format: request.format,
     section: request.section,
@@ -1036,8 +1085,12 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
         request.disabledRuntimeSkeletonDiagnosticMode,
     runtimeExecutionPreflightDiagnosticMode:
         request.runtimeExecutionPreflightDiagnosticMode,
+    disabledRuntimeExecutionSeamProbeDiagnosticMode:
+        request.disabledRuntimeExecutionSeamProbeDiagnosticMode,
     runtimeExecutionPreflightDiagnostic: runtimeExecutionPreflightDiagnostic,
     disabledRuntimeExecutionSeamProbe: disabledRuntimeExecutionSeamProbe,
+    disabledRuntimeExecutionSeamProbeDiagnostic:
+        disabledRuntimeExecutionSeamProbeDiagnostic,
     listGoldenCases: request.listGoldenCases,
     stdoutText: stdoutText,
     stderrText: '',
@@ -1073,6 +1126,7 @@ validateDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticArgs(
   var runtimePreparationDiagnosticSeen = false;
   var disabledRuntimeSkeletonDiagnosticSeen = false;
   var runtimeExecutionPreflightDiagnosticSeen = false;
+  var disabledRuntimeExecutionSeamProbeDiagnosticSeen = false;
   var listGoldenCasesSeen = false;
   String? goldenCaseSelection;
   DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticMode?
@@ -1085,6 +1139,8 @@ validateDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticArgs(
   disabledRuntimeSkeletonDiagnosticMode;
   DebugOnlyBridgeAnalyzerAdapterControlledRuntimeExecutionPreflightDiagnosticMode?
   runtimeExecutionPreflightDiagnosticMode;
+  DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeExecutionSeamProbeDiagnosticMode?
+  disabledRuntimeExecutionSeamProbeDiagnosticMode;
 
   for (final arg in args) {
     if (arg == '--help' || arg == '-h') {
@@ -1106,6 +1162,7 @@ validateDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticArgs(
         runtimePreparationDiagnosticMode: null,
         disabledRuntimeSkeletonDiagnosticMode: null,
         runtimeExecutionPreflightDiagnosticMode: null,
+        disabledRuntimeExecutionSeamProbeDiagnosticMode: null,
         listGoldenCases: false,
         showHelp: true,
       );
@@ -1247,6 +1304,26 @@ validateDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticArgs(
       runtimeExecutionPreflightDiagnosticSeen = true;
       continue;
     }
+    if (arg.startsWith(_disabledRuntimeExecutionSeamProbeDiagnosticFlag)) {
+      if (disabledRuntimeExecutionSeamProbeDiagnosticSeen) {
+        return const DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest.invalid(
+          'duplicateDisabledSeamProbeDiagnostic',
+        );
+      }
+      final parsed = _disabledRuntimeExecutionSeamProbeDiagnosticModeByWire(
+        arg
+            .substring(_disabledRuntimeExecutionSeamProbeDiagnosticFlag.length)
+            .trim(),
+      );
+      if (parsed == null) {
+        return const DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest.invalid(
+          'unknownDisabledSeamProbeDiagnostic',
+        );
+      }
+      disabledRuntimeExecutionSeamProbeDiagnosticMode = parsed;
+      disabledRuntimeExecutionSeamProbeDiagnosticSeen = true;
+      continue;
+    }
     if (arg == _listGoldenCasesFlag) {
       if (listGoldenCasesSeen) {
         return const DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest.invalid(
@@ -1305,6 +1382,8 @@ validateDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticArgs(
         disabledRuntimeSkeletonDiagnosticMode,
     runtimeExecutionPreflightDiagnosticMode:
         runtimeExecutionPreflightDiagnosticMode,
+    disabledRuntimeExecutionSeamProbeDiagnosticMode:
+        disabledRuntimeExecutionSeamProbeDiagnosticMode,
     listGoldenCases: listGoldenCasesSeen,
   );
 }
@@ -1333,6 +1412,8 @@ int debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitCode(
   runtimeExecutionPreflightDiagnostic,
   DisabledAnalyzerAdapterRuntimeExecutionSeamProbeResult?
   disabledRuntimeExecutionSeamProbe,
+  DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeExecutionSeamProbeDiagnosticResult?
+  disabledRuntimeExecutionSeamProbeDiagnostic,
 }) {
   final hasReportLeak = reportFindings.any(_isCriticalFinding);
   if (diagnostic.hasUnsafePolicyViolation ||
@@ -1348,7 +1429,9 @@ int debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitCode(
       (runtimeExecutionPreflight?.hasUnsafePolicyViolation ?? false) ||
       (runtimeExecutionPreflightDiagnostic?.hasUnsafePolicyViolation ??
           false) ||
-      (disabledRuntimeExecutionSeamProbe?.hasUnsafePolicyViolation ?? false)) {
+      (disabledRuntimeExecutionSeamProbe?.hasUnsafePolicyViolation ?? false) ||
+      (disabledRuntimeExecutionSeamProbeDiagnostic?.hasUnsafePolicyViolation ??
+          false)) {
     return debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitUnsafePolicy;
   }
   if (request.strict &&
@@ -1396,6 +1479,9 @@ int debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitCode(
           (runtimeExecutionPreflightDiagnostic?.hasUnsafePolicyViolation ??
               false) ||
           (disabledRuntimeExecutionSeamProbe?.hasUnsafePolicyViolation ??
+              false) ||
+          (disabledRuntimeExecutionSeamProbeDiagnostic
+                  ?.hasUnsafePolicyViolation ??
               false))) {
     return debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitBlockedStrict;
   }
@@ -1425,6 +1511,8 @@ String _renderMarkdown(
   runtimeExecutionPreflightDiagnostic,
   DisabledAnalyzerAdapterRuntimeExecutionSeamProbeResult?
   disabledRuntimeExecutionSeamProbe,
+  DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeExecutionSeamProbeDiagnosticResult?
+  disabledRuntimeExecutionSeamProbeDiagnostic,
 }) {
   final buffer = StringBuffer()
     ..writeln('# Debug-Only Bridge Analyzer Adapter Prototype Diagnostic')
@@ -1579,6 +1667,12 @@ String _renderMarkdown(
       disabledRuntimeExecutionSeamProbe,
     );
   }
+  if (disabledRuntimeExecutionSeamProbeDiagnostic != null) {
+    _writeDisabledRuntimeExecutionSeamProbeDiagnostic(
+      buffer,
+      disabledRuntimeExecutionSeamProbeDiagnostic,
+    );
+  }
   return buffer.toString();
 }
 
@@ -1605,6 +1699,8 @@ String _renderJson(
   runtimeExecutionPreflightDiagnostic,
   DisabledAnalyzerAdapterRuntimeExecutionSeamProbeResult?
   disabledRuntimeExecutionSeamProbe,
+  DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeExecutionSeamProbeDiagnosticResult?
+  disabledRuntimeExecutionSeamProbeDiagnostic,
 }) {
   return const JsonEncoder.withIndent(' ').convert(
     _jsonPayload(
@@ -1621,6 +1717,8 @@ String _renderJson(
       runtimeExecutionPreflight: runtimeExecutionPreflight,
       runtimeExecutionPreflightDiagnostic: runtimeExecutionPreflightDiagnostic,
       disabledRuntimeExecutionSeamProbe: disabledRuntimeExecutionSeamProbe,
+      disabledRuntimeExecutionSeamProbeDiagnostic:
+          disabledRuntimeExecutionSeamProbeDiagnostic,
     ),
   );
 }
@@ -1648,6 +1746,8 @@ Map<String, Object?> _jsonPayload(
   runtimeExecutionPreflightDiagnostic,
   DisabledAnalyzerAdapterRuntimeExecutionSeamProbeResult?
   disabledRuntimeExecutionSeamProbe,
+  DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeExecutionSeamProbeDiagnosticResult?
+  disabledRuntimeExecutionSeamProbeDiagnostic,
 }) {
   final payload = <String, Object?>{
     'version': debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandVersion,
@@ -1790,6 +1890,10 @@ Map<String, Object?> _jsonPayload(
       )) {
     payload['disabledRuntimeExecutionSeamProbe'] =
         disabledRuntimeExecutionSeamProbe.toJson();
+  }
+  if (disabledRuntimeExecutionSeamProbeDiagnostic != null) {
+    payload['disabledRuntimeExecutionSeamProbeDiagnostic'] =
+        disabledRuntimeExecutionSeamProbeDiagnostic.toJson();
   }
   return payload;
 }
@@ -2817,6 +2921,68 @@ void _writeDisabledRuntimeExecutionSeamProbe(
     ..writeln();
 }
 
+void _writeDisabledRuntimeExecutionSeamProbeDiagnostic(
+  StringBuffer buffer,
+  DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeExecutionSeamProbeDiagnosticResult
+  result,
+) {
+  buffer
+    ..writeln('## Disabled Runtime Execution Seam Probe Diagnostic Run')
+    ..writeln('- diagnostic status: ${result.status.wire}')
+    ..writeln('- disabled seam probe diagnostic mode: ${result.mode.wire}')
+    ..writeln('- source seam probe status: ${result.sourceSeamProbeStatus}')
+    ..writeln(
+      '- source preflight diagnostic status: ${result.sourcePreflightDiagnosticStatus}',
+    )
+    ..writeln('- safe for Phase 34O: ${result.safeForPhase34O}')
+    ..writeln('- next recommendation: ${result.nextRecommendation}')
+    ..writeln('- total diagnostic rows: ${result.totalDiagnosticRows}')
+    ..writeln('- request rows: ${result.requestDiagnosticRowCount}')
+    ..writeln('- response rows: ${result.responseDiagnosticRowCount}')
+    ..writeln('- attempt rows: ${result.attemptDiagnosticRowCount}')
+    ..writeln('- boundary rows: ${result.boundaryDiagnosticRowCount}')
+    ..writeln(
+      '- blocked reason rows: ${result.blockedReasonDiagnosticRowCount}',
+    )
+    ..writeln('- denied rows: ${result.deniedDiagnosticRowCount}')
+    ..writeln('- proof rows: ${result.proofDiagnosticRowCount}')
+    ..writeln(
+      '- recommendation rows: ${result.recommendationDiagnosticRowCount}',
+    )
+    ..writeln('- seam probe attempt count: ${result.seamProbeAttemptCount}')
+    ..writeln('- seam probe performed count: ${result.seamProbePerformedCount}')
+    ..writeln('- runtime execution count: ${result.runtimeExecutionCount}')
+    ..writeln(
+      '- runtime execution approved count: ${result.runtimeExecutionApprovedCount}',
+    )
+    ..writeln(
+      '- analyzer runtime input produced count: ${result.analyzerRuntimeInputProducedCount}',
+    )
+    ..writeln('- executable runtime count: ${result.executableRuntimeCount}')
+    ..writeln('- analyzer wiring count: ${result.analyzerWiringCount}')
+    ..writeln('- engine call count: ${result.engineCallCount}')
+    ..writeln('- scheduler execution count: ${result.schedulerExecutionCount}')
+    ..writeln('- persistence write count: ${result.persistenceWriteCount}')
+    ..writeln('- product output count: ${result.productOutputCount}')
+    ..writeln('- product adapter count: ${result.productAdapterCount}')
+    ..writeln(
+      '- saved analysis integration count: ${result.savedAnalysisIntegrationCount}',
+    )
+    ..writeln('- active denied field count: ${result.activeDeniedFieldCount}')
+    ..writeln('- owner proof queue count: ${result.ownerProofQueueCount}')
+    ..writeln()
+    ..writeln(
+      '| Row | Mode | Request | Response | Attempt | Seam performed | Execution performed | Runtime approved | Analyzer input produced | Findings |',
+    )
+    ..writeln('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
+  for (final row in result.rows) {
+    buffer.writeln(
+      '| ${row.diagnosticRowId} | ${row.diagnosticMode} | ${row.requestId} | ${row.responseId} | ${row.attemptId} | ${row.seamProbePerformed} | ${row.executionPerformed} | ${row.runtimeExecutionApproved} | ${row.analyzerRuntimeInputProduced} | ${_ids(row.findings)} |',
+    );
+  }
+  buffer.writeln();
+}
+
 void _writePatchSetDiagnostic(
   StringBuffer buffer,
   DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticResult result,
@@ -3379,6 +3545,16 @@ _runtimeExecutionPreflightDiagnosticModeByWire(String wire) {
   return null;
 }
 
+DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeExecutionSeamProbeDiagnosticMode?
+_disabledRuntimeExecutionSeamProbeDiagnosticModeByWire(String wire) {
+  for (final mode
+      in DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeExecutionSeamProbeDiagnosticMode
+          .values) {
+    if (mode.wire == wire) return mode;
+  }
+  return null;
+}
+
 bool _isCriticalFinding(String finding) =>
     finding.startsWith('reportTextLeak:');
 
@@ -3402,7 +3578,7 @@ List<String> _sorted(Iterable<String> values) {
 String _usage(String failure) {
   return [
     if (failure.isNotEmpty && failure != 'help') 'error: $failure',
-    'usage: dart run tool/debug_only_bridge_analyzer_adapter_prototype_diagnostic_command.dart [--format=markdown|json] [--strict] [--safe-demo] [--include-warnings] [--section=all|snapshot|packets|policy|records|proof|boundaries|runtime|recommendation|action-plan|patches|metadata-refinement|runtime-preparation|disabled-runtime-skeleton|runtime-execution-preflight|disabled-runtime-execution-seam-probe|golden] [--patch-diagnostic=default|all-safe|support|warning|proof|guards|denied|blocked|recommendation] [--refinement-diagnostic=default|all-safe|support|warning|proof|guards|denied|blocked|surfaces|recommendation] [--runtime-preparation-diagnostic=default|all-safe|envelopes|preconditions|policy|blocked-seams|denied|proof|recommendation] [--disabled-runtime-skeleton-diagnostic=default|all-safe|request|response|attempt|policy|blocked-seams|denied|proof|recommendation] [--runtime-execution-preflight-diagnostic=default|all-safe|checks|decision|blocked-reasons|denied|proof|recommendation] [--golden-case=<caseId>|default-selected|all-safe-selected] [--list-golden-cases]',
+    'usage: dart run tool/debug_only_bridge_analyzer_adapter_prototype_diagnostic_command.dart [--format=markdown|json] [--strict] [--safe-demo] [--include-warnings] [--section=all|snapshot|packets|policy|records|proof|boundaries|runtime|recommendation|action-plan|patches|metadata-refinement|runtime-preparation|disabled-runtime-skeleton|runtime-execution-preflight|disabled-runtime-execution-seam-probe|golden] [--patch-diagnostic=default|all-safe|support|warning|proof|guards|denied|blocked|recommendation] [--refinement-diagnostic=default|all-safe|support|warning|proof|guards|denied|blocked|surfaces|recommendation] [--runtime-preparation-diagnostic=default|all-safe|envelopes|preconditions|policy|blocked-seams|denied|proof|recommendation] [--disabled-runtime-skeleton-diagnostic=default|all-safe|request|response|attempt|policy|blocked-seams|denied|proof|recommendation] [--runtime-execution-preflight-diagnostic=default|all-safe|checks|decision|blocked-reasons|denied|proof|recommendation] [--disabled-seam-probe-diagnostic=default|all-safe|request|response|attempt|boundaries|blocked-reasons|denied|proof|recommendation] [--golden-case=<caseId>|default-selected|all-safe-selected] [--list-golden-cases]',
     'defaults: --format=markdown --safe-demo --include-warnings --section=all',
   ].join('\n');
 }
@@ -3417,6 +3593,8 @@ const _disabledRuntimeSkeletonDiagnosticFlag =
     '--disabled-runtime-skeleton-diagnostic=';
 const _runtimeExecutionPreflightDiagnosticFlag =
     '--runtime-execution-preflight-diagnostic=';
+const _disabledRuntimeExecutionSeamProbeDiagnosticFlag =
+    '--disabled-seam-probe-diagnostic=';
 const _strictFlag = '--strict';
 const _safeDemoFlag = '--safe-demo';
 const _includeWarningsFlag = '--include-warnings';

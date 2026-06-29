@@ -1204,3 +1204,30 @@ runtime input, add product labels, compute scores, rank moves, add official metr
 probability, expose Stockfish command/raw UCI/PV dump fields as active output, add UI/backend/persistence/cache/database
 integration, add scheduler execution, add direct engine access, implement executable runtime behavior, implement wiring,
 product adapter behavior, saved analysis integration, readiness summaries, readiness gates, or third-party data.
+
+## Phase 34N Run Disabled Analyzer Adapter Runtime Execution Seam Probe Diagnostic
+
+Phase 34N adds a practical developer-only diagnostic run over the Phase 34M disabled runtime execution seam probe. It
+inspects the disabled seam-probe request, refused response, refused attempt, boundaries, blocked reasons, denied fields,
+proof boundaries, and the next controlled runtime input preflight recommendation.
+
+Disabled seam-probe diagnostic behavior:
+
+- diagnostic modes cover default/all-safe, request, response, refused attempt, boundaries, blocked reasons, denied
+  fields, proof boundary, and recommendation rows.
+- `seamProbeRequested` may appear only as a refused developer-only probe record.
+- `seamProbePerformed=false`, `executionPerformed=false`, `executionAllowed=false`,
+  `runtimeExecutionApproved=false`, `analyzerRuntimeInputProduced=false`, `analyzerWiringAllowed=false`,
+  `engineCallsAllowed=false`, `schedulerAllowed=false`, `persistenceAllowed=false`, `productOutputAllowed=false`,
+  `productAdapterAllowed=false`, and `savedAnalysisAllowed=false` remain preserved.
+- request rows remain metadata-only, response rows remain refused/blocked metadata only, attempts remain refused,
+  boundaries remain blocked, and blocked reasons remain blocked.
+- Phase 32E cases do not claim captured Android proof; Android proof remains limited to `mate-threat-fast-evidence`,
+  `queen-win-major-swing`, and `simple-tactical-capture-check`.
+
+Next recommendation: `implementControlledAnalyzerAdapterRuntimeInputPreflightPatch`. Phase 34N does not run Stockfish,
+execute Android collector flows, call analyzer flow, wire analyzer internals, approve runtime execution, produce analyzer
+runtime input, add product labels, compute scores, rank moves, add official metrics, compute CP-loss, compute win
+probability, expose Stockfish command/raw UCI/PV dump fields as active output, add UI/backend/persistence/cache/database
+integration, add scheduler execution, add direct engine access, implement executable runtime behavior, implement wiring,
+product adapter behavior, saved analysis integration, readiness summaries, readiness gates, or third-party data.

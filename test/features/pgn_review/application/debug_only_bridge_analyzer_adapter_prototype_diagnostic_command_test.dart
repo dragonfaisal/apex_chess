@@ -8,6 +8,7 @@ import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_ana
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_controlled_runtime_execution_preflight.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_controlled_runtime_execution_preflight_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_execution_seam_probe.dart';
+import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_execution_seam_probe_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_skeleton.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_skeleton_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_metadata_refinement_diagnostic.dart';
@@ -828,6 +829,73 @@ void main() {
       },
     );
 
+    test('disabled seam probe diagnostic JSON and strict modes succeed', () {
+      final json = _run(
+        args: const <String>[
+          '--disabled-seam-probe-diagnostic=default',
+          '--format=json',
+        ],
+      );
+      final strict = _run(
+        args: const <String>[
+          '--disabled-seam-probe-diagnostic=default',
+          '--strict',
+        ],
+      );
+      final decoded = jsonDecode(json.stdoutText) as Map<String, Object?>;
+      final seamProbeDiagnostic =
+          decoded['disabledRuntimeExecutionSeamProbeDiagnostic']
+              as Map<String, Object?>;
+      final counts = seamProbeDiagnostic['counts'] as Map<String, Object?>;
+
+      expect(
+        json.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+      );
+      expect(
+        json.disabledRuntimeExecutionSeamProbeDiagnosticMode!.wire,
+        'default',
+      );
+      expect(
+        json.disabledRuntimeExecutionSeamProbeDiagnostic!.status,
+        DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeExecutionSeamProbeDiagnosticStatus
+            .disabledAnalyzerAdapterRuntimeExecutionSeamProbeDiagnosticReadyWithWarnings,
+      );
+      expect(
+        seamProbeDiagnostic['status'],
+        'disabledAnalyzerAdapterRuntimeExecutionSeamProbeDiagnosticReadyWithWarnings',
+      );
+      expect(seamProbeDiagnostic['safeForPhase34O'], isTrue);
+      expect(
+        seamProbeDiagnostic['nextRecommendation'],
+        'implementControlledAnalyzerAdapterRuntimeInputPreflightPatch',
+      );
+      expect(counts['unsafeCount'], 0);
+      expect(counts['blockerCount'], 0);
+      expect(counts['criticalCount'], 0);
+      expect(counts['seamProbeAttemptCount'], greaterThanOrEqualTo(1));
+      expect(counts['seamProbePerformedCount'], 0);
+      expect(counts['runtimeExecutionCount'], 0);
+      expect(counts['runtimeExecutionApprovedCount'], 0);
+      expect(counts['analyzerRuntimeInputProducedCount'], 0);
+      expect(counts['analyzerWiringCount'], 0);
+      expect(counts['engineCallCount'], 0);
+      expect(counts['schedulerExecutionCount'], 0);
+      expect(counts['persistenceWriteCount'], 0);
+      expect(counts['productOutputCount'], 0);
+      expect(counts['productAdapterCount'], 0);
+      expect(counts['savedAnalysisIntegrationCount'], 0);
+      expect(counts['activeDeniedFieldCount'], 0);
+      expect(
+        strict.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+      );
+      expect(
+        strict.disabledRuntimeExecutionSeamProbeDiagnostic!.safeForPhase34O,
+        isTrue,
+      );
+    });
+
     test('each patch diagnostic mode succeeds through diagnostic command', () {
       for (final mode in const <String>[
         'default',
@@ -969,6 +1037,31 @@ void main() {
       },
     );
 
+    test('each disabled seam probe diagnostic mode succeeds through command', () {
+      for (final mode
+          in DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeExecutionSeamProbeDiagnosticMode
+              .values) {
+        final result = _run(
+          args: <String>['--disabled-seam-probe-diagnostic=${mode.wire}'],
+        );
+
+        expect(
+          result.exitCode,
+          debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+          reason: mode.wire,
+        );
+        expect(result.disabledRuntimeExecutionSeamProbeDiagnosticMode, mode);
+        expect(
+          result.disabledRuntimeExecutionSeamProbeDiagnostic!.safeForPhase34O,
+          isTrue,
+        );
+        expect(
+          result.stdoutText,
+          contains('disabled seam probe diagnostic mode: ${mode.wire}'),
+        );
+      }
+    });
+
     test('selected Golden role guardrails are preserved', () {
       final selected = _run(
         args: const <String>['--golden-case=default-selected'],
@@ -1027,6 +1120,9 @@ void main() {
         args: const <String>[
           '--runtime-execution-preflight-diagnostic=missing',
         ],
+      );
+      final badDisabledSeamProbeDiagnostic = _run(
+        args: const <String>['--disabled-seam-probe-diagnostic=missing'],
       );
 
       expect(
@@ -1095,6 +1191,15 @@ void main() {
         badRuntimeExecutionPreflightDiagnostic.stderrText,
         contains('usage:'),
       );
+      expect(
+        badDisabledSeamProbeDiagnostic.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitUsage,
+      );
+      expect(
+        badDisabledSeamProbeDiagnostic.commandFailure,
+        'unknownDisabledSeamProbeDiagnostic',
+      );
+      expect(badDisabledSeamProbeDiagnostic.stderrText, contains('usage:'));
     });
 
     test('output contains no raw engine spam or active product data', () {
@@ -1138,6 +1243,9 @@ void main() {
       final disabledRuntimeExecutionSeamProbe = _run(
         args: const <String>['--section=disabled-runtime-execution-seam-probe'],
       ).stdoutText;
+      final disabledRuntimeExecutionSeamProbeDiagnostic = _run(
+        args: const <String>['--disabled-seam-probe-diagnostic=default'],
+      ).stdoutText;
 
       _expectReportGuardrails(markdown);
       _expectReportGuardrails(json);
@@ -1153,6 +1261,7 @@ void main() {
       _expectReportGuardrails(runtimeExecutionPreflight);
       _expectReportGuardrails(runtimeExecutionPreflightDiagnostic);
       _expectReportGuardrails(disabledRuntimeExecutionSeamProbe);
+      _expectReportGuardrails(disabledRuntimeExecutionSeamProbeDiagnostic);
     });
 
     test('source imports remain command-only and integration-free', () {
