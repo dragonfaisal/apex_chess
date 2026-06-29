@@ -1231,3 +1231,30 @@ runtime input, add product labels, compute scores, rank moves, add official metr
 probability, expose Stockfish command/raw UCI/PV dump fields as active output, add UI/backend/persistence/cache/database
 integration, add scheduler execution, add direct engine access, implement executable runtime behavior, implement wiring,
 product adapter behavior, saved analysis integration, readiness summaries, readiness gates, or third-party data.
+
+## Phase 34O Controlled Analyzer Adapter Runtime Input Preflight Patch
+
+Phase 34O adds a developer-only controlled preflight layer for future analyzer runtime input production. It consumes the
+Phase 34N disabled seam-probe diagnostic and the Phase 34M disabled seam-probe result, then creates deterministic
+runtime-input preflight checks, a disabled policy, a disabled decision, and blocked reasons showing that analyzer runtime
+input is still neither approved nor produced.
+
+Runtime input preflight behavior:
+
+- checks cover disabled seam-probe diagnostic presence, seam-probe result presence, refused seam-probe records,
+  `seamProbePerformed=false`, `executionPerformed=false`, `executionAllowed=false`,
+  `runtimeExecutionApproved=false`, `analyzerRuntimeInputProduced=false`, and
+  `analyzerRuntimeInputApproved=false`.
+- request/response/attempt metadata remains diagnostic-only, boundaries remain blocked, and blocked reasons preserve the
+  analyzer runtime input, runtime execution, analyzer wiring, engine, Stockfish, Android collector, scheduler,
+  persistence, product adapter, saved analysis, UI, backend, cache, and database denials.
+- Phase 32E cases do not claim captured Android proof; Android proof remains limited to `mate-threat-fast-evidence`,
+  `queen-win-major-swing`, and `simple-tactical-capture-check`.
+
+Next recommendation: `runControlledAnalyzerAdapterRuntimeInputPreflightDiagnostic`. Phase 34O does not run Stockfish,
+execute Android collector flows, call analyzer flow, wire analyzer internals, approve runtime execution, approve analyzer
+runtime input, produce analyzer runtime input, add product labels, compute scores, rank moves, add official metrics,
+compute CP-loss, compute win probability, expose Stockfish command/raw UCI/PV dump fields as active output, add
+UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine access, implement executable
+runtime behavior, implement wiring, product adapter behavior, saved analysis integration, readiness summaries, readiness
+gates, or third-party data.
