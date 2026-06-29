@@ -1176,3 +1176,31 @@ labels, compute scores, rank moves, add official metrics, compute CP-loss, compu
 command/raw UCI/PV dump fields as active output, add UI/backend/persistence/cache/database integration, add scheduler
 execution, add direct engine access, execute analyzer runtime, implement executable prototype behavior, implement wiring,
 product adapter behavior, saved analysis integration, readiness summaries, readiness gates, or third-party data.
+
+## Phase 34M Disabled Analyzer Adapter Runtime Execution Seam Probe Patch
+
+Phase 34M adds a developer-only disabled seam-probe layer between the disabled runtime skeleton and a future analyzer
+adapter runtime boundary. The seam probe creates metadata-only request, response, refused attempt, boundary, and blocked
+reason records so developers can inspect the future runtime seam without producing analyzer runtime input or approving
+execution.
+
+Disabled seam-probe behavior:
+
+- `seamProbeRequested` may be true as a developer-only refused attempt record, but `seamProbePerformed=false`,
+  `executionPerformed=false`, `executionAllowed=false`, `runtimeExecutionApproved=false`, and
+  `analyzerRuntimeInputProduced=false`.
+- boundaries cover the disabled runtime skeleton, runtime execution preflight, analyzer runtime input, analyzer wiring,
+  engine calls, Stockfish bridge, Android collector, scheduler execution, persistence, product output, product adapter,
+  saved analysis, UI, backend, cache, and database.
+- blocked reasons cover disabled seam-probe policy, runtime execution not approved, analyzer runtime input blocked,
+  analyzer wiring blocked, engine/Stockfish/raw UCI/PV dump/Android collector blocked, scheduler/persistence/product
+  paths blocked, score/metric/CP-loss/win-probability denial, Phase 32E proof honesty, and quiet/preparatory exclusion.
+- Phase 32E cases do not claim captured Android proof; Android proof remains limited to `mate-threat-fast-evidence`,
+  `queen-win-major-swing`, and `simple-tactical-capture-check`.
+
+Next recommendation: `runDisabledAnalyzerAdapterRuntimeExecutionSeamProbeDiagnostic`. Phase 34M does not run Stockfish,
+execute Android collector flows, call analyzer flow, wire analyzer internals, approve runtime execution, produce analyzer
+runtime input, add product labels, compute scores, rank moves, add official metrics, compute CP-loss, compute win
+probability, expose Stockfish command/raw UCI/PV dump fields as active output, add UI/backend/persistence/cache/database
+integration, add scheduler execution, add direct engine access, implement executable runtime behavior, implement wiring,
+product adapter behavior, saved analysis integration, readiness summaries, readiness gates, or third-party data.

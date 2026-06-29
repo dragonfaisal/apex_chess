@@ -361,3 +361,9 @@ No scheduler behavior, scheduler thresholds, scheduler execution, product review
 Phase 34L adds a developer-only diagnostic run over the Phase 34K runtime execution preflight. It reports preflight checks, the disabled decision, blocked reasons, denied fields, proof boundaries, and the next disabled runtime execution seam-probe patch recommendation while keeping runtime execution approval and all scheduler/product/persistence/analyzer/engine permissions false.
 
 No scheduler behavior, scheduler thresholds, scheduler execution, product review output, UI flow, backend flow, persistence, cache, database use, analyzer wiring, engine execution, Android collection, proof command execution, active adapter bridge runtime execution, product adapter wiring, saved analysis integration, readiness summary chain, or readiness gate is added. The diagnostic run does not change local smart scheduling decisions.
+
+## Phase 34M Disabled Runtime Execution Seam Probe Patch
+
+Phase 34M adds a developer-only disabled seam-probe layer over the runtime execution preflight. It records a requested but refused seam probe, disabled request/response metadata, blocked seam boundaries, and blocked reasons while keeping `seamProbePerformed`, `executionPerformed`, `runtimeExecutionApproved`, analyzer runtime input production, scheduler permission, persistence permission, product permission, analyzer wiring, and engine-call permission false.
+
+No scheduler behavior, scheduler thresholds, scheduler execution, product review output, UI flow, backend flow, persistence, cache, database use, analyzer wiring, analyzer runtime input production, engine execution, Android collection, proof command execution, active adapter bridge runtime execution, product adapter wiring, saved analysis integration, readiness summary chain, or readiness gate is added. The seam probe patch does not change local smart scheduling decisions.

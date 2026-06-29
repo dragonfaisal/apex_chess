@@ -7,6 +7,7 @@ import 'dart:io';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_controlled_runtime_preparation_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_controlled_runtime_execution_preflight.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_controlled_runtime_execution_preflight_diagnostic.dart';
+import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_execution_seam_probe.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_skeleton.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_skeleton_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_metadata_refinement_diagnostic.dart';
@@ -243,6 +244,14 @@ void main() {
           args: const <String>['--section=runtime-execution-preflight'],
         ).stdoutText,
         contains('## Controlled Runtime Execution Preflight'),
+      );
+      expect(
+        _run(
+          args: const <String>[
+            '--section=disabled-runtime-execution-seam-probe',
+          ],
+        ).stdoutText,
+        contains('## Disabled Runtime Execution Seam Probe'),
       );
       expect(
         _run(args: const <String>['--section=golden']).stdoutText,
@@ -749,6 +758,76 @@ void main() {
       );
     });
 
+    test(
+      'disabled runtime execution seam probe section JSON and strict modes succeed',
+      () {
+        final json = _run(
+          args: const <String>[
+            '--section=disabled-runtime-execution-seam-probe',
+            '--format=json',
+          ],
+        );
+        final strict = _run(
+          args: const <String>[
+            '--section=disabled-runtime-execution-seam-probe',
+            '--strict',
+          ],
+        );
+        final decoded = jsonDecode(json.stdoutText) as Map<String, Object?>;
+        final seamProbe =
+            decoded['disabledRuntimeExecutionSeamProbe']
+                as Map<String, Object?>;
+        final counts = seamProbe['counts'] as Map<String, Object?>;
+
+        expect(
+          json.exitCode,
+          debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+        );
+        expect(
+          json.disabledRuntimeExecutionSeamProbe!.status,
+          DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeExecutionSeamProbeStatus
+              .disabledAnalyzerAdapterRuntimeExecutionSeamProbeReadyWithWarnings,
+        );
+        expect(
+          seamProbe['status'],
+          'disabledAnalyzerAdapterRuntimeExecutionSeamProbeReadyWithWarnings',
+        );
+        expect(seamProbe['safeForPhase34N'], isTrue);
+        expect(
+          seamProbe['nextRecommendation'],
+          'runDisabledAnalyzerAdapterRuntimeExecutionSeamProbeDiagnostic',
+        );
+        expect(counts['unsafeCount'], 0);
+        expect(counts['blockerCount'], 0);
+        expect(counts['criticalCount'], 0);
+        expect(counts['seamProbeAttemptCount'], greaterThanOrEqualTo(1));
+        expect(counts['seamProbePerformedCount'], 0);
+        expect(counts['runtimeExecutionCount'], 0);
+        expect(counts['runtimeExecutionApprovedCount'], 0);
+        expect(counts['analyzerRuntimeInputCount'], 0);
+        expect(counts['analyzerWiringCount'], 0);
+        expect(counts['engineCallCount'], 0);
+        expect(counts['schedulerExecutionCount'], 0);
+        expect(counts['persistenceWriteCount'], 0);
+        expect(counts['productOutputCount'], 0);
+        expect(counts['productAdapterCount'], 0);
+        expect(counts['savedAnalysisIntegrationCount'], 0);
+        expect(counts['activeDeniedFieldCount'], 0);
+        expect(
+          strict.exitCode,
+          debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+        );
+        expect(
+          strict.disabledRuntimeExecutionSeamProbe!.safeForPhase34N,
+          isTrue,
+        );
+        expect(
+          strict.stdoutText,
+          contains('## Disabled Runtime Execution Seam Probe'),
+        );
+      },
+    );
+
     test('each patch diagnostic mode succeeds through diagnostic command', () {
       for (final mode in const <String>[
         'default',
@@ -1056,6 +1135,9 @@ void main() {
           '--runtime-execution-preflight-diagnostic=default',
         ],
       ).stdoutText;
+      final disabledRuntimeExecutionSeamProbe = _run(
+        args: const <String>['--section=disabled-runtime-execution-seam-probe'],
+      ).stdoutText;
 
       _expectReportGuardrails(markdown);
       _expectReportGuardrails(json);
@@ -1070,6 +1152,7 @@ void main() {
       _expectReportGuardrails(disabledRuntimeSkeletonDiagnostic);
       _expectReportGuardrails(runtimeExecutionPreflight);
       _expectReportGuardrails(runtimeExecutionPreflightDiagnostic);
+      _expectReportGuardrails(disabledRuntimeExecutionSeamProbe);
     });
 
     test('source imports remain command-only and integration-free', () {
@@ -1122,6 +1205,11 @@ void _expectReportGuardrails(String report) {
     'cpLoss active',
     'winProbability active',
     'runtime implemented: true',
+    'runtimeExecutionApproved: true',
+    'executionAllowed: true',
+    'executionPerformed: true',
+    'seamProbePerformed: true',
+    'analyzerRuntimeInputProduced: true',
     'analyzer wired: true',
     'engine call active',
     'scheduler execution active',
