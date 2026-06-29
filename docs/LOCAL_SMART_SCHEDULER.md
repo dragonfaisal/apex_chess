@@ -355,3 +355,9 @@ No scheduler behavior, scheduler thresholds, scheduler execution, product review
 Phase 34K adds a developer-only controlled runtime execution preflight layer over the disabled analyzer adapter runtime skeleton. It checks metadata-only request/response envelopes, refused execution attempts, disabled policy flags, blocked seams, denied fields, and proof boundaries while keeping `executionAllowed`, `runtimeExecutionApproved`, scheduler permission, persistence permission, product permission, analyzer wiring, and engine-call permission false.
 
 No scheduler behavior, scheduler thresholds, scheduler execution, product review output, UI flow, backend flow, persistence, cache, database use, analyzer wiring, engine execution, Android collection, proof command execution, active adapter bridge runtime execution, product adapter wiring, saved analysis integration, readiness summary chain, or readiness gate is added. The preflight patch is developer-only and does not change local smart scheduling decisions.
+
+## Phase 34L Controlled Runtime Execution Preflight Diagnostic
+
+Phase 34L adds a developer-only diagnostic run over the Phase 34K runtime execution preflight. It reports preflight checks, the disabled decision, blocked reasons, denied fields, proof boundaries, and the next disabled runtime execution seam-probe patch recommendation while keeping runtime execution approval and all scheduler/product/persistence/analyzer/engine permissions false.
+
+No scheduler behavior, scheduler thresholds, scheduler execution, product review output, UI flow, backend flow, persistence, cache, database use, analyzer wiring, engine execution, Android collection, proof command execution, active adapter bridge runtime execution, product adapter wiring, saved analysis integration, readiness summary chain, or readiness gate is added. The diagnostic run does not change local smart scheduling decisions.

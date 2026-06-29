@@ -1152,3 +1152,27 @@ labels, compute scores, rank moves, add official metrics, compute CP-loss, compu
 command/raw UCI/PV dump fields as active output, add UI/backend/persistence/cache/database integration, add scheduler
 execution, add direct engine access, execute analyzer runtime, implement executable prototype behavior, implement wiring,
 product adapter behavior, saved analysis integration, readiness summaries, readiness gates, or third-party data.
+
+## Phase 34L Run Controlled Analyzer Adapter Runtime Execution Preflight Diagnostic
+
+Phase 34L adds a practical developer-only diagnostic run over the Phase 34K controlled runtime execution preflight patch.
+It inspects preflight checks, the disabled preflight decision, blocked reasons, denied fields, proof boundaries, and the
+next disabled runtime execution seam-probe recommendation.
+
+Runtime execution preflight diagnostic behavior:
+
+- diagnostic modes cover default/all-safe, checks, decision, blocked reasons, denied fields, proof boundary, and
+  recommendation rows.
+- every diagnostic row keeps `executionAllowed=false`, `runtimeExecutionApproved=false`, `executionPerformed=false`,
+  `analyzerWiringAllowed=false`, `engineCallsAllowed=false`, `schedulerAllowed=false`, `persistenceAllowed=false`,
+  `productOutputAllowed=false`, `productAdapterAllowed=false`, and `savedAnalysisAllowed=false`.
+- preflight checks remain diagnostic-only, the preflight decision remains disabled, and blocked reasons remain blocked.
+- Phase 32E cases do not claim captured Android proof; Android proof remains limited to `mate-threat-fast-evidence`,
+  `queen-win-major-swing`, and `simple-tactical-capture-check`.
+
+Next recommendation: `implementDisabledAnalyzerAdapterRuntimeExecutionSeamProbePatch`. Phase 34L does not run Stockfish,
+execute Android collector flows, call analyzer flow, wire analyzer internals, approve runtime execution, add product
+labels, compute scores, rank moves, add official metrics, compute CP-loss, compute win probability, expose Stockfish
+command/raw UCI/PV dump fields as active output, add UI/backend/persistence/cache/database integration, add scheduler
+execution, add direct engine access, execute analyzer runtime, implement executable prototype behavior, implement wiring,
+product adapter behavior, saved analysis integration, readiness summaries, readiness gates, or third-party data.
