@@ -5,6 +5,7 @@ import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_ana
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_controlled_runtime_preparation.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_controlled_runtime_preparation_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_skeleton.dart';
+import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_skeleton_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_inspection_harness.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_inspection_harness_validation.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_metadata_refinement_diagnostic.dart';
@@ -386,6 +387,7 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandResult {
     this.patchDiagnosticMode,
     this.refinementDiagnosticMode,
     this.runtimePreparationDiagnosticMode,
+    this.disabledRuntimeSkeletonDiagnosticMode,
     this.listGoldenCases = false,
     this.diagnosticResult,
     this.selectedGoldenDiagnostic,
@@ -395,6 +397,7 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandResult {
     this.runtimePreparation,
     this.runtimePreparationDiagnostic,
     this.disabledRuntimeSkeleton,
+    this.disabledRuntimeSkeletonDiagnostic,
     this.commandFailure,
   });
 
@@ -413,6 +416,8 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandResult {
   refinementDiagnosticMode;
   final DebugOnlyBridgeAnalyzerAdapterControlledRuntimePreparationDiagnosticMode?
   runtimePreparationDiagnosticMode;
+  final DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeSkeletonDiagnosticMode?
+  disabledRuntimeSkeletonDiagnosticMode;
   final bool listGoldenCases;
   final DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticResult?
   diagnosticResult;
@@ -428,6 +433,8 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandResult {
   final DebugOnlyBridgeAnalyzerAdapterControlledRuntimePreparationDiagnosticResult?
   runtimePreparationDiagnostic;
   final DisabledAnalyzerAdapterRuntimeSkeletonResult? disabledRuntimeSkeleton;
+  final DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeSkeletonDiagnosticResult?
+  disabledRuntimeSkeletonDiagnostic;
   final String? commandFailure;
 }
 
@@ -442,6 +449,7 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest {
     this.patchDiagnosticMode,
     this.refinementDiagnosticMode,
     this.runtimePreparationDiagnosticMode,
+    this.disabledRuntimeSkeletonDiagnosticMode,
     this.listGoldenCases = false,
     this.showHelp = false,
   }) : isValid = true,
@@ -459,6 +467,7 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest {
       patchDiagnosticMode = null,
       refinementDiagnosticMode = null,
       runtimePreparationDiagnosticMode = null,
+      disabledRuntimeSkeletonDiagnosticMode = null,
       listGoldenCases = false,
       showHelp = false;
 
@@ -476,6 +485,8 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest {
   refinementDiagnosticMode;
   final DebugOnlyBridgeAnalyzerAdapterControlledRuntimePreparationDiagnosticMode?
   runtimePreparationDiagnosticMode;
+  final DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeSkeletonDiagnosticMode?
+  disabledRuntimeSkeletonDiagnosticMode;
   final bool listGoldenCases;
   final bool showHelp;
 }
@@ -690,6 +701,8 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
       refinementDiagnosticMode: request.refinementDiagnosticMode,
       runtimePreparationDiagnosticMode:
           request.runtimePreparationDiagnosticMode,
+      disabledRuntimeSkeletonDiagnosticMode:
+          request.disabledRuntimeSkeletonDiagnosticMode,
       listGoldenCases: request.listGoldenCases,
       stdoutText: '',
       stderrText: _usage(request.failure),
@@ -710,6 +723,8 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
       refinementDiagnosticMode: request.refinementDiagnosticMode,
       runtimePreparationDiagnosticMode:
           request.runtimePreparationDiagnosticMode,
+      disabledRuntimeSkeletonDiagnosticMode:
+          request.disabledRuntimeSkeletonDiagnosticMode,
       listGoldenCases: request.listGoldenCases,
       stdoutText: _usage('help'),
       stderrText: '',
@@ -740,6 +755,8 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
       refinementDiagnosticMode: request.refinementDiagnosticMode,
       runtimePreparationDiagnosticMode:
           request.runtimePreparationDiagnosticMode,
+      disabledRuntimeSkeletonDiagnosticMode:
+          request.disabledRuntimeSkeletonDiagnosticMode,
       listGoldenCases: true,
       stdoutText: stdoutText,
       stderrText: '',
@@ -771,6 +788,8 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
       refinementDiagnosticMode: request.refinementDiagnosticMode,
       runtimePreparationDiagnosticMode:
           request.runtimePreparationDiagnosticMode,
+      disabledRuntimeSkeletonDiagnosticMode:
+          request.disabledRuntimeSkeletonDiagnosticMode,
       listGoldenCases: request.listGoldenCases,
       stdoutText: '',
       stderrText: _usage(selectedGoldenBuildResult.failure!),
@@ -796,11 +815,13 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
       ? null
       : const DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementDiagnostic()
             .evaluate(mode: request.refinementDiagnosticMode!);
-  final includeDisabledRuntimeSkeleton = _includeSection(
-    request.section,
-    DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection
-        .disabledRuntimeSkeleton,
-  );
+  final includeDisabledRuntimeSkeleton =
+      _includeSection(
+        request.section,
+        DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection
+            .disabledRuntimeSkeleton,
+      ) ||
+      request.disabledRuntimeSkeletonDiagnosticMode != null;
   final includeRuntimePreparation =
       _includeSection(
         request.section,
@@ -831,6 +852,16 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
           runtimePreparationResult: runtimePreparation,
         )
       : null;
+  final disabledRuntimeSkeletonDiagnostic =
+      request.disabledRuntimeSkeletonDiagnosticMode == null
+      ? null
+      : const DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeSkeletonDiagnostic()
+            .evaluate(
+              skeletonResult: disabledRuntimeSkeleton,
+              runtimePreparationDiagnosticResult: runtimePreparationDiagnostic,
+              runtimePreparationResult: runtimePreparation,
+              mode: request.disabledRuntimeSkeletonDiagnosticMode!,
+            );
   final stdoutText = switch (request.format) {
     DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticFormat.markdown =>
       _renderMarkdown(
@@ -843,9 +874,10 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
         runtimePreparation: runtimePreparation,
         runtimePreparationDiagnostic: runtimePreparationDiagnostic,
         disabledRuntimeSkeleton: disabledRuntimeSkeleton,
+        disabledRuntimeSkeletonDiagnostic: disabledRuntimeSkeletonDiagnostic,
       ),
     DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticFormat.json =>
-      '${_renderJson(diagnostic, request.section, selectedGoldenDiagnostic: selectedGoldenDiagnostic, patchSetDiagnostic: patchSetDiagnostic, metadataRefinement: metadataRefinement, metadataRefinementDiagnostic: metadataRefinementDiagnostic, runtimePreparation: runtimePreparation, runtimePreparationDiagnostic: runtimePreparationDiagnostic, disabledRuntimeSkeleton: disabledRuntimeSkeleton)}\n',
+      '${_renderJson(diagnostic, request.section, selectedGoldenDiagnostic: selectedGoldenDiagnostic, patchSetDiagnostic: patchSetDiagnostic, metadataRefinement: metadataRefinement, metadataRefinementDiagnostic: metadataRefinementDiagnostic, runtimePreparation: runtimePreparation, runtimePreparationDiagnostic: runtimePreparationDiagnostic, disabledRuntimeSkeleton: disabledRuntimeSkeleton, disabledRuntimeSkeletonDiagnostic: disabledRuntimeSkeletonDiagnostic)}\n',
   };
   final reportFindings = <String>[
     ...const DebugOnlyBridgeAnalyzerAdapterPrototypeInspectionHarnessValidationValidator()
@@ -868,6 +900,9 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
     if (disabledRuntimeSkeleton != null)
       ...const DisabledAnalyzerAdapterRuntimeSkeletonValidator()
           .validateReportText(stdoutText),
+    if (disabledRuntimeSkeletonDiagnostic != null)
+      ...const DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeSkeletonDiagnosticValidator()
+          .validateReportText(stdoutText),
   ];
 
   return DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandResult(
@@ -882,6 +917,7 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
       runtimePreparation: runtimePreparation,
       runtimePreparationDiagnostic: runtimePreparationDiagnostic,
       disabledRuntimeSkeleton: disabledRuntimeSkeleton,
+      disabledRuntimeSkeletonDiagnostic: disabledRuntimeSkeletonDiagnostic,
     ),
     format: request.format,
     section: request.section,
@@ -892,6 +928,8 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
     patchDiagnosticMode: request.patchDiagnosticMode,
     refinementDiagnosticMode: request.refinementDiagnosticMode,
     runtimePreparationDiagnosticMode: request.runtimePreparationDiagnosticMode,
+    disabledRuntimeSkeletonDiagnosticMode:
+        request.disabledRuntimeSkeletonDiagnosticMode,
     listGoldenCases: request.listGoldenCases,
     stdoutText: stdoutText,
     stderrText: '',
@@ -903,6 +941,7 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
     runtimePreparation: runtimePreparation,
     runtimePreparationDiagnostic: runtimePreparationDiagnostic,
     disabledRuntimeSkeleton: disabledRuntimeSkeleton,
+    disabledRuntimeSkeletonDiagnostic: disabledRuntimeSkeletonDiagnostic,
   );
 }
 
@@ -923,6 +962,7 @@ validateDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticArgs(
   var patchDiagnosticSeen = false;
   var refinementDiagnosticSeen = false;
   var runtimePreparationDiagnosticSeen = false;
+  var disabledRuntimeSkeletonDiagnosticSeen = false;
   var listGoldenCasesSeen = false;
   String? goldenCaseSelection;
   DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticMode?
@@ -931,6 +971,8 @@ validateDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticArgs(
   refinementDiagnosticMode;
   DebugOnlyBridgeAnalyzerAdapterControlledRuntimePreparationDiagnosticMode?
   runtimePreparationDiagnosticMode;
+  DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeSkeletonDiagnosticMode?
+  disabledRuntimeSkeletonDiagnosticMode;
 
   for (final arg in args) {
     if (arg == '--help' || arg == '-h') {
@@ -950,6 +992,7 @@ validateDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticArgs(
         patchDiagnosticMode: null,
         refinementDiagnosticMode: null,
         runtimePreparationDiagnosticMode: null,
+        disabledRuntimeSkeletonDiagnosticMode: null,
         listGoldenCases: false,
         showHelp: true,
       );
@@ -1055,6 +1098,24 @@ validateDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticArgs(
       runtimePreparationDiagnosticSeen = true;
       continue;
     }
+    if (arg.startsWith(_disabledRuntimeSkeletonDiagnosticFlag)) {
+      if (disabledRuntimeSkeletonDiagnosticSeen) {
+        return const DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest.invalid(
+          'duplicateDisabledRuntimeSkeletonDiagnostic',
+        );
+      }
+      final parsed = _disabledRuntimeSkeletonDiagnosticModeByWire(
+        arg.substring(_disabledRuntimeSkeletonDiagnosticFlag.length).trim(),
+      );
+      if (parsed == null) {
+        return const DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest.invalid(
+          'unknownDisabledRuntimeSkeletonDiagnostic',
+        );
+      }
+      disabledRuntimeSkeletonDiagnosticMode = parsed;
+      disabledRuntimeSkeletonDiagnosticSeen = true;
+      continue;
+    }
     if (arg == _listGoldenCasesFlag) {
       if (listGoldenCasesSeen) {
         return const DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest.invalid(
@@ -1109,6 +1170,8 @@ validateDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticArgs(
     patchDiagnosticMode: patchDiagnosticMode,
     refinementDiagnosticMode: refinementDiagnosticMode,
     runtimePreparationDiagnosticMode: runtimePreparationDiagnosticMode,
+    disabledRuntimeSkeletonDiagnosticMode:
+        disabledRuntimeSkeletonDiagnosticMode,
     listGoldenCases: listGoldenCasesSeen,
   );
 }
@@ -1129,6 +1192,8 @@ int debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitCode(
   DebugOnlyBridgeAnalyzerAdapterControlledRuntimePreparationDiagnosticResult?
   runtimePreparationDiagnostic,
   DisabledAnalyzerAdapterRuntimeSkeletonResult? disabledRuntimeSkeleton,
+  DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeSkeletonDiagnosticResult?
+  disabledRuntimeSkeletonDiagnostic,
 }) {
   final hasReportLeak = reportFindings.any(_isCriticalFinding);
   if (diagnostic.hasUnsafePolicyViolation ||
@@ -1139,7 +1204,8 @@ int debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitCode(
       (metadataRefinementDiagnostic?.hasUnsafePolicyViolation ?? false) ||
       (runtimePreparation?.hasUnsafePolicyViolation ?? false) ||
       (runtimePreparationDiagnostic?.hasUnsafePolicyViolation ?? false) ||
-      (disabledRuntimeSkeleton?.hasUnsafePolicyViolation ?? false)) {
+      (disabledRuntimeSkeleton?.hasUnsafePolicyViolation ?? false) ||
+      (disabledRuntimeSkeletonDiagnostic?.hasUnsafePolicyViolation ?? false)) {
     return debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitUnsafePolicy;
   }
   if (request.strict &&
@@ -1180,7 +1246,9 @@ int debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitCode(
           (metadataRefinementDiagnostic?.hasUnsafePolicyViolation ?? false) ||
           (runtimePreparation?.hasUnsafePolicyViolation ?? false) ||
           (runtimePreparationDiagnostic?.hasUnsafePolicyViolation ?? false) ||
-          (disabledRuntimeSkeleton?.hasUnsafePolicyViolation ?? false))) {
+          (disabledRuntimeSkeleton?.hasUnsafePolicyViolation ?? false) ||
+          (disabledRuntimeSkeletonDiagnostic?.hasUnsafePolicyViolation ??
+              false))) {
     return debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitBlockedStrict;
   }
   return debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess;
@@ -1201,6 +1269,8 @@ String _renderMarkdown(
   DebugOnlyBridgeAnalyzerAdapterControlledRuntimePreparationDiagnosticResult?
   runtimePreparationDiagnostic,
   DisabledAnalyzerAdapterRuntimeSkeletonResult? disabledRuntimeSkeleton,
+  DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeSkeletonDiagnosticResult?
+  disabledRuntimeSkeletonDiagnostic,
 }) {
   final buffer = StringBuffer()
     ..writeln('# Debug-Only Bridge Analyzer Adapter Prototype Diagnostic')
@@ -1324,6 +1394,12 @@ String _renderMarkdown(
       )) {
     _writeDisabledRuntimeSkeleton(buffer, disabledRuntimeSkeleton);
   }
+  if (disabledRuntimeSkeletonDiagnostic != null) {
+    _writeDisabledRuntimeSkeletonDiagnostic(
+      buffer,
+      disabledRuntimeSkeletonDiagnostic,
+    );
+  }
   return buffer.toString();
 }
 
@@ -1342,6 +1418,8 @@ String _renderJson(
   DebugOnlyBridgeAnalyzerAdapterControlledRuntimePreparationDiagnosticResult?
   runtimePreparationDiagnostic,
   DisabledAnalyzerAdapterRuntimeSkeletonResult? disabledRuntimeSkeleton,
+  DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeSkeletonDiagnosticResult?
+  disabledRuntimeSkeletonDiagnostic,
 }) {
   return const JsonEncoder.withIndent(' ').convert(
     _jsonPayload(
@@ -1354,6 +1432,7 @@ String _renderJson(
       runtimePreparation: runtimePreparation,
       runtimePreparationDiagnostic: runtimePreparationDiagnostic,
       disabledRuntimeSkeleton: disabledRuntimeSkeleton,
+      disabledRuntimeSkeletonDiagnostic: disabledRuntimeSkeletonDiagnostic,
     ),
   );
 }
@@ -1373,6 +1452,8 @@ Map<String, Object?> _jsonPayload(
   DebugOnlyBridgeAnalyzerAdapterControlledRuntimePreparationDiagnosticResult?
   runtimePreparationDiagnostic,
   DisabledAnalyzerAdapterRuntimeSkeletonResult? disabledRuntimeSkeleton,
+  DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeSkeletonDiagnosticResult?
+  disabledRuntimeSkeletonDiagnostic,
 }) {
   final payload = <String, Object?>{
     'version': debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandVersion,
@@ -1490,6 +1571,10 @@ Map<String, Object?> _jsonPayload(
             .disabledRuntimeSkeleton,
       )) {
     payload['disabledRuntimeSkeleton'] = disabledRuntimeSkeleton.toJson();
+  }
+  if (disabledRuntimeSkeletonDiagnostic != null) {
+    payload['disabledRuntimeSkeletonDiagnostic'] =
+        disabledRuntimeSkeletonDiagnostic.toJson();
   }
   return payload;
 }
@@ -2263,6 +2348,59 @@ void _writeDisabledRuntimeSkeleton(
     ..writeln();
 }
 
+void _writeDisabledRuntimeSkeletonDiagnostic(
+  StringBuffer buffer,
+  DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeSkeletonDiagnosticResult result,
+) {
+  buffer
+    ..writeln('## Disabled Runtime Skeleton Diagnostic Run')
+    ..writeln('- diagnostic status: ${result.status.wire}')
+    ..writeln(
+      '- disabled runtime skeleton diagnostic mode: ${result.mode.wire}',
+    )
+    ..writeln('- source skeleton status: ${result.sourceSkeletonStatus}')
+    ..writeln(
+      '- source runtime-preparation diagnostic status: ${result.sourceRuntimePreparationDiagnosticStatus}',
+    )
+    ..writeln('- safe for Phase 34K: ${result.safeForPhase34K}')
+    ..writeln('- next recommendation: ${result.nextRecommendation}')
+    ..writeln('- total diagnostic rows: ${result.totalDiagnosticRows}')
+    ..writeln('- request rows: ${result.requestDiagnosticRowCount}')
+    ..writeln('- response rows: ${result.responseDiagnosticRowCount}')
+    ..writeln('- attempt rows: ${result.attemptDiagnosticRowCount}')
+    ..writeln('- policy rows: ${result.policyDiagnosticRowCount}')
+    ..writeln('- blocked seam rows: ${result.blockedSeamDiagnosticRowCount}')
+    ..writeln('- denied rows: ${result.deniedDiagnosticRowCount}')
+    ..writeln('- proof rows: ${result.proofDiagnosticRowCount}')
+    ..writeln(
+      '- recommendation rows: ${result.recommendationDiagnosticRowCount}',
+    )
+    ..writeln('- runtime execution count: ${result.runtimeExecutionCount}')
+    ..writeln('- executable runtime count: ${result.executableRuntimeCount}')
+    ..writeln('- analyzer wiring count: ${result.analyzerWiringCount}')
+    ..writeln('- engine call count: ${result.engineCallCount}')
+    ..writeln('- scheduler execution count: ${result.schedulerExecutionCount}')
+    ..writeln('- persistence write count: ${result.persistenceWriteCount}')
+    ..writeln('- product output count: ${result.productOutputCount}')
+    ..writeln('- product adapter count: ${result.productAdapterCount}')
+    ..writeln(
+      '- saved analysis integration count: ${result.savedAnalysisIntegrationCount}',
+    )
+    ..writeln('- active denied field count: ${result.activeDeniedFieldCount}')
+    ..writeln('- owner proof queue count: ${result.ownerProofQueueCount}')
+    ..writeln()
+    ..writeln(
+      '| Row | Request | Response | Attempted | Performed | Refused reason | Findings |',
+    )
+    ..writeln('| --- | --- | --- | --- | --- | --- | --- |');
+  for (final row in result.rows) {
+    buffer.writeln(
+      '| ${row.diagnosticRowId} | ${row.requestEnvelopeId} | ${row.responseEnvelopeId} | ${row.executionAttempted} | ${row.executionPerformed} | ${row.executionRefusedReason} | ${_ids(row.findings)} |',
+    );
+  }
+  buffer.writeln();
+}
+
 void _writePatchSetDiagnostic(
   StringBuffer buffer,
   DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticResult result,
@@ -2805,6 +2943,16 @@ _runtimePreparationDiagnosticModeByWire(String wire) {
   return null;
 }
 
+DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeSkeletonDiagnosticMode?
+_disabledRuntimeSkeletonDiagnosticModeByWire(String wire) {
+  for (final mode
+      in DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeSkeletonDiagnosticMode
+          .values) {
+    if (mode.wire == wire) return mode;
+  }
+  return null;
+}
+
 bool _isCriticalFinding(String finding) =>
     finding.startsWith('reportTextLeak:');
 
@@ -2828,7 +2976,7 @@ List<String> _sorted(Iterable<String> values) {
 String _usage(String failure) {
   return [
     if (failure.isNotEmpty && failure != 'help') 'error: $failure',
-    'usage: dart run tool/debug_only_bridge_analyzer_adapter_prototype_diagnostic_command.dart [--format=markdown|json] [--strict] [--safe-demo] [--include-warnings] [--section=all|snapshot|packets|policy|records|proof|boundaries|runtime|recommendation|action-plan|patches|metadata-refinement|runtime-preparation|disabled-runtime-skeleton|golden] [--patch-diagnostic=default|all-safe|support|warning|proof|guards|denied|blocked|recommendation] [--refinement-diagnostic=default|all-safe|support|warning|proof|guards|denied|blocked|surfaces|recommendation] [--runtime-preparation-diagnostic=default|all-safe|envelopes|preconditions|policy|blocked-seams|denied|proof|recommendation] [--golden-case=<caseId>|default-selected|all-safe-selected] [--list-golden-cases]',
+    'usage: dart run tool/debug_only_bridge_analyzer_adapter_prototype_diagnostic_command.dart [--format=markdown|json] [--strict] [--safe-demo] [--include-warnings] [--section=all|snapshot|packets|policy|records|proof|boundaries|runtime|recommendation|action-plan|patches|metadata-refinement|runtime-preparation|disabled-runtime-skeleton|golden] [--patch-diagnostic=default|all-safe|support|warning|proof|guards|denied|blocked|recommendation] [--refinement-diagnostic=default|all-safe|support|warning|proof|guards|denied|blocked|surfaces|recommendation] [--runtime-preparation-diagnostic=default|all-safe|envelopes|preconditions|policy|blocked-seams|denied|proof|recommendation] [--disabled-runtime-skeleton-diagnostic=default|all-safe|request|response|attempt|policy|blocked-seams|denied|proof|recommendation] [--golden-case=<caseId>|default-selected|all-safe-selected] [--list-golden-cases]',
     'defaults: --format=markdown --safe-demo --include-warnings --section=all',
   ].join('\n');
 }
@@ -2839,6 +2987,8 @@ const _goldenCaseFlag = '--golden-case=';
 const _patchDiagnosticFlag = '--patch-diagnostic=';
 const _refinementDiagnosticFlag = '--refinement-diagnostic=';
 const _runtimePreparationDiagnosticFlag = '--runtime-preparation-diagnostic=';
+const _disabledRuntimeSkeletonDiagnosticFlag =
+    '--disabled-runtime-skeleton-diagnostic=';
 const _strictFlag = '--strict';
 const _safeDemoFlag = '--safe-demo';
 const _includeWarningsFlag = '--include-warnings';

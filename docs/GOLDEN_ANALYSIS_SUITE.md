@@ -1097,3 +1097,29 @@ add official metrics, compute CP-loss, compute win probability, expose Stockfish
 active output, add UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine access,
 execute analyzer runtime, implement executable prototype behavior, implement wiring, product adapter behavior, saved
 analysis integration, readiness summaries, readiness gates, or third-party data.
+
+## Phase 34J Run Disabled Analyzer Adapter Runtime Skeleton Diagnostic
+
+Phase 34J adds a practical developer-only diagnostic run over the Phase 34I disabled analyzer adapter runtime skeleton.
+It inspects metadata-only request/response envelopes, refused execution attempts, disabled policy flags, blocked seams,
+denied fields, Android proof boundaries, and the next controlled-runtime preflight recommendation.
+
+Disabled skeleton diagnostic behavior:
+
+- diagnostic modes cover default/all-safe, request, response, refused attempt, policy, blocked seams, denied fields,
+  proof boundary, and recommendation rows.
+- execution attempts may appear only as refused skeleton seam diagnostics.
+- `executionPerformed`, `executionAllowed`, `analyzerWiringAllowed`, `engineCallsAllowed`, `schedulerAllowed`,
+  `persistenceAllowed`, `productOutputAllowed`, `productAdapterAllowed`, and `savedAnalysisAllowed` remain false.
+- request and response envelopes remain diagnostic metadata only.
+- blocked seams for analyzer runtime, analyzer wiring, engine, Stockfish bridge, Android collector, scheduler,
+  persistence, product adapter, saved analysis, UI, backend, cache, and database remain blocked.
+- Phase 32E cases do not claim captured Android proof; Android proof remains limited to `mate-threat-fast-evidence`,
+  `queen-win-major-swing`, and `simple-tactical-capture-check`.
+
+Next recommendation: `implementControlledAnalyzerAdapterRuntimeExecutionPreflightPatch`. Phase 34J does not run
+Stockfish, execute Android collector flows, call analyzer flow, wire analyzer internals, add product labels, compute
+scores, rank moves, add official metrics, compute CP-loss, compute win probability, expose Stockfish command/raw UCI/PV
+dump fields as active output, add UI/backend/persistence/cache/database integration, add scheduler execution, add direct
+engine access, execute analyzer runtime, implement executable prototype behavior, implement wiring, product adapter
+behavior, saved analysis integration, readiness summaries, readiness gates, or third-party data.

@@ -6,6 +6,7 @@ import 'dart:io';
 
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_controlled_runtime_preparation_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_skeleton.dart';
+import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_skeleton_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_metadata_refinement_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_patch_set_diagnostic.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -560,6 +561,67 @@ void main() {
       expect(strict.disabledRuntimeSkeleton!.safeForPhase34J, isTrue);
     });
 
+    test(
+      'disabled runtime skeleton diagnostic JSON and strict modes succeed',
+      () {
+        final json = _run(
+          args: const <String>[
+            '--disabled-runtime-skeleton-diagnostic=default',
+            '--format=json',
+          ],
+        );
+        final strict = _run(
+          args: const <String>[
+            '--disabled-runtime-skeleton-diagnostic=default',
+            '--strict',
+          ],
+        );
+        final decoded = jsonDecode(json.stdoutText) as Map<String, Object?>;
+        final skeletonDiagnostic =
+            decoded['disabledRuntimeSkeletonDiagnostic']
+                as Map<String, Object?>;
+        final counts = skeletonDiagnostic['counts'] as Map<String, Object?>;
+
+        expect(
+          json.exitCode,
+          debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+        );
+        expect(json.disabledRuntimeSkeletonDiagnosticMode!.wire, 'default');
+        expect(
+          json.disabledRuntimeSkeletonDiagnostic!.status,
+          DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeSkeletonDiagnosticStatus
+              .disabledAnalyzerAdapterRuntimeSkeletonDiagnosticReadyWithWarnings,
+        );
+        expect(
+          skeletonDiagnostic['status'],
+          'disabledAnalyzerAdapterRuntimeSkeletonDiagnosticReadyWithWarnings',
+        );
+        expect(skeletonDiagnostic['safeForPhase34K'], isTrue);
+        expect(
+          skeletonDiagnostic['nextRecommendation'],
+          'implementControlledAnalyzerAdapterRuntimeExecutionPreflightPatch',
+        );
+        expect(counts['unsafeCount'], 0);
+        expect(counts['blockerCount'], 0);
+        expect(counts['criticalCount'], 0);
+        expect(counts['runtimeExecutionCount'], 0);
+        expect(counts['analyzerWiringCount'], 0);
+        expect(counts['engineCallCount'], 0);
+        expect(counts['schedulerExecutionCount'], 0);
+        expect(counts['persistenceWriteCount'], 0);
+        expect(counts['productOutputCount'], 0);
+        expect(counts['activeDeniedFieldCount'], 0);
+        expect(
+          strict.exitCode,
+          debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+        );
+        expect(
+          strict.disabledRuntimeSkeletonDiagnostic!.safeForPhase34K,
+          isTrue,
+        );
+      },
+    );
+
     test('each patch diagnostic mode succeeds through diagnostic command', () {
       for (final mode in const <String>[
         'default',
@@ -639,6 +701,36 @@ void main() {
       }
     });
 
+    test(
+      'each disabled runtime skeleton diagnostic mode succeeds through command',
+      () {
+        for (final mode
+            in DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeSkeletonDiagnosticMode
+                .values) {
+          final result = _run(
+            args: <String>[
+              '--disabled-runtime-skeleton-diagnostic=${mode.wire}',
+            ],
+          );
+
+          expect(
+            result.exitCode,
+            debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+            reason: mode.wire,
+          );
+          expect(result.disabledRuntimeSkeletonDiagnosticMode, mode);
+          expect(
+            result.disabledRuntimeSkeletonDiagnostic!.safeForPhase34K,
+            isTrue,
+          );
+          expect(
+            result.stdoutText,
+            contains('disabled runtime skeleton diagnostic mode: ${mode.wire}'),
+          );
+        }
+      },
+    );
+
     test('selected Golden role guardrails are preserved', () {
       final selected = _run(
         args: const <String>['--golden-case=default-selected'],
@@ -690,6 +782,9 @@ void main() {
       final badRuntimePreparationDiagnostic = _run(
         args: const <String>['--runtime-preparation-diagnostic=missing'],
       );
+      final badDisabledRuntimeSkeletonDiagnostic = _run(
+        args: const <String>['--disabled-runtime-skeleton-diagnostic=missing'],
+      );
 
       expect(
         badSection.exitCode,
@@ -733,6 +828,18 @@ void main() {
         'unknownRuntimePreparationDiagnostic',
       );
       expect(badRuntimePreparationDiagnostic.stderrText, contains('usage:'));
+      expect(
+        badDisabledRuntimeSkeletonDiagnostic.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitUsage,
+      );
+      expect(
+        badDisabledRuntimeSkeletonDiagnostic.commandFailure,
+        'unknownDisabledRuntimeSkeletonDiagnostic',
+      );
+      expect(
+        badDisabledRuntimeSkeletonDiagnostic.stderrText,
+        contains('usage:'),
+      );
     });
 
     test('output contains no raw engine spam or active product data', () {
@@ -762,6 +869,9 @@ void main() {
       final disabledRuntimeSkeleton = _run(
         args: const <String>['--section=disabled-runtime-skeleton'],
       ).stdoutText;
+      final disabledRuntimeSkeletonDiagnostic = _run(
+        args: const <String>['--disabled-runtime-skeleton-diagnostic=default'],
+      ).stdoutText;
 
       _expectReportGuardrails(markdown);
       _expectReportGuardrails(json);
@@ -773,6 +883,7 @@ void main() {
       _expectReportGuardrails(runtimePreparation);
       _expectReportGuardrails(runtimePreparationDiagnostic);
       _expectReportGuardrails(disabledRuntimeSkeleton);
+      _expectReportGuardrails(disabledRuntimeSkeletonDiagnostic);
     });
 
     test('source imports remain command-only and integration-free', () {

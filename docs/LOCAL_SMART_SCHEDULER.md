@@ -343,3 +343,9 @@ No scheduler behavior, scheduler thresholds, scheduler execution, product review
 Phase 34I adds a developer-only disabled analyzer adapter runtime skeleton with metadata-only request/response envelopes, a disabled policy, blocked seam records, and an execution attempt that always refuses execution.
 
 No scheduler behavior, scheduler thresholds, scheduler execution, product review output, UI flow, backend flow, persistence, cache, database use, analyzer wiring, engine execution, Android collection, proof command execution, active adapter bridge runtime execution, product adapter wiring, saved analysis integration, readiness summary chain, or readiness gate is added. The skeleton is runtime-shaped but disabled and does not change local smart scheduling decisions.
+
+## Phase 34J Disabled Runtime Skeleton Diagnostic
+
+Phase 34J adds a developer-only diagnostic run over the Phase 34I disabled runtime skeleton, with modes for request, response, refused attempt, policy, blocked seams, denied fields, proof boundary, and recommendation metadata. It reports that execution can only appear as a refused skeleton seam and that `executionPerformed` remains false.
+
+No scheduler behavior, scheduler thresholds, scheduler execution, product review output, UI flow, backend flow, persistence, cache, database use, analyzer wiring, engine execution, Android collection, proof command execution, active adapter bridge runtime execution, product adapter wiring, saved analysis integration, readiness summary chain, or readiness gate is added. The diagnostic run does not change local smart scheduling decisions.
