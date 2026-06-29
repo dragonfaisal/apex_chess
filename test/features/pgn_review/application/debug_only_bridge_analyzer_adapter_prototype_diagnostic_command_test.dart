@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_controlled_runtime_preparation_diagnostic.dart';
+import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_controlled_runtime_execution_preflight.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_skeleton.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_skeleton_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_metadata_refinement_diagnostic.dart';
@@ -72,6 +73,10 @@ void main() {
       );
       expect(
         result.stdoutText,
+        contains('## Controlled Runtime Execution Preflight'),
+      );
+      expect(
+        result.stdoutText,
         contains(
           'proceedToSelectedGoldenAnalyzerAdapterPrototypeDiagnosticRun',
         ),
@@ -131,6 +136,7 @@ void main() {
       expect(decoded['patches'], isA<Map<String, Object?>>());
       expect(decoded['metadataRefinement'], isA<Map<String, Object?>>());
       expect(decoded['disabledRuntimeSkeleton'], isA<Map<String, Object?>>());
+      expect(decoded['runtimeExecutionPreflight'], isA<Map<String, Object?>>());
     });
 
     test('strict mode succeeds for safe demo', () {
@@ -230,6 +236,12 @@ void main() {
           args: const <String>['--section=disabled-runtime-skeleton'],
         ).stdoutText,
         contains('## Disabled Analyzer Adapter Runtime Skeleton'),
+      );
+      expect(
+        _run(
+          args: const <String>['--section=runtime-execution-preflight'],
+        ).stdoutText,
+        contains('## Controlled Runtime Execution Preflight'),
       );
       expect(
         _run(args: const <String>['--section=golden']).stdoutText,
@@ -622,6 +634,60 @@ void main() {
       },
     );
 
+    test('runtime execution preflight section JSON and strict modes succeed', () {
+      final json = _run(
+        args: const <String>[
+          '--section=runtime-execution-preflight',
+          '--format=json',
+        ],
+      );
+      final strict = _run(
+        args: const <String>[
+          '--section=runtime-execution-preflight',
+          '--strict',
+        ],
+      );
+      final decoded = jsonDecode(json.stdoutText) as Map<String, Object?>;
+      final preflight =
+          decoded['runtimeExecutionPreflight'] as Map<String, Object?>;
+      final counts = preflight['counts'] as Map<String, Object?>;
+
+      expect(
+        json.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+      );
+      expect(
+        json.runtimeExecutionPreflight!.status,
+        DebugOnlyBridgeAnalyzerAdapterControlledRuntimeExecutionPreflightStatus
+            .controlledAnalyzerAdapterRuntimeExecutionPreflightReadyWithWarnings,
+      );
+      expect(
+        preflight['status'],
+        'controlledAnalyzerAdapterRuntimeExecutionPreflightReadyWithWarnings',
+      );
+      expect(preflight['safeForPhase34L'], isTrue);
+      expect(
+        preflight['nextRecommendation'],
+        'runControlledAnalyzerAdapterRuntimeExecutionPreflightDiagnostic',
+      );
+      expect(counts['unsafeCount'], 0);
+      expect(counts['blockerCount'], 0);
+      expect(counts['criticalCount'], 0);
+      expect(counts['runtimeExecutionCount'], 0);
+      expect(counts['executableRuntimeCount'], 0);
+      expect(counts['analyzerWiringCount'], 0);
+      expect(counts['engineCallCount'], 0);
+      expect(counts['schedulerExecutionCount'], 0);
+      expect(counts['persistenceWriteCount'], 0);
+      expect(counts['productOutputCount'], 0);
+      expect(counts['activeDeniedFieldCount'], 0);
+      expect(
+        strict.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+      );
+      expect(strict.runtimeExecutionPreflight!.safeForPhase34L, isTrue);
+    });
+
     test('each patch diagnostic mode succeeds through diagnostic command', () {
       for (final mode in const <String>[
         'default',
@@ -872,6 +938,9 @@ void main() {
       final disabledRuntimeSkeletonDiagnostic = _run(
         args: const <String>['--disabled-runtime-skeleton-diagnostic=default'],
       ).stdoutText;
+      final runtimeExecutionPreflight = _run(
+        args: const <String>['--section=runtime-execution-preflight'],
+      ).stdoutText;
 
       _expectReportGuardrails(markdown);
       _expectReportGuardrails(json);
@@ -884,6 +953,7 @@ void main() {
       _expectReportGuardrails(runtimePreparationDiagnostic);
       _expectReportGuardrails(disabledRuntimeSkeleton);
       _expectReportGuardrails(disabledRuntimeSkeletonDiagnostic);
+      _expectReportGuardrails(runtimeExecutionPreflight);
     });
 
     test('source imports remain command-only and integration-free', () {
@@ -898,7 +968,7 @@ void main() {
         'package:flutter/',
         'widgets',
         'backend',
-        'preflight',
+        'preflight/server',
         'server',
         'cache',
         'database',

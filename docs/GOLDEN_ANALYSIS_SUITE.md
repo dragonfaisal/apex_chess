@@ -1123,3 +1123,32 @@ scores, rank moves, add official metrics, compute CP-loss, compute win probabili
 dump fields as active output, add UI/backend/persistence/cache/database integration, add scheduler execution, add direct
 engine access, execute analyzer runtime, implement executable prototype behavior, implement wiring, product adapter
 behavior, saved analysis integration, readiness summaries, readiness gates, or third-party data.
+
+## Phase 34K Controlled Analyzer Adapter Runtime Execution Preflight Patch
+
+Phase 34K adds a developer-only controlled runtime execution preflight layer over the Phase 34J disabled runtime skeleton
+diagnostic. The preflight inspects metadata-only request/response envelopes, refused execution attempts, disabled policy
+flags, blocked seams, denied fields, and proof boundaries to confirm the disabled skeleton has the minimum safe structure
+for future runtime work while keeping execution disabled.
+
+Preflight behavior:
+
+- required checks cover disabled skeleton presence, request/response envelope presence, refused execution attempt presence,
+  `executionPerformed=false`, all runtime-adjacent permission flags remaining false, Stockfish/raw UCI/PV dump denial,
+  Android collector denial, product label denial, score/metric/CP-loss/win-probability denial, Phase 32E proof honesty,
+  and quiet/preparatory exclusion.
+- the preflight decision keeps `executionAllowed=false`, `runtimeExecutionApproved=false`, `analyzerWiringAllowed=false`,
+  `engineCallsAllowed=false`, `schedulerAllowed=false`, `persistenceAllowed=false`, `productOutputAllowed=false`,
+  `productAdapterAllowed=false`, and `savedAnalysisAllowed=false`.
+- blocked reasons explicitly cover analyzer runtime, analyzer wiring, engine calls, Stockfish bridge, Android collector,
+  scheduler execution, persistence writes, product adapter, saved analysis integration, UI, backend, cache, database, and
+  product output seams.
+- the prototype diagnostic command includes a developer-only `--section=runtime-execution-preflight` surface, and the
+  dedicated preflight report supports markdown, JSON, strict mode, and focused checks/decision/blocked-reason sections.
+
+Next recommendation: `runControlledAnalyzerAdapterRuntimeExecutionPreflightDiagnostic`. Phase 34K does not run Stockfish,
+execute Android collector flows, call analyzer flow, wire analyzer internals, approve runtime execution, add product
+labels, compute scores, rank moves, add official metrics, compute CP-loss, compute win probability, expose Stockfish
+command/raw UCI/PV dump fields as active output, add UI/backend/persistence/cache/database integration, add scheduler
+execution, add direct engine access, execute analyzer runtime, implement executable prototype behavior, implement wiring,
+product adapter behavior, saved analysis integration, readiness summaries, readiness gates, or third-party data.
