@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_controlled_runtime_preparation_diagnostic.dart';
+import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_skeleton.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_metadata_refinement_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_patch_set_diagnostic.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -66,6 +67,10 @@ void main() {
       expect(result.stdoutText, contains('## Metadata Refinement Summary'));
       expect(
         result.stdoutText,
+        contains('## Disabled Analyzer Adapter Runtime Skeleton'),
+      );
+      expect(
+        result.stdoutText,
         contains(
           'proceedToSelectedGoldenAnalyzerAdapterPrototypeDiagnosticRun',
         ),
@@ -124,6 +129,7 @@ void main() {
       expect(decoded['actionPlan'], isA<Map<String, Object?>>());
       expect(decoded['patches'], isA<Map<String, Object?>>());
       expect(decoded['metadataRefinement'], isA<Map<String, Object?>>());
+      expect(decoded['disabledRuntimeSkeleton'], isA<Map<String, Object?>>());
     });
 
     test('strict mode succeeds for safe demo', () {
@@ -217,6 +223,12 @@ void main() {
       expect(
         _run(args: const <String>['--section=runtime-preparation']).stdoutText,
         contains('## Controlled Runtime Preparation'),
+      );
+      expect(
+        _run(
+          args: const <String>['--section=disabled-runtime-skeleton'],
+        ).stdoutText,
+        contains('## Disabled Analyzer Adapter Runtime Skeleton'),
       );
       expect(
         _run(args: const <String>['--section=golden']).stdoutText,
@@ -498,6 +510,56 @@ void main() {
       expect(strict.runtimePreparationDiagnostic!.safeForPhase34I, isTrue);
     });
 
+    test('disabled runtime skeleton section JSON and strict modes succeed', () {
+      final json = _run(
+        args: const <String>[
+          '--section=disabled-runtime-skeleton',
+          '--format=json',
+        ],
+      );
+      final strict = _run(
+        args: const <String>['--section=disabled-runtime-skeleton', '--strict'],
+      );
+      final decoded = jsonDecode(json.stdoutText) as Map<String, Object?>;
+      final skeleton =
+          decoded['disabledRuntimeSkeleton'] as Map<String, Object?>;
+      final counts = skeleton['counts'] as Map<String, Object?>;
+
+      expect(
+        json.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+      );
+      expect(
+        json.disabledRuntimeSkeleton!.status,
+        DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeSkeletonStatus
+            .disabledAnalyzerAdapterRuntimeSkeletonReadyWithWarnings,
+      );
+      expect(
+        skeleton['status'],
+        'disabledAnalyzerAdapterRuntimeSkeletonReadyWithWarnings',
+      );
+      expect(skeleton['safeForPhase34J'], isTrue);
+      expect(
+        skeleton['nextRecommendation'],
+        'runDisabledAnalyzerAdapterRuntimeSkeletonDiagnostic',
+      );
+      expect(counts['unsafeCount'], 0);
+      expect(counts['blockerCount'], 0);
+      expect(counts['criticalCount'], 0);
+      expect(counts['runtimeExecutionCount'], 0);
+      expect(counts['analyzerWiringCount'], 0);
+      expect(counts['engineCallCount'], 0);
+      expect(counts['schedulerExecutionCount'], 0);
+      expect(counts['persistenceWriteCount'], 0);
+      expect(counts['productOutputCount'], 0);
+      expect(counts['activeDeniedFieldCount'], 0);
+      expect(
+        strict.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+      );
+      expect(strict.disabledRuntimeSkeleton!.safeForPhase34J, isTrue);
+    });
+
     test('each patch diagnostic mode succeeds through diagnostic command', () {
       for (final mode in const <String>[
         'default',
@@ -697,6 +759,9 @@ void main() {
       final runtimePreparationDiagnostic = _run(
         args: const <String>['--runtime-preparation-diagnostic=default'],
       ).stdoutText;
+      final disabledRuntimeSkeleton = _run(
+        args: const <String>['--section=disabled-runtime-skeleton'],
+      ).stdoutText;
 
       _expectReportGuardrails(markdown);
       _expectReportGuardrails(json);
@@ -707,6 +772,7 @@ void main() {
       _expectReportGuardrails(refinementDiagnostic);
       _expectReportGuardrails(runtimePreparation);
       _expectReportGuardrails(runtimePreparationDiagnostic);
+      _expectReportGuardrails(disabledRuntimeSkeleton);
     });
 
     test('source imports remain command-only and integration-free', () {
