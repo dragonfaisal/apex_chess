@@ -260,4 +260,8 @@ Phase 34P adds a developer-only diagnostic run over the controlled runtime input
 
 Phase 34Q adds a disabled developer-only analyzer adapter runtime input envelope only. It does not load Stockfish, call FFI/native bridges, execute Android collector flows, approve analyzer runtime input, produce analyzer runtime input, create active runtime input envelopes, carry playable FEN/PGN/move/UCI payloads, expose Stockfish command/raw UCI/PV dump fields as active output, wire analyzer runtime, approve runtime execution, implement executable prototype behavior, scheduler execution, product adapter behavior, saved analysis integration, readiness gates, readiness summaries, or add engine-facing production integration.
 
+## Phase 34R Status
+
+Phase 34R adds a developer-only diagnostic run over the disabled analyzer adapter runtime input envelope only. It does not load Stockfish, call FFI/native bridges, execute Android collector flows, approve analyzer runtime input, produce analyzer runtime input, activate runtime input envelopes, carry playable FEN/PGN/move/UCI payloads, expose Stockfish command/raw UCI/PV dump fields as active output, wire analyzer runtime, approve runtime execution, implement executable prototype behavior, scheduler execution, product adapter behavior, saved analysis integration, readiness gates, readiness summaries, or add engine-facing production integration.
+
 Decision record: `LOCAL_ENGINE_SUBSTRATE_DECISION.md`.

@@ -13,6 +13,7 @@ import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_ana
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_controlled_runtime_input_preflight.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_controlled_runtime_input_preflight_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_input_envelope.dart';
+import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_input_envelope_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_inspection_harness.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_inspection_harness_validation.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_metadata_refinement_diagnostic.dart';
@@ -419,6 +420,8 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandResult {
     this.runtimeInputPreflightDiagnosticMode,
     this.runtimeInputPreflightDiagnostic,
     this.disabledRuntimeInputEnvelope,
+    this.disabledRuntimeInputEnvelopeDiagnosticMode,
+    this.disabledRuntimeInputEnvelopeDiagnostic,
     this.commandFailure,
   });
 
@@ -476,6 +479,10 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandResult {
   runtimeInputPreflightDiagnostic;
   final DisabledAnalyzerAdapterRuntimeInputEnvelopeResult?
   disabledRuntimeInputEnvelope;
+  final DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeInputEnvelopeDiagnosticMode?
+  disabledRuntimeInputEnvelopeDiagnosticMode;
+  final DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeInputEnvelopeDiagnosticResult?
+  disabledRuntimeInputEnvelopeDiagnostic;
   final String? commandFailure;
 }
 
@@ -494,6 +501,7 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest {
     this.runtimeExecutionPreflightDiagnosticMode,
     this.disabledRuntimeExecutionSeamProbeDiagnosticMode,
     this.runtimeInputPreflightDiagnosticMode,
+    this.disabledRuntimeInputEnvelopeDiagnosticMode,
     this.listGoldenCases = false,
     this.showHelp = false,
   }) : isValid = true,
@@ -515,6 +523,7 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest {
       runtimeExecutionPreflightDiagnosticMode = null,
       disabledRuntimeExecutionSeamProbeDiagnosticMode = null,
       runtimeInputPreflightDiagnosticMode = null,
+      disabledRuntimeInputEnvelopeDiagnosticMode = null,
       listGoldenCases = false,
       showHelp = false;
 
@@ -540,6 +549,8 @@ class DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest {
   disabledRuntimeExecutionSeamProbeDiagnosticMode;
   final DebugOnlyBridgeAnalyzerAdapterControlledRuntimeInputPreflightDiagnosticMode?
   runtimeInputPreflightDiagnosticMode;
+  final DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeInputEnvelopeDiagnosticMode?
+  disabledRuntimeInputEnvelopeDiagnosticMode;
   final bool listGoldenCases;
   final bool showHelp;
 }
@@ -822,6 +833,8 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
           request.runtimeExecutionPreflightDiagnosticMode,
       disabledRuntimeExecutionSeamProbeDiagnosticMode:
           request.disabledRuntimeExecutionSeamProbeDiagnosticMode,
+      disabledRuntimeInputEnvelopeDiagnosticMode:
+          request.disabledRuntimeInputEnvelopeDiagnosticMode,
       listGoldenCases: true,
       stdoutText: stdoutText,
       stderrText: '',
@@ -859,6 +872,8 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
           request.runtimeExecutionPreflightDiagnosticMode,
       disabledRuntimeExecutionSeamProbeDiagnosticMode:
           request.disabledRuntimeExecutionSeamProbeDiagnosticMode,
+      disabledRuntimeInputEnvelopeDiagnosticMode:
+          request.disabledRuntimeInputEnvelopeDiagnosticMode,
       listGoldenCases: request.listGoldenCases,
       stdoutText: '',
       stderrText: _usage(selectedGoldenBuildResult.failure!),
@@ -884,11 +899,15 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
       ? null
       : const DebugOnlyBridgeAnalyzerAdapterPrototypeMetadataRefinementDiagnostic()
             .evaluate(mode: request.refinementDiagnosticMode!);
-  final includeDisabledRuntimeInputEnvelope = _includeSection(
-    request.section,
-    DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection
-        .disabledRuntimeInputEnvelope,
-  );
+  final includeDisabledRuntimeInputEnvelopeDiagnostic =
+      request.disabledRuntimeInputEnvelopeDiagnosticMode != null;
+  final includeDisabledRuntimeInputEnvelope =
+      _includeSection(
+        request.section,
+        DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticSection
+            .disabledRuntimeInputEnvelope,
+      ) ||
+      includeDisabledRuntimeInputEnvelopeDiagnostic;
   final includeRuntimeInputPreflight =
       _includeSection(
         request.section,
@@ -1075,6 +1094,23 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
                   runtimeExecutionPreflightDiagnostic,
             )
       : null;
+  final disabledRuntimeInputEnvelopeDiagnostic =
+      includeDisabledRuntimeInputEnvelopeDiagnostic
+      ? const DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeInputEnvelopeDiagnostic()
+            .evaluate(
+              disabledRuntimeInputEnvelopeResult: disabledRuntimeInputEnvelope,
+              runtimeInputPreflightDiagnosticResult:
+                  runtimeInputPreflightDiagnostic,
+              runtimeInputPreflightResult: runtimeInputPreflight,
+              disabledSeamProbeDiagnosticResult:
+                  disabledRuntimeExecutionSeamProbeDiagnostic,
+              disabledSeamProbeResult: disabledRuntimeExecutionSeamProbe,
+              mode:
+                  request.disabledRuntimeInputEnvelopeDiagnosticMode ??
+                  DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeInputEnvelopeDiagnosticMode
+                      .defaultMode,
+            )
+      : null;
   final stdoutText = switch (request.format) {
     DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticFormat.markdown =>
       _renderMarkdown(
@@ -1097,9 +1133,11 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
         runtimeInputPreflight: runtimeInputPreflight,
         runtimeInputPreflightDiagnostic: runtimeInputPreflightDiagnostic,
         disabledRuntimeInputEnvelope: disabledRuntimeInputEnvelope,
+        disabledRuntimeInputEnvelopeDiagnostic:
+            disabledRuntimeInputEnvelopeDiagnostic,
       ),
     DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticFormat.json =>
-      '${_renderJson(diagnostic, request.section, selectedGoldenDiagnostic: selectedGoldenDiagnostic, patchSetDiagnostic: patchSetDiagnostic, metadataRefinement: metadataRefinement, metadataRefinementDiagnostic: metadataRefinementDiagnostic, runtimePreparation: runtimePreparation, runtimePreparationDiagnostic: runtimePreparationDiagnostic, disabledRuntimeSkeleton: disabledRuntimeSkeleton, disabledRuntimeSkeletonDiagnostic: disabledRuntimeSkeletonDiagnostic, runtimeExecutionPreflight: runtimeExecutionPreflight, runtimeExecutionPreflightDiagnostic: runtimeExecutionPreflightDiagnostic, disabledRuntimeExecutionSeamProbe: disabledRuntimeExecutionSeamProbe, disabledRuntimeExecutionSeamProbeDiagnostic: disabledRuntimeExecutionSeamProbeDiagnostic, runtimeInputPreflight: runtimeInputPreflight, runtimeInputPreflightDiagnostic: runtimeInputPreflightDiagnostic, disabledRuntimeInputEnvelope: disabledRuntimeInputEnvelope)}\n',
+      '${_renderJson(diagnostic, request.section, selectedGoldenDiagnostic: selectedGoldenDiagnostic, patchSetDiagnostic: patchSetDiagnostic, metadataRefinement: metadataRefinement, metadataRefinementDiagnostic: metadataRefinementDiagnostic, runtimePreparation: runtimePreparation, runtimePreparationDiagnostic: runtimePreparationDiagnostic, disabledRuntimeSkeleton: disabledRuntimeSkeleton, disabledRuntimeSkeletonDiagnostic: disabledRuntimeSkeletonDiagnostic, runtimeExecutionPreflight: runtimeExecutionPreflight, runtimeExecutionPreflightDiagnostic: runtimeExecutionPreflightDiagnostic, disabledRuntimeExecutionSeamProbe: disabledRuntimeExecutionSeamProbe, disabledRuntimeExecutionSeamProbeDiagnostic: disabledRuntimeExecutionSeamProbeDiagnostic, runtimeInputPreflight: runtimeInputPreflight, runtimeInputPreflightDiagnostic: runtimeInputPreflightDiagnostic, disabledRuntimeInputEnvelope: disabledRuntimeInputEnvelope, disabledRuntimeInputEnvelopeDiagnostic: disabledRuntimeInputEnvelopeDiagnostic)}\n',
   };
   final reportFindings = <String>[
     ...const DebugOnlyBridgeAnalyzerAdapterPrototypeInspectionHarnessValidationValidator()
@@ -1146,6 +1184,9 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
     if (disabledRuntimeInputEnvelope != null)
       ...const DisabledAnalyzerAdapterRuntimeInputEnvelopeValidator()
           .validateReportText(stdoutText),
+    if (disabledRuntimeInputEnvelopeDiagnostic != null)
+      ...const DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeInputEnvelopeDiagnosticValidator()
+          .validateReportText(stdoutText),
   ];
 
   return DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandResult(
@@ -1169,6 +1210,8 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
       runtimeInputPreflight: runtimeInputPreflight,
       runtimeInputPreflightDiagnostic: runtimeInputPreflightDiagnostic,
       disabledRuntimeInputEnvelope: disabledRuntimeInputEnvelope,
+      disabledRuntimeInputEnvelopeDiagnostic:
+          disabledRuntimeInputEnvelopeDiagnostic,
     ),
     format: request.format,
     section: request.section,
@@ -1187,6 +1230,8 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
         request.disabledRuntimeExecutionSeamProbeDiagnosticMode,
     runtimeInputPreflightDiagnosticMode:
         request.runtimeInputPreflightDiagnosticMode,
+    disabledRuntimeInputEnvelopeDiagnosticMode:
+        request.disabledRuntimeInputEnvelopeDiagnosticMode,
     runtimeExecutionPreflightDiagnostic: runtimeExecutionPreflightDiagnostic,
     disabledRuntimeExecutionSeamProbe: disabledRuntimeExecutionSeamProbe,
     disabledRuntimeExecutionSeamProbeDiagnostic:
@@ -1207,6 +1252,8 @@ runDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommand({
     runtimeExecutionPreflight: runtimeExecutionPreflight,
     runtimeInputPreflightDiagnostic: runtimeInputPreflightDiagnostic,
     disabledRuntimeInputEnvelope: disabledRuntimeInputEnvelope,
+    disabledRuntimeInputEnvelopeDiagnostic:
+        disabledRuntimeInputEnvelopeDiagnostic,
   );
 }
 
@@ -1231,6 +1278,7 @@ validateDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticArgs(
   var runtimeExecutionPreflightDiagnosticSeen = false;
   var disabledRuntimeExecutionSeamProbeDiagnosticSeen = false;
   var runtimeInputPreflightDiagnosticSeen = false;
+  var disabledRuntimeInputEnvelopeDiagnosticSeen = false;
   var listGoldenCasesSeen = false;
   String? goldenCaseSelection;
   DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticMode?
@@ -1247,6 +1295,8 @@ validateDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticArgs(
   disabledRuntimeExecutionSeamProbeDiagnosticMode;
   DebugOnlyBridgeAnalyzerAdapterControlledRuntimeInputPreflightDiagnosticMode?
   runtimeInputPreflightDiagnosticMode;
+  DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeInputEnvelopeDiagnosticMode?
+  disabledRuntimeInputEnvelopeDiagnosticMode;
 
   for (final arg in args) {
     if (arg == '--help' || arg == '-h') {
@@ -1270,6 +1320,7 @@ validateDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticArgs(
         runtimeExecutionPreflightDiagnosticMode: null,
         disabledRuntimeExecutionSeamProbeDiagnosticMode: null,
         runtimeInputPreflightDiagnosticMode: null,
+        disabledRuntimeInputEnvelopeDiagnosticMode: null,
         listGoldenCases: false,
         showHelp: true,
       );
@@ -1449,6 +1500,26 @@ validateDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticArgs(
       runtimeInputPreflightDiagnosticSeen = true;
       continue;
     }
+    if (arg.startsWith(_disabledRuntimeInputEnvelopeDiagnosticFlag)) {
+      if (disabledRuntimeInputEnvelopeDiagnosticSeen) {
+        return const DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest.invalid(
+          'duplicateDisabledRuntimeInputEnvelopeDiagnostic',
+        );
+      }
+      final parsed = _disabledRuntimeInputEnvelopeDiagnosticModeByWire(
+        arg
+            .substring(_disabledRuntimeInputEnvelopeDiagnosticFlag.length)
+            .trim(),
+      );
+      if (parsed == null) {
+        return const DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest.invalid(
+          'unknownDisabledRuntimeInputEnvelopeDiagnostic',
+        );
+      }
+      disabledRuntimeInputEnvelopeDiagnosticMode = parsed;
+      disabledRuntimeInputEnvelopeDiagnosticSeen = true;
+      continue;
+    }
     if (arg == _listGoldenCasesFlag) {
       if (listGoldenCasesSeen) {
         return const DebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandRequest.invalid(
@@ -1510,6 +1581,8 @@ validateDebugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticArgs(
     disabledRuntimeExecutionSeamProbeDiagnosticMode:
         disabledRuntimeExecutionSeamProbeDiagnosticMode,
     runtimeInputPreflightDiagnosticMode: runtimeInputPreflightDiagnosticMode,
+    disabledRuntimeInputEnvelopeDiagnosticMode:
+        disabledRuntimeInputEnvelopeDiagnosticMode,
     listGoldenCases: listGoldenCasesSeen,
   );
 }
@@ -1545,6 +1618,8 @@ int debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitCode(
   runtimeInputPreflightDiagnostic,
   DisabledAnalyzerAdapterRuntimeInputEnvelopeResult?
   disabledRuntimeInputEnvelope,
+  DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeInputEnvelopeDiagnosticResult?
+  disabledRuntimeInputEnvelopeDiagnostic,
 }) {
   final hasReportLeak = reportFindings.any(_isCriticalFinding);
   if (diagnostic.hasUnsafePolicyViolation ||
@@ -1565,7 +1640,9 @@ int debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitCode(
           false) ||
       (runtimeInputPreflight?.hasUnsafePolicyViolation ?? false) ||
       (runtimeInputPreflightDiagnostic?.hasUnsafePolicyViolation ?? false) ||
-      (disabledRuntimeInputEnvelope?.hasUnsafePolicyViolation ?? false)) {
+      (disabledRuntimeInputEnvelope?.hasUnsafePolicyViolation ?? false) ||
+      (disabledRuntimeInputEnvelopeDiagnostic?.hasUnsafePolicyViolation ??
+          false)) {
     return debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitUnsafePolicy;
   }
   if (request.strict &&
@@ -1620,7 +1697,9 @@ int debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitCode(
           (runtimeInputPreflight?.hasUnsafePolicyViolation ?? false) ||
           (runtimeInputPreflightDiagnostic?.hasUnsafePolicyViolation ??
               false) ||
-          (disabledRuntimeInputEnvelope?.hasUnsafePolicyViolation ?? false))) {
+          (disabledRuntimeInputEnvelope?.hasUnsafePolicyViolation ?? false) ||
+          (disabledRuntimeInputEnvelopeDiagnostic?.hasUnsafePolicyViolation ??
+              false))) {
     return debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitBlockedStrict;
   }
   return debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess;
@@ -1656,6 +1735,8 @@ String _renderMarkdown(
   runtimeInputPreflightDiagnostic,
   DisabledAnalyzerAdapterRuntimeInputEnvelopeResult?
   disabledRuntimeInputEnvelope,
+  DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeInputEnvelopeDiagnosticResult?
+  disabledRuntimeInputEnvelopeDiagnostic,
 }) {
   final buffer = StringBuffer()
     ..writeln('# Debug-Only Bridge Analyzer Adapter Prototype Diagnostic')
@@ -1838,6 +1919,12 @@ String _renderMarkdown(
       )) {
     _writeDisabledRuntimeInputEnvelope(buffer, disabledRuntimeInputEnvelope);
   }
+  if (disabledRuntimeInputEnvelopeDiagnostic != null) {
+    _writeDisabledRuntimeInputEnvelopeDiagnostic(
+      buffer,
+      disabledRuntimeInputEnvelopeDiagnostic,
+    );
+  }
   return buffer.toString();
 }
 
@@ -1871,6 +1958,8 @@ String _renderJson(
   runtimeInputPreflightDiagnostic,
   DisabledAnalyzerAdapterRuntimeInputEnvelopeResult?
   disabledRuntimeInputEnvelope,
+  DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeInputEnvelopeDiagnosticResult?
+  disabledRuntimeInputEnvelopeDiagnostic,
 }) {
   return const JsonEncoder.withIndent(' ').convert(
     _jsonPayload(
@@ -1892,6 +1981,8 @@ String _renderJson(
       runtimeInputPreflight: runtimeInputPreflight,
       runtimeInputPreflightDiagnostic: runtimeInputPreflightDiagnostic,
       disabledRuntimeInputEnvelope: disabledRuntimeInputEnvelope,
+      disabledRuntimeInputEnvelopeDiagnostic:
+          disabledRuntimeInputEnvelopeDiagnostic,
     ),
   );
 }
@@ -1926,6 +2017,8 @@ Map<String, Object?> _jsonPayload(
   runtimeInputPreflightDiagnostic,
   DisabledAnalyzerAdapterRuntimeInputEnvelopeResult?
   disabledRuntimeInputEnvelope,
+  DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeInputEnvelopeDiagnosticResult?
+  disabledRuntimeInputEnvelopeDiagnostic,
 }) {
   final payload = <String, Object?>{
     'version': debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandVersion,
@@ -2093,6 +2186,10 @@ Map<String, Object?> _jsonPayload(
       )) {
     payload['disabledRuntimeInputEnvelope'] = disabledRuntimeInputEnvelope
         .toJson();
+  }
+  if (disabledRuntimeInputEnvelopeDiagnostic != null) {
+    payload['disabledRuntimeInputEnvelopeDiagnostic'] =
+        disabledRuntimeInputEnvelopeDiagnostic.toJson();
   }
   return payload;
 }
@@ -3397,6 +3494,63 @@ void _writeDisabledRuntimeInputEnvelope(
     ..writeln();
 }
 
+void _writeDisabledRuntimeInputEnvelopeDiagnostic(
+  StringBuffer buffer,
+  DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeInputEnvelopeDiagnosticResult
+  result,
+) {
+  buffer
+    ..writeln('## Disabled Runtime Input Envelope Diagnostic Run')
+    ..writeln('- diagnostic status: ${result.status.wire}')
+    ..writeln(
+      '- disabled runtime input envelope diagnostic mode: ${result.mode.wire}',
+    )
+    ..writeln(
+      '- source disabled runtime input envelope status: ${result.sourceDisabledRuntimeInputEnvelopeStatus}',
+    )
+    ..writeln(
+      '- source runtime input preflight diagnostic status: ${result.sourceRuntimeInputPreflightDiagnosticStatus}',
+    )
+    ..writeln('- safe for Phase 34S: ${result.safeForPhase34S}')
+    ..writeln('- next recommendation: ${result.nextRecommendation}')
+    ..writeln('- disabled envelope count: ${result.disabledEnvelopeCount}')
+    ..writeln(
+      '- active runtime input envelope count: ${result.activeRuntimeInputEnvelopeCount}',
+    )
+    ..writeln('- playable payload count: ${result.playablePayloadCount}')
+    ..writeln(
+      '- analyzer runtime input approved count: ${result.analyzerRuntimeInputApprovedCount}',
+    )
+    ..writeln(
+      '- analyzer runtime input produced count: ${result.analyzerRuntimeInputProducedCount}',
+    )
+    ..writeln(
+      '- runtime execution approved count: ${result.runtimeExecutionApprovedCount}',
+    )
+    ..writeln('- runtime execution count: ${result.runtimeExecutionCount}')
+    ..writeln('- analyzer wiring count: ${result.analyzerWiringCount}')
+    ..writeln('- engine call count: ${result.engineCallCount}')
+    ..writeln('- scheduler execution count: ${result.schedulerExecutionCount}')
+    ..writeln('- persistence write count: ${result.persistenceWriteCount}')
+    ..writeln('- product output count: ${result.productOutputCount}')
+    ..writeln('- product adapter count: ${result.productAdapterCount}')
+    ..writeln(
+      '- saved analysis integration count: ${result.savedAnalysisIntegrationCount}',
+    )
+    ..writeln('- active denied field count: ${result.activeDeniedFieldCount}')
+    ..writeln()
+    ..writeln(
+      '| Row | Mode | Slots | Boundaries | Blocked reasons | Active envelope | Analyzer input approved | Analyzer input produced | Findings |',
+    )
+    ..writeln('| --- | --- | --- | --- | --- | --- | --- | --- | --- |');
+  for (final row in result.rows) {
+    buffer.writeln(
+      '| ${row.diagnosticRowId} | ${row.diagnosticMode} | ${_ids(row.slotIds)} | ${_ids(row.boundaryIds)} | ${_ids(row.blockedReasonIds)} | ${row.activeRuntimeInputEnvelope} | ${row.analyzerRuntimeInputApproved} | ${row.analyzerRuntimeInputProduced} | ${_ids(row.findings)} |',
+    );
+  }
+  buffer.writeln();
+}
+
 void _writePatchSetDiagnostic(
   StringBuffer buffer,
   DebugOnlyBridgeAnalyzerAdapterPrototypePatchSetDiagnosticResult result,
@@ -3979,6 +4133,16 @@ _runtimeInputPreflightDiagnosticModeByWire(String wire) {
   return null;
 }
 
+DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeInputEnvelopeDiagnosticMode?
+_disabledRuntimeInputEnvelopeDiagnosticModeByWire(String wire) {
+  for (final mode
+      in DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeInputEnvelopeDiagnosticMode
+          .values) {
+    if (mode.wire == wire) return mode;
+  }
+  return null;
+}
+
 bool _isCriticalFinding(String finding) =>
     finding.startsWith('reportTextLeak:');
 
@@ -4002,7 +4166,7 @@ List<String> _sorted(Iterable<String> values) {
 String _usage(String failure) {
   return [
     if (failure.isNotEmpty && failure != 'help') 'error: $failure',
-    'usage: dart run tool/debug_only_bridge_analyzer_adapter_prototype_diagnostic_command.dart [--format=markdown|json] [--strict] [--safe-demo] [--include-warnings] [--section=all|snapshot|packets|policy|records|proof|boundaries|runtime|recommendation|action-plan|patches|metadata-refinement|runtime-preparation|disabled-runtime-skeleton|runtime-execution-preflight|disabled-runtime-execution-seam-probe|runtime-input-preflight|disabled-runtime-input-envelope|golden] [--patch-diagnostic=default|all-safe|support|warning|proof|guards|denied|blocked|recommendation] [--refinement-diagnostic=default|all-safe|support|warning|proof|guards|denied|blocked|surfaces|recommendation] [--runtime-preparation-diagnostic=default|all-safe|envelopes|preconditions|policy|blocked-seams|denied|proof|recommendation] [--disabled-runtime-skeleton-diagnostic=default|all-safe|request|response|attempt|policy|blocked-seams|denied|proof|recommendation] [--runtime-execution-preflight-diagnostic=default|all-safe|checks|decision|blocked-reasons|denied|proof|recommendation] [--disabled-seam-probe-diagnostic=default|all-safe|request|response|attempt|boundaries|blocked-reasons|denied|proof|recommendation] [--runtime-input-preflight-diagnostic=default|all-safe|checks|decision|blocked-reasons|denied|proof|recommendation] [--golden-case=<caseId>|default-selected|all-safe-selected] [--list-golden-cases]',
+    'usage: dart run tool/debug_only_bridge_analyzer_adapter_prototype_diagnostic_command.dart [--format=markdown|json] [--strict] [--safe-demo] [--include-warnings] [--section=all|snapshot|packets|policy|records|proof|boundaries|runtime|recommendation|action-plan|patches|metadata-refinement|runtime-preparation|disabled-runtime-skeleton|runtime-execution-preflight|disabled-runtime-execution-seam-probe|runtime-input-preflight|disabled-runtime-input-envelope|golden] [--patch-diagnostic=default|all-safe|support|warning|proof|guards|denied|blocked|recommendation] [--refinement-diagnostic=default|all-safe|support|warning|proof|guards|denied|blocked|surfaces|recommendation] [--runtime-preparation-diagnostic=default|all-safe|envelopes|preconditions|policy|blocked-seams|denied|proof|recommendation] [--disabled-runtime-skeleton-diagnostic=default|all-safe|request|response|attempt|policy|blocked-seams|denied|proof|recommendation] [--runtime-execution-preflight-diagnostic=default|all-safe|checks|decision|blocked-reasons|denied|proof|recommendation] [--disabled-seam-probe-diagnostic=default|all-safe|request|response|attempt|boundaries|blocked-reasons|denied|proof|recommendation] [--runtime-input-preflight-diagnostic=default|all-safe|checks|decision|blocked-reasons|denied|proof|recommendation] [--disabled-runtime-input-envelope-diagnostic=default|all-safe|slots|boundaries|blocked-reasons|denied|proof|recommendation] [--golden-case=<caseId>|default-selected|all-safe-selected] [--list-golden-cases]',
     'defaults: --format=markdown --safe-demo --include-warnings --section=all',
   ].join('\n');
 }
@@ -4021,6 +4185,8 @@ const _disabledRuntimeExecutionSeamProbeDiagnosticFlag =
     '--disabled-seam-probe-diagnostic=';
 const _runtimeInputPreflightDiagnosticFlag =
     '--runtime-input-preflight-diagnostic=';
+const _disabledRuntimeInputEnvelopeDiagnosticFlag =
+    '--disabled-runtime-input-envelope-diagnostic=';
 const _strictFlag = '--strict';
 const _safeDemoFlag = '--safe-demo';
 const _includeWarningsFlag = '--include-warnings';

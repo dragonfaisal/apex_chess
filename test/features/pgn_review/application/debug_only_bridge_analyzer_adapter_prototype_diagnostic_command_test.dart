@@ -12,6 +12,7 @@ import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_ana
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_execution_seam_probe.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_execution_seam_probe_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_input_envelope.dart';
+import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_input_envelope_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_skeleton.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_skeleton_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_metadata_refinement_diagnostic.dart';
@@ -1111,6 +1112,79 @@ void main() {
       },
     );
 
+    test(
+      'disabled runtime input envelope diagnostic JSON and strict modes succeed',
+      () {
+        final json = _run(
+          args: const <String>[
+            '--disabled-runtime-input-envelope-diagnostic=default',
+            '--format=json',
+          ],
+        );
+        final strict = _run(
+          args: const <String>[
+            '--disabled-runtime-input-envelope-diagnostic=default',
+            '--strict',
+          ],
+        );
+        final decoded = jsonDecode(json.stdoutText) as Map<String, Object?>;
+        final envelopeDiagnostic =
+            decoded['disabledRuntimeInputEnvelopeDiagnostic']
+                as Map<String, Object?>;
+        final counts = envelopeDiagnostic['counts'] as Map<String, Object?>;
+
+        expect(
+          json.exitCode,
+          debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+        );
+        expect(
+          json.disabledRuntimeInputEnvelopeDiagnosticMode!.wire,
+          'default',
+        );
+        expect(
+          json.disabledRuntimeInputEnvelopeDiagnostic!.status,
+          DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeInputEnvelopeDiagnosticStatus
+              .disabledAnalyzerAdapterRuntimeInputEnvelopeDiagnosticReadyWithWarnings,
+        );
+        expect(
+          envelopeDiagnostic['status'],
+          'disabledAnalyzerAdapterRuntimeInputEnvelopeDiagnosticReadyWithWarnings',
+        );
+        expect(envelopeDiagnostic['safeForPhase34S'], isTrue);
+        expect(
+          envelopeDiagnostic['nextRecommendation'],
+          'implementControlledAnalyzerAdapterRuntimeInputEnvelopeActivationPreflightPatch',
+        );
+        expect(counts['disabledEnvelopeCount'], greaterThanOrEqualTo(1));
+        expect(counts['activeRuntimeInputEnvelopeCount'], 0);
+        expect(counts['playablePayloadCount'], 0);
+        expect(counts['analyzerRuntimeInputApprovedCount'], 0);
+        expect(counts['analyzerRuntimeInputProducedCount'], 0);
+        expect(counts['runtimeExecutionApprovedCount'], 0);
+        expect(counts['runtimeExecutionCount'], 0);
+        expect(counts['analyzerWiringCount'], 0);
+        expect(counts['engineCallCount'], 0);
+        expect(counts['schedulerExecutionCount'], 0);
+        expect(counts['persistenceWriteCount'], 0);
+        expect(counts['productOutputCount'], 0);
+        expect(counts['productAdapterCount'], 0);
+        expect(counts['savedAnalysisIntegrationCount'], 0);
+        expect(counts['activeDeniedFieldCount'], 0);
+        expect(
+          strict.exitCode,
+          debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+        );
+        expect(
+          strict.disabledRuntimeInputEnvelopeDiagnostic!.safeForPhase34S,
+          isTrue,
+        );
+        expect(
+          strict.stdoutText,
+          contains('## Disabled Runtime Input Envelope Diagnostic Run'),
+        );
+      },
+    );
+
     test('each patch diagnostic mode succeeds through diagnostic command', () {
       for (final mode in const <String>[
         'default',
@@ -1305,6 +1379,38 @@ void main() {
       },
     );
 
+    test(
+      'each disabled runtime input envelope diagnostic mode succeeds through command',
+      () {
+        for (final mode
+            in DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeInputEnvelopeDiagnosticMode
+                .values) {
+          final result = _run(
+            args: <String>[
+              '--disabled-runtime-input-envelope-diagnostic=${mode.wire}',
+            ],
+          );
+
+          expect(
+            result.exitCode,
+            debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+            reason: mode.wire,
+          );
+          expect(result.disabledRuntimeInputEnvelopeDiagnosticMode, mode);
+          expect(
+            result.disabledRuntimeInputEnvelopeDiagnostic!.safeForPhase34S,
+            isTrue,
+          );
+          expect(
+            result.stdoutText,
+            contains(
+              'disabled runtime input envelope diagnostic mode: ${mode.wire}',
+            ),
+          );
+        }
+      },
+    );
+
     test('selected Golden role guardrails are preserved', () {
       final selected = _run(
         args: const <String>['--golden-case=default-selected'],
@@ -1369,6 +1475,11 @@ void main() {
       );
       final badRuntimeInputPreflightDiagnostic = _run(
         args: const <String>['--runtime-input-preflight-diagnostic=missing'],
+      );
+      final badDisabledRuntimeInputEnvelopeDiagnostic = _run(
+        args: const <String>[
+          '--disabled-runtime-input-envelope-diagnostic=missing',
+        ],
       );
 
       expect(
@@ -1455,6 +1566,18 @@ void main() {
         'unknownRuntimeInputPreflightDiagnostic',
       );
       expect(badRuntimeInputPreflightDiagnostic.stderrText, contains('usage:'));
+      expect(
+        badDisabledRuntimeInputEnvelopeDiagnostic.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitUsage,
+      );
+      expect(
+        badDisabledRuntimeInputEnvelopeDiagnostic.commandFailure,
+        'unknownDisabledRuntimeInputEnvelopeDiagnostic',
+      );
+      expect(
+        badDisabledRuntimeInputEnvelopeDiagnostic.stderrText,
+        contains('usage:'),
+      );
     });
 
     test('output contains no raw engine spam or active product data', () {
@@ -1510,6 +1633,11 @@ void main() {
       final disabledRuntimeInputEnvelope = _run(
         args: const <String>['--section=disabled-runtime-input-envelope'],
       ).stdoutText;
+      final disabledRuntimeInputEnvelopeDiagnostic = _run(
+        args: const <String>[
+          '--disabled-runtime-input-envelope-diagnostic=default',
+        ],
+      ).stdoutText;
 
       _expectReportGuardrails(markdown);
       _expectReportGuardrails(json);
@@ -1529,6 +1657,7 @@ void main() {
       _expectReportGuardrails(runtimeInputPreflight);
       _expectReportGuardrails(runtimeInputPreflightDiagnostic);
       _expectReportGuardrails(disabledRuntimeInputEnvelope);
+      _expectReportGuardrails(disabledRuntimeInputEnvelopeDiagnostic);
     });
 
     test('source imports remain command-only and integration-free', () {
