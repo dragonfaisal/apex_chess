@@ -8,6 +8,7 @@ import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_ana
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_controlled_runtime_execution_preflight.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_controlled_runtime_execution_preflight_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_controlled_runtime_input_preflight.dart';
+import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_controlled_runtime_input_preflight_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_execution_seam_probe.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_execution_seam_probe_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_skeleton.dart';
@@ -968,6 +969,71 @@ void main() {
       );
     });
 
+    test('runtime input preflight diagnostic JSON and strict modes succeed', () {
+      final json = _run(
+        args: const <String>[
+          '--runtime-input-preflight-diagnostic=default',
+          '--format=json',
+        ],
+      );
+      final strict = _run(
+        args: const <String>[
+          '--runtime-input-preflight-diagnostic=default',
+          '--strict',
+        ],
+      );
+      final decoded = jsonDecode(json.stdoutText) as Map<String, Object?>;
+      final runtimeInputPreflightDiagnostic =
+          decoded['runtimeInputPreflightDiagnostic'] as Map<String, Object?>;
+      final counts =
+          runtimeInputPreflightDiagnostic['counts'] as Map<String, Object?>;
+
+      expect(
+        json.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+      );
+      expect(json.runtimeInputPreflightDiagnosticMode!.wire, 'default');
+      expect(
+        json.runtimeInputPreflightDiagnostic!.status,
+        DebugOnlyBridgeAnalyzerAdapterControlledRuntimeInputPreflightDiagnosticStatus
+            .controlledAnalyzerAdapterRuntimeInputPreflightDiagnosticReadyWithWarnings,
+      );
+      expect(
+        runtimeInputPreflightDiagnostic['status'],
+        'controlledAnalyzerAdapterRuntimeInputPreflightDiagnosticReadyWithWarnings',
+      );
+      expect(runtimeInputPreflightDiagnostic['safeForPhase34Q'], isTrue);
+      expect(
+        runtimeInputPreflightDiagnostic['nextRecommendation'],
+        'implementDisabledAnalyzerAdapterRuntimeInputEnvelopePatch',
+      );
+      expect(counts['unsafeCount'], 0);
+      expect(counts['blockerCount'], 0);
+      expect(counts['criticalCount'], 0);
+      expect(counts['seamProbePerformedCount'], 0);
+      expect(counts['runtimeExecutionCount'], 0);
+      expect(counts['runtimeExecutionApprovedCount'], 0);
+      expect(counts['analyzerRuntimeInputApprovedCount'], 0);
+      expect(counts['analyzerRuntimeInputProducedCount'], 0);
+      expect(counts['analyzerWiringCount'], 0);
+      expect(counts['engineCallCount'], 0);
+      expect(counts['schedulerExecutionCount'], 0);
+      expect(counts['persistenceWriteCount'], 0);
+      expect(counts['productOutputCount'], 0);
+      expect(counts['productAdapterCount'], 0);
+      expect(counts['savedAnalysisIntegrationCount'], 0);
+      expect(counts['activeDeniedFieldCount'], 0);
+      expect(
+        strict.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+      );
+      expect(strict.runtimeInputPreflightDiagnostic!.safeForPhase34Q, isTrue);
+      expect(
+        strict.stdoutText,
+        contains('## Controlled Runtime Input Preflight Diagnostic Run'),
+      );
+    });
+
     test('each patch diagnostic mode succeeds through diagnostic command', () {
       for (final mode in const <String>[
         'default',
@@ -1134,6 +1200,34 @@ void main() {
       }
     });
 
+    test(
+      'each runtime input preflight diagnostic mode succeeds through command',
+      () {
+        for (final mode
+            in DebugOnlyBridgeAnalyzerAdapterControlledRuntimeInputPreflightDiagnosticMode
+                .values) {
+          final result = _run(
+            args: <String>['--runtime-input-preflight-diagnostic=${mode.wire}'],
+          );
+
+          expect(
+            result.exitCode,
+            debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+            reason: mode.wire,
+          );
+          expect(result.runtimeInputPreflightDiagnosticMode, mode);
+          expect(
+            result.runtimeInputPreflightDiagnostic!.safeForPhase34Q,
+            isTrue,
+          );
+          expect(
+            result.stdoutText,
+            contains('runtime input preflight diagnostic mode: ${mode.wire}'),
+          );
+        }
+      },
+    );
+
     test('selected Golden role guardrails are preserved', () {
       final selected = _run(
         args: const <String>['--golden-case=default-selected'],
@@ -1195,6 +1289,9 @@ void main() {
       );
       final badDisabledSeamProbeDiagnostic = _run(
         args: const <String>['--disabled-seam-probe-diagnostic=missing'],
+      );
+      final badRuntimeInputPreflightDiagnostic = _run(
+        args: const <String>['--runtime-input-preflight-diagnostic=missing'],
       );
 
       expect(
@@ -1272,6 +1369,15 @@ void main() {
         'unknownDisabledSeamProbeDiagnostic',
       );
       expect(badDisabledSeamProbeDiagnostic.stderrText, contains('usage:'));
+      expect(
+        badRuntimeInputPreflightDiagnostic.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitUsage,
+      );
+      expect(
+        badRuntimeInputPreflightDiagnostic.commandFailure,
+        'unknownRuntimeInputPreflightDiagnostic',
+      );
+      expect(badRuntimeInputPreflightDiagnostic.stderrText, contains('usage:'));
     });
 
     test('output contains no raw engine spam or active product data', () {
@@ -1321,6 +1427,9 @@ void main() {
       final runtimeInputPreflight = _run(
         args: const <String>['--section=runtime-input-preflight'],
       ).stdoutText;
+      final runtimeInputPreflightDiagnostic = _run(
+        args: const <String>['--runtime-input-preflight-diagnostic=default'],
+      ).stdoutText;
 
       _expectReportGuardrails(markdown);
       _expectReportGuardrails(json);
@@ -1338,6 +1447,7 @@ void main() {
       _expectReportGuardrails(disabledRuntimeExecutionSeamProbe);
       _expectReportGuardrails(disabledRuntimeExecutionSeamProbeDiagnostic);
       _expectReportGuardrails(runtimeInputPreflight);
+      _expectReportGuardrails(runtimeInputPreflightDiagnostic);
     });
 
     test('source imports remain command-only and integration-free', () {
