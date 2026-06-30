@@ -1284,3 +1284,32 @@ compute CP-loss, compute win probability, expose Stockfish command/raw UCI/PV du
 UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine access, implement executable
 runtime behavior, implement wiring, product adapter behavior, saved analysis integration, readiness summaries, readiness
 gates, or third-party data.
+
+## Phase 34Q Disabled Analyzer Adapter Runtime Input Envelope Patch
+
+Phase 34Q adds a developer-only disabled runtime input envelope layer over the Phase 34P runtime-input preflight
+diagnostic and the Phase 34O runtime-input preflight result. It creates a metadata-only disabled envelope, disabled
+runtime-input slots, blocked boundaries, blocked reasons, and a report/umbrella diagnostic section proving that the
+future analyzer runtime input surface exists only as a refused, non-consumable boundary.
+
+Disabled runtime input envelope behavior:
+
+- safe default status is `disabledAnalyzerAdapterRuntimeInputEnvelopeReadyWithWarnings`, `safeForPhase34R=true`, and
+  next recommendation `runDisabledAnalyzerAdapterRuntimeInputEnvelopeDiagnostic`.
+- future input slots for source chain, selected Golden support, proof boundary, denied fields, and runtime input
+  candidates remain disabled, unset, blocked, or redacted metadata only.
+- FEN, PGN, move-list, UCI move, engine option, depth, MultiPV, Stockfish command, raw UCI, PV dump, product-label,
+  score/metric, persistence, scheduler, product adapter, and saved-analysis slots remain blocked and redacted.
+- boundaries block analyzer runtime input, analyzer runtime input approval, runtime execution, analyzer wiring, engine
+  calls, Stockfish bridge, Android collector, scheduler execution, persistence writes, product output, product adapter,
+  saved analysis, UI, backend, cache, and database paths.
+- Phase 32E cases do not claim captured Android proof; Android proof remains limited to `mate-threat-fast-evidence`,
+  `queen-win-major-swing`, and `simple-tactical-capture-check`.
+
+Next recommendation: `runDisabledAnalyzerAdapterRuntimeInputEnvelopeDiagnostic`. Phase 34Q does not run Stockfish,
+execute Android collector flows, call analyzer flow, wire analyzer internals, approve runtime execution, approve analyzer
+runtime input, produce analyzer runtime input, create an active runtime input envelope, carry playable FEN/PGN/move/UCI
+payloads, add product labels, compute scores, rank moves, add official metrics, compute CP-loss, compute win probability,
+expose Stockfish command/raw UCI/PV dump fields as active output, add UI/backend/persistence/cache/database integration,
+add scheduler execution, add direct engine access, implement executable runtime behavior, implement wiring, product
+adapter behavior, saved analysis integration, readiness summaries, readiness gates, or third-party data.

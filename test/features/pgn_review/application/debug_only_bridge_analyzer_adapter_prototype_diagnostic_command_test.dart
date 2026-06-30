@@ -11,6 +11,7 @@ import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_ana
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_controlled_runtime_input_preflight_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_execution_seam_probe.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_execution_seam_probe_diagnostic.dart';
+import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_input_envelope.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_skeleton.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_skeleton_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_prototype_metadata_refinement_diagnostic.dart';
@@ -84,6 +85,7 @@ void main() {
         result.stdoutText,
         contains('## Controlled Runtime Input Preflight'),
       );
+      expect(result.stdoutText, contains('## Disabled Runtime Input Envelope'));
       expect(
         result.stdoutText,
         contains(
@@ -147,6 +149,10 @@ void main() {
       expect(decoded['disabledRuntimeSkeleton'], isA<Map<String, Object?>>());
       expect(decoded['runtimeExecutionPreflight'], isA<Map<String, Object?>>());
       expect(decoded['runtimeInputPreflight'], isA<Map<String, Object?>>());
+      expect(
+        decoded['disabledRuntimeInputEnvelope'],
+        isA<Map<String, Object?>>(),
+      );
     });
 
     test('strict mode succeeds for safe demo', () {
@@ -266,6 +272,12 @@ void main() {
           args: const <String>['--section=runtime-input-preflight'],
         ).stdoutText,
         contains('## Controlled Runtime Input Preflight'),
+      );
+      expect(
+        _run(
+          args: const <String>['--section=disabled-runtime-input-envelope'],
+        ).stdoutText,
+        contains('## Disabled Runtime Input Envelope'),
       );
       expect(
         _run(args: const <String>['--section=golden']).stdoutText,
@@ -1034,6 +1046,71 @@ void main() {
       );
     });
 
+    test(
+      'disabled runtime input envelope section JSON and strict modes succeed',
+      () {
+        final json = _run(
+          args: const <String>[
+            '--section=disabled-runtime-input-envelope',
+            '--format=json',
+          ],
+        );
+        final strict = _run(
+          args: const <String>[
+            '--section=disabled-runtime-input-envelope',
+            '--strict',
+          ],
+        );
+        final decoded = jsonDecode(json.stdoutText) as Map<String, Object?>;
+        final envelope =
+            decoded['disabledRuntimeInputEnvelope'] as Map<String, Object?>;
+        final counts = envelope['counts'] as Map<String, Object?>;
+
+        expect(
+          json.exitCode,
+          debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+        );
+        expect(
+          json.disabledRuntimeInputEnvelope!.status,
+          DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeInputEnvelopeStatus
+              .disabledAnalyzerAdapterRuntimeInputEnvelopeReadyWithWarnings,
+        );
+        expect(
+          envelope['status'],
+          'disabledAnalyzerAdapterRuntimeInputEnvelopeReadyWithWarnings',
+        );
+        expect(envelope['safeForPhase34R'], isTrue);
+        expect(
+          envelope['nextRecommendation'],
+          'runDisabledAnalyzerAdapterRuntimeInputEnvelopeDiagnostic',
+        );
+        expect(counts['disabledEnvelopeCount'], greaterThanOrEqualTo(1));
+        expect(counts['activeRuntimeInputEnvelopeCount'], 0);
+        expect(counts['analyzerRuntimeInputApprovedCount'], 0);
+        expect(counts['analyzerRuntimeInputProducedCount'], 0);
+        expect(counts['runtimeExecutionApprovedCount'], 0);
+        expect(counts['runtimeExecutionCount'], 0);
+        expect(counts['analyzerWiringCount'], 0);
+        expect(counts['engineCallCount'], 0);
+        expect(counts['schedulerExecutionCount'], 0);
+        expect(counts['persistenceWriteCount'], 0);
+        expect(counts['productOutputCount'], 0);
+        expect(counts['productAdapterCount'], 0);
+        expect(counts['savedAnalysisIntegrationCount'], 0);
+        expect(counts['activePayloadSlotCount'], 0);
+        expect(counts['activeDeniedFieldCount'], 0);
+        expect(
+          strict.exitCode,
+          debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+        );
+        expect(strict.disabledRuntimeInputEnvelope!.safeForPhase34R, isTrue);
+        expect(
+          strict.stdoutText,
+          contains('## Disabled Runtime Input Envelope'),
+        );
+      },
+    );
+
     test('each patch diagnostic mode succeeds through diagnostic command', () {
       for (final mode in const <String>[
         'default',
@@ -1430,6 +1507,9 @@ void main() {
       final runtimeInputPreflightDiagnostic = _run(
         args: const <String>['--runtime-input-preflight-diagnostic=default'],
       ).stdoutText;
+      final disabledRuntimeInputEnvelope = _run(
+        args: const <String>['--section=disabled-runtime-input-envelope'],
+      ).stdoutText;
 
       _expectReportGuardrails(markdown);
       _expectReportGuardrails(json);
@@ -1448,6 +1528,7 @@ void main() {
       _expectReportGuardrails(disabledRuntimeExecutionSeamProbeDiagnostic);
       _expectReportGuardrails(runtimeInputPreflight);
       _expectReportGuardrails(runtimeInputPreflightDiagnostic);
+      _expectReportGuardrails(disabledRuntimeInputEnvelope);
     });
 
     test('source imports remain command-only and integration-free', () {
@@ -1492,7 +1573,12 @@ void _expectReportGuardrails(String report) {
     'readyok',
     'info depth',
     'bestmove e2e4',
+    'position fen ',
+    'go movetime ',
     'pv e2e4',
+    'playable fen payload',
+    'pgn payload:',
+    'uci move payload',
     'active fields: productLabel',
     'numeric move score:',
     'ACPL active',
