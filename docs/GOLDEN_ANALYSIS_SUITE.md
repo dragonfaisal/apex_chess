@@ -1345,3 +1345,34 @@ compute win probability, expose Stockfish command/raw UCI/PV dump fields as acti
 UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine access, implement
 executable runtime behavior, implement wiring, product adapter behavior, saved analysis integration, readiness summaries,
 readiness gates, or third-party data.
+
+## Phase 34S Controlled Runtime Input Envelope Activation Preflight Patch
+
+Phase 34S adds a developer-only controlled activation preflight layer over the Phase 34R disabled runtime input envelope
+diagnostic and the Phase 34Q disabled runtime input envelope result. It creates activation preflight checks, a disabled
+activation decision, blocked reasons, a standalone report, and an umbrella diagnostic section proving activation can be
+inspected only as metadata and is still not approved or performed.
+
+Controlled activation preflight behavior:
+
+- safe default status is `controlledAnalyzerAdapterRuntimeInputEnvelopeActivationPreflightReadyWithWarnings`,
+  `safeForPhase34T=true`, and next recommendation
+  `runControlledAnalyzerAdapterRuntimeInputEnvelopeActivationPreflightDiagnostic`.
+- checks cover disabled envelope presence, disabled envelope state, activation approval/performance staying false,
+  active runtime input envelope count staying zero, playable payload count staying zero, analyzer runtime input approval
+  and production staying false, runtime execution staying disabled, and FEN/PGN/move/UCI/engine option/depth/MultiPV,
+  Stockfish command, raw UCI, and PV dump slots staying blocked.
+- the activation decision keeps `activationApproved=false`, `activationPerformed=false`,
+  `activeRuntimeInputEnvelope=false`, `analyzerRuntimeInputApproved=false`, `analyzerRuntimeInputProduced=false`,
+  `runtimeExecutionApproved=false`, `executionAllowed=false`, and `executionPerformed=false`.
+- Phase 32E cases do not claim captured Android proof; Android proof remains limited to `mate-threat-fast-evidence`,
+  `queen-win-major-swing`, and `simple-tactical-capture-check`.
+
+Next recommendation: `runControlledAnalyzerAdapterRuntimeInputEnvelopeActivationPreflightDiagnostic`. Phase 34S does
+not run Stockfish, execute Android collector flows, call analyzer flow, wire analyzer internals, activate runtime input
+envelopes, approve activation, approve runtime execution, approve analyzer runtime input, produce analyzer runtime
+input, carry playable FEN/PGN/move/UCI payloads, add product labels, compute scores, rank moves, add official metrics,
+compute CP-loss, compute win probability, expose Stockfish command/raw UCI/PV dump fields as active output, add
+UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine access, implement
+executable runtime behavior, implement wiring, product adapter behavior, saved analysis integration, readiness summaries,
+readiness gates, or third-party data.
