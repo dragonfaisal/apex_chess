@@ -10,6 +10,7 @@ import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_ana
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_controlled_runtime_input_preflight.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_controlled_runtime_input_preflight_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_controlled_runtime_input_envelope_activation_preflight.dart';
+import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_controlled_runtime_input_envelope_activation_preflight_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_execution_seam_probe.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_execution_seam_probe_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_input_envelope.dart';
@@ -1274,6 +1275,87 @@ void main() {
       },
     );
 
+    test(
+      'runtime input envelope activation preflight diagnostic JSON and strict modes succeed',
+      () {
+        final json = _run(
+          args: const <String>[
+            '--runtime-input-envelope-activation-preflight-diagnostic=default',
+            '--format=json',
+          ],
+        );
+        final strict = _run(
+          args: const <String>[
+            '--runtime-input-envelope-activation-preflight-diagnostic=default',
+            '--strict',
+          ],
+        );
+        final decoded = jsonDecode(json.stdoutText) as Map<String, Object?>;
+        final activationPreflightDiagnostic =
+            decoded['runtimeInputEnvelopeActivationPreflightDiagnostic']
+                as Map<String, Object?>;
+        final counts =
+            activationPreflightDiagnostic['counts'] as Map<String, Object?>;
+
+        expect(
+          json.exitCode,
+          debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+        );
+        expect(
+          json.runtimeInputEnvelopeActivationPreflightDiagnosticMode!.wire,
+          'default',
+        );
+        expect(
+          json.runtimeInputEnvelopeActivationPreflightDiagnostic!.status,
+          DebugOnlyBridgeAnalyzerAdapterControlledRuntimeInputEnvelopeActivationPreflightDiagnosticStatus
+              .controlledAnalyzerAdapterRuntimeInputEnvelopeActivationPreflightDiagnosticReadyWithWarnings,
+        );
+        expect(
+          activationPreflightDiagnostic['status'],
+          'controlledAnalyzerAdapterRuntimeInputEnvelopeActivationPreflightDiagnosticReadyWithWarnings',
+        );
+        expect(activationPreflightDiagnostic['safeForPhase34U'], isTrue);
+        expect(
+          activationPreflightDiagnostic['nextRecommendation'],
+          'implementDisabledAnalyzerAdapterRuntimeInputEnvelopeActivationCandidatePatch',
+        );
+        expect(counts['disabledEnvelopeCount'], greaterThanOrEqualTo(1));
+        expect(counts['activationPreflightCount'], greaterThanOrEqualTo(1));
+        expect(counts['activationApprovedCount'], 0);
+        expect(counts['activationPerformedCount'], 0);
+        expect(counts['activeRuntimeInputEnvelopeCount'], 0);
+        expect(counts['playablePayloadCount'], 0);
+        expect(counts['analyzerRuntimeInputApprovedCount'], 0);
+        expect(counts['analyzerRuntimeInputProducedCount'], 0);
+        expect(counts['runtimeExecutionApprovedCount'], 0);
+        expect(counts['runtimeExecutionCount'], 0);
+        expect(counts['analyzerWiringCount'], 0);
+        expect(counts['engineCallCount'], 0);
+        expect(counts['schedulerExecutionCount'], 0);
+        expect(counts['persistenceWriteCount'], 0);
+        expect(counts['productOutputCount'], 0);
+        expect(counts['productAdapterCount'], 0);
+        expect(counts['savedAnalysisIntegrationCount'], 0);
+        expect(counts['activeDeniedFieldCount'], 0);
+        expect(
+          strict.exitCode,
+          debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+        );
+        expect(
+          strict
+              .runtimeInputEnvelopeActivationPreflightDiagnostic!
+              .safeForPhase34U,
+          isTrue,
+        );
+        expect(
+          strict.stdoutText,
+          contains(
+            '## Runtime Input Envelope Activation Preflight Diagnostic Run',
+          ),
+        );
+      },
+    );
+
     test('each patch diagnostic mode succeeds through diagnostic command', () {
       for (final mode in const <String>[
         'default',
@@ -1500,6 +1582,43 @@ void main() {
       },
     );
 
+    test(
+      'each runtime input envelope activation preflight diagnostic mode succeeds through command',
+      () {
+        for (final mode
+            in DebugOnlyBridgeAnalyzerAdapterControlledRuntimeInputEnvelopeActivationPreflightDiagnosticMode
+                .values) {
+          final result = _run(
+            args: <String>[
+              '--runtime-input-envelope-activation-preflight-diagnostic=${mode.wire}',
+            ],
+          );
+
+          expect(
+            result.exitCode,
+            debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+            reason: mode.wire,
+          );
+          expect(
+            result.runtimeInputEnvelopeActivationPreflightDiagnosticMode,
+            mode,
+          );
+          expect(
+            result
+                .runtimeInputEnvelopeActivationPreflightDiagnostic!
+                .safeForPhase34U,
+            isTrue,
+          );
+          expect(
+            result.stdoutText,
+            contains(
+              'runtime input envelope activation preflight diagnostic mode: ${mode.wire}',
+            ),
+          );
+        }
+      },
+    );
+
     test('selected Golden role guardrails are preserved', () {
       final selected = _run(
         args: const <String>['--golden-case=default-selected'],
@@ -1568,6 +1687,11 @@ void main() {
       final badDisabledRuntimeInputEnvelopeDiagnostic = _run(
         args: const <String>[
           '--disabled-runtime-input-envelope-diagnostic=missing',
+        ],
+      );
+      final badRuntimeInputEnvelopeActivationPreflightDiagnostic = _run(
+        args: const <String>[
+          '--runtime-input-envelope-activation-preflight-diagnostic=missing',
         ],
       );
 
@@ -1667,6 +1791,18 @@ void main() {
         badDisabledRuntimeInputEnvelopeDiagnostic.stderrText,
         contains('usage:'),
       );
+      expect(
+        badRuntimeInputEnvelopeActivationPreflightDiagnostic.exitCode,
+        debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitUsage,
+      );
+      expect(
+        badRuntimeInputEnvelopeActivationPreflightDiagnostic.commandFailure,
+        'unknownRuntimeInputEnvelopeActivationPreflightDiagnostic',
+      );
+      expect(
+        badRuntimeInputEnvelopeActivationPreflightDiagnostic.stderrText,
+        contains('usage:'),
+      );
     });
 
     test('output contains no raw engine spam or active product data', () {
@@ -1732,6 +1868,11 @@ void main() {
           '--section=runtime-input-envelope-activation-preflight',
         ],
       ).stdoutText;
+      final runtimeInputEnvelopeActivationPreflightDiagnostic = _run(
+        args: const <String>[
+          '--runtime-input-envelope-activation-preflight-diagnostic=default',
+        ],
+      ).stdoutText;
 
       _expectReportGuardrails(markdown);
       _expectReportGuardrails(json);
@@ -1753,6 +1894,9 @@ void main() {
       _expectReportGuardrails(disabledRuntimeInputEnvelope);
       _expectReportGuardrails(disabledRuntimeInputEnvelopeDiagnostic);
       _expectReportGuardrails(runtimeInputEnvelopeActivationPreflight);
+      _expectReportGuardrails(
+        runtimeInputEnvelopeActivationPreflightDiagnostic,
+      );
     });
 
     test('source imports remain command-only and integration-free', () {

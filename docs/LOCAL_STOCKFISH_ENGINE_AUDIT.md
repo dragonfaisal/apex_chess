@@ -268,4 +268,8 @@ Phase 34R adds a developer-only diagnostic run over the disabled analyzer adapte
 
 Phase 34S adds a developer-only controlled runtime input envelope activation preflight only. It does not load Stockfish, call FFI/native bridges, execute Android collector flows, approve activation, perform activation, create active runtime input envelopes, approve analyzer runtime input, produce analyzer runtime input, carry playable FEN/PGN/move/UCI payloads, expose Stockfish command/raw UCI/PV dump fields as active output, wire analyzer runtime, approve runtime execution, implement executable prototype behavior, scheduler execution, product adapter behavior, saved analysis integration, readiness gates, readiness summaries, or add engine-facing production integration.
 
+## Phase 34T Status
+
+Phase 34T adds a developer-only diagnostic run over the controlled runtime input envelope activation preflight only. It does not load Stockfish, call FFI/native bridges, execute Android collector flows, approve activation, perform activation, create active runtime input envelopes, approve analyzer runtime input, produce analyzer runtime input, carry playable FEN/PGN/move/UCI payloads, expose Stockfish command/raw UCI/PV dump fields as active output, wire analyzer runtime, approve runtime execution, implement executable prototype behavior, scheduler execution, product adapter behavior, saved analysis integration, readiness gates, readiness summaries, or add engine-facing production integration.
+
 Decision record: `LOCAL_ENGINE_SUBSTRATE_DECISION.md`.

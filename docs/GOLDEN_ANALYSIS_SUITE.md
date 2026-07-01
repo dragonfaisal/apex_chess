@@ -1376,3 +1376,34 @@ compute CP-loss, compute win probability, expose Stockfish command/raw UCI/PV du
 UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine access, implement
 executable runtime behavior, implement wiring, product adapter behavior, saved analysis integration, readiness summaries,
 readiness gates, or third-party data.
+
+## Phase 34T Run Controlled Runtime Input Envelope Activation Preflight Diagnostic
+
+Phase 34T adds a practical developer-only diagnostic run over the Phase 34S controlled runtime input envelope activation
+preflight patch. It inspects activation preflight checks, the disabled activation decision, blocked reasons, denied
+fields, proof boundaries, and the next disabled activation-candidate patch recommendation.
+
+Controlled activation preflight diagnostic behavior:
+
+- modes cover `default`, `all-safe`, `checks`, `decision`, `blocked-reasons`, `denied`, `proof`, and `recommendation`.
+- diagnostic rows report the activation preflight ID, source diagnostic/envelope/preflight/seam/skeleton/preparation/
+  action/patch/refinement IDs, check IDs, decision ID, blocked reason IDs, denied fields, proof boundaries, and
+  status/recommendation metadata.
+- every row keeps `activationApproved=false`, `activationPerformed=false`, `activeRuntimeInputEnvelope=false`,
+  `playablePayloadCount=0`, `analyzerRuntimeInputApproved=false`, `analyzerRuntimeInputProduced=false`,
+  `runtimeExecutionApproved=false`, `executionAllowed=false`, `executionPerformed=false`,
+  `analyzerWiringAllowed=false`, `engineCallsAllowed=false`, `schedulerAllowed=false`, `persistenceAllowed=false`,
+  `productOutputAllowed=false`, `productAdapterAllowed=false`, and `savedAnalysisAllowed=false`.
+- FEN, PGN, move-list, UCI move, engine option, depth, MultiPV, Stockfish command, raw UCI, and PV dump slots remain
+  blocked/redacted and are not emitted as playable or active payloads.
+- Phase 32E cases do not claim captured Android proof; Android proof remains limited to `mate-threat-fast-evidence`,
+  `queen-win-major-swing`, and `simple-tactical-capture-check`.
+
+Next recommendation: `implementDisabledAnalyzerAdapterRuntimeInputEnvelopeActivationCandidatePatch`. Phase 34T does
+not run Stockfish, execute Android collector flows, call analyzer flow, wire analyzer internals, activate runtime input
+envelopes, approve activation, perform activation, approve runtime execution, approve analyzer runtime input, produce
+analyzer runtime input, carry playable FEN/PGN/move/UCI payloads, add product labels, compute scores, rank moves, add
+official metrics, compute CP-loss, compute win probability, expose Stockfish command/raw UCI/PV dump fields as active
+output, add UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine access,
+implement executable runtime behavior, implement wiring, product adapter behavior, saved analysis integration,
+readiness summaries, readiness gates, or third-party data.
