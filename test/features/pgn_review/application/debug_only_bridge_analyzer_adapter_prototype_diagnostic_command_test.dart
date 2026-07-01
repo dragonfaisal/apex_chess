@@ -14,6 +14,7 @@ import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_ana
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_execution_seam_probe.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_execution_seam_probe_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_input_envelope.dart';
+import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_input_envelope_activation_candidate.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_input_envelope_diagnostic.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_skeleton.dart';
 import 'package:apex_chess/features/pgn_review/application/debug_only_bridge_analyzer_adapter_disabled_runtime_skeleton_diagnostic.dart';
@@ -92,6 +93,10 @@ void main() {
       expect(
         result.stdoutText,
         contains('## Runtime Input Envelope Activation Preflight'),
+      );
+      expect(
+        result.stdoutText,
+        contains('## Disabled Runtime Input Envelope Activation Candidate'),
       );
       expect(
         result.stdoutText,
@@ -1352,6 +1357,86 @@ void main() {
           contains(
             '## Runtime Input Envelope Activation Preflight Diagnostic Run',
           ),
+        );
+      },
+    );
+
+    test(
+      'disabled runtime input envelope activation candidate section JSON and strict modes succeed',
+      () {
+        final json = _run(
+          args: const <String>[
+            '--section=disabled-runtime-input-envelope-activation-candidate',
+            '--format=json',
+          ],
+        );
+        final strict = _run(
+          args: const <String>[
+            '--section=disabled-runtime-input-envelope-activation-candidate',
+            '--strict',
+          ],
+        );
+        final decoded = jsonDecode(json.stdoutText) as Map<String, Object?>;
+        final activationCandidate =
+            decoded['disabledRuntimeInputEnvelopeActivationCandidate']
+                as Map<String, Object?>;
+        final counts = activationCandidate['counts'] as Map<String, Object?>;
+
+        expect(
+          json.exitCode,
+          debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+        );
+        expect(
+          json.disabledRuntimeInputEnvelopeActivationCandidate!.status,
+          DebugOnlyBridgeAnalyzerAdapterDisabledRuntimeInputEnvelopeActivationCandidateStatus
+              .disabledAnalyzerAdapterRuntimeInputEnvelopeActivationCandidateReadyWithWarnings,
+        );
+        expect(
+          activationCandidate['status'],
+          'disabledAnalyzerAdapterRuntimeInputEnvelopeActivationCandidateReadyWithWarnings',
+        );
+        expect(activationCandidate['safeForPhase34V'], isTrue);
+        expect(
+          activationCandidate['nextRecommendation'],
+          'runDisabledAnalyzerAdapterRuntimeInputEnvelopeActivationCandidateDiagnostic',
+        );
+        expect(counts['candidateRecordCount'], 16);
+        expect(counts['boundaryCount'], 21);
+        expect(counts['blockedReasonCount'], 31);
+        expect(counts['disabledEnvelopeCount'], greaterThanOrEqualTo(1));
+        expect(counts['activationPreflightCount'], greaterThanOrEqualTo(1));
+        expect(counts['activationCandidateCount'], greaterThanOrEqualTo(1));
+        expect(counts['activationCandidateApprovedCount'], 0);
+        expect(counts['activationCandidatePromotedCount'], 0);
+        expect(counts['activationApprovedCount'], 0);
+        expect(counts['activationPerformedCount'], 0);
+        expect(counts['activeRuntimeInputEnvelopeCount'], 0);
+        expect(counts['playablePayloadCount'], 0);
+        expect(counts['analyzerRuntimeInputApprovedCount'], 0);
+        expect(counts['analyzerRuntimeInputProducedCount'], 0);
+        expect(counts['runtimeExecutionApprovedCount'], 0);
+        expect(counts['runtimeExecutionCount'], 0);
+        expect(counts['analyzerWiringCount'], 0);
+        expect(counts['engineCallCount'], 0);
+        expect(counts['schedulerExecutionCount'], 0);
+        expect(counts['persistenceWriteCount'], 0);
+        expect(counts['productOutputCount'], 0);
+        expect(counts['productAdapterCount'], 0);
+        expect(counts['savedAnalysisIntegrationCount'], 0);
+        expect(counts['activeDeniedFieldCount'], 0);
+        expect(
+          strict.exitCode,
+          debugOnlyBridgeAnalyzerAdapterPrototypeDiagnosticCommandExitSuccess,
+        );
+        expect(
+          strict
+              .disabledRuntimeInputEnvelopeActivationCandidate!
+              .safeForPhase34V,
+          isTrue,
+        );
+        expect(
+          strict.stdoutText,
+          contains('## Disabled Runtime Input Envelope Activation Candidate'),
         );
       },
     );

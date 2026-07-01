@@ -1407,3 +1407,40 @@ official metrics, compute CP-loss, compute win probability, expose Stockfish com
 output, add UI/backend/persistence/cache/database integration, add scheduler execution, add direct engine access,
 implement executable runtime behavior, implement wiring, product adapter behavior, saved analysis integration,
 readiness summaries, readiness gates, or third-party data.
+
+## Phase 34U Disabled Runtime Input Envelope Activation Candidate Patch
+
+Phase 34U adds a developer-only disabled activation candidate layer over the Phase 34T activation preflight diagnostic
+and Phase 34S activation preflight result. It creates a metadata-only candidate record set, blocked boundaries, blocked
+reasons, a standalone report, and an umbrella diagnostic section proving a future activation candidate can be inspected
+without being approved, promoted, activated, consumed, or executed.
+
+Disabled activation candidate behavior:
+
+- safe default status is `disabledAnalyzerAdapterRuntimeInputEnvelopeActivationCandidateReadyWithWarnings`,
+  `safeForPhase34V=true`, and next recommendation
+  `runDisabledAnalyzerAdapterRuntimeInputEnvelopeActivationCandidateDiagnostic`.
+- candidate records cover the disabled activation candidate, source envelope reference, activation preflight reference,
+  activation preflight diagnostic reference, blocked playable payloads, blocked analyzer runtime input, blocked runtime
+  execution, blocked analyzer wiring, blocked engine/scheduler/persistence/product-adapter/saved-analysis paths, proof
+  boundary, denied fields, and recommendation metadata.
+- every candidate keeps `activationCandidateDisabled=true`, `activationCandidateApproved=false`,
+  `activationCandidatePromoted=false`, `activationApproved=false`, `activationPerformed=false`,
+  `activeRuntimeInputEnvelope=false`, `playablePayloadCount=0`, `analyzerRuntimeInputApproved=false`,
+  `analyzerRuntimeInputProduced=false`, `runtimeExecutionApproved=false`, `executionAllowed=false`,
+  `executionPerformed=false`, `analyzerWiringAllowed=false`, `engineCallsAllowed=false`, `schedulerAllowed=false`,
+  `persistenceAllowed=false`, `productOutputAllowed=false`, `productAdapterAllowed=false`, and
+  `savedAnalysisAllowed=false`.
+- FEN, PGN, move-list, UCI move, engine option, depth, MultiPV, Stockfish command, raw UCI, and PV dump payloads remain
+  blocked/redacted and are not emitted as active candidate data.
+- Phase 32E cases do not claim captured Android proof; Android proof remains limited to `mate-threat-fast-evidence`,
+  `queen-win-major-swing`, and `simple-tactical-capture-check`.
+
+Next recommendation: `runDisabledAnalyzerAdapterRuntimeInputEnvelopeActivationCandidateDiagnostic`. Phase 34U does not
+run Stockfish, execute Android collector flows, call analyzer flow, wire analyzer internals, activate runtime input
+envelopes, approve activation, perform activation, approve or promote activation candidates, approve runtime execution,
+approve analyzer runtime input, produce analyzer runtime input, carry playable FEN/PGN/move/UCI payloads, add product
+labels, compute scores, rank moves, add official metrics, compute CP-loss, compute win probability, expose Stockfish
+command/raw UCI/PV dump fields as active output, add UI/backend/persistence/cache/database integration, add scheduler
+execution, add direct engine access, implement executable runtime behavior, implement wiring, product adapter behavior,
+saved analysis integration, readiness summaries, readiness gates, or third-party data.
