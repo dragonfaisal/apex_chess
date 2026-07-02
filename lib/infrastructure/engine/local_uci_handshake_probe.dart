@@ -10,6 +10,8 @@ const localUciHandshakeProbeNextRecommendation =
     'implementControlledFenPositionInputProbe';
 const localUciHandshakeProbeBlockedRecommendation =
     'runAndroidLocalUciHandshakeProof';
+const localUciHandshakeProbeAndroidFailureRecommendation =
+    'fixAndroidLocalUciHandshakePath';
 
 const defaultLocalUciHandshakeProbeTimeout = Duration(milliseconds: 2500);
 
@@ -67,6 +69,15 @@ class LocalUciHandshakeProbeResult {
 
   List<String> get blockedGuidance {
     if (safeForPhase35C) return const [];
+    if (nextRecommendation ==
+        localUciHandshakeProbeAndroidFailureRecommendation) {
+      return const [
+        'Android/device handshake proof failed.',
+        'This is not a successful Android UCI proof.',
+        'Do not proceed to Phase 35C yet.',
+        'Next action is fixing the Android local UCI handshake path.',
+      ];
+    }
     return const [
       'Host handshake proof is blocked.',
       'This is not a successful UCI proof.',
@@ -199,6 +210,7 @@ class LocalUciHandshakeProbe {
 
   Future<LocalUciHandshakeProbeResult> run({
     Duration timeout = defaultLocalUciHandshakeProbeTimeout,
+    String blockedRecommendation = localUciHandshakeProbeBlockedRecommendation,
   }) async {
     final normalizedTimeout = timeout.inMilliseconds > 0
         ? timeout
@@ -281,10 +293,15 @@ class LocalUciHandshakeProbe {
         handshakeSucceeded && uciOkReceived && readyOkReceived;
     final nextRecommendation = safeForPhase35C
         ? localUciHandshakeProbeNextRecommendation
-        : localUciHandshakeProbeBlockedRecommendation;
+        : blockedRecommendation;
     final blockers = <String>[];
     if (!safeForPhase35C) {
-      blockers.add('Host handshake proof is blocked.');
+      blockers.add(
+        blockedRecommendation ==
+                localUciHandshakeProbeAndroidFailureRecommendation
+            ? 'Android/device handshake proof failed.'
+            : 'Host handshake proof is blocked.',
+      );
     }
     if (failedToLaunch) {
       blockers.add('Engine launch failed before UCI handshake completed.');
@@ -304,9 +321,18 @@ class LocalUciHandshakeProbe {
 
     final warnings = <String>[];
     if (!safeForPhase35C) {
-      warnings.add('This is not a successful UCI proof.');
-      warnings.add('Do not proceed to Phase 35C yet.');
-      warnings.add('Next action is Android/device handshake proof.');
+      if (blockedRecommendation ==
+          localUciHandshakeProbeAndroidFailureRecommendation) {
+        warnings.add('This is not a successful Android UCI proof.');
+        warnings.add('Do not proceed to Phase 35C yet.');
+        warnings.add(
+          'Next action is fixing the Android local UCI handshake path.',
+        );
+      } else {
+        warnings.add('This is not a successful UCI proof.');
+        warnings.add('Do not proceed to Phase 35C yet.');
+        warnings.add('Next action is Android/device handshake proof.');
+      }
     }
     if (previewBuilder.unsafeOutputSuppressed) {
       warnings.add(
