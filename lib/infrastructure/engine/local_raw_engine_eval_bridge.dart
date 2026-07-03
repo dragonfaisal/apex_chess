@@ -5,22 +5,28 @@ const localRawEngineEvalBridgeControlledFen = localSearchEvalProbeControlledFen;
 const localRawEngineEvalBridgeDepth = localSearchEvalProbeDepthLimit;
 
 class LocalRawEngineEvalBridge {
-  LocalRawEngineEvalBridge({LocalSearchEvalProbe? searchProbe})
-    : _searchProbe = searchProbe ?? LocalSearchEvalProbe();
+  LocalRawEngineEvalBridge({
+    LocalSearchEvalProbe? searchProbe,
+    Set<String> allowedControlledFens = const {
+      localRawEngineEvalBridgeControlledFen,
+    },
+  }) : _searchProbe = searchProbe ?? LocalSearchEvalProbe(),
+       _allowedControlledFens = Set.unmodifiable(allowedControlledFens);
 
   final LocalSearchEvalProbe _searchProbe;
+  final Set<String> _allowedControlledFens;
 
   Future<LocalRawEngineEval> evaluate({
     String requestedFen = localRawEngineEvalBridgeControlledFen,
     int requestedDepth = localRawEngineEvalBridgeDepth,
     Duration timeout = defaultLocalSearchEvalProbeTimeout,
   }) async {
-    if (requestedFen != localRawEngineEvalBridgeControlledFen) {
+    if (!_allowedControlledFens.contains(requestedFen)) {
       return _blocked(
         requestedFen: requestedFen,
         requestedDepth: requestedDepth,
         failureMessage:
-            'Phase 35E accepts only the controlled start-position FEN.',
+            'Raw eval bridge accepts only explicitly allowed controlled FENs.',
       );
     }
     if (requestedDepth != localRawEngineEvalBridgeDepth) {

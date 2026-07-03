@@ -23,6 +23,9 @@ class LocalAnalyzerSingleFenRawEvalAdapter {
     LocalRawEvalPerspectiveNormalizer? normalizer,
     LocalAnalyzerRawEvalLoader? rawEvalLoader,
     LocalAnalyzerPerspectiveNormalizer? perspectiveNormalizer,
+    Set<String> allowedControlledFens = const {
+      analyzerSingleFenRawEvalControlledFen,
+    },
   }) : _rawEvalLoader =
            rawEvalLoader ??
            (({
@@ -30,31 +33,38 @@ class LocalAnalyzerSingleFenRawEvalAdapter {
              required int requestedDepth,
              required Duration timeout,
            }) async {
-             return (bridge ?? LocalRawEngineEvalBridge()).evaluate(
-               requestedFen: requestedFen,
-               requestedDepth: requestedDepth,
-               timeout: timeout,
-             );
+             return (bridge ??
+                     LocalRawEngineEvalBridge(
+                       allowedControlledFens: allowedControlledFens,
+                     ))
+                 .evaluate(
+                   requestedFen: requestedFen,
+                   requestedDepth: requestedDepth,
+                   timeout: timeout,
+                 );
            }),
        _perspectiveNormalizer =
            perspectiveNormalizer ??
            ((rawEval) {
              return (normalizer ?? const LocalRawEvalPerspectiveNormalizer())
                  .normalizeRawEval(rawEval);
-           });
+           }),
+       _allowedControlledFens = Set.unmodifiable(allowedControlledFens);
 
   final LocalAnalyzerRawEvalLoader _rawEvalLoader;
   final LocalAnalyzerPerspectiveNormalizer _perspectiveNormalizer;
+  final Set<String> _allowedControlledFens;
 
   Future<AnalyzerRawEvalResult> evaluate(
     AnalyzerSingleFenRawEvalRequest request, {
     Duration timeout = defaultLocalSearchEvalProbeTimeout,
   }) async {
-    if (request.fen != analyzerSingleFenRawEvalControlledFen) {
+    if (!_allowedControlledFens.contains(request.fen)) {
       return _failure(
         request: request,
         failureMessage:
-            'Phase 35G accepts only the controlled start-position FEN.',
+            'Analyzer single-FEN raw eval accepts only explicitly allowed '
+            'controlled FENs.',
       );
     }
     if (request.requestedDepth != analyzerSingleFenRawEvalDepth) {
