@@ -81,9 +81,17 @@ class AnalyzerDraftClassificationGateResult {
     required this.draftEvidenceIsPublic,
     required this.draftEvidenceIsOfficialMoveQuality,
     required this.draftEvidenceIsClassifierOutput,
+    this.beforeMoverPerspectiveCp,
+    this.playedAfterMoverPerspectiveCp,
+    this.candidateAfterMoverPerspectiveCp,
     required this.moverPerspectiveDeltaCp,
     required this.moverPerspectiveCpLossCandidate,
     required this.cpLossCandidateDirection,
+    this.expectedPointsModelName,
+    this.expectedPointsModelVersion,
+    this.beforeExpectedPoints,
+    this.playedAfterExpectedPoints,
+    this.candidateAfterExpectedPoints,
     required this.playedExpectedPointsDelta,
     required this.candidateVsPlayedExpectedPointsDelta,
     required this.draftClassificationGateComputed,
@@ -126,9 +134,17 @@ class AnalyzerDraftClassificationGateResult {
   final bool draftEvidenceIsPublic;
   final bool draftEvidenceIsOfficialMoveQuality;
   final bool draftEvidenceIsClassifierOutput;
+  final int? beforeMoverPerspectiveCp;
+  final int? playedAfterMoverPerspectiveCp;
+  final int? candidateAfterMoverPerspectiveCp;
   final int? moverPerspectiveDeltaCp;
   final int? moverPerspectiveCpLossCandidate;
   final String? cpLossCandidateDirection;
+  final String? expectedPointsModelName;
+  final String? expectedPointsModelVersion;
+  final double? beforeExpectedPoints;
+  final double? playedAfterExpectedPoints;
+  final double? candidateAfterExpectedPoints;
   final double? playedExpectedPointsDelta;
   final double? candidateVsPlayedExpectedPointsDelta;
   final bool draftClassificationGateComputed;
@@ -171,9 +187,17 @@ class AnalyzerDraftClassificationGateResult {
     'draftEvidenceIsPublic': draftEvidenceIsPublic,
     'draftEvidenceIsOfficialMoveQuality': draftEvidenceIsOfficialMoveQuality,
     'draftEvidenceIsClassifierOutput': draftEvidenceIsClassifierOutput,
+    'beforeMoverPerspectiveCp': beforeMoverPerspectiveCp,
+    'playedAfterMoverPerspectiveCp': playedAfterMoverPerspectiveCp,
+    'candidateAfterMoverPerspectiveCp': candidateAfterMoverPerspectiveCp,
     'moverPerspectiveDeltaCp': moverPerspectiveDeltaCp,
     'moverPerspectiveCpLossCandidate': moverPerspectiveCpLossCandidate,
     'cpLossCandidateDirection': cpLossCandidateDirection,
+    'expectedPointsModelName': expectedPointsModelName,
+    'expectedPointsModelVersion': expectedPointsModelVersion,
+    'beforeExpectedPoints': beforeExpectedPoints,
+    'playedAfterExpectedPoints': playedAfterExpectedPoints,
+    'candidateAfterExpectedPoints': candidateAfterExpectedPoints,
     'playedExpectedPointsDelta': playedExpectedPointsDelta,
     'candidateVsPlayedExpectedPointsDelta':
         candidateVsPlayedExpectedPointsDelta,
@@ -233,6 +257,17 @@ class AnalyzerDraftClassificationGateResult {
       ..writeln(
         'draftEvidenceIsClassifierOutput: $draftEvidenceIsClassifierOutput',
       )
+      ..writeln(
+        'beforeMoverPerspectiveCp: ${beforeMoverPerspectiveCp ?? 'none'}',
+      )
+      ..writeln(
+        'playedAfterMoverPerspectiveCp: '
+        '${playedAfterMoverPerspectiveCp ?? 'none'}',
+      )
+      ..writeln(
+        'candidateAfterMoverPerspectiveCp: '
+        '${candidateAfterMoverPerspectiveCp ?? 'none'}',
+      )
       ..writeln('moverPerspectiveDeltaCp: ${moverPerspectiveDeltaCp ?? 'none'}')
       ..writeln(
         'moverPerspectiveCpLossCandidate: '
@@ -240,6 +275,18 @@ class AnalyzerDraftClassificationGateResult {
       )
       ..writeln(
         'cpLossCandidateDirection: ${cpLossCandidateDirection ?? 'none'}',
+      )
+      ..writeln('expectedPointsModelName: ${expectedPointsModelName ?? 'none'}')
+      ..writeln(
+        'expectedPointsModelVersion: ${expectedPointsModelVersion ?? 'none'}',
+      )
+      ..writeln('beforeExpectedPoints: ${beforeExpectedPoints ?? 'none'}')
+      ..writeln(
+        'playedAfterExpectedPoints: ${playedAfterExpectedPoints ?? 'none'}',
+      )
+      ..writeln(
+        'candidateAfterExpectedPoints: '
+        '${candidateAfterExpectedPoints ?? 'none'}',
       )
       ..writeln(
         'playedExpectedPointsDelta: ${playedExpectedPointsDelta ?? 'none'}',
@@ -419,10 +466,19 @@ AnalyzerDraftClassificationGateResult evaluateAnalyzerDraftClassificationGate({
         draftEvidence.draftEvidenceIsOfficialMoveQuality,
     draftEvidenceIsClassifierOutput:
         draftEvidence.draftEvidenceIsClassifierOutput,
+    beforeMoverPerspectiveCp: draftEvidence.beforeMoverPerspectiveCp,
+    playedAfterMoverPerspectiveCp: draftEvidence.playedAfterMoverPerspectiveCp,
+    candidateAfterMoverPerspectiveCp:
+        draftEvidence.candidateAfterMoverPerspectiveCp,
     moverPerspectiveDeltaCp: draftEvidence.moverPerspectiveDeltaCp,
     moverPerspectiveCpLossCandidate:
         draftEvidence.moverPerspectiveCpLossCandidate,
     cpLossCandidateDirection: draftEvidence.cpLossCandidateDirection,
+    expectedPointsModelName: draftEvidence.expectedPointsModelName,
+    expectedPointsModelVersion: draftEvidence.expectedPointsModelVersion,
+    beforeExpectedPoints: draftEvidence.beforeExpectedPoints,
+    playedAfterExpectedPoints: draftEvidence.playedAfterExpectedPoints,
+    candidateAfterExpectedPoints: draftEvidence.candidateAfterExpectedPoints,
     playedExpectedPointsDelta: draftEvidence.playedExpectedPointsDelta,
     candidateVsPlayedExpectedPointsDelta:
         draftEvidence.candidateVsPlayedExpectedPointsDelta,
