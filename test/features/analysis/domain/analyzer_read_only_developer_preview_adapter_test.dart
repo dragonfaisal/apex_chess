@@ -15,6 +15,7 @@ void main() {
         AnalyzerReadOnlyDeveloperPreviewUnavailableReason.none,
       );
       expect(result.safeForPhase37A, isTrue);
+      expect(result.safeForPhase37B, isTrue);
       expect(
         result.nextRecommendation,
         analyzerReadOnlyDeveloperPreviewAdapterNextRecommendation,
@@ -221,6 +222,18 @@ void main() {
       expect(dirtyOfficial.safeForPhase37A, isFalse);
       expect(dirtySideEffect.safeForPhase37A, isFalse);
     });
+
+    test('safeForPhase37B true only for clean source', () {
+      final clean = _adapt(_contract());
+      final dirtyPublic = _adapt(_contract(debugPreviewIsPublic: true));
+      final dirtyOfficial = _adapt(_contract(officialWinPercentComputed: true));
+      final dirtySideEffect = _adapt(_contract(fileWritePerformed: true));
+
+      expect(clean.safeForPhase37B, isTrue);
+      expect(dirtyPublic.safeForPhase37B, isFalse);
+      expect(dirtyOfficial.safeForPhase37B, isFalse);
+      expect(dirtySideEffect.safeForPhase37B, isFalse);
+    });
   });
 }
 
@@ -368,6 +381,7 @@ void _expectBlockedAdapter(
   expect(result.adapterComputed, isFalse);
   expect(result.previewReady, isFalse);
   expect(result.safeForPhase37A, isFalse);
+  expect(result.safeForPhase37B, isFalse);
   expect(
     result.nextRecommendation,
     analyzerReadOnlyDeveloperPreviewAdapterFailureRecommendation,

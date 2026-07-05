@@ -6,7 +6,7 @@ const analyzerReadOnlyDeveloperPreviewAdapterSource =
     'phase36PReadOnlyDeveloperPreviewAdapter';
 const analyzerReadOnlyDeveloperPreviewAdapterVersion = 'phase36P.v1';
 const analyzerReadOnlyDeveloperPreviewAdapterNextRecommendation =
-    'beginReadOnlyDeveloperPreviewConsumptionPlanning';
+    'implementReadOnlyDeveloperPreviewConsumptionPlan';
 const analyzerReadOnlyDeveloperPreviewAdapterFailureRecommendation =
     'fixReadOnlyDeveloperPreviewAdapterBoundary';
 
@@ -63,6 +63,7 @@ class AnalyzerReadOnlyDeveloperPreviewAdapterResult {
     required this.mappingSucceeded,
     required this.failureMessage,
     required this.safeForPhase37A,
+    required this.safeForPhase37B,
     required this.nextRecommendation,
   });
 
@@ -108,6 +109,7 @@ class AnalyzerReadOnlyDeveloperPreviewAdapterResult {
   final bool mappingSucceeded;
   final String? failureMessage;
   final bool safeForPhase37A;
+  final bool safeForPhase37B;
   final String nextRecommendation;
 
   Map<String, Object?> toJson() => {
@@ -152,6 +154,7 @@ class AnalyzerReadOnlyDeveloperPreviewAdapterResult {
     'mappingSucceeded': mappingSucceeded,
     'failureMessage': failureMessage,
     'safeForPhase37A': safeForPhase37A,
+    'safeForPhase37B': safeForPhase37B,
     'nextRecommendation': nextRecommendation,
   };
 
@@ -279,6 +282,7 @@ adaptDeveloperDebugPreviewContractToReadOnlyDeveloperPreview(
             sourceSafe: sourceSafe,
           ),
     safeForPhase37A: mappingSucceeded,
+    safeForPhase37B: mappingSucceeded,
     nextRecommendation: mappingSucceeded
         ? analyzerReadOnlyDeveloperPreviewAdapterNextRecommendation
         : analyzerReadOnlyDeveloperPreviewAdapterFailureRecommendation,
