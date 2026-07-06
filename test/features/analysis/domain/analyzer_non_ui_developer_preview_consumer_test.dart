@@ -17,6 +17,7 @@ void main() {
         AnalyzerNonUiDeveloperPreviewConsumerUnavailableReason.none,
       );
       expect(result.safeForPhase37D, isTrue);
+      expect(result.safeForPhase37E, isTrue);
       expect(
         result.nextRecommendation,
         analyzerNonUiDeveloperPreviewConsumerNextRecommendation,
@@ -216,6 +217,20 @@ void main() {
       expect(dirtyOfficial.safeForPhase37D, isFalse);
       expect(dirtySideEffect.safeForPhase37D, isFalse);
     });
+
+    test('safeForPhase37E true only for clean source', () {
+      final clean = _consume(_adapter());
+      final dirtyProduct = _consume(_adapter(adapterIsProductReview: true));
+      final dirtyOfficial = _consume(
+        _adapter(officialWinPercentComputed: true),
+      );
+      final dirtySideEffect = _consume(_adapter(fileWritePerformed: true));
+
+      expect(clean.safeForPhase37E, isTrue);
+      expect(dirtyProduct.safeForPhase37E, isFalse);
+      expect(dirtyOfficial.safeForPhase37E, isFalse);
+      expect(dirtySideEffect.safeForPhase37E, isFalse);
+    });
   });
 }
 
@@ -326,6 +341,7 @@ void _expectBlockedConsumer(
   expect(result.consumerComputed, isFalse);
   expect(result.consumerReady, isFalse);
   expect(result.safeForPhase37D, isFalse);
+  expect(result.safeForPhase37E, isFalse);
   expect(
     result.nextRecommendation,
     analyzerNonUiDeveloperPreviewConsumerFailureRecommendation,

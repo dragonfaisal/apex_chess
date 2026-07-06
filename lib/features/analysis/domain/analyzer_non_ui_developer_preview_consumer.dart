@@ -4,7 +4,7 @@ const analyzerNonUiDeveloperPreviewConsumerSource =
     'phase37CNonUiDeveloperPreviewConsumer';
 const analyzerNonUiDeveloperPreviewConsumerVersion = 'phase37C.v1';
 const analyzerNonUiDeveloperPreviewConsumerNextRecommendation =
-    'planDeveloperOnlyPreviewProbeConsumption';
+    'planDeveloperOnlyProbeHarnessOrDiagnosticsBoundary';
 const analyzerNonUiDeveloperPreviewConsumerFailureRecommendation =
     'fixNonUiDeveloperPreviewConsumerBoundary';
 
@@ -63,6 +63,7 @@ class AnalyzerNonUiDeveloperPreviewConsumerResult {
     required this.mappingSucceeded,
     required this.failureMessage,
     required this.safeForPhase37D,
+    required this.safeForPhase37E,
     required this.nextRecommendation,
   });
 
@@ -110,6 +111,7 @@ class AnalyzerNonUiDeveloperPreviewConsumerResult {
   final bool mappingSucceeded;
   final String? failureMessage;
   final bool safeForPhase37D;
+  final bool safeForPhase37E;
   final String nextRecommendation;
 }
 
@@ -236,6 +238,7 @@ consumeReadOnlyDeveloperPreviewAdapterResult(
             publicStringsClean: publicStringsClean,
           ),
     safeForPhase37D: mappingSucceeded,
+    safeForPhase37E: mappingSucceeded,
     nextRecommendation: mappingSucceeded
         ? analyzerNonUiDeveloperPreviewConsumerNextRecommendation
         : analyzerNonUiDeveloperPreviewConsumerFailureRecommendation,
