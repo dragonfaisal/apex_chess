@@ -16,8 +16,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apex_chess/app/di/providers.dart';
 import 'package:apex_chess/core/platform/audio/chess_audio_service.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
-import 'package:apex_chess/infrastructure/api/cloud_eval_service.dart'
-    show CloudEvalSnapshot, CloudEvalError;
 import 'package:apex_chess/infrastructure/engine/local_eval_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -28,10 +26,10 @@ class LivePlayState {
   final String currentFen;
 
   /// Cloud evaluation snapshot (null if pending or unavailable).
-  final CloudEvalSnapshot? evaluation;
+  final EvalSnapshot? evaluation;
 
   /// Error from the cloud eval service (null if no error).
-  final CloudEvalError? evalError;
+  final EvalError? evalError;
 
   final bool isEvaluating;
   final String? selectedSquare;
@@ -70,15 +68,14 @@ class LivePlayState {
     this.lastMoveWasWhite = true,
   });
 
-  factory LivePlayState.initial() => LivePlayState(
-        currentFen: Chess.initial.fen,
-      );
+  factory LivePlayState.initial() =>
+      LivePlayState(currentFen: Chess.initial.fen);
 
   LivePlayState copyWith({
     String? currentFen,
-    CloudEvalSnapshot? evaluation,
+    EvalSnapshot? evaluation,
     bool clearEval = false,
-    CloudEvalError? evalError,
+    EvalError? evalError,
     bool clearError = false,
     bool? isEvaluating,
     String? selectedSquare,
@@ -94,40 +91,42 @@ class LivePlayState {
     int? previousScoreCp,
     int? previousMateIn,
     bool? lastMoveWasWhite,
-  }) =>
-      LivePlayState(
-        currentFen: currentFen ?? this.currentFen,
-        evaluation: clearEval ? null : (evaluation ?? this.evaluation),
-        evalError: clearError ? null : (evalError ?? this.evalError),
-        isEvaluating: isEvaluating ?? this.isEvaluating,
-        selectedSquare:
-            clearSelection ? null : (selectedSquare ?? this.selectedSquare),
-        legalMoves:
-            clearSelection ? const [] : (legalMoves ?? this.legalMoves),
-        lastMove: lastMove ?? this.lastMove,
-        isCheck: isCheck ?? this.isCheck,
-        isCheckmate: isCheckmate ?? this.isCheckmate,
-        isStalemate: isStalemate ?? this.isStalemate,
-        isDraw: isDraw ?? this.isDraw,
-        moveAnalysis:
-            clearAnalysis ? null : (moveAnalysis ?? this.moveAnalysis),
-        previousScoreCp: previousScoreCp ?? this.previousScoreCp,
-        previousMateIn: previousMateIn ?? this.previousMateIn,
-        lastMoveWasWhite: lastMoveWasWhite ?? this.lastMoveWasWhite,
-      );
+  }) => LivePlayState(
+    currentFen: currentFen ?? this.currentFen,
+    evaluation: clearEval ? null : (evaluation ?? this.evaluation),
+    evalError: clearError ? null : (evalError ?? this.evalError),
+    isEvaluating: isEvaluating ?? this.isEvaluating,
+    selectedSquare: clearSelection
+        ? null
+        : (selectedSquare ?? this.selectedSquare),
+    legalMoves: clearSelection ? const [] : (legalMoves ?? this.legalMoves),
+    lastMove: lastMove ?? this.lastMove,
+    isCheck: isCheck ?? this.isCheck,
+    isCheckmate: isCheckmate ?? this.isCheckmate,
+    isStalemate: isStalemate ?? this.isStalemate,
+    isDraw: isDraw ?? this.isDraw,
+    moveAnalysis: clearAnalysis ? null : (moveAnalysis ?? this.moveAnalysis),
+    previousScoreCp: previousScoreCp ?? this.previousScoreCp,
+    previousMateIn: previousMateIn ?? this.previousMateIn,
+    lastMoveWasWhite: lastMoveWasWhite ?? this.lastMoveWasWhite,
+  );
 
   /// User-facing error message for the eval bar.
   String? get evalErrorMessage {
     if (evalError == null) return null;
     return switch (evalError!) {
-      CloudEvalError.offline =>
+      EvalError.offline =>
         'Apex AI Analyst could not be loaded on this device.',
-      CloudEvalError.rateLimited =>
-        'Engine busy — retrying…',
-      CloudEvalError.positionNotFound =>
+      EvalError.rateLimited => 'Engine busy — retrying…',
+      EvalError.positionNotFound =>
         'Engine returned no evaluation for this position.',
-      CloudEvalError.serverError =>
-        'Apex AI Analyst stopped responding.',
+      EvalError.serverError => 'Apex AI Analyst stopped responding.',
+      EvalError.synchronizationTimeout =>
+        'Apex AI Analyst could not synchronize this position.',
+      EvalError.searchTimeout => 'Apex AI Analyst search timed out.',
+      EvalError.malformedResponse =>
+        'Apex AI Analyst returned incomplete evidence.',
+      EvalError.cancelled => 'Analysis cancelled.',
     };
   }
 }
@@ -200,7 +199,9 @@ class LivePlayNotifier extends Notifier<LivePlayState> {
     }
     _audio.play(ChessSoundType.select);
     state = state.copyWith(
-        selectedSquare: squareAlg, legalMoves: legalDestinations);
+      selectedSquare: squareAlg,
+      legalMoves: legalDestinations,
+    );
   }
 
   // ── Move Execution ─────────────────────────────────────────────────────
@@ -214,7 +215,8 @@ class LivePlayNotifier extends Notifier<LivePlayState> {
     final isWhiteMoving = _position.turn == Side.white;
 
     final movingPiece = _position.board.pieceAt(fromSq);
-    final isPromotion = movingPiece != null &&
+    final isPromotion =
+        movingPiece != null &&
         movingPiece.role == Role.pawn &&
         (toSq.rank == 0 || toSq.rank == 7);
 
@@ -231,16 +233,18 @@ class LivePlayNotifier extends Notifier<LivePlayState> {
     // file as a castling candidate, then map to the FIDE king-target so
     // every downstream consumer (aura, sound, last-move highlight) sees
     // g1/c1/g8/c8 — never the rook square.
-    final isCastlingCandidate = movingPiece != null &&
+    final isCastlingCandidate =
+        movingPiece != null &&
         movingPiece.role == Role.king &&
-        from.length == 2 && from[0] == 'e' &&
-        to.length == 2 && to[1] == from[1] &&
+        from.length == 2 &&
+        from[0] == 'e' &&
+        to.length == 2 &&
+        to[1] == from[1] &&
         (to[0] == 'a' || to[0] == 'c' || to[0] == 'g' || to[0] == 'h');
     final fidetoFile = isCastlingCandidate
         ? ((to[0] == 'h' || to[0] == 'g') ? 'g' : 'c')
         : null;
-    final fidetoSquare =
-        fidetoFile == null ? to : '$fidetoFile${to[1]}';
+    final fidetoSquare = fidetoFile == null ? to : '$fidetoFile${to[1]}';
     final isCastling = isCastlingCandidate;
 
     // `isCapture` must be derived from the *original* tapped square: a
@@ -249,8 +253,10 @@ class LivePlayNotifier extends Notifier<LivePlayState> {
     final isCapture = targetPiece != null && !isCastling;
 
     final move = NormalMove(
-        from: fromSq, to: toSq,
-        promotion: isPromotion ? Role.queen : null);
+      from: fromSq,
+      to: toSq,
+      promotion: isPromotion ? Role.queen : null,
+    );
 
     if (!_position.isLegal(move)) {
       _audio.play(ChessSoundType.error);
@@ -293,8 +299,10 @@ class LivePlayNotifier extends Notifier<LivePlayState> {
       isCheck: _position.isCheck,
       isCheckmate: _position.isCheckmate,
       isStalemate: _position.isStalemate,
-      isDraw: !_position.isCheckmate &&
-          !_position.isStalemate && _position.isGameOver,
+      isDraw:
+          !_position.isCheckmate &&
+          !_position.isStalemate &&
+          _position.isGameOver,
       clearEval: true,
       clearError: true,
       previousScoreCp: prevCp,
@@ -323,7 +331,7 @@ class LivePlayNotifier extends Notifier<LivePlayState> {
     if (_disposed) return;
     state = state.copyWith(isEvaluating: true, clearError: true);
 
-    (CloudEvalSnapshot?, CloudEvalError?) result;
+    (EvalSnapshot?, EvalError?) result;
     try {
       result = await _eval.evaluate(state.currentFen);
     } on Object {
@@ -333,10 +341,7 @@ class LivePlayNotifier extends Notifier<LivePlayState> {
       // them as a generic offline error so the UI shows the engine-down
       // banner instead of crashing.
       if (_disposed) return;
-      state = state.copyWith(
-        isEvaluating: false,
-        evalError: CloudEvalError.offline,
-      );
+      state = state.copyWith(isEvaluating: false, evalError: EvalError.offline);
       return;
     }
 
@@ -344,17 +349,14 @@ class LivePlayNotifier extends Notifier<LivePlayState> {
     final (snapshot, error) = result;
 
     if (error != null) {
-      state = state.copyWith(
-        isEvaluating: false,
-        evalError: error,
-      );
+      state = state.copyWith(isEvaluating: false, evalError: error);
       return;
     }
 
     if (snapshot == null) {
       state = state.copyWith(
         isEvaluating: false,
-        evalError: CloudEvalError.positionNotFound,
+        evalError: EvalError.positionNotFound,
       );
       return;
     }
@@ -369,7 +371,7 @@ class LivePlayNotifier extends Notifier<LivePlayState> {
     _classifyLastMove(snapshot);
   }
 
-  void _classifyLastMove(CloudEvalSnapshot currentEval) {
+  void _classifyLastMove(EvalSnapshot currentEval) {
     final prevCp = state.previousScoreCp;
     if (prevCp == null) return;
 
@@ -421,7 +423,6 @@ final audioServiceProvider = Provider<ChessAudioService>((ref) {
   return service;
 });
 
-final livePlayProvider =
-    NotifierProvider<LivePlayNotifier, LivePlayState>(
+final livePlayProvider = NotifierProvider<LivePlayNotifier, LivePlayState>(
   LivePlayNotifier.new,
 );

@@ -25,6 +25,21 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   const classifier = MoveClassifier();
 
+  test('missing before or after score cannot be classified', () {
+    expect(
+      () => classifier.classify(
+        const MoveClassificationInput(
+          isWhiteMove: true,
+          prevWhiteCp: null,
+          prevWhiteMate: null,
+          currWhiteCp: 0,
+          currWhiteMate: null,
+        ),
+      ),
+      throwsA(isA<IncompleteMoveEvidenceException>()),
+    );
+  });
+
   // ─── Brilliant gate ──────────────────────────────────────────────────
   group('Brilliant gate', () {
     test(
@@ -84,7 +99,7 @@ void main() {
       expect(cls.quality, MoveQuality.blunder);
     });
 
-    test('True sacrifice with compensation IS Brilliant', () {
+    test('numeric sacrifice evidence alone is NOT Brilliant', () {
       // White is up only marginally (+50 cp ≈ 54.5 % Win%) — not
       // crushing — sacrifices a knight (caller asserts), the move is
       // engine-best, ΔW stays in noise (cp stays ≈ +30), and no
@@ -103,10 +118,10 @@ void main() {
           multiPvWhiteWinPercents: [55.0, 54.0, 52.0],
         ),
       );
-      expect(cls.quality, MoveQuality.brilliant);
+      expect(cls.quality, isNot(MoveQuality.brilliant));
     });
 
-    test('True sacrifice that mates IS Brilliant', () {
+    test('unverified sacrifice that mates is NOT Brilliant', () {
       final cls = classifier.classify(
         const MoveClassificationInput(
           isWhiteMove: true,
@@ -120,7 +135,7 @@ void main() {
           multiPvWhiteWinPercents: [95.0, 72.0, 65.0],
         ),
       );
-      expect(cls.quality, MoveQuality.brilliant);
+      expect(cls.quality, isNot(MoveQuality.brilliant));
     });
 
     test(
@@ -167,6 +182,8 @@ void main() {
               verificationMultiPV: 5,
               firstCommitmentPly: 0,
             ),
+            alternativeEvidenceComplete: true,
+            deepVerificationComplete: true,
           ),
         );
         expect(cls.quality, MoveQuality.brilliant);
@@ -215,6 +232,8 @@ void main() {
               verificationMultiPV: 5,
               firstCommitmentPly: 0,
             ),
+            alternativeEvidenceComplete: true,
+            deepVerificationComplete: true,
           ),
         );
         expect(cls.quality, anyOf(MoveQuality.brilliant, MoveQuality.great));
@@ -238,6 +257,54 @@ void main() {
       );
       expect(cls.quality, isNot(MoveQuality.brilliant));
     });
+
+    test(
+      'Verified non-mating sacrifice above CP-loss cap is NOT Brilliant',
+      () {
+        final cls = classifier.classify(
+          const MoveClassificationInput(
+            isWhiteMove: true,
+            prevWhiteCp: 600,
+            prevWhiteMate: null,
+            currWhiteCp: 550,
+            currWhiteMate: null,
+            engineBestMoveUci: 'e4e5',
+            playedMoveUci: 'e4e5',
+            isSacrifice: true,
+            isFirstSacrificePly: true,
+            alternativeEvidenceComplete: true,
+            deepVerificationComplete: true,
+            tacticalVerdict: DeepTacticalVerdict(
+              isCandidate: true,
+              verified: true,
+              candidateType: 'sacrifice_trajectory',
+              isBestOrNearBest: true,
+              isOnlyMove: false,
+              isNonObvious: true,
+              lowDepthRejectedHighDepthApproved: true,
+              forcingLineLength: 4,
+              forcedMate: false,
+              forcedPromotion: true,
+              decisiveMaterialWin: false,
+              sacrificeTrajectory: true,
+              delayedSacrifice: false,
+              queenSacrifice: false,
+              rookSacrifice: false,
+              decoy: false,
+              deflection: true,
+              matingNet: false,
+              promotionNet: true,
+              firstCommitmentPly: 0,
+              reasonCode: 'verified_sacrifice',
+              humanExplanation: 'The sacrifice forces promotion.',
+            ),
+          ),
+        );
+
+        expect(cls.moverCpLoss, 50);
+        expect(cls.quality, isNot(MoveQuality.brilliant));
+      },
+    );
 
     test('Brilliant only attaches to FIRST sac ply, not consolidating ply', () {
       // The same engine-best, sound, sacrificial-flagged move is
@@ -305,6 +372,23 @@ void main() {
 
   // ─── Black perspective ────────────────────────────────────────────
   group('Black perspective', () {
+    test('Black improvement clamps CP loss to zero but keeps signed gain', () {
+      final cls = classifier.classify(
+        const MoveClassificationInput(
+          isWhiteMove: false,
+          prevWhiteCp: -20,
+          prevWhiteMate: null,
+          currWhiteCp: -120,
+          currWhiteMate: null,
+          engineBestMoveUci: 'e7e5',
+          playedMoveUci: 'e7e5',
+        ),
+      );
+
+      expect(cls.deltaW, greaterThan(0));
+      expect(cls.moverCpLoss, 0);
+    });
+
     test(
       'Black move that improves Black reads as positive ΔW (not Blunder)',
       () {
@@ -418,7 +502,7 @@ void main() {
   });
 
   group('Best-move invariant', () {
-    test('played == best cannot produce Inaccuracy/Mistake/Blunder', () {
+    test('played == stale best does not override before/after loss', () {
       final cls = classifier.classify(
         const MoveClassificationInput(
           isWhiteMove: true,
@@ -431,8 +515,8 @@ void main() {
         ),
       );
       expect(cls.playedEqualsPv1, isTrue);
-      expect(cls.quality, MoveQuality.best);
-      expect(cls.reasonCode, 'pv1_best_invariant');
+      expect(cls.quality, MoveQuality.blunder);
+      expect(cls.reasonCode, 'baseline_blunder');
     });
 
     test('Quick mode never finalizes tactical Brilliant/Great/Forced', () {
@@ -564,6 +648,7 @@ void main() {
             currWhiteCp: -400,
             currWhiteMate: null,
             multiPvWhiteWinPercents: [82.0, 58.0, 45.0],
+            alternativeEvidenceComplete: true,
           ),
         );
         expect(cls.quality, MoveQuality.blunder);
@@ -582,6 +667,7 @@ void main() {
             currWhiteCp: 400,
             currWhiteMate: null,
             multiPvWhiteWinPercents: [18.0, 45.0, 52.0],
+            alternativeEvidenceComplete: true,
           ),
         );
         expect(cls.quality, MoveQuality.blunder);
@@ -604,6 +690,7 @@ void main() {
           engineBestMoveUci: 'a2a3',
           playedMoveUci: 'a2a3',
           multiPvWhiteWinPercents: [60.0, 30.0, 25.0],
+          alternativeEvidenceComplete: true,
         ),
       );
       expect(cls.quality, MoveQuality.forced);
@@ -683,12 +770,15 @@ void main() {
           engineBestMoveUci: 'd1d8',
           playedMoveUci: 'd1d8',
           secondBestWhiteWinPercent: 50.0,
+          multiPvWhiteWinPercents: [71.0, 50.0, 45.0],
+          alternativeEvidenceComplete: true,
+          isCapture: true,
         ),
       );
       expect(cls.quality, MoveQuality.great);
     });
 
-    test('Move that flips losing → equal (ΔW > 10) ⇒ Great', () {
+    test('outcome swing without complete alternatives is NOT Great', () {
       // White-POV: -300 → +50.
       final cls = classifier.classify(
         const MoveClassificationInput(
@@ -702,8 +792,7 @@ void main() {
           hasTacticalMotif: true,
         ),
       );
-      expect(cls.quality, MoveQuality.great);
-      expect(cls.reasonCode, anyOf('outcome_swing', 'tactical_breakthrough'));
+      expect(cls.quality, isNot(MoveQuality.great));
     });
 
     test('Great requires a human-meaningful reason code', () {
@@ -717,6 +806,8 @@ void main() {
           engineBestMoveUci: 'f2f4',
           playedMoveUci: 'f2f4',
           hasTacticalMotif: true,
+          multiPvWhiteWinPercents: [64.0, 40.0, 35.0],
+          alternativeEvidenceComplete: true,
         ),
       );
       expect(cls.quality, MoveQuality.great);
@@ -728,7 +819,6 @@ void main() {
           'defensive_resource',
           'avoids_mate',
           'tactical_breakthrough',
-          'outcome_swing',
         ]),
       );
     });

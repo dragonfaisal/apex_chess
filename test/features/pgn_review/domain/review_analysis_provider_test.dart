@@ -209,14 +209,14 @@ class _FakeProvider extends ReviewAnalysisProvider {
 }
 
 const _singleMoveTimeline = AnalysisTimeline(
-  startingFen: '8/8/8/8/8/8/8/8 w - - 0 1',
+  startingFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
   moves: [
     MoveAnalysis(
       ply: 0,
       san: 'e4',
       uci: 'e2e4',
-      fenBefore: '8/8/8/8/8/8/8/8 w - - 0 1',
-      fenAfter: '8/8/8/8/8/8/8/8 w - - 0 1',
+      fenBefore: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+      fenAfter: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
       targetSquare: 'e4',
       winPercentBefore: 50,
       winPercentAfter: 51,
@@ -232,6 +232,8 @@ const _singleMoveTimeline = AnalysisTimeline(
   tacticalVerifierVersion: kApexTacticalVerifierVersion,
   openingBookVersion: kApexOpeningBookVersion,
   analysisSchemaVersion: kApexAnalysisSchemaVersion,
+  completionStatus: AnalysisCompletionStatus.complete,
+  expectedPlies: 1,
 );
 
 ArchivedGame _savedReview() {

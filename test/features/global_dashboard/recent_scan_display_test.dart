@@ -30,10 +30,10 @@ void main() {
     expect(display.card.white.name, 'ALFAISALpro');
     expect(display.card.black.name, 'EMANUEL-1972');
     expect(display.card.white.isUser, isTrue);
-    expect(display.card.primaryMeta, '85% · Fast');
+    expect(display.card.primaryMeta, 'Metrics unavailable · Fast');
     expect(display.card.moveCountLabel, '28 moves');
     expect(display.card.secondaryMeta, contains('PGN'));
-    expect(display.subtitle, '85% · Fast · 28 moves');
+    expect(display.subtitle, 'Metrics unavailable · Fast · 28 moves');
     expect(display.subtitle, isNot(contains('White won')));
     expect(display.subtitle, isNot(contains('You won')));
   });
@@ -59,7 +59,7 @@ void main() {
 
     expect(display.card.white.name, contains('ALFAISALpro'));
     expect(display.card.black.name, contains('EMANUEL-1972'));
-    expect(display.card.primaryMeta, '88% · Deep');
+    expect(display.card.primaryMeta, 'Metrics unavailable · Deep');
     expect(display.card.moveCountLabel, '32 moves');
   });
 

@@ -1037,7 +1037,9 @@ class _SearchedApexStats extends StatelessWidget {
             Expanded(
               child: _SmallStat(
                 label: 'AVG',
-                value: '${stats.averageAccuracy.toStringAsFixed(0)}%',
+                value: stats.hasAccuracyMetric
+                    ? '${stats.averageAccuracy.toStringAsFixed(0)}%'
+                    : '—',
                 color: ApexColors.emeraldBright,
               ),
             ),
@@ -1494,8 +1496,8 @@ class _AccuracyTrendCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _CardHeader(
-            title: 'ACCURACY TREND',
-            subtitle: 'Higher is better',
+            title: 'ACCURACY',
+            subtitle: 'Unavailable until a product metric is approved',
             accent: ApexColors.emerald,
           ),
           const SizedBox(height: 10),
@@ -1503,10 +1505,10 @@ class _AccuracyTrendCard extends StatelessWidget {
             _SmallNotice(
               icon: Icons.auto_graph_rounded,
               title: display.state == AccuracyTrendState.empty
-                  ? 'No games yet'
+                  ? 'Accuracy unavailable'
                   : 'More games needed',
               subtitle: display.state == AccuracyTrendState.empty
-                  ? 'Review a game to build stats'
+                  ? 'ACPL remains available in trusted saved reviews'
                   : 'One game logged',
             )
           else

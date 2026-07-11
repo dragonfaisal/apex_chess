@@ -1,4 +1,6 @@
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
+import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
+import 'package:apex_chess/core/domain/entities/move_analysis.dart';
 import 'package:apex_chess/core/domain/services/move_quality_display.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/archives/presentation/controllers/archive_controller.dart';
@@ -54,7 +56,7 @@ void main() {
     expect(all.totalBrilliants, 1);
     expect(all.totalMisses, 2);
     expect(all.totalBlunders, 1);
-    expect(all.averageAcpl, closeTo(20.666, 0.01));
+    expect(all.averageAcpl, closeTo(21, 0.01));
     expect(white.gamesAnalyzed, 1);
     expect(white.wins, 1);
     expect(black.gamesAnalyzed, 2);
@@ -178,22 +180,22 @@ void main() {
     expect(filters.perspective, 'ApexUser');
   });
 
-  test('Accuracy trend handles empty, one, and many games', () {
+  test('Accuracy trend remains unavailable without an approved metric', () {
     expect(
       buildAccuracyTrendDisplay(DashboardStats.empty()).state,
       AccuracyTrendState.empty,
     );
 
     final one = buildDashboardStatsForTesting([_game(id: 'one')]);
-    expect(buildAccuracyTrendDisplay(one).state, AccuracyTrendState.partial);
+    expect(buildAccuracyTrendDisplay(one).state, AccuracyTrendState.empty);
 
     final many = buildDashboardStatsForTesting([
       _game(id: 'one', analyzedAt: DateTime(2026, 5, 1), acpl: 30),
       _game(id: 'two', analyzedAt: DateTime(2026, 5, 2), acpl: 10),
     ]);
     final trend = buildAccuracyTrendDisplay(many);
-    expect(trend.state, AccuracyTrendState.ready);
-    expect(trend.points, [70, 90]);
+    expect(trend.state, AccuracyTrendState.empty);
+    expect(trend.points, isEmpty);
   });
 
   test('Move quality breakdown renders all 10 public labels', () {
@@ -314,7 +316,7 @@ void main() {
       ),
     ], perspective: 'ApexUser');
 
-    expect(spots.map((s) => s.title), contains('Black needs review'));
+    expect(spots.map((s) => s.title), isNot(contains('Black needs review')));
     expect(spots.map((s) => s.title), contains('C50 needs review'));
   });
 
@@ -475,6 +477,38 @@ ArchivedGame _game({
   AnalysisMode analysisMode = AnalysisMode.deep,
   String? analysisProfileId,
 }) {
+  final moves = <MoveAnalysis>[];
+  var ply = 0;
+  for (final entry in qualities.entries) {
+    for (var count = 0; count < entry.value; count++) {
+      moves.add(
+        MoveAnalysis(
+          ply: ply++,
+          san: 'Nf3',
+          uci: 'g1f3',
+          fenBefore: 'before-$ply',
+          fenAfter: 'after-$ply',
+          winPercentBefore: 50,
+          winPercentAfter: 50,
+          deltaW: 0,
+          isWhiteMove: ply.isOdd,
+          classification: entry.key,
+          moverCpLoss: acpl.round(),
+          message: '',
+        ),
+      );
+    }
+  }
+  final timeline = AnalysisTimeline(
+    moves: moves,
+    startingFen: 'fixture',
+    headers: {'White': white, 'Black': black, 'Result': result},
+    winPercentages: [for (final move in moves) move.winPercentAfter],
+    analysisMode: analysisMode.wire,
+    analysisProfileId: analysisProfileId,
+    completionStatus: AnalysisCompletionStatus.complete,
+    expectedPlies: moves.length,
+  );
   return ArchivedGame(
     id: id,
     source: source,
@@ -500,5 +534,7 @@ ArchivedGame _game({
     ecoCode: eco,
     analysisMode: analysisMode,
     analysisProfileId: analysisProfileId,
+    cachedTimeline: moves.isEmpty ? null : timeline,
+    cpLossSampleCount: moves.length,
   );
 }

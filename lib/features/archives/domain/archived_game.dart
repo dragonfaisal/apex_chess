@@ -118,6 +118,7 @@ class ArchivedGame {
 
   /// White-perspective average centipawn loss (for accuracy column).
   final double averageCpLoss;
+  final int cpLossSampleCount;
   final int totalPlies;
   final String? openingName;
   final String? ecoCode;
@@ -145,6 +146,7 @@ class ArchivedGame {
     required this.pgn,
     required this.qualityCounts,
     required this.averageCpLoss,
+    this.cpLossSampleCount = 0,
     required this.totalPlies,
     this.openingName,
     this.ecoCode,
@@ -176,6 +178,7 @@ class ArchivedGame {
       cachedTimeline!.tacticalVerifierVersion == kApexTacticalVerifierVersion &&
       cachedTimeline!.openingBookVersion == kApexOpeningBookVersion &&
       cachedTimeline!.analysisSchemaVersion == kApexAnalysisSchemaVersion &&
+      cachedTimeline!.isComplete &&
       (cacheKey == null || cachedTimeline!.cacheKey == cacheKey);
 
   AnalysisProfile get analysisProfile =>
@@ -185,10 +188,12 @@ class ArchivedGame {
   /// present, falling back to the persisted `qualityCounts` map for
   /// older records that pre-date the Phase A integration audit.
   Map<MoveQuality, int> get qualityCountsLive {
-    final tl = cachedTimeline;
-    if (tl != null) return tl.qualityCounts;
-    return qualityCounts;
+    if (!isCacheCurrent) return const <MoveQuality, int>{};
+    return cachedTimeline!.qualityCounts;
   }
+
+  bool get hasVerifiedCpLoss =>
+      isCacheCurrent && cachedTimeline!.hasVerifiedCpLoss;
 
   // All count getters route through [qualityCountsLive] so they reflect
   // the *actual* classifications stored in the timeline. The legacy
@@ -203,8 +208,8 @@ class ArchivedGame {
   int get missCount => displayCount(ReviewMoveLabel.miss);
 
   Map<ReviewMoveLabel, int> get displayQualityCountsLive {
-    final tl = cachedTimeline;
-    if (tl != null) {
+    if (isCacheCurrent) {
+      final tl = cachedTimeline!;
       final out = <ReviewMoveLabel, int>{};
       for (final move in tl.moves) {
         final bucket = MoveQualityDisplay.countBucketForMove(move);
@@ -212,12 +217,7 @@ class ArchivedGame {
       }
       return out;
     }
-    final out = <ReviewMoveLabel, int>{};
-    for (final entry in qualityCounts.entries) {
-      final bucket = MoveQualityDisplay.labelForQuality(entry.key);
-      out[bucket] = (out[bucket] ?? 0) + entry.value;
-    }
-    return out;
+    return const <ReviewMoveLabel, int>{};
   }
 
   int displayCount(ReviewMoveLabel label) =>
@@ -404,6 +404,7 @@ class ArchivedGame {
       for (final e in qualityCounts.entries) e.key.name: e.value,
     },
     'averageCpLoss': averageCpLoss,
+    'cpLossSampleCount': cpLossSampleCount,
     'totalPlies': totalPlies,
     'openingName': openingName,
     'ecoCode': ecoCode,
@@ -422,6 +423,14 @@ class ArchivedGame {
 
   factory ArchivedGame.fromJson(Map<dynamic, dynamic> j) {
     final counts = (j['qualityCounts'] as Map?) ?? const {};
+    AnalysisTimeline? cachedTimeline;
+    try {
+      cachedTimeline = j['cachedTimeline'] is Map
+          ? AnalysisTimeline.fromJson(j['cachedTimeline'] as Map)
+          : null;
+    } on Object {
+      cachedTimeline = null;
+    }
     return ArchivedGame(
       id: j['id'] as String,
       source: ArchiveSource.fromWire(j['source'] as String),
@@ -441,12 +450,11 @@ class ArchivedGame {
           if (counts[k.name] != null) k: (counts[k.name] as num).toInt(),
       },
       averageCpLoss: (j['averageCpLoss'] as num).toDouble(),
+      cpLossSampleCount: (j['cpLossSampleCount'] as num?)?.toInt() ?? 0,
       totalPlies: (j['totalPlies'] as num).toInt(),
       openingName: j['openingName'] as String?,
       ecoCode: j['ecoCode'] as String?,
-      cachedTimeline: j['cachedTimeline'] is Map
-          ? AnalysisTimeline.fromJson(j['cachedTimeline'] as Map)
-          : null,
+      cachedTimeline: cachedTimeline,
       // Old records without a stored version are treated as v1 so the
       // archive UI can offer to re-scan them. Old records without an
       // explicit mode default to `deep` since pre-audit scans always
@@ -492,6 +500,7 @@ class ArchivedGame {
       pgn: pgn,
       qualityCounts: timeline.qualityCounts,
       averageCpLoss: timeline.averageCpLoss,
+      cpLossSampleCount: timeline.cpLossEligibleCount,
       totalPlies: timeline.totalPlies,
       openingName: h['Opening'],
       ecoCode: h['ECO'],

@@ -170,6 +170,32 @@ void main() {
     expect(state.result, isNotNull);
   });
 
+  test('Opponent Insights explains deliberate metric unavailability', () async {
+    final container = ProviderContainer(
+      overrides: [
+        profileScannerServiceProvider.overrideWithValue(
+          _UnavailableScannerService(),
+        ),
+        connectionReachabilityProbeProvider.overrideWithValue(
+          () async => NetworkAvailability.online,
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await container
+        .read(profileScannerControllerProvider.notifier)
+        .scan(username: 'magnolia', source: 'chess.com');
+
+    final state = container.read(profileScannerControllerProvider);
+    expect(state.isLoading, isFalse);
+    expect(state.result, isNull);
+    expect(
+      state.error,
+      'Opponent Insights is unavailable until Apex adopts a validated accuracy policy.',
+    );
+  });
+
   test('cancelled scan does not block re-entry reset', () async {
     final service = _SlowScannerService();
     final container = ProviderContainer(
@@ -302,6 +328,23 @@ class _CountingScannerService implements ProfileScannerService {
   }) async {
     calls++;
     return _result();
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _UnavailableScannerService implements ProfileScannerService {
+  @override
+  Future<ProfileScanResult> scan({
+    required String username,
+    required String source,
+    int sampleSize = 5,
+    int depth = 14,
+    ScanCancellation? cancellation,
+    void Function(ScanProgress)? onProgress,
+  }) {
+    throw const ProfileMetricUnavailableException();
   }
 
   @override

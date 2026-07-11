@@ -63,6 +63,7 @@ Future<String?> saveAnalysisToArchive({
   String? timeControl,
 }) async {
   try {
+    if (!timeline.isComplete) return null;
     final payload = CanonicalAnalysisPayload.fromTimeline(
       timeline: timeline,
       pgn: pgn,
@@ -93,8 +94,10 @@ ArchivedGame archivedGameFromAnalysisPayload(
   AnalysisMode? analysisMode,
 }) {
   final timeline = payload.timeline;
-  if (timeline == null) {
-    throw StateError('Analysis payload has no timeline');
+  if (payload.status != AnalysisProviderStatus.completed ||
+      timeline == null ||
+      !timeline.isComplete) {
+    throw StateError('Only a complete analysis payload can be archived');
   }
   return ArchivedGame.fromTimeline(
     timeline: timeline,

@@ -458,8 +458,9 @@ class CanonicalAnalysisPayload {
 
   String get sourceLabel => source.label;
 
-  String get accuracyLabel =>
-      (100 - averageCpLoss).clamp(0, 100).toStringAsFixed(0);
+  String get accuracyLabel => timeline?.hasVerifiedCpLoss == true
+      ? 'ACPL ${averageCpLoss.toStringAsFixed(1)}'
+      : 'Metrics unavailable';
 
   AnalysisMode get reviewBoardMode {
     final profile = providerMetadata.analysisProfileId;

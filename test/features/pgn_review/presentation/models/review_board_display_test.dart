@@ -172,7 +172,7 @@ void main() {
       1.0,
     );
     expect(ReviewEvalDisplay.fromMove(null).isKnown, isFalse);
-    expect(ReviewEvalDisplay.fromMove(null).percentageLabel, '50%');
+    expect(ReviewEvalDisplay.fromMove(null).percentageLabel, '—');
   });
 
   test('each public move quality maps to chip label and marker', () {

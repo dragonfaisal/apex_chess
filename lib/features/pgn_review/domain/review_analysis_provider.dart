@@ -424,7 +424,7 @@ class LocalOfflineReviewProvider extends ReviewAnalysisProvider {
   @override
   Future<GameReviewResult> analyzeGame(GameReviewRequest request) async {
     final sw = Stopwatch()..start();
-    final metadata = metadataFor(request);
+    final requestedMetadata = metadataFor(request);
     final mode = _modeForProfile(request.profile);
     final timeline = await _analyzer.analyzeFromPgn(
       request.pgn,
@@ -434,21 +434,41 @@ class LocalOfflineReviewProvider extends ReviewAnalysisProvider {
       onProgress: request.onProgress,
     );
     sw.stop();
+    final actualMetadata = AnalysisRunMetadata(
+      analysisProfileId: request.profile.id.wire,
+      providerId: timeline.providerId,
+      engineVersion: timeline.engineVersion,
+      classifierVersion: timeline.classifierVersion,
+      tacticalVerifierVersion: timeline.tacticalVerifierVersion,
+      openingBookVersion: timeline.openingBookVersion,
+      depth: timeline.depth ?? 0,
+      movetimeMs: timeline.movetimeMs ?? request.profile.localMovetimeMs,
+      multipv: timeline.multipv ?? request.profile.localMultiPv,
+      candidateVerificationEnabled: timeline.candidateVerificationEnabled,
+      completedAt: timeline.completedAt ?? DateTime.now().toUtc(),
+      pgnHash: requestedMetadata.pgnHash,
+      cacheKey: buildAnalysisCacheKey(
+        pgnHash: requestedMetadata.pgnHash,
+        analysisProfileId: request.profile.id,
+        providerId: timeline.providerId,
+        engineVersion: timeline.engineVersion,
+      ),
+    );
     final enriched = timeline.copyWith(
-      analysisProfileId: metadata.analysisProfileId,
-      providerId: metadata.providerId,
-      engineVersion: metadata.engineVersion,
-      classifierVersion: metadata.classifierVersion,
-      tacticalVerifierVersion: metadata.tacticalVerifierVersion,
-      openingBookVersion: metadata.openingBookVersion,
+      analysisProfileId: actualMetadata.analysisProfileId,
+      providerId: actualMetadata.providerId,
+      engineVersion: actualMetadata.engineVersion,
+      classifierVersion: actualMetadata.classifierVersion,
+      tacticalVerifierVersion: actualMetadata.tacticalVerifierVersion,
+      openingBookVersion: actualMetadata.openingBookVersion,
       analysisSchemaVersion: kApexAnalysisSchemaVersion,
-      depth: metadata.depth,
-      movetimeMs: metadata.movetimeMs,
-      multipv: metadata.multipv,
-      candidateVerificationEnabled: metadata.candidateVerificationEnabled,
-      completedAt: metadata.completedAt,
-      pgnHash: metadata.pgnHash,
-      cacheKey: metadata.cacheKey,
+      depth: actualMetadata.depth,
+      movetimeMs: actualMetadata.movetimeMs,
+      multipv: actualMetadata.multipv,
+      candidateVerificationEnabled: actualMetadata.candidateVerificationEnabled,
+      completedAt: actualMetadata.completedAt,
+      pgnHash: actualMetadata.pgnHash,
+      cacheKey: actualMetadata.cacheKey,
       cacheHit: false,
     );
     final summary = const ReviewSummaryService().compute(
@@ -463,10 +483,10 @@ class LocalOfflineReviewProvider extends ReviewAnalysisProvider {
       cacheHit: false,
       providerId: providerId,
       profileId: request.profile.id.wire,
-      positionsAnalyzed: enriched.totalPlies + 1,
+      positionsAnalyzed: enriched.engineSearchCount,
       candidateVerificationsCount: verified,
-      averageDepthReached: request.profile.localDepth.toDouble(),
-      engineCallsCount: enriched.totalPlies + 1 + (verified * 2),
+      averageDepthReached: (enriched.depth ?? 0).toDouble(),
+      engineCallsCount: enriched.engineSearchCount,
     );
     final payload = CanonicalAnalysisPayload.fromTimeline(
       timeline: enriched,
@@ -475,12 +495,12 @@ class LocalOfflineReviewProvider extends ReviewAnalysisProvider {
       modeUsed: AnalysisReviewMode.offlineLocal,
       providerKind: AnalysisProviderKind.offlineLocal,
       userIsWhite: request.userIsWhite,
-      providerMetadata: metadata.toContractMetadata(),
+      providerMetadata: actualMetadata.toContractMetadata(),
     );
     return GameReviewResult(
       timeline: enriched,
       summary: summary,
-      metadata: metadata,
+      metadata: actualMetadata,
       telemetry: telemetry,
       fromCache: false,
       analysisResult: AnalysisReviewResult.completed(payload),

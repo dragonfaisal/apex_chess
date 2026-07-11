@@ -3,8 +3,6 @@ import 'dart:async';
 import 'package:apex_chess/core/infrastructure/engine/chess_engine.dart';
 import 'package:apex_chess/core/infrastructure/engine/uci/uci_command.dart';
 import 'package:apex_chess/core/infrastructure/engine/uci/uci_event.dart';
-import 'package:apex_chess/infrastructure/api/cloud_eval_service.dart'
-    show CloudEvalError;
 import 'package:apex_chess/infrastructure/engine/local_eval_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -55,7 +53,7 @@ void main() {
         );
 
         expect(snapshot, isNull);
-        expect(error, CloudEvalError.positionNotFound);
+        expect(error, EvalError.positionNotFound);
         expect(engine.startCount, 0);
         expect(engine.commands, isEmpty);
       },
@@ -72,9 +70,24 @@ void main() {
       );
 
       expect(snapshot, isNull);
-      expect(error, CloudEvalError.serverError);
+      expect(error, EvalError.searchTimeout);
       expect(engine.commands.whereType<UciStop>(), isNotEmpty);
       expect(engine.overlapDetected, isFalse);
+    });
+
+    test('missing readyok fails before a position search starts', () async {
+      final engine = _LifecycleFakeEngine(emitReady: false);
+      final service = LocalEvalService(engine: engine);
+
+      final (snapshot, error) = await service.evaluate(
+        startFen,
+        depth: 8,
+        timeout: const Duration(milliseconds: 30),
+      );
+
+      expect(snapshot, isNull);
+      expect(error, EvalError.synchronizationTimeout);
+      expect(engine.commands.whereType<UciPosition>(), isEmpty);
     });
 
     test(
@@ -108,10 +121,12 @@ void main() {
 class _LifecycleFakeEngine implements ChessEngine {
   _LifecycleFakeEngine({
     this.emitBestMove = true,
+    this.emitReady = true,
     this.searchDelay = Duration.zero,
   });
 
   final bool emitBestMove;
+  final bool emitReady;
   final Duration searchDelay;
   final commands = <UciCommand>[];
   final _events = StreamController<EngineEvent>.broadcast();
@@ -120,6 +135,7 @@ class _LifecycleFakeEngine implements ChessEngine {
   var disposeCount = 0;
   var searchInFlight = false;
   var overlapDetected = false;
+  String? currentFen;
 
   @override
   Stream<EngineEvent> get events => _events.stream;
@@ -139,7 +155,9 @@ class _LifecycleFakeEngine implements ChessEngine {
   @override
   void send(UciCommand command) {
     commands.add(command);
-    if (command is UciIsReady) {
+    if (command is UciPosition) {
+      currentFen = command.fen;
+    } else if (command is UciIsReady && emitReady) {
       scheduleMicrotask(() => _events.add(const EngineReadyOk()));
     } else if (command is UciGo) {
       if (searchInFlight) overlapDetected = true;
@@ -147,18 +165,20 @@ class _LifecycleFakeEngine implements ChessEngine {
       if (emitBestMove) {
         Future<void>.delayed(searchDelay, () {
           if (_events.isClosed) return;
+          final blackToMove = currentFen?.split(' ')[1] == 'b';
+          final root = blackToMove ? 'e7e5' : 'e2e4';
           _events
             ..add(
-              const EngineInfo(
+              EngineInfo(
                 depth: 8,
                 multipv: 1,
                 scoreCp: 20,
                 nodes: 1000,
                 nps: 2000,
-                pv: ['e2e4', 'e7e5'],
+                pv: [root],
               ),
             )
-            ..add(const EngineBestMove(move: 'e2e4'));
+            ..add(EngineBestMove(move: root));
           searchInFlight = false;
         });
       }

@@ -1,4 +1,3 @@
-import 'package:apex_chess/features/analysis/domain/analyzer_before_after_raw_eval.dart';
 import 'package:apex_chess/features/analysis/domain/analyzer_cp_loss_candidate.dart';
 import 'package:apex_chess/features/analysis/domain/analyzer_expected_points.dart';
 import 'package:apex_chess/infrastructure/engine/local_analyzer_cp_loss_candidate_probe.dart';

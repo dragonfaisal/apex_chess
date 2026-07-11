@@ -9,7 +9,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-const _fen = '8/8/8/8/8/8/8/8 w - - 0 1';
+const _fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+const _afterE4 = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
 
 void main() {
   test('same PGN and profile produce stable archive identity', () {
@@ -211,7 +212,7 @@ AnalysisTimeline _timeline({
         san: 'e4',
         uci: 'e2e4',
         fenBefore: _fen,
-        fenAfter: _fen,
+        fenAfter: _afterE4,
         targetSquare: 'e4',
         winPercentBefore: 50,
         winPercentAfter: 52,
@@ -234,6 +235,8 @@ AnalysisTimeline _timeline({
     providerId: 'local_offline',
     engineVersion: 'local-test',
     pgnHash: archiveIdForPgn(_pgn),
+    completionStatus: AnalysisCompletionStatus.complete,
+    expectedPlies: 1,
   );
 }
 

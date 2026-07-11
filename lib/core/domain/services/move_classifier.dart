@@ -120,6 +120,8 @@ class MoveClassificationInput {
     this.openingName,
     this.ecoCode,
     this.suppressTrophyTiers = false,
+    this.alternativeEvidenceComplete = false,
+    this.deepVerificationComplete = false,
   });
 
   /// Side that just made the played move.
@@ -206,6 +208,21 @@ class MoveClassificationInput {
   /// mode emits only Blunder / Mistake / Inaccuracy / Good / Excellent /
   /// Best / Book / MissedWin.
   final bool suppressTrophyTiers;
+
+  /// True only when the requested MultiPV alternatives were all received at
+  /// the required depth with distinct legal root moves.
+  final bool alternativeEvidenceComplete;
+
+  /// True only when candidate re-search evidence met its depth/MultiPV
+  /// contract and the tactical verifier approved the played line.
+  final bool deepVerificationComplete;
+}
+
+class IncompleteMoveEvidenceException implements Exception {
+  const IncompleteMoveEvidenceException(this.message);
+  final String message;
+  @override
+  String toString() => 'IncompleteMoveEvidenceException: $message';
 }
 
 class MoveClassifier {
@@ -270,6 +287,12 @@ class MoveClassifier {
 
   /// Classify a single ply.
   MoveClassification classify(MoveClassificationInput in_) {
+    if (!_validScore(in_.prevWhiteCp, in_.prevWhiteMate) ||
+        !_validScore(in_.currWhiteCp, in_.currWhiteMate)) {
+      throw const IncompleteMoveEvidenceException(
+        'Classification requires one unambiguous cp-or-mate score before and after the move.',
+      );
+    }
     final whiteWinBefore = _win.forCp(
       cp: in_.prevWhiteCp,
       mate: in_.prevWhiteMate,
@@ -294,13 +317,18 @@ class MoveClassifier {
       isWhiteMove: in_.isWhiteMove,
     );
 
-    final cpLossMover = _persp.cpLoss(
+    final signedCpChange = _persp.cpLoss(
       whiteCpBefore: in_.prevWhiteCp,
       whiteCpAfter: in_.currWhiteCp,
       mateBefore: in_.prevWhiteMate,
       mateAfter: in_.currWhiteMate,
       isWhiteMove: in_.isWhiteMove,
     );
+    final cpLossMover = signedCpChange == null
+        ? null
+        : signedCpChange < 0
+        ? 0
+        : signedCpChange;
 
     final moverForcesMate = _persp.moverForcesMate(
       in_.currWhiteMate,
@@ -333,16 +361,6 @@ class MoveClassifier {
       var finalQuality = q;
       var finalMessage = message;
       var finalReasonCode = reasonCode;
-
-      // Hard invariant: if the played move is the engine's top line after
-      // UCI normalisation, never surface a negative label. This guards stale
-      // eval pair drift and mate-sign edge cases from producing
-      // "Better: same move" or PV1-as-Blunder reads.
-      if (wasEngineBestMove && _pv1InvariantShouldPromote(q)) {
-        finalQuality = MoveQuality.best;
-        finalMessage = 'Best move - top engine choice.';
-        finalReasonCode = 'pv1_best_invariant';
-      }
 
       return MoveClassification(
         quality: finalQuality,
@@ -397,21 +415,25 @@ class MoveClassifier {
     );
 
     // ── Missed Win (§ 3.6.5) ──────────────────────────────────────────
-    final missedWin = _classifyMissedWin(
-      bestMoverWinBefore: _bestMoverWinBeforeFromPv(
-        in_,
-        fallback: moverWinBefore,
-      ),
-      moverWinAfter: moverWinAfter,
-      deltaW: deltaW,
-      hasMultiPvEvidence: (in_.multiPvWhiteWinPercents?.length ?? 0) >= 2,
-      wasEngineBestMove: wasEngineBestMove,
-      prevMoverMate: _persp.moverForcesMate(
-        in_.prevWhiteMate,
-        isWhiteMove: in_.isWhiteMove,
-      ),
-      currMoverMate: moverForcesMate,
-    );
+    final missedWin = in_.suppressTrophyTiers
+        ? null
+        : _classifyMissedWin(
+            bestMoverWinBefore: _bestMoverWinBeforeFromPv(
+              in_,
+              fallback: moverWinBefore,
+            ),
+            moverWinAfter: moverWinAfter,
+            deltaW: deltaW,
+            hasMultiPvEvidence:
+                in_.alternativeEvidenceComplete &&
+                (in_.multiPvWhiteWinPercents?.length ?? 0) >= 2,
+            wasEngineBestMove: wasEngineBestMove,
+            prevMoverMate: _persp.moverForcesMate(
+              in_.prevWhiteMate,
+              isWhiteMove: in_.isWhiteMove,
+            ),
+            currMoverMate: moverForcesMate,
+          );
     if (missedWin != null) {
       return finish(
         missedWin.quality,
@@ -575,6 +597,7 @@ class MoveClassifier {
     required bool wasEngineBestMove,
   }) {
     final tactical = in_.tacticalVerdict;
+    if (!in_.deepVerificationComplete || !tactical.verified) return null;
     final verifiedNonObviousCommitment =
         (tactical.matingNet || tactical.promotionNet) &&
         tactical.lowDepthRejectedHighDepthApproved &&
@@ -592,15 +615,11 @@ class MoveClassifier {
     if (in_.isRecapture) return null;
     if (in_.isFreeCapture && !tactical.hasSacrificeMotif) return null;
     if (!in_.isFirstSacrificePly && !tacticalSacrifice) return null;
-    if (!tacticalSacrifice &&
-        (in_.multiPvWhiteWinPercents == null ||
-            in_.multiPvWhiteWinPercents!.length < 3)) {
-      return null;
-    }
+    if (!tacticalSacrifice) return null;
 
     // Soundness
     if (deltaW < -2.0 && !tactical.forcedMate) return null;
-    if (!tacticalSacrifice &&
+    if (!tactical.forcedMate &&
         cpLossMover != null &&
         cpLossMover > brilliantCpLossCap) {
       return null;
@@ -640,23 +659,12 @@ class MoveClassifier {
       if (altMover >= triviallyWinning) return null;
     }
 
-    final pvs = _moverPvWinPercents(in_);
-    if (!tacticalSacrifice && (pvs == null || pvs.first < 50.0)) return null;
-
-    if (tacticalSacrifice) {
-      return _SpecialClassification(
-        quality: MoveQuality.brilliant,
-        reasonCode: tactical.reasonCode,
-        message: tactical.humanExplanation.isNotEmpty
-            ? tactical.humanExplanation
-            : 'Brilliant sacrifice - the tactic works after the forcing line.',
-      );
-    }
-
-    return const _SpecialClassification(
+    return _SpecialClassification(
       quality: MoveQuality.brilliant,
-      reasonCode: 'sound_sacrifice',
-      message: 'Brilliant sacrifice - opens the attack and stays sound.',
+      reasonCode: tactical.reasonCode,
+      message: tactical.humanExplanation.isNotEmpty
+          ? tactical.humanExplanation
+          : 'Brilliant sacrifice - the tactic works after the forcing line.',
     );
   }
 
@@ -720,7 +728,9 @@ class MoveClassifier {
     required bool wasEngineBestMove,
   }) {
     final pvs = in_.multiPvWhiteWinPercents;
-    if (pvs == null || pvs.length < 3) return null;
+    if (!in_.alternativeEvidenceComplete || pvs == null || pvs.length < 3) {
+      return null;
+    }
     if (deltaW < dwGood) {
       return null; // capped at "Okay"; severe drops aren't forced
     }
@@ -768,9 +778,11 @@ class MoveClassifier {
     required bool wasEngineBestMove,
   }) {
     final tactical = in_.tacticalVerdict;
+    if (!in_.alternativeEvidenceComplete) return null;
     final tacticalGreat =
         tactical.isCandidate &&
-        (tactical.verified || tactical.hasForcingOutcome) &&
+        in_.deepVerificationComplete &&
+        tactical.verified &&
         (wasEngineBestMove || tactical.isBestOrNearBest) &&
         tactical.hasForcingOutcome;
     if (tacticalGreat &&
@@ -796,20 +808,6 @@ class MoveClassifier {
     if (!wasEngineBestMove) return null;
     // Position after the move must not be clearly losing.
     if (moverWinAfter < 30.0) return null;
-
-    // Variant A: ΔW > 10 *and* the move crosses an eval boundary.
-    final crossedFromLosing = moverWinBefore < 30.0 && moverWinAfter >= 40.0;
-    final crossedFromEqual =
-        moverWinBefore < 60.0 &&
-        moverWinBefore >= 40.0 &&
-        moverWinAfter >= 60.0;
-    if (deltaW > 10.0 && (crossedFromLosing || crossedFromEqual)) {
-      return const _SpecialClassification(
-        quality: MoveQuality.great,
-        reasonCode: 'outcome_swing',
-        message: 'Great find - changes the course of the position.',
-      );
-    }
 
     final pvs = _moverPvWinPercents(in_);
     if (pvs != null && pvs.length >= 3 && deltaW >= dwExcellent) {
@@ -839,19 +837,8 @@ class MoveClassifier {
     return normalizeCastlingUci(engine) == normalizeCastlingUci(played);
   }
 
-  bool _pv1InvariantShouldPromote(MoveQuality q) => switch (q) {
-    MoveQuality.brilliant ||
-    MoveQuality.great ||
-    MoveQuality.best ||
-    MoveQuality.book ||
-    MoveQuality.forced => false,
-    MoveQuality.excellent ||
-    MoveQuality.good ||
-    MoveQuality.inaccuracy ||
-    MoveQuality.mistake ||
-    MoveQuality.blunder ||
-    MoveQuality.missedWin => true,
-  };
+  bool _validScore(int? cp, int? mate) =>
+      (cp != null) != (mate != null) && mate != 0;
 
   double _bestMoverWinBeforeFromPv(
     MoveClassificationInput in_, {

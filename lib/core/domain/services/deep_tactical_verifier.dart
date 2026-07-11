@@ -82,8 +82,9 @@ class DeepTacticalVerifier {
 
     final lowRank = _rankOf(played, input.lowDepthLines);
     final highRank = _rankOf(played, input.highDepthLines);
-    final effectiveRank = highRank ?? lowRank;
-    final lineForOnlyMove = input.highDepthLines.length >= 3
+    final verified = _verificationEvidenceComplete(input, played);
+    final effectiveRank = verified ? highRank : lowRank;
+    final lineForOnlyMove = verified
         ? input.highDepthLines
         : input.lowDepthLines;
 
@@ -97,9 +98,12 @@ class DeepTacticalVerifier {
                   isWhiteMove: input.isWhiteMove,
                 ) <=
                 3.0);
-    final onlyMove = _isOnlyMove(lineForOnlyMove, input.isWhiteMove);
+    final onlyMove =
+        verified && _isOnlyMove(lineForOnlyMove, input.isWhiteMove);
 
-    final trajectory = _merge(actual, highPv, lowPv);
+    // Actual game moves and low-depth guesses can nominate a candidate, but
+    // only the requested high-depth played line may prove its tactical story.
+    final trajectory = verified ? highPv : _merge(actual, lowPv);
     final movedMajorSac = trajectory.queenSacrifice || trajectory.rookSacrifice;
     final delayedSac =
         trajectory.movedPieceCaptured &&
@@ -115,7 +119,7 @@ class DeepTacticalVerifier {
     final decisiveMaterialWin = trajectory.decisiveMaterialWin;
 
     final lowRejectedHighApproved =
-        input.highDepthLines.isNotEmpty &&
+        verified &&
         (lowRank == null || lowRank > 2) &&
         (highRank == 1 || highRank == 2);
     final nonObviousScore = _nonObviousScore(
@@ -138,7 +142,6 @@ class DeepTacticalVerifier {
     final isCandidate = candidateType != 'none';
     if (!isCandidate) return DeepTacticalVerdict.none;
 
-    final verified = input.highDepthLines.isNotEmpty;
     final reason = _reasonCode(
       queenSacrifice: trajectory.queenSacrifice,
       rookSacrifice: trajectory.rookSacrifice,
@@ -197,14 +200,40 @@ class DeepTacticalVerifier {
   }
 
   List<String> _playedLineFrom(List<EngineLine> lines, String played) {
-    if (lines.isEmpty) return <String>[played];
+    if (lines.isEmpty) return const <String>[];
     final matching = lines.where(
       (l) => l.moveUci != null && _normalizeUci(l.moveUci!) == played,
     );
-    final line = matching.isNotEmpty ? matching.first : lines.first;
+    if (matching.isEmpty) return const <String>[];
+    final line = matching.first;
     final pv = line.pvMoves.map(_normalizeUci).where((m) => m.length >= 4);
     if (pv.isEmpty) return <String>[played];
     return pv.take(replayLimitPlies).toList(growable: false);
+  }
+
+  bool _verificationEvidenceComplete(DeepTacticalInput input, String played) {
+    final requestedDepth = input.verificationDepth;
+    final requestedMultiPv = input.verificationMultiPV;
+    if (requestedDepth == null || requestedMultiPv == null) return false;
+    if (input.highDepthLines.length < requestedMultiPv) return false;
+    Position position;
+    try {
+      position = Chess.fromSetup(Setup.parseFen(input.fenBefore));
+    } on Object {
+      return false;
+    }
+    final roots = <String>{};
+    for (var index = 0; index < requestedMultiPv; index++) {
+      final line = input.highDepthLines[index];
+      if (line.rank != index + 1 || line.depth < requestedDepth) return false;
+      final root = line.moveUci == null ? '' : _normalizeUci(line.moveUci!);
+      if (root.length < 4 || !roots.add(root) || line.pvMoves.isEmpty) {
+        return false;
+      }
+      final move = _moveFromUci(position, root);
+      if (move == null || !position.isLegal(move)) return false;
+    }
+    return roots.contains(played);
   }
 
   _LineTactics _analyzeLine(
@@ -315,9 +344,9 @@ class DeepTacticalVerifier {
 
   _LineTactics _merge(
     _LineTactics a,
-    _LineTactics b,
-    _LineTactics c,
-  ) => _LineTactics(
+    _LineTactics b, [
+    _LineTactics c = _LineTactics.empty,
+  ]) => _LineTactics(
     movedPieceCaptured:
         a.movedPieceCaptured || b.movedPieceCaptured || c.movedPieceCaptured,
     capturedOffset: _minPositive([

@@ -31,6 +31,11 @@ void main() {
       expect(error, isNull);
       expect(snapshot, isNotNull);
       expect(snapshot!.bestMoveUci, 'e2e4');
+      expect(snapshot.positionFen, startFen);
+      expect(snapshot.requestedDepth, 12);
+      expect(snapshot.depth, 12);
+      expect(snapshot.requestedMultiPv, 3);
+      expect(snapshot.multiPvComplete, isTrue);
       expect(snapshot.secondBestCp, 20);
       expect(snapshot.engineLines, hasLength(3));
       expect(snapshot.engineLines.map((l) => l.rank), [1, 2, 3]);
@@ -122,6 +127,142 @@ void main() {
         engine.commands.whereType<UciSetOption>().map((c) => c.toUci()),
         contains('setoption name MultiPV value 5'),
       );
+    });
+
+    test(
+      'uses the deepest coherent frame instead of mixing progressive depths',
+      () async {
+        final engine = _FakeChessEngine(
+          bestMove: 'e2e4',
+          infos: const [
+            EngineInfo(depth: 11, multipv: 1, scoreCp: 28, pv: ['e2e4']),
+            EngineInfo(depth: 11, multipv: 2, scoreCp: 18, pv: ['d2d4']),
+            EngineInfo(depth: 11, multipv: 3, scoreCp: 8, pv: ['g1f3']),
+            EngineInfo(depth: 12, multipv: 1, scoreCp: 30, pv: ['e2e4']),
+            EngineInfo(depth: 12, multipv: 2, scoreCp: 20, pv: ['d2d4']),
+          ],
+        );
+        final service = LocalEvalService(engine: engine);
+
+        final (snapshot, error) = await service.evaluate(
+          startFen,
+          depth: 12,
+          multiPv: 3,
+          timeout: const Duration(seconds: 1),
+        );
+
+        expect(error, isNull);
+        expect(snapshot, isNotNull);
+        expect(snapshot!.depth, 11);
+        expect(snapshot.engineLines, hasLength(3));
+        expect(snapshot.engineLines.map((line) => line.depth), [11, 11, 11]);
+        expect(snapshot.targetDepthReached, isFalse);
+        expect(snapshot.multiPvComplete, isTrue);
+      },
+    );
+
+    test(
+      'reports a deepest PV1-only frame truthfully when no complete MultiPV frame exists',
+      () async {
+        final engine = _FakeChessEngine(
+          bestMove: 'e2e4',
+          infos: const [
+            EngineInfo(depth: 11, multipv: 1, scoreCp: 28, pv: ['e2e4']),
+            EngineInfo(depth: 12, multipv: 1, scoreCp: 30, pv: ['e2e4']),
+          ],
+        );
+        final service = LocalEvalService(engine: engine);
+
+        final (snapshot, error) = await service.evaluate(
+          startFen,
+          depth: 12,
+          multiPv: 3,
+          timeout: const Duration(seconds: 1),
+        );
+
+        expect(error, isNull);
+        expect(snapshot, isNotNull);
+        expect(snapshot!.depth, 12);
+        expect(snapshot.engineLines, hasLength(1));
+        expect(snapshot.multiPvComplete, isFalse);
+      },
+    );
+
+    test('rejects bounded scores as non-authoritative evidence', () async {
+      final service = LocalEvalService(
+        engine: _FakeChessEngine(
+          bestMove: 'e2e4',
+          infos: const [
+            EngineInfo(
+              depth: 12,
+              multipv: 1,
+              scoreCp: 30,
+              scoreBound: 'lowerbound',
+              pv: ['e2e4'],
+            ),
+          ],
+        ),
+      );
+
+      final (snapshot, error) = await service.evaluate(startFen, depth: 12);
+      expect(snapshot, isNull);
+      expect(error, isNotNull);
+    });
+
+    test('rejects missing PV1 even when PV2 exists', () async {
+      final service = LocalEvalService(
+        engine: _FakeChessEngine(
+          bestMove: 'd2d4',
+          infos: const [
+            EngineInfo(depth: 12, multipv: 2, scoreCp: 20, pv: ['d2d4']),
+          ],
+        ),
+      );
+
+      final (snapshot, error) = await service.evaluate(
+        startFen,
+        depth: 12,
+        multiPv: 2,
+      );
+      expect(snapshot, isNull);
+      expect(error, isNotNull);
+    });
+
+    test('rejects bestmove that disagrees with the PV1 root', () async {
+      final service = LocalEvalService(
+        engine: _FakeChessEngine(
+          bestMove: 'd2d4',
+          infos: const [
+            EngineInfo(depth: 12, multipv: 1, scoreCp: 30, pv: ['e2e4']),
+          ],
+        ),
+      );
+
+      final (snapshot, error) = await service.evaluate(startFen, depth: 12);
+      expect(snapshot, isNull);
+      expect(error, isNotNull);
+    });
+
+    test('does not claim complete MultiPV for duplicate root moves', () async {
+      final service = LocalEvalService(
+        engine: _FakeChessEngine(
+          bestMove: 'e2e4',
+          infos: const [
+            EngineInfo(depth: 12, multipv: 1, scoreCp: 30, pv: ['e2e4']),
+            EngineInfo(depth: 12, multipv: 2, scoreCp: 20, pv: ['e2e4']),
+          ],
+        ),
+      );
+
+      final (snapshot, error) = await service.evaluate(
+        startFen,
+        depth: 12,
+        multiPv: 2,
+      );
+      expect(error, isNull);
+      expect(snapshot, isNotNull);
+      expect(snapshot!.multiPvComplete, isFalse);
+      expect(snapshot.engineLines, hasLength(1));
     });
   });
 }

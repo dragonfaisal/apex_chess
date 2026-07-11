@@ -502,7 +502,7 @@ class _FilterBar extends ConsumerWidget {
     ArchiveSort.oldest => 'Oldest',
     ArchiveSort.mostBrilliants => 'Most brilliants',
     ArchiveSort.mostBlunders => 'Most blunders',
-    ArchiveSort.highestAccuracy => 'Highest accuracy',
+    ArchiveSort.highestAccuracy => 'Lowest ACPL',
   };
 
   String _resultLabel(ArchiveResultFilter r) => switch (r) {

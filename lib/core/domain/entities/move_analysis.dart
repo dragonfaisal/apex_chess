@@ -72,6 +72,15 @@ class MoveAnalysis {
   /// Mover-perspective centipawn loss, when both evals are cp scores.
   final int? moverCpLoss;
 
+  /// Whether this ply has a complete before/after engine pair. Book moves
+  /// deliberately set this false and are excluded from numeric metrics.
+  final bool engineEvaluationAvailable;
+  final int? requestedDepth;
+  final int? achievedDepthBefore;
+  final int? achievedDepthAfter;
+  final int multiPvReceived;
+  final bool searchQualityMet;
+
   /// Tactical/material tags used by the classifier and debug export.
   final bool isCapture;
   final bool isFreeCapture;
@@ -140,6 +149,12 @@ class MoveAnalysis {
     this.reasonCode = 'legacy',
     this.playedEqualsPv1 = false,
     this.moverCpLoss,
+    this.engineEvaluationAvailable = true,
+    this.requestedDepth,
+    this.achievedDepthBefore,
+    this.achievedDepthAfter,
+    this.multiPvReceived = 0,
+    this.searchQualityMet = false,
     this.isCapture = false,
     this.isFreeCapture = false,
     this.isRecapture = false,
@@ -195,6 +210,12 @@ class MoveAnalysis {
     'reasonCode': reasonCode,
     'playedEqualsPv1': playedEqualsPv1,
     'moverCpLoss': moverCpLoss,
+    'engineEvaluationAvailable': engineEvaluationAvailable,
+    'requestedDepth': requestedDepth,
+    'achievedDepthBefore': achievedDepthBefore,
+    'achievedDepthAfter': achievedDepthAfter,
+    'multiPvReceived': multiPvReceived,
+    'searchQualityMet': searchQualityMet,
     'isCapture': isCapture,
     'isFreeCapture': isFreeCapture,
     'isRecapture': isRecapture,
@@ -220,10 +241,16 @@ class MoveAnalysis {
 
   factory MoveAnalysis.fromJson(Map<dynamic, dynamic> j) {
     final classRaw = j['classification'] as String?;
-    final classification = MoveQuality.values.firstWhere(
-      (q) => q.name == classRaw,
-      orElse: () => MoveQuality.good,
-    );
+    MoveQuality? classification;
+    for (final quality in MoveQuality.values) {
+      if (quality.name == classRaw) {
+        classification = quality;
+        break;
+      }
+    }
+    if (classification == null) {
+      throw FormatException('Unknown persisted move classification: $classRaw');
+    }
     MoveQuality parseQuality(String? raw, MoveQuality fallback) => MoveQuality
         .values
         .firstWhere((q) => q.name == raw, orElse: () => fallback);
@@ -258,6 +285,14 @@ class MoveAnalysis {
       reasonCode: j['reasonCode'] as String? ?? 'legacy',
       playedEqualsPv1: j['playedEqualsPv1'] as bool? ?? false,
       moverCpLoss: (j['moverCpLoss'] as num?)?.toInt(),
+      engineEvaluationAvailable:
+          j['engineEvaluationAvailable'] as bool? ??
+          !(j['inBook'] as bool? ?? false),
+      requestedDepth: (j['requestedDepth'] as num?)?.toInt(),
+      achievedDepthBefore: (j['achievedDepthBefore'] as num?)?.toInt(),
+      achievedDepthAfter: (j['achievedDepthAfter'] as num?)?.toInt(),
+      multiPvReceived: (j['multiPvReceived'] as num?)?.toInt() ?? 0,
+      searchQualityMet: j['searchQualityMet'] as bool? ?? false,
       isCapture: j['isCapture'] as bool? ?? false,
       isFreeCapture: j['isFreeCapture'] as bool? ?? false,
       isRecapture: j['isRecapture'] as bool? ?? false,

@@ -13,6 +13,7 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:apex_chess/core/domain/entities/deep_tactical_verdict.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 
 void main() {
@@ -46,6 +47,9 @@ void main() {
         playedMoveUci: 'd1h5',
         isSacrifice: true,
         multiPvWhiteWinPercents: [95.0, 72.0, 64.0],
+        tacticalVerdict: _verifiedTactical(forcedMate: true),
+        alternativeEvidenceComplete: true,
+        deepVerificationComplete: true,
       );
       expect(r.quality, MoveQuality.brilliant);
     });
@@ -109,6 +113,9 @@ void main() {
         playedMoveUci: 'b2b4',
         isSacrifice: true,
         multiPvWhiteWinPercents: [51.0, 50.0, 49.0],
+        tacticalVerdict: _verifiedTactical(),
+        alternativeEvidenceComplete: true,
+        deepVerificationComplete: true,
       );
       expect(r.quality, MoveQuality.brilliant);
     });
@@ -178,4 +185,34 @@ void main() {
       expect(r.quality, MoveQuality.best);
     });
   });
+}
+
+DeepTacticalVerdict _verifiedTactical({bool forcedMate = false}) {
+  return DeepTacticalVerdict(
+    isCandidate: true,
+    verified: true,
+    candidateType: 'sacrifice_trajectory',
+    isBestOrNearBest: true,
+    isOnlyMove: false,
+    isNonObvious: true,
+    lowDepthRejectedHighDepthApproved: true,
+    forcingLineLength: 4,
+    forcedMate: forcedMate,
+    forcedPromotion: false,
+    decisiveMaterialWin: !forcedMate,
+    sacrificeTrajectory: true,
+    delayedSacrifice: false,
+    queenSacrifice: false,
+    rookSacrifice: false,
+    decoy: true,
+    deflection: false,
+    matingNet: forcedMate,
+    promotionNet: false,
+    reasonCode: forcedMate ? 'verified_mating_sacrifice' : 'verified_sacrifice',
+    humanExplanation: 'Deep verification confirms the forcing sacrifice.',
+    firstCommitmentPly: 0,
+    candidateVerified: true,
+    verificationDepth: 22,
+    verificationMultiPV: 5,
+  );
 }

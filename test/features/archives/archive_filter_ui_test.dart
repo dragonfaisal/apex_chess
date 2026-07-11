@@ -1,4 +1,6 @@
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
+import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
+import 'package:apex_chess/core/domain/entities/move_analysis.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/archives/presentation/controllers/archive_controller.dart';
 import 'package:apex_chess/features/archives/presentation/views/archive_screen.dart';
@@ -295,6 +297,23 @@ void main() {
     expect(state.visible.map((g) => g.id), ['deep']);
   });
 
+  test('Lowest ACPL sort ranks only current verified metrics', () {
+    final state = ArchiveState(
+      filters: const ArchiveFilters(sort: ArchiveSort.highestAccuracy),
+      games: [
+        _game(id: 'unavailable', averageCpLoss: 0),
+        _game(id: 'higher-acpl', metricAvailable: true, averageCpLoss: 42),
+        _game(id: 'lower-acpl', metricAvailable: true, averageCpLoss: 18),
+      ],
+    );
+
+    expect(state.visible.map((game) => game.id), [
+      'lower-acpl',
+      'higher-acpl',
+      'unavailable',
+    ]);
+  });
+
   testWidgets('Archive active chips render scoped labels', (tester) async {
     await _pumpArchive(
       tester,
@@ -383,7 +402,42 @@ ArchivedGame _game({
   String? pgn,
   AnalysisMode analysisMode = AnalysisMode.deep,
   String? analysisProfileId,
+  bool metricAvailable = false,
+  double averageCpLoss = 18,
 }) {
+  final moves = <MoveAnalysis>[];
+  var ply = 0;
+  for (final entry in qualities.entries) {
+    for (var count = 0; count < entry.value; count++) {
+      moves.add(
+        MoveAnalysis(
+          ply: ply++,
+          san: 'Nf3',
+          uci: 'g1f3',
+          fenBefore: 'before-$ply',
+          fenAfter: 'after-$ply',
+          winPercentBefore: 50,
+          winPercentAfter: 50,
+          deltaW: 0,
+          isWhiteMove: ply.isOdd,
+          classification: entry.key,
+          moverCpLoss: metricAvailable ? averageCpLoss.round() : null,
+          engineEvaluationAvailable: metricAvailable,
+          message: '',
+        ),
+      );
+    }
+  }
+  final timeline = AnalysisTimeline(
+    moves: moves,
+    startingFen: 'fixture',
+    headers: {'White': white, 'Black': black, 'Result': result},
+    winPercentages: [for (final move in moves) move.winPercentAfter],
+    analysisMode: analysisMode.wire,
+    analysisProfileId: analysisProfileId,
+    completionStatus: AnalysisCompletionStatus.complete,
+    expectedPlies: moves.length,
+  );
   return ArchivedGame(
     id: id,
     source: source,
@@ -403,12 +457,13 @@ ArchivedGame _game({
 1. e4 *
 ''',
     qualityCounts: qualities,
-    averageCpLoss: 18,
+    averageCpLoss: averageCpLoss,
     totalPlies: 20,
     openingName: opening,
     ecoCode: eco,
     analysisMode: analysisMode,
     analysisProfileId: analysisProfileId,
+    cachedTimeline: moves.isEmpty ? null : timeline,
   );
 }
 

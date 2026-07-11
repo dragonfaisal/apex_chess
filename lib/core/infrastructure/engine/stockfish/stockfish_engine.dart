@@ -38,7 +38,7 @@ import 'stockfish_isolate.dart';
 /// hash size.
 class StockfishEngine implements ChessEngine {
   StockfishEngine({Duration startupTimeout = const Duration(seconds: 5)})
-      : _startupTimeout = startupTimeout;
+    : _startupTimeout = startupTimeout;
 
   final Duration _startupTimeout;
 
@@ -126,6 +126,30 @@ class StockfishEngine implements ChessEngine {
     _toWorker = ready.commandSendPort;
     _bridgeVersion = ready.bridgeVersion;
     _running = true;
+
+    final uciOk = Completer<void>();
+    String? engineName;
+    late final StreamSubscription<EngineEvent> handshakeSub;
+    handshakeSub = events.listen((event) {
+      if (event is EngineId && event.name?.trim().isNotEmpty == true) {
+        engineName = event.name!.trim();
+      } else if (event is EngineUciOk && !uciOk.isCompleted) {
+        uciOk.complete();
+      } else if (event is EngineError && !uciOk.isCompleted) {
+        uciOk.completeError(event.message);
+      }
+    });
+    try {
+      send(const UciHandshake());
+      await uciOk.future.timeout(_startupTimeout);
+      _bridgeVersion = '${ready.bridgeVersion}|${engineName ?? 'uci-unknown'}';
+    } on Object catch (error) {
+      _running = false;
+      await _teardown();
+      throw EngineStartupException('UCI handshake failed', cause: error);
+    } finally {
+      await handshakeSub.cancel();
+    }
   }
 
   @override

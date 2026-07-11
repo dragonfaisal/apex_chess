@@ -444,8 +444,8 @@ class _PlayerCard extends StatelessWidget {
 
   final _SummaryPlayerIdentity identity;
   final String result;
-  final double accuracy;
-  final double acpl;
+  final double? accuracy;
+  final double? acpl;
 
   @override
   Widget build(BuildContext context) {
@@ -507,7 +507,9 @@ class _PlayerCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            '${accuracy.toStringAsFixed(1)}%',
+            accuracy == null
+                ? 'Accuracy unavailable'
+                : '${accuracy!.toStringAsFixed(1)}%',
             style: ApexTypography.headlineMedium.copyWith(
               fontSize: 24,
               color: ApexColors.textPrimary,
@@ -515,7 +517,9 @@ class _PlayerCard extends StatelessWidget {
             ),
           ),
           Text(
-            'ACPL ${acpl.toStringAsFixed(1)}',
+            acpl == null
+                ? 'ACPL unavailable'
+                : 'ACPL ${acpl!.toStringAsFixed(1)}',
             style: ApexTypography.bodyMedium.copyWith(
               color: ApexColors.textSecondary,
               fontSize: 11,
@@ -571,8 +575,8 @@ class _AccuracyCard extends StatelessWidget {
   });
 
   final String label;
-  final double accuracy;
-  final double acpl;
+  final double? accuracy;
+  final double? acpl;
   final bool colorKnown;
 
   @override
@@ -597,7 +601,9 @@ class _AccuracyCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            colorKnown ? '${accuracy.toStringAsFixed(1)}%' : '—',
+            colorKnown && accuracy != null
+                ? '${accuracy!.toStringAsFixed(1)}%'
+                : 'Accuracy unavailable',
             style: ApexTypography.headlineMedium.copyWith(
               fontSize: 26,
               color: ApexColors.textPrimary,
@@ -606,7 +612,9 @@ class _AccuracyCard extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            'ACPL ${acpl.toStringAsFixed(1)}',
+            acpl == null
+                ? 'ACPL unavailable'
+                : 'ACPL ${acpl!.toStringAsFixed(1)}',
             style: ApexTypography.bodyMedium.copyWith(
               color: ApexColors.textSecondary,
               fontSize: 11,
@@ -1263,8 +1271,7 @@ class _PhaseRow extends StatelessWidget {
           child: Text(
             empty
                 ? '—'
-                : '${breakdown.accuracyPct.toStringAsFixed(0)}% · ACPL '
-                      '${breakdown.averageCpLoss.toStringAsFixed(1)} · '
+                : 'ACPL ${breakdown.averageCpLoss.toStringAsFixed(1)} · '
                       '${breakdown.plies} plies',
             style: ApexTypography.bodyMedium.copyWith(
               color: ApexColors.textSecondary,

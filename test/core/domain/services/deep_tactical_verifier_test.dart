@@ -58,10 +58,11 @@ void main() {
           ),
           EngineLine(
             rank: 2,
-            moveUci: 'b2b6',
+            moveUci: 'b2b3',
             scoreCp: 0,
             depth: 24,
             whiteWinPercent: 50,
+            pvMoves: const ['b2b3'],
           ),
           EngineLine(
             rank: 3,
@@ -69,12 +70,13 @@ void main() {
             scoreCp: 80,
             depth: 24,
             whiteWinPercent: win.forCp(cp: 80),
+            pvMoves: const ['b2a2'],
           ),
         ],
         isCapture: true,
         deltaW: 8,
         verificationDepth: 24,
-        verificationMultiPV: 5,
+        verificationMultiPV: 3,
       ),
     );
 
@@ -120,24 +122,26 @@ void main() {
             whiteWinPercent: 0,
             pvMoves: [move.uci, ...continuation],
           ),
-          const EngineLine(
+          EngineLine(
             rank: 2,
-            moveUci: 'f8e7',
+            moveUci: 'b2b3',
             scoreCp: 0,
             depth: 24,
             whiteWinPercent: 50,
+            pvMoves: const ['b2b3'],
           ),
-          const EngineLine(
+          EngineLine(
             rank: 3,
-            moveUci: 'f8d6',
+            moveUci: 'b2a2',
             scoreCp: 100,
             depth: 24,
             whiteWinPercent: 60,
+            pvMoves: const ['b2a2'],
           ),
         ],
         deltaW: 7,
         verificationDepth: 24,
-        verificationMultiPV: 5,
+        verificationMultiPV: 3,
       ),
     );
 

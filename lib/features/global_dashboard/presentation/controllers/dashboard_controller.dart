@@ -278,9 +278,8 @@ class DashboardStats {
   final Map<MoveQuality, int> qualityDistribution;
   final Map<ReviewMoveLabel, int> moveQualityBreakdown;
 
-  /// Accuracy per game, oldest→newest. Used to paint the trend line.
-  /// Accuracy is `100 - averageCpLoss` (averageCpLoss is already a
-  /// Win% delta aggregate, so values come out in a 0..100 band).
+  /// Reserved for a future approved per-game Accuracy metric. Chapter 1
+  /// deliberately leaves this empty; ACPL is tracked separately.
   final List<double> accuracyTrend;
 
   /// 0..100. Computed only when [perspective] is set; otherwise 0.
@@ -289,6 +288,7 @@ class DashboardStats {
   final String? perspective;
 
   bool get hasData => gamesAnalyzed > 0;
+  bool get hasAccuracyMetric => false;
 }
 
 class DashboardPlayerSearchState {
@@ -543,8 +543,8 @@ DashboardStats _buildStats(
   final qualityTotals = <MoveQuality, int>{};
   final displayQualityTotals = <ReviewMoveLabel, int>{};
   final trend = <double>[];
-  double accuracySum = 0;
   double acplSum = 0;
+  int verifiedMetricGames = 0;
 
   final me = perspective?.toLowerCase();
   for (final g in ordered) {
@@ -565,12 +565,10 @@ DashboardStats _buildStats(
       displayQualityTotals[entry.key] =
           (displayQualityTotals[entry.key] ?? 0) + entry.value;
     }
-    // Accuracy clamps to a sensible band — a bad game doesn't have
-    // negative accuracy, and a flawless one caps at 100.
-    final acc = (100 - g.averageCpLoss).clamp(0, 100).toDouble();
-    trend.add(acc);
-    accuracySum += acc;
-    acplSum += g.averageCpLoss;
+    if (g.hasVerifiedCpLoss) {
+      acplSum += g.averageCpLoss;
+      verifiedMetricGames++;
+    }
 
     if (me != null && me.isNotEmpty) {
       final whiteIsMe = g.white.toLowerCase() == me;
@@ -619,12 +617,12 @@ DashboardStats _buildStats(
     totalMistakes: mistakes,
     totalInaccuracies: inaccuracies,
     totalMisses: misses,
-    averageAcpl: acplSum / countedGames,
+    averageAcpl: verifiedMetricGames == 0 ? 0 : acplSum / verifiedMetricGames,
     qualityDistribution: qualityTotals,
     moveQualityBreakdown: displayQualityTotals,
     accuracyTrend: trend,
     winRate: decided == 0 ? 0 : (wins / decided) * 100,
-    averageAccuracy: accuracySum / countedGames,
+    averageAccuracy: 0,
     perspective: perspective,
   );
 }

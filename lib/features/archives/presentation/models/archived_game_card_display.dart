@@ -58,8 +58,8 @@ extension ArchivedGameCardDisplay on ArchivedGame {
   }
 
   String get archiveAccuracyLabel {
-    final accuracy = (100 - averageCpLoss).clamp(0, 100).toStringAsFixed(0);
-    return '$accuracy%';
+    if (!hasVerifiedCpLoss) return 'Metrics unavailable';
+    return 'ACPL ${averageCpLoss.toStringAsFixed(1)}';
   }
 }
 

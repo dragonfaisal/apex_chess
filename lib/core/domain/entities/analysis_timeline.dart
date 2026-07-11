@@ -10,6 +10,8 @@ import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'move_analysis.dart';
 
+enum AnalysisCompletionStatus { complete, incomplete }
+
 class AnalysisTimeline {
   /// Ordered per-move analyses (index 0 = ply 0 = White's first move).
   final List<MoveAnalysis> moves;
@@ -34,6 +36,7 @@ class AnalysisTimeline {
   final int openingBookVersion;
   final int analysisSchemaVersion;
   final int? depth;
+  final int? requestedDepth;
   final int? movetimeMs;
   final int? multipv;
   final bool candidateVerificationEnabled;
@@ -41,6 +44,10 @@ class AnalysisTimeline {
   final String? pgnHash;
   final String? cacheKey;
   final bool cacheHit;
+  final AnalysisCompletionStatus completionStatus;
+  final int? expectedPlies;
+  final int engineSearchCount;
+  final int engineCacheHitCount;
 
   const AnalysisTimeline({
     required this.moves,
@@ -56,6 +63,7 @@ class AnalysisTimeline {
     this.openingBookVersion = kApexOpeningBookVersion,
     this.analysisSchemaVersion = kApexAnalysisSchemaVersion,
     this.depth,
+    this.requestedDepth,
     this.movetimeMs,
     this.multipv,
     this.candidateVerificationEnabled = false,
@@ -63,12 +71,22 @@ class AnalysisTimeline {
     this.pgnHash,
     this.cacheKey,
     this.cacheHit = false,
+    this.completionStatus = AnalysisCompletionStatus.incomplete,
+    this.expectedPlies,
+    this.engineSearchCount = 0,
+    this.engineCacheHitCount = 0,
   }) : analysisProfileId =
            analysisProfileId ??
            (analysisMode == 'quick' ? 'fast_review' : 'deep_review');
 
   /// Total number of plies.
   int get totalPlies => moves.length;
+
+  bool get isComplete =>
+      completionStatus == AnalysisCompletionStatus.complete &&
+      expectedPlies != null &&
+      expectedPlies == moves.length &&
+      moves.isNotEmpty;
 
   /// O(1) access to a specific ply's analysis.
   MoveAnalysis? operator [](int ply) {
@@ -86,14 +104,36 @@ class AnalysisTimeline {
     return counts;
   }
 
-  /// Average centipawn loss (for accuracy display).
+  int get cpLossEligibleCount => moves
+      .where(
+        (move) =>
+            move.engineEvaluationAvailable &&
+            !move.inBook &&
+            move.classification != MoveQuality.book &&
+            move.moverCpLoss != null,
+      )
+      .length;
+
+  int get cpLossEligibleCountWhite => _cpLossCountForSide(isWhite: true);
+  int get cpLossEligibleCountBlack => _cpLossCountForSide(isWhite: false);
+
+  bool get hasVerifiedCpLoss => cpLossEligibleCount > 0;
+
+  /// Average mover-perspective centipawn loss over cp-scored, non-book plies.
   double get averageCpLoss {
-    if (moves.isEmpty) return 0;
-    double totalLoss = 0;
-    for (final m in moves) {
-      totalLoss += m.deltaW < 0 ? m.deltaW.abs() : 0;
-    }
-    return totalLoss / moves.length;
+    final eligible = moves.where(
+      (move) =>
+          move.engineEvaluationAvailable &&
+          !move.inBook &&
+          move.classification != MoveQuality.book &&
+          move.moverCpLoss != null,
+    );
+    if (eligible.isEmpty) return 0;
+    return eligible.fold<double>(
+          0,
+          (sum, move) => sum + move.moverCpLoss!.clamp(0, 100000).toDouble(),
+        ) /
+        eligible.length;
   }
 
   /// Average centipawn loss for plies played by the White side.
@@ -113,12 +153,29 @@ class AnalysisTimeline {
     double total = 0;
     int count = 0;
     for (final m in moves) {
-      if (m.isWhiteMove != isWhite) continue;
+      if (m.isWhiteMove != isWhite ||
+          !m.engineEvaluationAvailable ||
+          m.inBook ||
+          m.classification == MoveQuality.book ||
+          m.moverCpLoss == null) {
+        continue;
+      }
       count++;
-      total += m.deltaW < 0 ? m.deltaW.abs() : 0;
+      total += m.moverCpLoss!.clamp(0, 100000);
     }
     return count == 0 ? 0 : total / count;
   }
+
+  int _cpLossCountForSide({required bool isWhite}) => moves
+      .where(
+        (move) =>
+            move.isWhiteMove == isWhite &&
+            move.engineEvaluationAvailable &&
+            !move.inBook &&
+            move.classification != MoveQuality.book &&
+            move.moverCpLoss != null,
+      )
+      .length;
 
   // ── Serialisation ──────────────────────────────────────────────
   // Persisted alongside [ArchivedGame] so the archive can re-open a
@@ -140,6 +197,7 @@ class AnalysisTimeline {
     'openingBookVersion': openingBookVersion,
     'analysisSchemaVersion': analysisSchemaVersion,
     'depth': depth,
+    'requestedDepth': requestedDepth,
     'movetimeMs': movetimeMs,
     'multipv': multipv,
     'candidateVerificationEnabled': candidateVerificationEnabled,
@@ -147,6 +205,10 @@ class AnalysisTimeline {
     'pgnHash': pgnHash,
     'cacheKey': cacheKey,
     'cacheHit': cacheHit,
+    'completionStatus': completionStatus.name,
+    'expectedPlies': expectedPlies,
+    'engineSearchCount': engineSearchCount,
+    'engineCacheHitCount': engineCacheHitCount,
     'moves': moves.map((m) => m.toJson()).toList(growable: false),
   };
 
@@ -164,6 +226,7 @@ class AnalysisTimeline {
     int? openingBookVersion,
     int? analysisSchemaVersion,
     int? depth,
+    int? requestedDepth,
     int? movetimeMs,
     int? multipv,
     bool? candidateVerificationEnabled,
@@ -171,6 +234,10 @@ class AnalysisTimeline {
     String? pgnHash,
     String? cacheKey,
     bool? cacheHit,
+    AnalysisCompletionStatus? completionStatus,
+    int? expectedPlies,
+    int? engineSearchCount,
+    int? engineCacheHitCount,
   }) {
     return AnalysisTimeline(
       moves: moves ?? this.moves,
@@ -188,6 +255,7 @@ class AnalysisTimeline {
       analysisSchemaVersion:
           analysisSchemaVersion ?? this.analysisSchemaVersion,
       depth: depth ?? this.depth,
+      requestedDepth: requestedDepth ?? this.requestedDepth,
       movetimeMs: movetimeMs ?? this.movetimeMs,
       multipv: multipv ?? this.multipv,
       candidateVerificationEnabled:
@@ -196,6 +264,10 @@ class AnalysisTimeline {
       pgnHash: pgnHash ?? this.pgnHash,
       cacheKey: cacheKey ?? this.cacheKey,
       cacheHit: cacheHit ?? this.cacheHit,
+      completionStatus: completionStatus ?? this.completionStatus,
+      expectedPlies: expectedPlies ?? this.expectedPlies,
+      engineSearchCount: engineSearchCount ?? this.engineSearchCount,
+      engineCacheHitCount: engineCacheHitCount ?? this.engineCacheHitCount,
     );
   }
 
@@ -220,6 +292,7 @@ class AnalysisTimeline {
       openingBookVersion: (j['openingBookVersion'] as num?)?.toInt() ?? 1,
       analysisSchemaVersion: (j['analysisSchemaVersion'] as num?)?.toInt() ?? 1,
       depth: (j['depth'] as num?)?.toInt(),
+      requestedDepth: (j['requestedDepth'] as num?)?.toInt(),
       movetimeMs: (j['movetimeMs'] as num?)?.toInt(),
       multipv: (j['multipv'] as num?)?.toInt(),
       candidateVerificationEnabled:
@@ -230,6 +303,13 @@ class AnalysisTimeline {
       pgnHash: j['pgnHash'] as String?,
       cacheKey: j['cacheKey'] as String?,
       cacheHit: j['cacheHit'] as bool? ?? false,
+      completionStatus: AnalysisCompletionStatus.values.firstWhere(
+        (value) => value.name == j['completionStatus'],
+        orElse: () => AnalysisCompletionStatus.incomplete,
+      ),
+      expectedPlies: (j['expectedPlies'] as num?)?.toInt(),
+      engineSearchCount: (j['engineSearchCount'] as num?)?.toInt() ?? 0,
+      engineCacheHitCount: (j['engineCacheHitCount'] as num?)?.toInt() ?? 0,
       moves: [for (final m in movesRaw) MoveAnalysis.fromJson(m as Map)],
     );
   }

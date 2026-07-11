@@ -29,24 +29,30 @@ import 'package:dartchess/dartchess.dart';
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/engine_line.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
+import 'package:apex_chess/core/domain/entities/position_evaluation.dart';
 import 'package:apex_chess/core/domain/services/analysis_debug_export.dart';
 import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/core/domain/services/deep_tactical_verifier.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/core/domain/services/position_heuristics.dart';
+import 'package:apex_chess/core/domain/services/pgn_mainline_validator.dart';
 import 'package:apex_chess/core/domain/services/sacrifice_trajectory.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart'
     show AnalysisMode;
-import 'package:apex_chess/infrastructure/api/cloud_eval_service.dart'
-    show CloudEvalError;
 import 'package:apex_chess/infrastructure/engine/eco_book.dart';
 import 'package:apex_chess/infrastructure/engine/local_eval_service.dart';
 
 /// Exception used to surface user-facing errors to the home / review UI.
+enum LocalAnalysisFailure { invalidPgn, incompleteEvaluation, cancelled }
+
 class LocalAnalysisException implements Exception {
-  const LocalAnalysisException(this.message);
+  const LocalAnalysisException(
+    this.message, {
+    this.failure = LocalAnalysisFailure.incompleteEvaluation,
+  });
 
   final String message;
+  final LocalAnalysisFailure failure;
 
   @override
   String toString() => 'LocalAnalysisException: $message';
@@ -61,6 +67,7 @@ class LocalGameAnalyzer {
     Future<EcoBook>? bookFuture,
     EvaluationAnalyzer analyzer = const EvaluationAnalyzer(),
     DeepTacticalVerifier tacticalVerifier = const DeepTacticalVerifier(),
+    PgnMainlineValidator pgnValidator = const PgnMainlineValidator(),
     int depth = 14,
     // Optional wall-clock cap per position. When null, the analyzer
     // picks a sensible budget for the effective search depth via
@@ -73,6 +80,7 @@ class LocalGameAnalyzer {
        _bookFuture = bookFuture,
        _analyzer = analyzer,
        _tacticalVerifier = tacticalVerifier,
+       _pgnValidator = pgnValidator,
        _depth = depth,
        _movetimeOverride = movetime;
 
@@ -96,6 +104,7 @@ class LocalGameAnalyzer {
   final Future<EcoBook>? _bookFuture;
   final EvaluationAnalyzer _analyzer;
   final DeepTacticalVerifier _tacticalVerifier;
+  final PgnMainlineValidator _pgnValidator;
   final int _depth;
   final Duration? _movetimeOverride;
 
@@ -107,6 +116,7 @@ class LocalGameAnalyzer {
     int? depth,
     Duration? movetime,
     AnalysisMode mode = AnalysisMode.deep,
+    bool Function()? isCancelled,
   }) async {
     final searchDepth = depth ?? _depth;
     // Quick scans cannot honestly verify Brilliant / Great / Forced
@@ -135,52 +145,18 @@ class LocalGameAnalyzer {
     // Capture into a local so Dart's flow analysis can promote it past
     // the subsequent `await` boundaries inside this method.
     final book = _book;
-    final game = PgnGame.parsePgn(pgn);
-    final headers = Map<String, String>.from(game.headers);
-    Position position = PgnGame.startingPosition(game.headers);
-    final startingFen = position.fen;
-
-    final parsed = <_ParsedMove>[];
-    for (final node in game.moves.mainline()) {
-      final move = position.parseSan(node.san);
-      if (move == null) break;
-      final fenBefore = position.fen;
-      final isWhite = position.turn == Side.white;
-      final newPos = position.play(move);
-      // Always derive UCI from the actual move squares — never fall back
-      // to SAN, which would produce garbage like "O-O" inside the four-
-      // character slot the UI parses as (from, to). Castling is then
-      // normalised to the king's destination square so the downstream
-      // comparison with the engine's best move works regardless of
-      // whether the engine emits `e1g1` or `e1h1`.
-      String uci;
-      String targetSquare = '';
-      if (move is NormalMove) {
-        final rawUci =
-            '${_sqAlg(move.from)}${_sqAlg(move.to)}'
-            '${move.promotion != null ? _roleChar(move.promotion!) : ""}';
-        uci = normalizeCastlingUci(rawUci);
-        targetSquare = uci.substring(2, 4);
-      } else {
-        // Should be unreachable — dartchess emits NormalMove for every
-        // legal move, including castling. Defensive null-guard so the
-        // rest of the pipeline can rely on `uci.length >= 4`.
-        uci = '';
-      }
-      parsed.add(
-        _ParsedMove(
-          fenBefore: fenBefore,
-          fenAfter: newPos.fen,
-          san: node.san,
-          uci: uci,
-          targetSquare: targetSquare,
-          isWhiteMove: isWhite,
-          isCapture: move is NormalMove && _isCapture(position, move),
-          terminalAfterEval: _terminalEvalFor(newPos, isWhiteMove: isWhite),
-        ),
+    final ValidatedPgnGame validated;
+    try {
+      validated = _pgnValidator.validate(pgn);
+    } on PgnValidationException catch (error) {
+      throw LocalAnalysisException(
+        error.message,
+        failure: LocalAnalysisFailure.invalidPgn,
       );
-      position = newPos;
     }
+    final headers = validated.headers;
+    final startingFen = validated.startingFen;
+    final parsed = validated.moves;
 
     final totalPlies = parsed.length;
     onProgress?.call(0, totalPlies);
@@ -205,11 +181,8 @@ class LocalGameAnalyzer {
     // ── Cache engine evals by FEN. fenAfter[ply N] == fenBefore[ply N+1],
     // so each non-book position is evaluated at most once. ──
     final cache = <String, EvalSnapshot>{};
-
-    // Track consecutive engine failures. One slow position shouldn't
-    // nuke an entire game scan — skip it, mark the ply as unknown, and
-    // keep going. Only abort when the engine is *sustainedly* broken.
-    var consecutiveFailures = 0;
+    var engineSearchCount = 0;
+    var engineCacheHitCount = 0;
 
     Future<EvalSnapshot?> evalCached(
       String fen, {
@@ -217,7 +190,15 @@ class LocalGameAnalyzer {
       Duration? evalMovetime,
       int? evalMultiPv,
       String profile = 'main',
+      bool requiredEvidence = true,
     }) async {
+      if (isCancelled?.call() == true) {
+        _eval.cancelActiveSearch();
+        throw const LocalAnalysisException(
+          'Offline review cancelled.',
+          failure: LocalAnalysisFailure.cancelled,
+        );
+      }
       final effectiveDepth = evalDepth ?? searchDepth;
       final effectiveMovetime = evalMovetime ?? searchMovetime;
       final effectiveMultiPv = evalMultiPv ?? analysisMultiPv;
@@ -225,34 +206,24 @@ class LocalGameAnalyzer {
           '$fen|engine=local-${_eval.engineVersion}|classifier=$kApexClassifierVersion|profile=$profile|depth=$effectiveDepth|movetime=${effectiveMovetime.inMilliseconds}|multipv=$effectiveMultiPv';
       final hit = cache[cacheKey];
       if (hit != null) {
-        consecutiveFailures = 0;
+        engineCacheHitCount++;
         return hit;
       }
+      engineSearchCount++;
       final (snap, err) = await _eval.evaluate(
         fen,
         depth: effectiveDepth,
         movetime: effectiveMovetime,
         multiPv: effectiveMultiPv,
       );
-      if (err != null && err != CloudEvalError.positionNotFound) {
-        consecutiveFailures++;
-        // A sustained run of failures means the engine itself is
-        // unresponsive (NNUE weights missing, native crash, hostile
-        // position, etc.) — abort so the user sees a clear error instead
-        // of a half-blank timeline.
-        if (consecutiveFailures >= 5) {
-          throw const LocalAnalysisException(
-            'Quantum Scan failed — engine stopped responding.',
+      if (err != null || snap == null || !snap.isUsableFor(fen)) {
+        if (requiredEvidence) {
+          throw LocalAnalysisException(
+            'Offline review stopped: no trustworthy evaluation for the exact position.',
           );
         }
         return null;
       }
-      if (snap == null) {
-        // positionNotFound — engine answered but had no usable score.
-        // Skip this ply (it'll classify as Unknown) but don't abort.
-        return null;
-      }
-      consecutiveFailures = 0;
       cache[cacheKey] = snap;
       return snap;
     }
@@ -273,6 +244,13 @@ class LocalGameAnalyzer {
     final moves = <MoveAnalysis>[];
 
     for (var ply = 0; ply < totalPlies; ply++) {
+      if (isCancelled?.call() == true) {
+        _eval.cancelActiveSearch();
+        throw const LocalAnalysisException(
+          'Offline review cancelled.',
+          failure: LocalAnalysisFailure.cancelled,
+        );
+      }
       final entry = parsed[ply];
 
       // ── Book cutoff: if the move is a known theoretical reply, trust
@@ -296,6 +274,10 @@ class LocalGameAnalyzer {
             finalClassification: MoveQuality.book,
             reasonCode: 'book_theory',
             playedEqualsPv1: false,
+            engineEvaluationAvailable: false,
+            requestedDepth: searchDepth,
+            multiPvReceived: 0,
+            searchQualityMet: false,
             isWhiteMove: entry.isWhiteMove,
             engineBestMoveSan: null,
             engineBestMoveUci: null,
@@ -326,33 +308,20 @@ class LocalGameAnalyzer {
       // on a mate-on-the-board position is ambiguous (`mate 0` from STM
       // POV). Using the synthesised eval avoids classifying the
       // mate-delivering ply as a Blunder.
-      final after = entry.terminalAfterEval ?? await evalCached(entry.fenAfter);
+      final after = _terminalEvalFor(entry) ?? await evalCached(entry.fenAfter);
 
       // Derive the *real* pre-move Win% from the engine — `prevWinPct`
       // may be stale if the previous plies came from the book (book moves
       // preserve the prior Win% unchanged, so the book→engine transition
       // would otherwise show an artificial jump on the first real eval).
-      final winPctBefore = before != null
-          ? EvaluationAnalyzer.calculateWinPercentage(
-              cp: before.scoreCp,
-              mate: before.mateIn,
-            )
-          : prevWinPct;
-      final winPctAfter = after != null
-          ? EvaluationAnalyzer.calculateWinPercentage(
-              cp: after.scoreCp,
-              mate: after.mateIn,
-            )
-          : winPctBefore;
-
-      // Backfill any preceding book moves so the chart ramps smoothly
-      // from the opening eval (50 % if we started in book) to where the
-      // engine actually thinks the position stands when theory ends.
-      if (before != null &&
-          moves.isNotEmpty &&
-          moves.last.classification == MoveQuality.book) {
-        _backfillBookWinPct(moves, winPctBefore);
-      }
+      final winPctBefore = EvaluationAnalyzer.calculateWinPercentage(
+        cp: before!.scoreCp,
+        mate: before.mateIn,
+      );
+      final winPctAfter = EvaluationAnalyzer.calculateWinPercentage(
+        cp: after!.scoreCp,
+        mate: after.mateIn,
+      );
 
       // Material-trajectory-derived sacrifice signals — see
       // `SacrificeTrajectory.analyze` for the gating rules. The Brilliant
@@ -368,7 +337,7 @@ class LocalGameAnalyzer {
           entry.san.contains('=') ||
           sac.isSacrifice ||
           (entry.isCapture && !isFreeCapture);
-      final beforeLines = before?.engineLines ?? const <EngineLine>[];
+      final beforeLines = before.engineLines;
       final multiPvWhiteWinPercents = beforeLines.length >= 2
           ? beforeLines.map((l) => l.whiteWinPercent).toList(growable: false)
           : null;
@@ -415,6 +384,7 @@ class LocalGameAnalyzer {
           evalMovetime: const Duration(milliseconds: 650),
           evalMultiPv: 3,
           profile: 'candidate_low_v$kApexClassifierVersion',
+          requiredEvidence: false,
         );
         final verificationDepth = searchDepth >= 22
             ? (searchDepth + 2 > 24 ? 24 : searchDepth + 2)
@@ -425,6 +395,7 @@ class LocalGameAnalyzer {
           evalMovetime: searchMovetime + const Duration(milliseconds: 1500),
           evalMultiPv: 5,
           profile: 'candidate_high_v$kApexClassifierVersion',
+          requiredEvidence: false,
         );
         tacticalVerdict = _tacticalVerifier.verify(
           DeepTacticalInput(
@@ -454,7 +425,7 @@ class LocalGameAnalyzer {
           : beforeLines;
       final engineBestMoveUci = classificationLines.isNotEmpty
           ? classificationLines.first.moveUci
-          : before?.bestMoveUci;
+          : before.bestMoveUci;
       final classificationWinPercents = classificationLines.length >= 2
           ? classificationLines
                 .map((l) => l.whiteWinPercent)
@@ -465,10 +436,10 @@ class LocalGameAnalyzer {
           : secondBestWhiteWinPercent;
 
       final result = _analyzer.analyze(
-        prevCp: before?.scoreCp,
-        prevMate: before?.mateIn,
-        currCp: after?.scoreCp,
-        currMate: after?.mateIn,
+        prevCp: before.scoreCp,
+        prevMate: before.mateIn,
+        currCp: after.scoreCp,
+        currMate: after.mateIn,
         isWhiteMove: entry.isWhiteMove,
         engineBestMoveUci: engineBestMoveUci,
         playedMoveUci: entry.uci,
@@ -489,6 +460,12 @@ class LocalGameAnalyzer {
         // forces Book just because we're early in the game.
         isBook: false,
         suppressTrophyTiers: suppressTrophyTiers,
+        alternativeEvidenceComplete:
+            before.targetDepthReached && before.multiPvComplete,
+        deepVerificationComplete:
+            highCandidateEval?.targetDepthReached == true &&
+            highCandidateEval?.multiPvComplete == true &&
+            tacticalVerdict.verified,
       );
 
       String? engineBestSan;
@@ -514,8 +491,8 @@ class LocalGameAnalyzer {
           isWhiteMove: entry.isWhiteMove,
           engineBestMoveSan: engineBestSan,
           engineBestMoveUci: engineBestMoveUci,
-          scoreCpAfter: after?.scoreCp,
-          mateInAfter: after?.mateIn,
+          scoreCpAfter: after.scoreCp,
+          mateInAfter: after.mateIn,
           inBook: false,
           openingStatus: openingStatus,
           engineLines: classificationLines,
@@ -524,6 +501,17 @@ class LocalGameAnalyzer {
           reasonCode: result.reasonCode,
           playedEqualsPv1: result.playedEqualsPv1,
           moverCpLoss: result.moverCpLoss,
+          engineEvaluationAvailable: true,
+          requestedDepth: searchDepth,
+          achievedDepthBefore: before.depth,
+          achievedDepthAfter: after.status == PositionEvaluationStatus.terminal
+              ? null
+              : after.depth,
+          multiPvReceived: before.receivedMultiPv,
+          searchQualityMet:
+              before.targetDepthReached &&
+              (after.status == PositionEvaluationStatus.terminal ||
+                  after.targetDepthReached),
           isCapture: entry.isCapture,
           isFreeCapture: isFreeCapture,
           isRecapture: isRecapture,
@@ -563,11 +551,26 @@ class LocalGameAnalyzer {
       tacticalVerifierVersion: kApexTacticalVerifierVersion,
       openingBookVersion: kApexOpeningBookVersion,
       analysisSchemaVersion: kApexAnalysisSchemaVersion,
-      depth: searchDepth,
+      depth: moves
+          .expand(
+            (move) => <int>[
+              if (move.achievedDepthBefore != null) move.achievedDepthBefore!,
+              if (move.achievedDepthAfter != null) move.achievedDepthAfter!,
+            ],
+          )
+          .fold<int?>(
+            null,
+            (min, value) => min == null || value < min ? value : min,
+          ),
+      requestedDepth: searchDepth,
       movetimeMs: searchMovetime.inMilliseconds,
       multipv: analysisMultiPv,
       candidateVerificationEnabled: mode == AnalysisMode.deep,
       completedAt: DateTime.now().toUtc(),
+      completionStatus: AnalysisCompletionStatus.complete,
+      expectedPlies: totalPlies,
+      engineSearchCount: engineSearchCount,
+      engineCacheHitCount: engineCacheHitCount,
     );
     // Phase A integration audit, step A: structured per-ply log so future
     // regressions can be triaged from a single device-log dump. No-op in
@@ -576,71 +579,7 @@ class LocalGameAnalyzer {
     return timeline;
   }
 
-  /// Rewrite contiguous book moves at the tail of [moves] so their
-  /// `winPercentBefore` / `winPercentAfter` interpolate linearly from the
-  /// first book move's starting Win% up to [endWinPct]. This makes the
-  /// advantage chart read as a smooth ramp through theory instead of a
-  /// flat 50 % line followed by an abrupt step on the first engine eval.
-  static void _backfillBookWinPct(List<MoveAnalysis> moves, double endWinPct) {
-    var start = moves.length - 1;
-    while (start > 0 && moves[start - 1].classification == MoveQuality.book) {
-      start--;
-    }
-    final startWinPct = moves[start].winPercentBefore;
-    final span = moves.length - start;
-    for (var i = start; i < moves.length; i++) {
-      final src = moves[i];
-      final tBefore = span == 0 ? 1.0 : (i - start) / span;
-      final tAfter = span == 0 ? 1.0 : (i - start + 1) / span;
-      final wBefore = startWinPct + (endWinPct - startWinPct) * tBefore;
-      final wAfter = startWinPct + (endWinPct - startWinPct) * tAfter;
-      moves[i] = MoveAnalysis(
-        ply: src.ply,
-        san: src.san,
-        uci: src.uci,
-        fenBefore: src.fenBefore,
-        fenAfter: src.fenAfter,
-        targetSquare: src.targetSquare,
-        winPercentBefore: wBefore,
-        winPercentAfter: wAfter,
-        // deltaW semantics (see MoveAnalysis): negative = bad for the
-        // mover, so the raw White-perspective difference must be
-        // negated for Black's moves to stay consistent with the main
-        // analyze() path.
-        deltaW: (wAfter - wBefore) * (src.isWhiteMove ? 1.0 : -1.0),
-        isWhiteMove: src.isWhiteMove,
-        classification: src.classification,
-        engineBestMoveUci: src.engineBestMoveUci,
-        engineBestMoveSan: src.engineBestMoveSan,
-        scoreCpAfter: src.scoreCpAfter,
-        mateInAfter: src.mateInAfter,
-        inBook: src.inBook,
-        openingStatus: src.openingStatus,
-        openingName: src.openingName,
-        ecoCode: src.ecoCode,
-        engineLines: src.engineLines,
-        baseClassification: src.baseClassification,
-        finalClassification: src.finalClassification,
-        reasonCode: src.reasonCode,
-        playedEqualsPv1: src.playedEqualsPv1,
-        moverCpLoss: src.moverCpLoss,
-        isCapture: src.isCapture,
-        isFreeCapture: src.isFreeCapture,
-        isRecapture: src.isRecapture,
-        isSacrifice: src.isSacrifice,
-        isFirstSacrificePly: src.isFirstSacrificePly,
-        tacticalVerdict: src.tacticalVerdict,
-        message: src.message,
-        coachExplanation: src.coachExplanation,
-        analysisMode: src.analysisMode,
-        classifierVersion: src.classifierVersion,
-        engineVersion: src.engineVersion,
-        debugMetadata: src.debugMetadata,
-      );
-    }
-  }
-
-  bool _isRecapture(List<_ParsedMove> parsed, int ply) {
+  bool _isRecapture(List<ValidatedPgnMove> parsed, int ply) {
     if (ply <= 0) return false;
     final prev = parsed[ply - 1];
     final curr = parsed[ply];
@@ -649,7 +588,7 @@ class LocalGameAnalyzer {
         prev.targetSquare == curr.targetSquare;
   }
 
-  bool _isFreeCapture(List<_ParsedMove> parsed, int ply) {
+  bool _isFreeCapture(List<ValidatedPgnMove> parsed, int ply) {
     final curr = parsed[ply];
     if (!curr.isCapture) return false;
     final before = PositionHeuristics.materialBalanceFromFen(curr.fenBefore);
@@ -662,7 +601,7 @@ class LocalGameAnalyzer {
     return (after - before) * moverSign > 0;
   }
 
-  List<String> _actualContinuation(List<_ParsedMove> parsed, int ply) {
+  List<String> _actualContinuation(List<ValidatedPgnMove> parsed, int ply) {
     final out = <String>[];
     for (
       var i = ply + 1;
@@ -679,7 +618,7 @@ class LocalGameAnalyzer {
 
   OpeningStatus _openingStatusFor({
     required EcoBook? book,
-    required _ParsedMove entry,
+    required ValidatedPgnMove entry,
     required int ply,
   }) {
     if (ply >= _openingPhaseMaxPly) return OpeningStatus.notOpening;
@@ -690,7 +629,7 @@ class LocalGameAnalyzer {
   }
 
   double? _bestNonSacAlternativeWhiteWinPercent(
-    _ParsedMove entry,
+    ValidatedPgnMove entry,
     List<EngineLine> lines,
     SacrificeContext sac,
   ) {
@@ -707,7 +646,7 @@ class LocalGameAnalyzer {
     return null;
   }
 
-  bool _lineLooksSacrificial(_ParsedMove entry, String moveUci) {
+  bool _lineLooksSacrificial(ValidatedPgnMove entry, String moveUci) {
     final afterFen = _tryFenAfterUci(entry.fenBefore, moveUci);
     if (afterFen == null) return false;
     final ctx = SacrificeTrajectory.analyze([
@@ -771,18 +710,6 @@ class LocalGameAnalyzer {
     }
   }
 
-  bool _isCapture(Position position, NormalMove move) {
-    final movingPiece = position.board.pieceAt(move.from);
-    final targetPiece = position.board.pieceAt(move.to);
-    if (targetPiece == null) return false;
-    final isCastling =
-        movingPiece != null &&
-        movingPiece.role == Role.king &&
-        move.from.file == 4 &&
-        (move.to.file == 0 || move.to.file == 7);
-    return !isCastling;
-  }
-
   static Square? _parseSquare(String alg) {
     if (alg.length != 2) return null;
     final file = alg.codeUnitAt(0) - 'a'.codeUnitAt(0);
@@ -793,53 +720,9 @@ class LocalGameAnalyzer {
     return Square(file + (rank - 1) * 8);
   }
 
-  static String _sqAlg(Square sq) {
-    final file = String.fromCharCode('a'.codeUnitAt(0) + sq.file);
-    return '$file${sq.rank + 1}';
-  }
-
-  static String _roleChar(Role role) => switch (role) {
-    Role.queen => 'q',
-    Role.rook => 'r',
-    Role.bishop => 'b',
-    Role.knight => 'n',
-    _ => '',
-  };
-
   // Sacrifice detection lives in [PositionHeuristics] so the cloud
   // analyser can share the same logic without copying the FEN
   // material-balance code.
-}
-
-class _ParsedMove {
-  const _ParsedMove({
-    required this.fenBefore,
-    required this.fenAfter,
-    required this.san,
-    required this.uci,
-    required this.targetSquare,
-    required this.isWhiteMove,
-    required this.isCapture,
-    this.terminalAfterEval,
-  });
-
-  final String fenBefore;
-  final String fenAfter;
-  final String san;
-  final String uci;
-  final String targetSquare;
-  final bool isWhiteMove;
-  final bool isCapture;
-
-  /// Pre-synthesised eval for the post-move position when the move
-  /// resulted in a terminal state (checkmate / stalemate / insufficient
-  /// material). When non-null, the pipeline skips the engine call on
-  /// `fenAfter` and uses this directly — fixes the Phase A audit bug
-  /// where Stockfish's `mate 0` on a checkmate position was being
-  /// normalised to `mateInWhite = 0` and tripping the classifier's
-  /// "opponent forces mate" short-circuit on a move that *delivered*
-  /// mate.
-  final EvalSnapshot? terminalAfterEval;
 }
 
 /// Build a signed-from-white-POV [EvalSnapshot] for the position that
@@ -852,23 +735,28 @@ class _ParsedMove {
 ///     move is no longer classified as Blunder.
 ///   * stalemate / insufficient material / 75-move / 5-fold: `scoreCp = 0`
 ///     so the position reads as drawn, not as "engine unreachable".
-EvalSnapshot? _terminalEvalFor(Position post, {required bool isWhiteMove}) {
-  if (post.isCheckmate) {
+EvalSnapshot? _terminalEvalFor(ValidatedPgnMove move) {
+  if (move.terminalState == ValidatedTerminalState.checkmate) {
     return EvalSnapshot(
       scoreCp: null,
-      mateIn: isWhiteMove ? 1 : -1,
+      mateIn: move.isWhiteMove ? 1 : -1,
       depth: 0,
       bestMoveUci: null,
       pvMoves: const <String>[],
+      positionFen: move.fenAfter,
+      status: PositionEvaluationStatus.terminal,
     );
   }
-  if (post.isStalemate || post.isInsufficientMaterial) {
-    return const EvalSnapshot(
+  if (move.terminalState == ValidatedTerminalState.stalemate ||
+      move.terminalState == ValidatedTerminalState.insufficientMaterial) {
+    return EvalSnapshot(
       scoreCp: 0,
       mateIn: null,
       depth: 0,
       bestMoveUci: null,
-      pvMoves: <String>[],
+      pvMoves: const <String>[],
+      positionFen: move.fenAfter,
+      status: PositionEvaluationStatus.terminal,
     );
   }
   return null;

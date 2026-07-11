@@ -6,6 +6,7 @@
 library;
 
 import 'package:apex_chess/core/domain/entities/analysis_profile.dart';
+import 'package:apex_chess/core/domain/services/pgn_mainline_validator.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/pgn_review/domain/analysis_contract.dart';
 
@@ -78,7 +79,30 @@ class ReviewEntryContract {
 
   static bool canOpenCachedReview(ArchivedGame game) {
     final timeline = game.cachedTimeline;
-    return game.isCacheCurrent && timeline != null && timeline.moves.isNotEmpty;
+    if (!game.isCacheCurrent || timeline == null || !timeline.isComplete) {
+      return false;
+    }
+    try {
+      final parsed = const PgnMainlineValidator().validate(game.pgn);
+      if (parsed.startingFen != timeline.startingFen ||
+          parsed.moves.length != timeline.moves.length) {
+        return false;
+      }
+      for (var index = 0; index < parsed.moves.length; index++) {
+        final expected = parsed.moves[index];
+        final cached = timeline.moves[index];
+        if (cached.ply != index ||
+            cached.fenBefore != expected.fenBefore ||
+            cached.fenAfter != expected.fenAfter ||
+            cached.uci != expected.uci ||
+            cached.san != expected.san) {
+          return false;
+        }
+      }
+      return true;
+    } on Object {
+      return false;
+    }
   }
 
   static AnalysisReviewResult savedReviewResult(

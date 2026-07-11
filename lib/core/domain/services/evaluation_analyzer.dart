@@ -177,6 +177,8 @@ class EvaluationAnalyzer {
     bool isTrivialRecapture = false,
     bool isFirstSacrificePly = true,
     bool suppressTrophyTiers = false,
+    bool alternativeEvidenceComplete = false,
+    bool deepVerificationComplete = false,
   }) {
     final detailed = classifyDetailed(
       prevCp: prevCp,
@@ -202,6 +204,8 @@ class EvaluationAnalyzer {
       isTrivialRecapture: isTrivialRecapture,
       isFirstSacrificePly: isFirstSacrificePly,
       suppressTrophyTiers: suppressTrophyTiers,
+      alternativeEvidenceComplete: alternativeEvidenceComplete,
+      deepVerificationComplete: deepVerificationComplete,
     );
     return MoveAnalysisResult(
       quality: detailed.quality,
@@ -243,25 +247,10 @@ class EvaluationAnalyzer {
     bool isTrivialRecapture = false,
     bool isFirstSacrificePly = true,
     bool suppressTrophyTiers = false,
+    bool alternativeEvidenceComplete = false,
+    bool deepVerificationComplete = false,
   }) {
-    // Backward-compat: the old API took `isOnlyWinningMove` as a
-    // boolean assertion that "this move is the *only* winning line".
-    // We translate that into a synthetic 2-element MultiPV list when
-    // the caller has not supplied a real one — the Forced gate then
-    // recognises the move as forced.
-    final pvList =
-        multiPvWhiteWinPercents ??
-        (isOnlyWinningMove
-            ? <double>[
-                const WinPercentCalculator().forCp(cp: currCp, mate: currMate),
-                // Synthetic alt: drop ≥ 25 pp below the played line so
-                // the Forced gate fires.
-                const WinPercentCalculator().forCp(cp: currCp, mate: currMate) -
-                    (isWhiteMove ? 25.0 : -25.0),
-                const WinPercentCalculator().forCp(cp: currCp, mate: currMate) -
-                    (isWhiteMove ? 30.0 : -30.0),
-              ]
-            : null);
+    final pvList = multiPvWhiteWinPercents;
     return _classifier.classify(
       MoveClassificationInput(
         isWhiteMove: isWhiteMove,
@@ -286,6 +275,8 @@ class EvaluationAnalyzer {
         multiPvWhiteWinPercents: pvList,
         altLineWhiteWinPercent: altLineWhiteWinPercent,
         suppressTrophyTiers: suppressTrophyTiers,
+        alternativeEvidenceComplete: alternativeEvidenceComplete,
+        deepVerificationComplete: deepVerificationComplete,
       ),
     );
   }

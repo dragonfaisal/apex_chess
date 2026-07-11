@@ -37,15 +37,24 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 
 import 'package:apex_chess/core/domain/entities/engine_line.dart';
+import 'package:apex_chess/core/domain/entities/position_evaluation.dart';
 import 'package:apex_chess/core/domain/services/win_percent_calculator.dart';
 import 'package:apex_chess/core/infrastructure/engine/engine.dart';
 import 'package:apex_chess/core/infrastructure/engine/uci/fen_validator.dart';
-import 'package:apex_chess/infrastructure/api/cloud_eval_service.dart'
-    show CloudEvalSnapshot, CloudEvalError;
 
 /// Re-exported for callers that prefer a non-"cloud" name on the happy path.
-typedef EvalSnapshot = CloudEvalSnapshot;
-typedef EvalError = CloudEvalError;
+typedef EvalSnapshot = PositionEvaluation;
+
+enum EvalError {
+  positionNotFound,
+  rateLimited,
+  offline,
+  serverError,
+  synchronizationTimeout,
+  searchTimeout,
+  malformedResponse,
+  cancelled,
+}
 
 class LocalEvalService {
   LocalEvalService({
@@ -65,6 +74,10 @@ class LocalEvalService {
   final Duration _defaultTimeout;
 
   String get engineVersion => _engine.bridgeVersion;
+
+  void cancelActiveSearch() {
+    if (_engine.isRunning) _engine.stop();
+  }
 
   /// Serializes evaluate() calls so only one UCI search is in flight at a
   /// time. Essential — the engine has a single position slot.
@@ -121,6 +134,9 @@ class LocalEvalService {
         return (null, EvalError.offline);
       }
     }
+    if (engineVersion.toLowerCase().contains('stub')) {
+      return (null, EvalError.offline);
+    }
 
     // ── 1. Stop any lingering search and flush to a known-idle state. ──
     try {
@@ -129,12 +145,16 @@ class LocalEvalService {
       // Engine not running — start() above would have bailed; re-report.
       return (null, EvalError.offline);
     }
-    await _awaitReadyOk(const Duration(seconds: 2));
+    if (!await _awaitReadyOk(const Duration(seconds: 2))) {
+      return (null, EvalError.synchronizationTimeout);
+    }
 
     // ── 2. Reset per-position state; this prevents the engine from using
     //     its transposition table built against the previous FEN. ──
     _engine.send(const UciNewGame());
-    await _awaitReadyOk(const Duration(seconds: 2));
+    if (!await _awaitReadyOk(const Duration(seconds: 2))) {
+      return (null, EvalError.synchronizationTimeout);
+    }
 
     // MultiPV is a sticky UCI option. Set it on every call so a Deep
     // review does not leak PV3 searches into Quick/live evaluations.
@@ -142,27 +162,26 @@ class LocalEvalService {
     _engine.send(
       UciSetOption(name: 'MultiPV', value: requestedMultiPv.toString()),
     );
-    await _awaitReadyOk(const Duration(seconds: 2));
+    if (!await _awaitReadyOk(const Duration(seconds: 2))) {
+      return (null, EvalError.synchronizationTimeout);
+    }
 
     // ── 3. Install the new position and start a *fresh* search. ──
     //     `latestByPv` is only filled from frames emitted *after* the
     //     subscription below is live, so stale lines from the prior
     //     search can't bleed into this result.
-    final latestByPv = <int, EngineInfo>{};
+    final framesByDepth = <int, Map<int, EngineInfo>>{};
     final bestMoveCompleter = Completer<EngineBestMove>();
     late final StreamSubscription<EngineEvent> sub;
     sub = _engine.events.listen((event) {
       if (event is EngineInfo) {
-        // Keep the deepest frame per PV rank; depth only grows within a
-        // single search, so any frame with depth < latest depth for that
-        // rank is out-of-order and ignored.
         if (event.scoreCp == null && event.scoreMate == null) return;
         final rank = event.multipv ?? 1;
         if (rank < 1 || rank > requestedMultiPv) return;
-        final prior = latestByPv[rank];
-        if (prior == null || (event.depth ?? 0) >= (prior.depth ?? 0)) {
-          latestByPv[rank] = event;
-        }
+        final eventDepth = event.depth ?? 0;
+        if (eventDepth <= 0) return;
+        framesByDepth.putIfAbsent(eventDepth, () => <int, EngineInfo>{})[rank] =
+            event;
       } else if (event is EngineBestMove) {
         if (!bestMoveCompleter.isCompleted) bestMoveCompleter.complete(event);
       } else if (event is EngineError) {
@@ -193,12 +212,14 @@ class LocalEvalService {
           .inMilliseconds;
       final isWhiteToMove = _sideToMoveIsWhite(fen);
 
+      final selectedFrame = _selectCompletedFrame(
+        framesByDepth,
+        requestedMultiPv: requestedMultiPv,
+      );
       final lines = _buildEngineLines(
         fen: fen,
-        bestMove: best.move,
-        infosByRank: latestByPv,
+        infosByRank: selectedFrame,
         requestedMultiPv: requestedMultiPv,
-        depth: depth,
         isWhiteToMove: isWhiteToMove,
       );
       final bestLine = lines.isNotEmpty ? lines.first : null;
@@ -209,11 +230,14 @@ class LocalEvalService {
       // No usable info frame → engine answered but didn't report a score.
       // Surface this so callers can decide whether to retry or treat the
       // move as unscored rather than silently returning 0.0 / "Good".
-      if (scoreCpWhite == null && mateInWhite == null) {
-        return (null, EvalError.positionNotFound);
+      if (bestLine == null ||
+          (scoreCpWhite == null) == (mateInWhite == null) ||
+          mateInWhite == 0 ||
+          _normalizeCastlingUci(best.move) != bestLine.moveUci) {
+        return (null, EvalError.malformedResponse);
       }
 
-      final pv = bestLine?.pvMoves ?? const <String>[];
+      final pv = bestLine.pvMoves;
 
       // Diagnostic telemetry — off in release builds. Cheap to keep on in
       // debug because each eval already involves ~thousands of UCI lines;
@@ -223,7 +247,7 @@ class LocalEvalService {
       if (kDebugMode) {
         developer.log(
           'uci_eval fen="$fen" depth_target=$depth '
-          'depth_reached=${bestLine?.depth ?? '?'} '
+          'depth_reached=${bestLine.depth} '
           'multipv=$requestedMultiPv '
           'lines=${lines.length} '
           'movetime_cap_ms=${movetime?.inMilliseconds ?? '-'} '
@@ -241,16 +265,24 @@ class LocalEvalService {
           mateIn: mateInWhite,
           secondBestCp: secondLine?.scoreCp,
           secondBestMate: secondLine?.mateIn,
-          depth: bestLine?.depth ?? depth,
-          bestMoveUci: bestLine?.moveUci ?? best.move,
+          depth: bestLine.depth,
+          bestMoveUci: bestLine.moveUci,
           pvMoves: pv,
           engineLines: lines,
+          positionFen: fen,
+          requestedDepth: depth,
+          requestedMovetimeMs: movetime?.inMilliseconds,
+          requestedMultiPv: requestedMultiPv,
+          nodes: selectedFrame[1]?.nodes,
+          engineTimeMs: selectedFrame[1]?.time?.inMilliseconds,
+          elapsedMs: elapsedMs,
+          engineVersion: engineVersion,
         ),
         null,
       );
     } on TimeoutException {
       _engine.send(const UciStop());
-      return (null, EvalError.serverError);
+      return (null, EvalError.searchTimeout);
     } catch (_) {
       return (null, EvalError.serverError);
     } finally {
@@ -261,10 +293,9 @@ class LocalEvalService {
   /// Send `isready` and await the engine's `readyok` acknowledgement.
   ///
   /// Used to drain pending output between UCI state transitions. On
-  /// timeout we silently return — the caller will discover any real
-  /// engine stall when the follow-up `go` search times out, and we still
-  /// want to preserve forward progress on a mildly laggy engine.
-  Future<void> _awaitReadyOk(Duration timeout) async {
+  /// A missing acknowledgement is a synchronization failure. Continuing
+  /// would make the following score impossible to bind to the requested FEN.
+  Future<bool> _awaitReadyOk(Duration timeout) async {
     final completer = Completer<void>();
     late final StreamSubscription<EngineEvent> sub;
     sub = _engine.events.listen((event) {
@@ -280,10 +311,9 @@ class LocalEvalService {
     try {
       _engine.send(const UciIsReady());
       await completer.future.timeout(timeout);
-    } on TimeoutException {
-      // Ignore — we treat missing `readyok` as best-effort sync.
-    } catch (_) {
-      // Ignore — caller will see failure via the follow-up go/bestmove.
+      return true;
+    } on Object {
+      return false;
     } finally {
       await sub.cancel();
     }
@@ -297,17 +327,18 @@ class LocalEvalService {
 
   List<EngineLine> _buildEngineLines({
     required String fen,
-    required String bestMove,
     required Map<int, EngineInfo> infosByRank,
     required int requestedMultiPv,
-    required int depth,
     required bool isWhiteToMove,
   }) {
     final win = const WinPercentCalculator();
     final lines = <EngineLine>[];
+    final roots = <String>{};
     for (var rank = 1; rank <= requestedMultiPv; rank++) {
       final info = infosByRank[rank];
-      if (info == null) continue;
+      if (info == null) break;
+      if (info.depth == null || info.depth! <= 0) break;
+      if (info.scoreBound != null) break;
 
       final scoreCpWhite = info.scoreCp == null
           ? null
@@ -319,14 +350,17 @@ class LocalEvalService {
           : isWhiteToMove
           ? info.scoreMate!
           : -info.scoreMate!;
-      if (scoreCpWhite == null && mateInWhite == null) continue;
+      if ((scoreCpWhite == null) == (mateInWhite == null) || mateInWhite == 0) {
+        break;
+      }
 
       final pvMoves = info.pv
           .map(_normalizeCastlingUci)
           .toList(growable: false);
-      final moveUci = pvMoves.isNotEmpty
-          ? pvMoves.first
-          : (rank == 1 ? _normalizeCastlingUci(bestMove) : null);
+      if (pvMoves.isEmpty) break;
+      final moveUci = pvMoves.first;
+      if (_tryUciToSan(fen, moveUci) == null) break;
+      if (!roots.add(moveUci)) break;
       lines.add(
         EngineLine(
           rank: rank,
@@ -334,13 +368,43 @@ class LocalEvalService {
           moveSan: _tryUciToSan(fen, moveUci),
           scoreCp: scoreCpWhite,
           mateIn: mateInWhite,
-          depth: info.depth ?? depth,
+          depth: info.depth!,
           whiteWinPercent: win.forCp(cp: scoreCpWhite, mate: mateInWhite),
           pvMoves: pvMoves,
         ),
       );
     }
     return lines;
+  }
+
+  Map<int, EngineInfo> _selectCompletedFrame(
+    Map<int, Map<int, EngineInfo>> framesByDepth, {
+    required int requestedMultiPv,
+  }) {
+    final depths = framesByDepth.keys.toList(growable: false)
+      ..sort((a, b) => b.compareTo(a));
+
+    for (final depth in depths) {
+      final frame = framesByDepth[depth]!;
+      if (_contiguousRankCount(frame, requestedMultiPv) == requestedMultiPv) {
+        return frame;
+      }
+    }
+
+    for (final depth in depths) {
+      final frame = framesByDepth[depth]!;
+      if (_contiguousRankCount(frame, requestedMultiPv) > 0) return frame;
+    }
+    return const <int, EngineInfo>{};
+  }
+
+  int _contiguousRankCount(Map<int, EngineInfo> frame, int requestedMultiPv) {
+    var count = 0;
+    for (var rank = 1; rank <= requestedMultiPv; rank++) {
+      if (!frame.containsKey(rank)) break;
+      count++;
+    }
+    return count;
   }
 
   String? _tryUciToSan(String fen, String? uci) {

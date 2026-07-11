@@ -106,6 +106,59 @@ Qxa1+ 15. Nxa1 c1=Q# 0-1
     });
 
     test(
+      'missing exact-position evidence fails closed before labeling',
+      () async {
+        final analyzer = LocalGameAnalyzer(eval: _WrongFenEvalService());
+
+        expect(
+          () => analyzer.analyzeFromPgn('1. e4 *', depth: 12),
+          throwsA(isA<LocalAnalysisException>()),
+        );
+      },
+    );
+
+    test(
+      'cooperative cancellation returns a typed cancellation failure',
+      () async {
+        final eval = _ScriptedEvalService();
+        final analyzer = LocalGameAnalyzer(eval: eval);
+
+        await expectLater(
+          analyzer.analyzeFromPgn('1. e4 *', isCancelled: () => true),
+          throwsA(
+            isA<LocalAnalysisException>().having(
+              (error) => error.failure,
+              'failure',
+              LocalAnalysisFailure.cancelled,
+            ),
+          ),
+        );
+        expect(eval.calls, isEmpty);
+      },
+    );
+
+    test(
+      'below-target search may score base move but cannot prove trophies',
+      () async {
+        final analyzer = LocalGameAnalyzer(
+          eval: _ScriptedEvalService(achievedDepth: 6),
+        );
+
+        final timeline = await analyzer.analyzeFromPgn('1. a3 *', depth: 12);
+
+        expect(timeline.moves.single.searchQualityMet, isFalse);
+        expect(
+          timeline.moves.single.classification,
+          isNot(
+            anyOf(MoveQuality.brilliant, MoveQuality.great, MoveQuality.forced),
+          ),
+        );
+        expect(timeline.depth, 6);
+        expect(timeline.requestedDepth, 12);
+      },
+    );
+
+    test(
       'supplied PGN keeps 11...dxc3 out of Forced and mate is sane',
       () async {
         final fixture = _fixtureMoves(regressionPgn);
@@ -146,7 +199,7 @@ Qxa1+ 15. Nxa1 c1=Q# 0-1
         expect(bb4.tacticalVerdict.deflection, isTrue);
         expect(
           bb4.classification,
-          anyOf(MoveQuality.brilliant, MoveQuality.great),
+          isNot(anyOf(MoveQuality.brilliant, MoveQuality.great)),
         );
 
         final c2 = timeline.moves.singleWhere((m) => m.san == 'c2');
@@ -159,13 +212,11 @@ Qxa1+ 15. Nxa1 c1=Q# 0-1
         expect(qxa1.tacticalVerdict.matingNet, isTrue);
         expect(
           qxa1.classification,
-          anyOf(MoveQuality.brilliant, MoveQuality.great),
+          isNot(anyOf(MoveQuality.brilliant, MoveQuality.great)),
         );
 
-        expect([
-          bb4.classification,
-          qxa1.classification,
-        ], contains(MoveQuality.brilliant));
+        expect(bb4.tacticalVerdict.verified, isFalse);
+        expect(qxa1.tacticalVerdict.verified, isFalse);
 
         final debugLine = AnalysisDebugExport.jsonLines(timeline)
             .split('\n')
@@ -203,7 +254,10 @@ Qxa1+ 15. Nxa1 c1=Q# 0-1
 }
 
 class _ScriptedEvalService extends LocalEvalService {
-  _ScriptedEvalService() : super(engine: _NoopChessEngine());
+  _ScriptedEvalService({this.achievedDepth})
+    : super(engine: _NoopChessEngine());
+
+  final int? achievedDepth;
 
   final calls = <_EvalCall>[];
   static const _win = WinPercentCalculator();
@@ -231,7 +285,7 @@ class _ScriptedEvalService extends LocalEvalService {
           moveUci: candidates[i].$1,
           moveSan: candidates[i].$2,
           scoreCp: candidates[i].$3,
-          depth: depth ?? 12,
+          depth: achievedDepth ?? depth ?? 12,
           whiteWinPercent: _win.forCp(cp: candidates[i].$3),
           pvMoves: [candidates[i].$1],
         ),
@@ -239,15 +293,40 @@ class _ScriptedEvalService extends LocalEvalService {
     return (
       EvalSnapshot(
         scoreCp: score,
-        depth: depth ?? 12,
+        depth: achievedDepth ?? depth ?? 12,
         bestMoveUci: primaryMove,
         pvMoves: [primaryMove],
         engineLines: lines,
         secondBestCp: lines.length >= 2 ? lines[1].scoreCp : null,
+        positionFen: fen,
+        requestedDepth: depth,
+        requestedMultiPv: multiPv,
       ),
       null,
     );
   }
+}
+
+class _WrongFenEvalService extends LocalEvalService {
+  _WrongFenEvalService() : super(engine: _NoopChessEngine());
+
+  @override
+  Future<(EvalSnapshot?, EvalError?)> evaluate(
+    String fen, {
+    int? depth,
+    Duration? movetime,
+    Duration? timeout,
+    int multiPv = 1,
+  }) async => (
+    EvalSnapshot(
+      scoreCp: 0,
+      depth: depth ?? 12,
+      positionFen: 'wrong-fen',
+      requestedDepth: depth,
+      requestedMultiPv: multiPv,
+    ),
+    null,
+  );
 }
 
 class _PgnFixtureEvalService extends LocalEvalService {
@@ -345,6 +424,9 @@ class _PgnFixtureEvalService extends LocalEvalService {
         pvMoves: [best],
         secondBestCp: lines.length >= 2 ? lines[1].scoreCp : null,
         engineLines: lines,
+        positionFen: fen,
+        requestedDepth: depth,
+        requestedMultiPv: multiPv,
       ),
       null,
     );

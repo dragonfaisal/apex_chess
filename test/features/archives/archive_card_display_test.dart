@@ -65,8 +65,8 @@ void main() {
     expect(model.moveCountLabel, '20 moves');
     expect(model.secondaryMeta, contains('Chess.com'));
     expect(model.secondaryMeta, contains('Deep'));
-    expect(model.secondaryMeta, contains('76%'));
-    expect(model.badges, ['Blunder 1']);
+    expect(model.secondaryMeta, contains('Metrics unavailable'));
+    expect(model.badges, isEmpty);
   });
 
   test(
@@ -78,8 +78,8 @@ void main() {
 
       expect(model.secondaryMeta, contains('Chess.com'));
       expect(model.secondaryMeta, contains('Deep'));
-      expect(model.secondaryMeta, contains('76%'));
-      expect(model.badges, contains('Blunder 1'));
+      expect(model.secondaryMeta, contains('Metrics unavailable'));
+      expect(model.badges, isEmpty);
     },
   );
 }

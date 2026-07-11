@@ -52,14 +52,22 @@ class ScanProgress {
   double get overall {
     if (total == 0) return 0;
     final gameFraction = (completed / total).clamp(0, 1).toDouble();
-    final plyFraction =
-        currentPlyTotal == 0 ? 0.0 : (currentPly / currentPlyTotal) / total;
+    final plyFraction = currentPlyTotal == 0
+        ? 0.0
+        : (currentPly / currentPlyTotal) / total;
     return (gameFraction + plyFraction).clamp(0, 1).toDouble();
   }
 }
 
 class ScanCancelledException implements Exception {
   const ScanCancelledException();
+}
+
+class ProfileMetricUnavailableException implements Exception {
+  const ProfileMetricUnavailableException();
+  @override
+  String toString() =>
+      'Profile scanning is unavailable until Apex adopts a validated accuracy policy.';
 }
 
 class ProfileScannerService {
@@ -84,6 +92,9 @@ class ProfileScannerService {
     ScanCancellation? cancellation,
     void Function(ScanProgress)? onProgress,
   }) async {
+    if (!_officialAccuracyPolicyAvailable) {
+      throw const ProfileMetricUnavailableException();
+    }
     // 1. Fetch the opponent's recent games from the correct provider.
     //    Re-throw [ImportException] verbatim so the controller can show
     //    the underlying message (e.g. "Chess.com is rate-limiting requests"
@@ -92,15 +103,9 @@ class ProfileScannerService {
     //    network and the empty-account cases behind the same string.
     final List<ImportedGame> games;
     if (source == 'chess.com') {
-      games = await chessCom.fetchRecentGames(
-        username,
-        limit: sampleSize,
-      );
+      games = await chessCom.fetchRecentGames(username, limit: sampleSize);
     } else {
-      games = await lichess.fetchRecentGames(
-        username,
-        limit: sampleSize,
-      );
+      games = await lichess.fetchRecentGames(username, limit: sampleSize);
     }
 
     if (games.isEmpty) {
@@ -122,13 +127,15 @@ class ProfileScannerService {
         throw const ScanCancelledException();
       }
       final g = toScan[i];
-      onProgress?.call(ScanProgress(
-        completed: i,
-        total: toScan.length,
-        currentPly: 0,
-        currentPlyTotal: 1,
-        currentGame: '${g.whiteName} vs ${g.blackName}',
-      ));
+      onProgress?.call(
+        ScanProgress(
+          completed: i,
+          total: toScan.length,
+          currentPly: 0,
+          currentPlyTotal: 1,
+          currentGame: '${g.whiteName} vs ${g.blackName}',
+        ),
+      );
 
       AnalysisTimeline? timeline;
       try {
@@ -137,62 +144,68 @@ class ProfileScannerService {
           depth: depth,
           onProgress: (c, t) {
             if (cancellation?.isCancelled ?? false) return;
-            onProgress?.call(ScanProgress(
-              completed: i,
-              total: toScan.length,
-              currentPly: c,
-              currentPlyTotal: t,
-              currentGame: '${g.whiteName} vs ${g.blackName}',
-            ));
+            onProgress?.call(
+              ScanProgress(
+                completed: i,
+                total: toScan.length,
+                currentPly: c,
+                currentPlyTotal: t,
+                currentGame: '${g.whiteName} vs ${g.blackName}',
+              ),
+            );
           },
         );
       } on LocalAnalysisException {
         // One game failing shouldn't tank the whole scan; record a
         // zero-accuracy row and move on. Rare in practice.
-        perGameAccuracy.add(GameAccuracy(
-          id: g.id,
-          white: g.whiteName,
-          black: g.blackName,
-          result: g.resultLabel,
-          accuracy: 0,
-          brilliantCount: 0,
-          blunderCount: 0,
-          engineMatchRate: 0,
-          cpLossStdDev: 0,
-          rating: null,
-        ));
+        perGameAccuracy.add(
+          GameAccuracy(
+            id: g.id,
+            white: g.whiteName,
+            black: g.blackName,
+            result: g.resultLabel,
+            accuracy: 0,
+            brilliantCount: 0,
+            blunderCount: 0,
+            engineMatchRate: 0,
+            cpLossStdDev: 0,
+            rating: null,
+          ),
+        );
         continue;
       }
 
       final signals = _collectSignals(timeline, username);
       accuracySum += signals.accuracy;
 
-      perGameAccuracy.add(GameAccuracy(
-        id: g.id,
-        white: g.whiteName,
-        black: g.blackName,
-        result: g.resultLabel,
-        accuracy: signals.accuracy,
-        brilliantCount:
-            timeline.qualityCounts[MoveQuality.brilliant] ?? 0,
-        blunderCount:
-            timeline.qualityCounts[MoveQuality.blunder] ?? 0,
-        engineMatchRate: signals.engineMatchRate,
-        cpLossStdDev: signals.cpLossStdDev,
-        rating: signals.rating,
-      ));
+      perGameAccuracy.add(
+        GameAccuracy(
+          id: g.id,
+          white: g.whiteName,
+          black: g.blackName,
+          result: g.resultLabel,
+          accuracy: signals.accuracy,
+          brilliantCount: timeline.qualityCounts[MoveQuality.brilliant] ?? 0,
+          blunderCount: timeline.qualityCounts[MoveQuality.blunder] ?? 0,
+          engineMatchRate: signals.engineMatchRate,
+          cpLossStdDev: signals.cpLossStdDev,
+          rating: signals.rating,
+        ),
+      );
     }
 
     if (cancellation?.isCancelled ?? false) {
       throw const ScanCancelledException();
     }
 
-    onProgress?.call(ScanProgress(
-      completed: toScan.length,
-      total: toScan.length,
-      currentPly: 1,
-      currentPlyTotal: 1,
-    ));
+    onProgress?.call(
+      ScanProgress(
+        completed: toScan.length,
+        total: toScan.length,
+        currentPly: 1,
+        currentPlyTotal: 1,
+      ),
+    );
 
     if (perGameAccuracy.isEmpty) {
       return ProfileScanResult(
@@ -210,21 +223,21 @@ class ProfileScannerService {
     }
 
     final avgAccuracy = accuracySum / perGameAccuracy.length;
-    final avgEngineMatch = perGameAccuracy
+    final avgEngineMatch =
+        perGameAccuracy
             .map((g) => g.engineMatchRate)
             .fold<double>(0, (s, v) => s + v) /
         perGameAccuracy.length;
-    final avgCpStdDev = perGameAccuracy
+    final avgCpStdDev =
+        perGameAccuracy
             .map((g) => g.cpLossStdDev)
             .fold<double>(0, (s, v) => s + v) /
         perGameAccuracy.length;
     final ratedGames = perGameAccuracy.where((g) => g.rating != null).toList();
     final avgRating = ratedGames.isEmpty
         ? null
-        : ratedGames
-                .map((g) => g.rating!)
-                .reduce((a, b) => a + b) ~/
-            ratedGames.length;
+        : ratedGames.map((g) => g.rating!).reduce((a, b) => a + b) ~/
+              ratedGames.length;
 
     // ── Composite suspicion score ────────────────────────────────
     //
@@ -242,41 +255,40 @@ class ProfileScannerService {
     //       when accuracy is > 85%.
     //
     // Each term is 0..1; final score is a weighted sum × 100.
-    final expectedAccuracy =
-        _expectedAccuracyForRating(avgRating ?? 1500);
-    final expectedMatch =
-        _expectedEngineMatchForRating(avgRating ?? 1500);
-    final accuracyExcess =
-        ((avgAccuracy - expectedAccuracy) / 15).clamp(0, 1).toDouble();
-    final matchExcess =
-        ((avgEngineMatch - expectedMatch) / 0.25).clamp(0, 1).toDouble();
+    final expectedAccuracy = _expectedAccuracyForRating(avgRating ?? 1500);
+    final expectedMatch = _expectedEngineMatchForRating(avgRating ?? 1500);
+    final accuracyExcess = ((avgAccuracy - expectedAccuracy) / 15)
+        .clamp(0, 1)
+        .toDouble();
+    final matchExcess = ((avgEngineMatch - expectedMatch) / 0.25)
+        .clamp(0, 1)
+        .toDouble();
     final flatness = (avgAccuracy >= 85 && avgCpStdDev < 3.0)
         ? ((3.0 - avgCpStdDev) / 3.0).clamp(0, 1).toDouble()
         : 0.0;
 
     final suspicionScore =
-        (0.45 * accuracyExcess + 0.40 * matchExcess + 0.15 * flatness) *
-            100;
+        (0.45 * accuracyExcess + 0.40 * matchExcess + 0.15 * flatness) * 100;
 
     final suspicion = suspicionScore >= 70
         ? SuspicionLevel.suspicious
         : suspicionScore >= 40
-            ? SuspicionLevel.moderate
-            : SuspicionLevel.clean;
+        ? SuspicionLevel.moderate
+        : SuspicionLevel.clean;
 
     final verdict = switch (suspicion) {
       SuspicionLevel.clean =>
         'Signals sit within the human band for ${avgRating ?? "this rating"} '
-        '— ${avgAccuracy.toStringAsFixed(0)}% accuracy, '
-        '${(avgEngineMatch * 100).toStringAsFixed(0)}% top-line match.',
+            '— ${avgAccuracy.toStringAsFixed(0)}% accuracy, '
+            '${(avgEngineMatch * 100).toStringAsFixed(0)}% top-line match.',
       SuspicionLevel.moderate =>
         'Elevated signals — ${avgAccuracy.toStringAsFixed(0)}% accuracy with '
-        '${(avgEngineMatch * 100).toStringAsFixed(0)}% engine agreement at '
-        '${avgRating ?? "the stated"} ELO. Flag for a human review.',
+            '${(avgEngineMatch * 100).toStringAsFixed(0)}% engine agreement at '
+            '${avgRating ?? "the stated"} ELO. Flag for a human review.',
       SuspicionLevel.suspicious =>
         'Accuracy and top-line match are well above the human band for '
-        '${avgRating ?? "this rating"} '
-        '(SD ${avgCpStdDev.toStringAsFixed(1)}%). Strong engine assistance signal.',
+            '${avgRating ?? "this rating"} '
+            '(SD ${avgCpStdDev.toStringAsFixed(1)}%). Strong engine assistance signal.',
     };
 
     return ProfileScanResult(
@@ -293,6 +305,8 @@ class ProfileScannerService {
       games: perGameAccuracy.reversed.toList(),
     );
   }
+
+  bool get _officialAccuracyPolicyAvailable => false;
 
   /// Baseline human accuracy curve. ~75% at 1500, ~92% at 2500.
   /// Beyond that the scale plateaus — top GMs rarely score above 96%
@@ -325,8 +339,9 @@ class ProfileScannerService {
     if (userIsWhite == null) {
       // Username not on either side of the header — fall back to
       // whole-game signals so the row still shows something.
-      final fallbackAcc =
-          (100 - timeline.averageCpLoss).clamp(0, 100).toDouble();
+      final fallbackAcc = (100 - timeline.averageCpLoss)
+          .clamp(0, 100)
+          .toDouble();
       return _Signals(
         accuracy: fallbackAcc,
         engineMatchRate: 0,
@@ -391,7 +406,6 @@ class ProfileScannerService {
     if (black == me) return false;
     return null;
   }
-
 }
 
 class _Signals {
@@ -406,5 +420,3 @@ class _Signals {
   final double cpLossStdDev;
   final int? rating;
 }
-
-

@@ -166,6 +166,14 @@ class ProfileScannerController extends Notifier<ProfileScannerState> {
         error: message,
         clearProgress: true,
       );
+    } on ProfileMetricUnavailableException {
+      if (gen != _generation || cancellation.isCancelled) return;
+      state = state.copyWith(
+        isLoading: false,
+        error:
+            'Opponent Insights is unavailable until Apex adopts a validated accuracy policy.',
+        clearProgress: true,
+      );
     } catch (_) {
       if (gen != _generation || cancellation.isCancelled) return;
       final message = await _scannerFailureMessage(

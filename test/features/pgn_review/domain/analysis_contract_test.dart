@@ -15,7 +15,9 @@ import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-const _fen = '8/8/8/8/8/8/8/8 w - - 0 1';
+const _fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+const _afterE4 = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+const _afterE5 = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2';
 
 void main() {
   test('request model normalizes source, mode, user side, and game key', () {
@@ -212,10 +214,10 @@ void main() {
       perspective: 'Alpha',
     );
 
-    expect(display.card.primaryMeta, '99% · Fast');
+    expect(display.card.primaryMeta, 'Metrics unavailable · Fast');
     expect(display.card.moveCountLabel, '1 moves');
     expect(display.card.secondaryMeta, contains('Chess.com'));
-    expect(display.subtitle, '99% · Fast · 1 moves');
+    expect(display.subtitle, 'Metrics unavailable · Fast · 1 moves');
   });
 
   test('canonical key is stable across modes and distinct across games', () {
@@ -330,7 +332,7 @@ AnalysisTimeline _timeline({String analysisProfileId = 'fast_review'}) {
         san: 'e4',
         uci: 'e2e4',
         fenBefore: _fen,
-        fenAfter: _fen,
+        fenAfter: _afterE4,
         targetSquare: 'e4',
         winPercentBefore: 50,
         winPercentAfter: 52,
@@ -343,8 +345,8 @@ AnalysisTimeline _timeline({String analysisProfileId = 'fast_review'}) {
         ply: 1,
         san: 'e5',
         uci: 'e7e5',
-        fenBefore: _fen,
-        fenAfter: _fen,
+        fenBefore: _afterE4,
+        fenAfter: _afterE5,
         targetSquare: 'e5',
         winPercentBefore: 52,
         winPercentAfter: 50,
@@ -372,6 +374,8 @@ AnalysisTimeline _timeline({String analysisProfileId = 'fast_review'}) {
     openingBookVersion: kApexOpeningBookVersion,
     analysisSchemaVersion: kApexAnalysisSchemaVersion,
     pgnHash: archiveIdForPgn(_pgn),
+    completionStatus: AnalysisCompletionStatus.complete,
+    expectedPlies: 2,
   );
 }
 

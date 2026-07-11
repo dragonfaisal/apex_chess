@@ -8,8 +8,6 @@
 /// from a real data source.").
 library;
 
-import 'dart:math' as math;
-
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
@@ -190,7 +188,7 @@ class PhaseBreakdown {
   final GamePhase phase;
   final int plies;
   final double averageCpLoss;
-  final double accuracyPct;
+  final double? accuracyPct;
 }
 
 /// Snapshot of the key ply types called out on the summary screen.
@@ -240,16 +238,16 @@ class ReviewSummary {
   });
 
   /// Lichess-style game accuracy for the user's plies (0–100).
-  final double userAccuracyPct;
+  final double? userAccuracyPct;
 
   /// Lichess-style game accuracy for the opponent's plies (0–100).
-  final double opponentAccuracyPct;
+  final double? opponentAccuracyPct;
 
   /// Mean centipawn loss across the user's plies.
-  final double userAverageCpLoss;
+  final double? userAverageCpLoss;
 
   /// Mean centipawn loss across the opponent's plies.
-  final double opponentAverageCpLoss;
+  final double? opponentAverageCpLoss;
 
   /// Counts for every classification tier (timeline-derived).
   final ReviewCounts counts;
@@ -301,31 +299,25 @@ class ReviewSummaryService {
     final whiteCpLoss = timeline.averageCpLossWhite;
     final blackCpLoss = timeline.averageCpLossBlack;
 
+    final whiteCount = timeline.cpLossEligibleCountWhite;
+    final blackCount = timeline.cpLossEligibleCountBlack;
     final userCpLoss = switch (userIsWhite) {
-      true => whiteCpLoss,
-      false => blackCpLoss,
-      null => (whiteCpLoss + blackCpLoss) / 2,
+      true => whiteCount == 0 ? null : whiteCpLoss,
+      false => blackCount == 0 ? null : blackCpLoss,
+      null => timeline.cpLossEligibleCount == 0 ? null : timeline.averageCpLoss,
     };
     final oppCpLoss = switch (userIsWhite) {
-      true => blackCpLoss,
-      false => whiteCpLoss,
-      null => (whiteCpLoss + blackCpLoss) / 2,
+      true => blackCount == 0 ? null : blackCpLoss,
+      false => whiteCount == 0 ? null : whiteCpLoss,
+      null => timeline.cpLossEligibleCount == 0 ? null : timeline.averageCpLoss,
     };
-
-    // Accuracy uses per-move Win% loss, Lichess-style. See
-    // [_moveAccuracyPct] for the formula.
-    final userAccuracy = _gameAccuracy(moves, userIsWhite: userIsWhite);
-    final oppAccuracy = _gameAccuracy(
-      moves,
-      userIsWhite: userIsWhite == null ? null : !userIsWhite,
-    );
 
     final phases = _phaseBreakdown(moves, userIsWhite: userIsWhite);
     final highlights = _highlights(moves, userIsWhite: userIsWhite);
 
     return ReviewSummary(
-      userAccuracyPct: userAccuracy,
-      opponentAccuracyPct: oppAccuracy,
+      userAccuracyPct: null,
+      opponentAccuracyPct: null,
       userAverageCpLoss: userCpLoss,
       opponentAverageCpLoss: oppCpLoss,
       counts: counts,
@@ -385,48 +377,6 @@ class ReviewSummaryService {
     );
   }
 
-  // ── Accuracy ────────────────────────────────────────────────────
-
-  /// Lichess-style per-move accuracy. Published at
-  /// https://lichess.org/page/accuracy as:
-  ///
-  ///   accuracy% = 103.1668 · exp(-0.04354 · winPctDelta) - 3.1669
-  ///
-  /// where `winPctDelta = max(0, winBefore_moverPOV - winAfter_moverPOV)`.
-  /// Clamped to `[0, 100]` so extreme swings don't push the value
-  /// negative.
-  static double _moveAccuracyPct(MoveAnalysis m) {
-    // `deltaW` on MoveAnalysis is **signed mover-POV** — positive
-    // means the move helped the mover, negative means it hurt. The
-    // Lichess formula only cares about the magnitude of the loss, so
-    // we clamp at zero.
-    final loss = m.deltaW < 0 ? -m.deltaW : 0.0;
-    final raw = 103.1668 * math.exp(-0.04354 * loss) - 3.1669;
-    return raw.clamp(0.0, 100.0);
-  }
-
-  /// Game-level accuracy: arithmetic mean over the specified side's
-  /// per-ply accuracy. Lichess uses a volatility-weighted harmonic
-  /// mean; we stick with a simpler arithmetic mean here because the
-  /// spec (§ 3 bullet 4) asks for "user accuracy %", not Lichess's
-  /// proprietary blend. When [userIsWhite] is `null` we average
-  /// every ply — the summary screen will render a "Colour unknown"
-  /// caveat rather than two distinct rows.
-  static double _gameAccuracy(
-    List<MoveAnalysis> moves, {
-    required bool? userIsWhite,
-  }) {
-    final relevant = userIsWhite == null
-        ? moves
-        : moves.where((m) => m.isWhiteMove == userIsWhite).toList();
-    if (relevant.isEmpty) return 0;
-    double total = 0;
-    for (final m in relevant) {
-      total += _moveAccuracyPct(m);
-    }
-    return total / relevant.length;
-  }
-
   // ── Phases ──────────────────────────────────────────────────────
 
   static List<PhaseBreakdown> _phaseBreakdown(
@@ -435,26 +385,26 @@ class ReviewSummaryService {
   }) {
     int openP = 0, midP = 0, endP = 0;
     double openL = 0, midL = 0, endL = 0;
-    double openAcc = 0, midAcc = 0, endAcc = 0;
-
     for (final m in moves) {
       if (userIsWhite != null && m.isWhiteMove != userIsWhite) continue;
+      if (!m.engineEvaluationAvailable ||
+          m.inBook ||
+          m.classification == MoveQuality.book ||
+          m.moverCpLoss == null) {
+        continue;
+      }
       final phase = _phaseForPly(m.ply);
-      final loss = m.deltaW < 0 ? -m.deltaW : 0.0;
-      final acc = _moveAccuracyPct(m);
+      final loss = m.moverCpLoss!.clamp(0, 100000).toDouble();
       switch (phase) {
         case GamePhase.opening:
           openP++;
           openL += loss;
-          openAcc += acc;
         case GamePhase.middlegame:
           midP++;
           midL += loss;
-          midAcc += acc;
         case GamePhase.endgame:
           endP++;
           endL += loss;
-          endAcc += acc;
       }
     }
 
@@ -463,19 +413,19 @@ class ReviewSummaryService {
         phase: GamePhase.opening,
         plies: openP,
         averageCpLoss: openP == 0 ? 0 : openL / openP,
-        accuracyPct: openP == 0 ? 0 : openAcc / openP,
+        accuracyPct: null,
       ),
       PhaseBreakdown(
         phase: GamePhase.middlegame,
         plies: midP,
         averageCpLoss: midP == 0 ? 0 : midL / midP,
-        accuracyPct: midP == 0 ? 0 : midAcc / midP,
+        accuracyPct: null,
       ),
       PhaseBreakdown(
         phase: GamePhase.endgame,
         plies: endP,
         averageCpLoss: endP == 0 ? 0 : endL / endP,
-        accuracyPct: endP == 0 ? 0 : endAcc / endP,
+        accuracyPct: null,
       ),
     ];
   }

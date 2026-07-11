@@ -40,13 +40,13 @@ class RecentScanDisplay {
         resultTone: base.resultTone,
         white: base.white,
         black: base.black,
-        primaryMeta: '${payload.accuracyLabel}% · ${payload.reviewModeLabel}',
+        primaryMeta: '${payload.accuracyLabel} · ${payload.reviewModeLabel}',
         moveCountLabel: '${payload.moveCount} moves',
         secondaryMeta: '${payload.sourceLabel} · ${game.relativePlayedAt}',
       ),
       accuracy: payload.accuracyLabel,
       summary:
-          '${payload.accuracyLabel}% · '
+          '${payload.accuracyLabel} · '
           '${payload.reviewModeLabel} · ${payload.moveCount} moves',
     );
   }

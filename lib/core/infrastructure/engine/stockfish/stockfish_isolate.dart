@@ -111,8 +111,7 @@ Future<void> stockfishIsolateEntry(StockfishIsolateInit init) async {
   final shutdownCompleter = Completer<void>();
 
   final versionPtr = bindings.version();
-  final version =
-      versionPtr == nullptr ? 'unknown' : versionPtr.toDartString();
+  final version = versionPtr == nullptr ? 'unknown' : versionPtr.toDartString();
 
   init.mainSendPort.send(
     StockfishIsolateReady(
@@ -166,10 +165,16 @@ Future<void> stockfishIsolateEntry(StockfishIsolateInit init) async {
         Pointer<Utf8>? utf;
         try {
           utf = line.toNativeUtf8();
-          bindings.write(handle, utf);
+          final written = bindings.write(handle, utf);
+          if (written < 0) {
+            throw StateError('stockfish_write rejected the active session');
+          }
         } on Object {
-          init.mainSendPort.send(StockfishIsolateError(
-              'native write failed for line: ${_redact(line)}'));
+          init.mainSendPort.send(
+            StockfishIsolateError(
+              'native write failed for line: ${_redact(line)}',
+            ),
+          );
         } finally {
           if (utf != null) {
             try {

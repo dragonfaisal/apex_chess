@@ -9,6 +9,7 @@
 library;
 
 import 'package:apex_chess/core/domain/entities/engine_line.dart';
+import 'package:apex_chess/core/domain/entities/position_evaluation.dart';
 import 'package:apex_chess/core/domain/services/win_percent_calculator.dart';
 import 'package:apex_chess/infrastructure/api/lichess_cloud_eval_client.dart';
 
@@ -16,43 +17,7 @@ import 'package:apex_chess/infrastructure/api/lichess_cloud_eval_client.dart';
 // Eval Result (normalized to White's POV)
 // ─────────────────────────────────────────────────────────────────────────────
 
-class CloudEvalSnapshot {
-  /// Centipawns of the best line, White's POV.
-  final int? scoreCp;
-
-  /// Mate-in for the best line, White's POV.
-  final int? mateIn;
-
-  /// Centipawns of the second-best line, White's POV. `null` when
-  /// Lichess only returned a single PV.
-  final int? secondBestCp;
-
-  /// Mate-in for the second-best line, White's POV.
-  final int? secondBestMate;
-
-  /// Search depth achieved in the cloud.
-  final int depth;
-
-  /// Best move in UCI (e.g., "e2e4").
-  final String? bestMoveUci;
-
-  /// Principal variation (list of UCI moves).
-  final List<String> pvMoves;
-
-  /// Ranked candidate lines when the backend supplied MultiPV.
-  final List<EngineLine> engineLines;
-
-  const CloudEvalSnapshot({
-    this.scoreCp,
-    this.mateIn,
-    this.secondBestCp,
-    this.secondBestMate,
-    required this.depth,
-    this.bestMoveUci,
-    this.pvMoves = const [],
-    this.engineLines = const <EngineLine>[],
-  });
-}
+typedef CloudEvalSnapshot = PositionEvaluation;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Error States
@@ -147,6 +112,9 @@ class CloudEvalService {
           bestMoveUci: bestMove,
           pvMoves: result.pvMoves,
           engineLines: engineLines,
+          positionFen: fen,
+          requestedMultiPv: multiPv,
+          engineVersion: 'lichess-cloud',
         ),
         null,
       );

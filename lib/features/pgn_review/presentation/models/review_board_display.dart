@@ -155,12 +155,12 @@ class ReviewEvalDisplay {
   bool get isEqual => !whiteBetter && !blackBetter;
 
   factory ReviewEvalDisplay.fromMove(MoveAnalysis? move) {
-    if (move == null) {
+    if (move == null || !move.engineEvaluationAvailable) {
       return const ReviewEvalDisplay(
         whiteShare: 0.5,
         label: '-',
-        percentageLabel: '50%',
-        advantageLabel: 'Equal',
+        percentageLabel: '—',
+        advantageLabel: 'Evaluation unavailable',
         isKnown: false,
       );
     }

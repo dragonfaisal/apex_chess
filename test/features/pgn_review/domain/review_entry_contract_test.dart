@@ -6,7 +6,8 @@ import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/pgn_review/domain/review_entry_contract.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-const _fen = '8/8/8/8/8/8/8/8 w - - 0 1';
+const _fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+const _afterE4 = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
 
 void main() {
   test('import and PGN intents analyze before mutating review state', () {
@@ -77,7 +78,7 @@ ArchivedGame _gameWithTimeline() {
         san: 'e4',
         uci: 'e2e4',
         fenBefore: _fen,
-        fenAfter: _fen,
+        fenAfter: _afterE4,
         targetSquare: 'e4',
         winPercentBefore: 50,
         winPercentAfter: 52,
@@ -89,6 +90,8 @@ ArchivedGame _gameWithTimeline() {
     ],
     headers: const {'White': 'White', 'Black': 'Black', 'Result': '1-0'},
     winPercentages: const [52],
+    completionStatus: AnalysisCompletionStatus.complete,
+    expectedPlies: 1,
   );
   return ArchivedGame(
     id: 'saved',

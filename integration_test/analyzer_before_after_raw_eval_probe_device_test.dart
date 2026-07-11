@@ -2,8 +2,6 @@ import 'dart:ffi';
 import 'dart:io';
 
 import 'package:apex_chess/features/analysis/domain/analyzer_before_after_raw_eval.dart';
-import 'package:apex_chess/features/analysis/domain/analyzer_raw_eval_result.dart';
-import 'package:apex_chess/features/analysis/domain/analyzer_single_fen_raw_eval.dart';
 import 'package:apex_chess/infrastructure/engine/local_analyzer_before_after_raw_eval_probe.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';

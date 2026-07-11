@@ -76,6 +76,8 @@ void main() {
       ],
       winPercentages: [52.0, 50.0],
       headers: const {'White': 'A', 'Black': 'B', 'Result': '*'},
+      completionStatus: AnalysisCompletionStatus.complete,
+      expectedPlies: 2,
     );
 
     final game = ArchivedGame.fromTimeline(
@@ -141,16 +143,33 @@ void main() {
   test('current-version record with cached timeline reports cache current', () {
     final timeline = AnalysisTimeline(
       startingFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
-      moves: const [],
-      winPercentages: const [],
+      moves: const [
+        MoveAnalysis(
+          ply: 0,
+          san: 'e4',
+          uci: 'e2e4',
+          fenBefore: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+          fenAfter:
+              'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+          winPercentBefore: 50,
+          winPercentAfter: 50,
+          deltaW: 0,
+          isWhiteMove: true,
+          classification: MoveQuality.best,
+          message: '',
+        ),
+      ],
+      winPercentages: const [50],
       headers: const {'White': 'A', 'Black': 'B', 'Result': '*'},
+      completionStatus: AnalysisCompletionStatus.complete,
+      expectedPlies: 1,
     );
     final game = ArchivedGame.fromTimeline(
       timeline: timeline,
       id: 'fresh-id',
       source: ArchiveSource.pgn,
       depth: 14,
-      pgn: '*',
+      pgn: '1. e4 *',
     );
     expect(game.classifierVersion, kClassifierVersion);
     expect(game.isCacheCurrent, isTrue);
@@ -217,6 +236,8 @@ void main() {
         ],
         winPercentages: const [52.0],
         headers: const {'White': 'A', 'Black': 'B', 'Result': '*'},
+        completionStatus: AnalysisCompletionStatus.complete,
+        expectedPlies: 1,
       );
       final game = ArchivedGame(
         id: 'divergent',
@@ -291,6 +312,8 @@ void main() {
       ],
       winPercentages: const [50, 0, 75],
       headers: const {'White': 'A', 'Black': 'B', 'Result': '0-1'},
+      completionStatus: AnalysisCompletionStatus.complete,
+      expectedPlies: 3,
     );
     final game = ArchivedGame.fromTimeline(
       timeline: timeline,

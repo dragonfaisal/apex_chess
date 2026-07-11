@@ -13,6 +13,7 @@
 ///      `AnalysisTimeline.averageCpLoss{White,Black}` extensions used
 ///      by the archive card.
 library;
+
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
@@ -27,36 +28,45 @@ void main() {
       // Canonical case: analyzer pipeline synthesised `mateIn = 1`
       // (from White's POV) because the post-move position is
       // checkmate and White is the mover.
-      final cls = classifier.classify(const MoveClassificationInput(
-        isWhiteMove: true,
-        prevWhiteCp: 550,
-        prevWhiteMate: null,
-        currWhiteCp: null,
-        currWhiteMate: 1,
-        engineBestMoveUci: 'd1h5',
-        playedMoveUci: 'd1h5',
-      ));
+      final cls = classifier.classify(
+        const MoveClassificationInput(
+          isWhiteMove: true,
+          prevWhiteCp: 550,
+          prevWhiteMate: null,
+          currWhiteCp: null,
+          currWhiteMate: 1,
+          engineBestMoveUci: 'd1h5',
+          playedMoveUci: 'd1h5',
+        ),
+      );
       expect(cls.quality, isNot(MoveQuality.blunder));
     });
 
     test(
-        'Opponent (Black) delivering mate vs White is NOT Blunder on Black',
-        () {
-      // Black's turn; Black plays a move that checkmates White.
-      // Synthetic `mateIn = -1` (white POV — favourable to Black).
-      final cls = classifier.classify(const MoveClassificationInput(
-        isWhiteMove: false,
-        prevWhiteCp: -550,
-        prevWhiteMate: null,
-        currWhiteCp: null,
-        currWhiteMate: -1,
-        engineBestMoveUci: 'h4h1',
-        playedMoveUci: 'h4h1',
-      ));
-      expect(cls.quality, isNot(MoveQuality.blunder),
-          reason: 'Opponent (Black) mate delivery must not be attributed '
-              'as a blunder — the previous White ply gets the blame.');
-    });
+      'Opponent (Black) delivering mate vs White is NOT Blunder on Black',
+      () {
+        // Black's turn; Black plays a move that checkmates White.
+        // Synthetic `mateIn = -1` (white POV — favourable to Black).
+        final cls = classifier.classify(
+          const MoveClassificationInput(
+            isWhiteMove: false,
+            prevWhiteCp: -550,
+            prevWhiteMate: null,
+            currWhiteCp: null,
+            currWhiteMate: -1,
+            engineBestMoveUci: 'h4h1',
+            playedMoveUci: 'h4h1',
+          ),
+        );
+        expect(
+          cls.quality,
+          isNot(MoveQuality.blunder),
+          reason:
+              'Opponent (Black) mate delivery must not be attributed '
+              'as a blunder — the previous White ply gets the blame.',
+        );
+      },
+    );
   });
 
   group('Quick mode (suppressTrophyTiers)', () {
@@ -110,11 +120,9 @@ void main() {
         final cls = classifier.classify(in_);
         expect(
           cls.quality,
-          isNot(anyOf(
-            MoveQuality.brilliant,
-            MoveQuality.great,
-            MoveQuality.forced,
-          )),
+          isNot(
+            anyOf(MoveQuality.brilliant, MoveQuality.great, MoveQuality.forced),
+          ),
           reason:
               'suppressTrophyTiers must block all trophy tiers; got '
               '${cls.quality}',
@@ -141,17 +149,19 @@ void main() {
       // Without suppression the brain MAY fire Forced; with
       // suppression it MUST NOT.
       final deep = classifier.classify(in_);
-      final quick = classifier.classify(const MoveClassificationInput(
-        isWhiteMove: true,
-        prevWhiteCp: -200,
-        prevWhiteMate: null,
-        currWhiteCp: -210,
-        currWhiteMate: null,
-        engineBestMoveUci: 'g1h1',
-        playedMoveUci: 'g1h1',
-        multiPvWhiteWinPercents: [30, 5, 4],
-        suppressTrophyTiers: true,
-      ));
+      final quick = classifier.classify(
+        const MoveClassificationInput(
+          isWhiteMove: true,
+          prevWhiteCp: -200,
+          prevWhiteMate: null,
+          currWhiteCp: -210,
+          currWhiteMate: null,
+          engineBestMoveUci: 'g1h1',
+          playedMoveUci: 'g1h1',
+          multiPvWhiteWinPercents: [30, 5, 4],
+          suppressTrophyTiers: true,
+        ),
+      );
       expect(quick.quality, isNot(MoveQuality.forced));
       // `deep` is informational — we don't hard-pin it.
       // Fail loud if suppression somehow *adds* a trophy tier:
@@ -167,9 +177,7 @@ void main() {
 
   group('AnalysisTimeline per-colour ACPL', () {
     test('averageCpLoss{White,Black} splits per-side plies correctly', () {
-      // Hand-rolled tiny timeline: 4 plies, deltas alternate.
-      // White: -0.20, 0.0 → losses sum 0.20 over 2 plies = avg 0.10.
-      // Black: -0.40, 0.0 → losses sum 0.40 over 2 plies = avg 0.20.
+      // Hand-rolled tiny timeline: true mover-POV cp loss is averaged.
       final moves = <MoveAnalysis>[
         _move(isWhite: true, deltaW: -0.20),
         _move(isWhite: false, deltaW: -0.40),
@@ -182,8 +190,8 @@ void main() {
         moves: moves,
         winPercentages: const [50, 40, 38, 50, 52],
       );
-      expect(tl.averageCpLossWhite, closeTo(0.10, 1e-9));
-      expect(tl.averageCpLossBlack, closeTo(0.20, 1e-9));
+      expect(tl.averageCpLossWhite, closeTo(10, 1e-9));
+      expect(tl.averageCpLossBlack, closeTo(20, 1e-9));
     });
 
     test('Empty timeline returns zero for both colours', () {
@@ -213,6 +221,7 @@ MoveAnalysis _move({required bool isWhite, required double deltaW}) =>
       winPercentBefore: 50,
       winPercentAfter: 50,
       deltaW: deltaW,
+      moverCpLoss: deltaW < 0 ? (-deltaW * 100).round() : 0,
       engineBestMoveUci: null,
       engineBestMoveSan: null,
       message: '',

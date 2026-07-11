@@ -315,7 +315,15 @@ class ArchiveState {
         collapsed.sort((a, b) => b.blunderCount.compareTo(a.blunderCount));
         break;
       case ArchiveSort.highestAccuracy:
-        collapsed.sort((a, b) => a.averageCpLoss.compareTo(b.averageCpLoss));
+        collapsed.sort((a, b) {
+          if (a.hasVerifiedCpLoss != b.hasVerifiedCpLoss) {
+            return a.hasVerifiedCpLoss ? -1 : 1;
+          }
+          if (!a.hasVerifiedCpLoss) {
+            return b.analyzedAt.compareTo(a.analyzedAt);
+          }
+          return a.averageCpLoss.compareTo(b.averageCpLoss);
+        });
         break;
     }
     return collapsed;
@@ -383,6 +391,7 @@ class ArchiveController extends Notifier<ArchiveState> {
     String id,
     AnalysisTimeline timeline,
   ) async {
+    if (!timeline.isComplete) return;
     final repo = await ref.read(archiveRepositoryProvider.future);
     final existing = repo.find(id);
     if (existing == null) return;
@@ -403,6 +412,7 @@ class ArchiveController extends Notifier<ArchiveState> {
       // "archive Brilliant count doesn't match timeline" fix.
       qualityCounts: timeline.qualityCounts,
       averageCpLoss: timeline.averageCpLoss,
+      cpLossSampleCount: timeline.cpLossEligibleCount,
       totalPlies: timeline.totalPlies,
       openingName: existing.openingName,
       ecoCode: existing.ecoCode,
