@@ -8,6 +8,7 @@
 /// degradation, not a functional break.
 library;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
@@ -17,6 +18,7 @@ import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/features/pgn_review/domain/analysis_contract.dart';
 
 import '../domain/archived_game.dart';
+import '../domain/review_document.dart';
 import '../presentation/controllers/archive_controller.dart';
 
 /// Stable id derived from the PGN text. Uses the shared FNV cache hash so
@@ -61,6 +63,7 @@ Future<String?> saveAnalysisToArchive({
   DateTime? playedAt,
   AnalysisMode analysisMode = AnalysisMode.deep,
   String? timeControl,
+  bool? userIsWhite,
 }) async {
   try {
     if (!timeline.isComplete) return null;
@@ -73,16 +76,22 @@ Future<String?> saveAnalysisToArchive({
       playedAt: playedAt,
       timeControl: timeControl,
     );
-    final game = archivedGameFromAnalysisPayload(
-      payload,
-      depth: depth,
-      source: source,
-      analysisMode: analysisMode,
+    final document = ReviewDocument.fromCompletedTimeline(
+      pgn: pgn,
+      timeline: timeline,
+      sourceProvider: source.wire,
+      sourceGameId: payload.sourceId,
+      importedAt: playedAt,
+      userIsWhite: userIsWhite ?? payload.userIsWhite,
+      createdAt: payload.createdAt,
+      timeControl: timeControl,
     );
-    await ref.read(archiveControllerProvider.notifier).save(game);
-    return game.id;
-  } catch (_) {
+    return await ref
+        .read(archiveControllerProvider.notifier)
+        .saveReviewDocument(document);
+  } catch (error) {
     // Archive save is best-effort — never block the review flow.
+    debugPrint('Archive save failed: ${error.runtimeType}: $error');
     return null;
   }
 }

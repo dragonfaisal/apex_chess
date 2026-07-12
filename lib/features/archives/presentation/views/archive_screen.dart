@@ -135,8 +135,34 @@ class _ArchiveScreenState extends ConsumerState<ArchiveScreen> {
   Future<void> _openArchivedGame(
     BuildContext context,
     WidgetRef ref,
-    ArchivedGame game,
+    ArchivedGame archiveEntry,
   ) async {
+    var game = archiveEntry;
+    if (archiveEntry.isUnavailable) {
+      showApexGlassToast(
+        context,
+        message: ApexCopy.savedReviewUnavailable,
+        detail: archiveEntry.unavailableReason,
+        type: ApexGlassToastType.warning,
+      );
+      return;
+    }
+    if (archiveEntry.canResolveCanonicalDocument &&
+        archiveEntry.cachedTimeline == null) {
+      final resolved = await ref
+          .read(archiveControllerProvider.notifier)
+          .resolveExact(archiveEntry.id);
+      if (!context.mounted) return;
+      if (resolved == null) {
+        showApexGlassToast(
+          context,
+          message: ApexCopy.savedReviewUnavailable,
+          type: ApexGlassToastType.warning,
+        );
+        return;
+      }
+      game = resolved;
+    }
     // Phase 6 instant-reopen: if the saved record carries a *current*
     // cached timeline, push the review screen straight away without
     // spawning the engine. Phase A audit: stale-cache invalidation —
@@ -247,6 +273,9 @@ class _ArchiveScreenState extends ConsumerState<ArchiveScreen> {
   /// (case-insensitive). Falls back to `false` (White-at-bottom) when
   /// no account is connected — same default as a raw PGN import.
   static bool _userIsBlack(WidgetRef ref, ArchivedGame game) {
+    if (game.recordKind == ArchivedRecordKind.canonicalDocument) {
+      return game.analyzedUserIsWhite == false;
+    }
     final account = ref.read(accountControllerProvider).valueOrNull;
     final me = account?.username.trim().toLowerCase();
     if (me == null || me.isEmpty) return false;
@@ -258,6 +287,9 @@ class _ArchiveScreenState extends ConsumerState<ArchiveScreen> {
   /// variants instead of attributing "Allowed forced mate" blame to
   /// a colour we only guessed at.
   static bool _userColorKnown(WidgetRef ref, ArchivedGame game) {
+    if (game.recordKind == ArchivedRecordKind.canonicalDocument) {
+      return game.analyzedUserIsWhite != null;
+    }
     final account = ref.read(accountControllerProvider).valueOrNull;
     final me = account?.username.trim().toLowerCase();
     if (me == null || me.isEmpty) return false;

@@ -66,6 +66,12 @@ enum ArchiveSource {
   }
 }
 
+/// Storage role for the Archive compatibility model.
+///
+/// [ArchivedGame] remains the bounded list/presentation model while canonical
+/// saved analysis is owned by ReviewDocument in the new store.
+enum ArchivedRecordKind { legacy, canonicalDocument, unavailable }
+
 /// Immutable, serialisable record of one analyzed game.
 class ArchivedGame {
   /// Stable identifier — SHA1 of the normalized PGN. Avoids storing
@@ -108,6 +114,18 @@ class ArchivedGame {
   final int openingBookVersion;
   final int analysisSchemaVersion;
   final String? timeControl;
+  final int? analysisMovetimeMs;
+  final int? analysisMultiPv;
+  final bool candidateVerificationEnabled;
+
+  /// Canonical-store references. These are absent on untouched legacy rows.
+  final ArchivedRecordKind recordKind;
+  final String? canonicalGameId;
+  final String? analysisVariantId;
+  final bool? analyzedUserIsWhite;
+  final String? engineIdentity;
+  final bool canonicalIndexVerified;
+  final String? unavailableReason;
 
   /// Per-classification counts. **Derived from the cached timeline**
   /// (when present) via [qualityCountsLive] so the counts can never
@@ -161,6 +179,16 @@ class ArchivedGame {
     this.openingBookVersion = kApexOpeningBookVersion,
     this.analysisSchemaVersion = kApexAnalysisSchemaVersion,
     this.timeControl,
+    this.analysisMovetimeMs,
+    this.analysisMultiPv,
+    this.candidateVerificationEnabled = false,
+    this.recordKind = ArchivedRecordKind.legacy,
+    this.canonicalGameId,
+    this.analysisVariantId,
+    this.analyzedUserIsWhite,
+    this.engineIdentity,
+    this.canonicalIndexVerified = false,
+    this.unavailableReason,
   }) : analysisProfileId =
            analysisProfileId ??
            (analysisMode == AnalysisMode.quick ? 'fast_review' : 'deep_review');
@@ -181,6 +209,20 @@ class ArchivedGame {
       cachedTimeline!.isComplete &&
       (cacheKey == null || cachedTimeline!.cacheKey == cacheKey);
 
+  bool get canResolveCanonicalDocument =>
+      recordKind == ArchivedRecordKind.canonicalDocument &&
+      canonicalIndexVerified &&
+      canonicalGameId != null &&
+      analysisVariantId != null;
+
+  bool get isCanonicalPolicyCurrent =>
+      classifierVersion == kApexClassifierVersion &&
+      tacticalVerifierVersion == kApexTacticalVerifierVersion &&
+      openingBookVersion == kApexOpeningBookVersion &&
+      analysisSchemaVersion == kApexAnalysisSchemaVersion;
+
+  bool get isUnavailable => recordKind == ArchivedRecordKind.unavailable;
+
   AnalysisProfile get analysisProfile =>
       AnalysisProfile.fromWire(analysisProfileId);
 
@@ -188,12 +230,21 @@ class ArchivedGame {
   /// present, falling back to the persisted `qualityCounts` map for
   /// older records that pre-date the Phase A integration audit.
   Map<MoveQuality, int> get qualityCountsLive {
+    if (canResolveCanonicalDocument &&
+        isCanonicalPolicyCurrent &&
+        cachedTimeline == null) {
+      return Map<MoveQuality, int>.unmodifiable(qualityCounts);
+    }
     if (!isCacheCurrent) return const <MoveQuality, int>{};
     return cachedTimeline!.qualityCounts;
   }
 
   bool get hasVerifiedCpLoss =>
-      isCacheCurrent && cachedTimeline!.hasVerifiedCpLoss;
+      (canResolveCanonicalDocument &&
+          isCanonicalPolicyCurrent &&
+          cachedTimeline == null &&
+          cpLossSampleCount > 0) ||
+      (isCacheCurrent && cachedTimeline!.hasVerifiedCpLoss);
 
   // All count getters route through [qualityCountsLive] so they reflect
   // the *actual* classifications stored in the timeline. The legacy
@@ -235,14 +286,30 @@ class ArchivedGame {
     _ => 'Deep',
   };
 
-  String get canonicalGameKey => canonicalKeyFor(
-    pgn: pgn,
-    pgnHash: pgnHash,
-    white: white,
-    black: black,
-    result: result,
-    playedAt: playedAt,
-  );
+  String? get compactEngineLabel {
+    final value = engineIdentity?.trim();
+    if (value == null || value.isEmpty || value == 'unknown') return null;
+    final parts = value.split('|');
+    return parts.last.trim();
+  }
+
+  String? get archiveTrustLabel => switch (recordKind) {
+    ArchivedRecordKind.canonicalDocument =>
+      isCanonicalPolicyCurrent ? null : 'Historic analysis',
+    ArchivedRecordKind.legacy => 'Legacy review',
+    ArchivedRecordKind.unavailable => 'Unavailable',
+  };
+
+  String get canonicalGameKey =>
+      canonicalGameId ??
+      canonicalKeyFor(
+        pgn: pgn,
+        pgnHash: pgnHash,
+        white: white,
+        black: black,
+        result: result,
+        playedAt: playedAt,
+      );
 
   static String canonicalKeyFor({
     required String pgn,
@@ -285,9 +352,28 @@ class ArchivedGame {
     return out;
   }
 
+  /// Archive-specific listing: canonical analysis variants coexist, while
+  /// duplicate legacy rows still collapse to their preferred visible record.
+  static List<ArchivedGame> preserveAnalysisVariants(
+    Iterable<ArchivedGame> games,
+  ) {
+    final canonical = <String, ArchivedGame>{};
+    final legacy = <ArchivedGame>[];
+    for (final game in games) {
+      if (game.recordKind == ArchivedRecordKind.canonicalDocument) {
+        canonical[game.id] = game;
+      } else {
+        legacy.add(game);
+      }
+    }
+    final out = [...canonical.values, ...collapseCanonical(legacy)]
+      ..sort((a, b) => b.analyzedAt.compareTo(a.analyzedAt));
+    return out;
+  }
+
   bool isPreferredVisibleRecordOver(ArchivedGame other) {
-    final modeCompare = _modeRank.compareTo(other._modeRank);
-    if (modeCompare != 0) return modeCompare > 0;
+    final evidenceCompare = compareAnalysisStrengthTo(other);
+    if (evidenceCompare != 0) return evidenceCompare > 0;
     final cacheCompare = _cacheRank.compareTo(other._cacheRank);
     if (cacheCompare != 0) return cacheCompare > 0;
     final sourceCompare = _sourceRank.compareTo(other._sourceRank);
@@ -299,12 +385,20 @@ class ArchivedGame {
     return analyzedAt.isAfter(other.analyzedAt);
   }
 
-  int get _modeRank {
-    final profile = analysisProfileId.trim();
-    if (profile == 'deep_review') return 3;
-    if (profile == 'offline_review') return 2;
-    if (profile == 'fast_review') return 1;
-    return analysisMode == AnalysisMode.deep ? 3 : 1;
+  /// Compares concrete requested/achieved evidence without interpreting a
+  /// display label such as "Fast" or "Deep" as a strength guarantee.
+  int compareAnalysisStrengthTo(ArchivedGame other) {
+    for (final comparison in <int>[
+      depth.compareTo(other.depth),
+      (analysisMultiPv ?? 0).compareTo(other.analysisMultiPv ?? 0),
+      (candidateVerificationEnabled ? 1 : 0).compareTo(
+        other.candidateVerificationEnabled ? 1 : 0,
+      ),
+      (analysisMovetimeMs ?? 0).compareTo(other.analysisMovetimeMs ?? 0),
+    ]) {
+      if (comparison != 0) return comparison;
+    }
+    return 0;
   }
 
   int get _cacheRank => isCacheCurrent ? 2 : (cachedTimeline == null ? 0 : 1);
@@ -315,6 +409,9 @@ class ArchivedGame {
   };
 
   bool? userIsBlackFor(String? userHandle) {
+    if (recordKind == ArchivedRecordKind.canonicalDocument) {
+      return analyzedUserIsWhite == null ? null : !analyzedUserIsWhite!;
+    }
     final me = userHandle?.trim().toLowerCase();
     if (me == null || me.isEmpty) return null;
     if (black.trim().toLowerCase() == me) return true;
@@ -418,6 +515,16 @@ class ArchivedGame {
     'openingBookVersion': openingBookVersion,
     'analysisSchemaVersion': analysisSchemaVersion,
     'timeControl': timeControl,
+    'analysisMovetimeMs': analysisMovetimeMs,
+    'analysisMultiPv': analysisMultiPv,
+    'candidateVerificationEnabled': candidateVerificationEnabled,
+    'recordKind': recordKind.name,
+    'canonicalGameId': canonicalGameId,
+    'analysisVariantId': analysisVariantId,
+    'analyzedUserIsWhite': analyzedUserIsWhite,
+    'engineIdentity': engineIdentity,
+    'canonicalIndexVerified': canonicalIndexVerified,
+    'unavailableReason': unavailableReason,
     if (cachedTimeline != null) 'cachedTimeline': cachedTimeline!.toJson(),
   };
 
@@ -470,6 +577,20 @@ class ArchivedGame {
       openingBookVersion: (j['openingBookVersion'] as num?)?.toInt() ?? 1,
       analysisSchemaVersion: (j['analysisSchemaVersion'] as num?)?.toInt() ?? 1,
       timeControl: j['timeControl'] as String?,
+      analysisMovetimeMs: (j['analysisMovetimeMs'] as num?)?.toInt(),
+      analysisMultiPv: (j['analysisMultiPv'] as num?)?.toInt(),
+      candidateVerificationEnabled:
+          j['candidateVerificationEnabled'] as bool? ?? false,
+      recordKind: ArchivedRecordKind.values.firstWhere(
+        (value) => value.name == j['recordKind'],
+        orElse: () => ArchivedRecordKind.legacy,
+      ),
+      canonicalGameId: j['canonicalGameId'] as String?,
+      analysisVariantId: j['analysisVariantId'] as String?,
+      analyzedUserIsWhite: j['analyzedUserIsWhite'] as bool?,
+      engineIdentity: j['engineIdentity'] as String?,
+      canonicalIndexVerified: j['canonicalIndexVerified'] as bool? ?? false,
+      unavailableReason: j['unavailableReason'] as String?,
     );
   }
 
@@ -515,6 +636,9 @@ class ArchivedGame {
       openingBookVersion: timeline.openingBookVersion,
       analysisSchemaVersion: timeline.analysisSchemaVersion,
       timeControl: timeControl ?? h['TimeControl'],
+      analysisMovetimeMs: timeline.movetimeMs,
+      analysisMultiPv: timeline.multipv,
+      candidateVerificationEnabled: timeline.candidateVerificationEnabled,
     );
   }
 

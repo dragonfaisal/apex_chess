@@ -41,6 +41,10 @@ class LogoutService {
   Future<void> _wipeHive() async {
     for (final name in const [
       ArchiveRepository.boxName,
+      ArchiveRepository.documentBoxName,
+      ArchiveRepository.indexBoxName,
+      ArchiveRepository.migrationBoxName,
+      ArchiveRepository.quarantineBoxName,
       MistakeVaultRepository.boxName,
     ]) {
       try {

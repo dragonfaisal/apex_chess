@@ -82,4 +82,36 @@ void main() {
       expect(model.badges, isEmpty);
     },
   );
+
+  test('canonical card uses saved perspective and compact provenance', () {
+    final canonical = ArchivedGame(
+      id: 'review-1',
+      source: ArchiveSource.pgn,
+      white: 'Alpha',
+      black: 'Beta',
+      result: '0-1',
+      analyzedAt: DateTime(2026, 7, 11),
+      depth: 14,
+      pgn: '',
+      qualityCounts: const {MoveQuality.best: 1},
+      averageCpLoss: 12,
+      cpLossSampleCount: 1,
+      totalPlies: 2,
+      analysisProfileId: 'fast_review',
+      recordKind: ArchivedRecordKind.canonicalDocument,
+      canonicalGameId: 'game-id',
+      analysisVariantId: 'variant-id',
+      analyzedUserIsWhite: false,
+      engineIdentity: 'apex-stockfish-bridge/0.3.0|Stockfish 17',
+      canonicalIndexVerified: true,
+    );
+
+    final model = canonical.toApexGameCardDisplay(userHandle: 'alpha');
+    expect(model.white.isUser, isFalse);
+    expect(model.black.isUser, isTrue);
+    expect(model.secondaryMeta, contains('Fast'));
+    expect(model.secondaryMeta, contains('Stockfish 17'));
+    expect(model.secondaryMeta, contains('ACPL 12.0'));
+    expect(model.secondaryMeta, isNot(contains('Legacy review')));
+  });
 }

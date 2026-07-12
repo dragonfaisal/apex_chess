@@ -4,6 +4,7 @@ import 'package:apex_chess/core/domain/entities/move_analysis.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/features/archives/data/archive_save_hook.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
+import 'package:apex_chess/features/archives/domain/review_document.dart';
 import 'package:apex_chess/features/archives/presentation/controllers/archive_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -106,7 +107,7 @@ void main() {
     expect(game.qualityCountsLive[MoveQuality.best], 1);
   });
 
-  testWidgets('Fast then Deep same PGN shows one canonical saved review', (
+  testWidgets('Fast then Deep same PGN preserve two canonical variants', (
     tester,
   ) async {
     final saved = <String, ArchivedGame>{};
@@ -136,13 +137,14 @@ void main() {
       analysisMode: AnalysisMode.deep,
     );
 
-    expect(fastId, deepId);
-    expect(ArchivedGame.collapseCanonical(saved.values), hasLength(1));
-    expect(
-      ArchivedGame.collapseCanonical(saved.values).single.reviewModeLabel,
+    expect(fastId, isNotNull);
+    expect(deepId, isNotNull);
+    expect(fastId, isNot(deepId));
+    expect(saved, hasLength(2));
+    expect(saved.values.map((game) => game.reviewModeLabel).toSet(), {
+      'Fast',
       'Deep',
-    );
-    expect(ArchivedGame.collapseCanonical(saved.values).single.depth, 22);
+    });
   });
 }
 
@@ -161,6 +163,7 @@ Future<String?> _saveWithWidgetRef(
   var started = false;
   await tester.pumpWidget(
     ProviderScope(
+      key: UniqueKey(),
       overrides: [
         archiveControllerProvider.overrideWith(
           () => _FakeArchiveController(saved),
@@ -171,15 +174,17 @@ Future<String?> _saveWithWidgetRef(
           builder: (context, ref, _) {
             if (!started) {
               started = true;
-              pending = saveAnalysisToArchive(
-                ref: ref,
-                timeline: timeline,
-                pgn: pgn,
-                depth: depth,
-                source: source,
-                playedAt: playedAt,
-                analysisMode: analysisMode,
-                timeControl: timeControl,
+              pending = Future<String?>.microtask(
+                () => saveAnalysisToArchive(
+                  ref: ref,
+                  timeline: timeline,
+                  pgn: pgn,
+                  depth: depth,
+                  source: source,
+                  playedAt: playedAt,
+                  analysisMode: analysisMode,
+                  timeControl: timeControl,
+                ),
               );
             }
             return const SizedBox.shrink();
@@ -188,7 +193,9 @@ Future<String?> _saveWithWidgetRef(
       ),
     ),
   );
-  return pending == null ? null : await pending!;
+  final result = pending == null ? null : await pending!;
+  await tester.pumpWidget(const SizedBox.shrink());
+  return result;
 }
 
 const _pgn = '''
@@ -249,8 +256,22 @@ class _FakeArchiveController extends ArchiveController {
   ArchiveState build() => ArchiveState(games: saved.values.toList());
 
   @override
-  Future<void> save(ArchivedGame g) async {
-    saved[g.id] = g;
+  Future<String> saveReviewDocument(ReviewDocument document) async {
+    final profile = document.compatibility.profileId;
+    final game = ArchivedGame.fromTimeline(
+      timeline: document.timeline,
+      id: document.documentId,
+      source: ArchiveSource.fromWire(document.game.sourceProvider),
+      depth: document.run.achievedDepth ?? 0,
+      pgn: document.game.originalPgn,
+      playedAt: document.game.importedAt,
+      analysisMode: profile == 'fast_review'
+          ? AnalysisMode.quick
+          : AnalysisMode.deep,
+      timeControl: document.game.headers['TimeControl'],
+    );
+    saved[game.id] = game;
     state = ArchiveState(games: saved.values.toList());
+    return game.id;
   }
 }

@@ -327,7 +327,7 @@ class AnalysisReviewRequest {
       requestedMode: AnalysisReviewMode.cached,
       allowReanalysis: allowReanalysis,
       requestedAt: (requestedAt ?? DateTime.now()).toUtc(),
-      userIsWhite: userIsWhite,
+      userIsWhite: userIsWhite ?? game.analyzedUserIsWhite,
       userHandle: _cleanOptional(userHandle),
     );
   }
@@ -554,7 +554,7 @@ class CanonicalAnalysisPayload {
       sourceId: sourceId,
       white: AnalysisPlayerInfo.fromName(game.white, rating: game.whiteRating),
       black: AnalysisPlayerInfo.fromName(game.black, rating: game.blackRating),
-      userIsWhite: userIsWhite,
+      userIsWhite: userIsWhite ?? game.analyzedUserIsWhite,
       result: game.result,
       playedAt: game.playedAt,
       openingName: game.openingName,

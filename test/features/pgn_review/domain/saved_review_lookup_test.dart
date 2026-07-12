@@ -2,10 +2,10 @@ import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
+import 'package:apex_chess/features/archives/domain/review_identity.dart';
 import 'package:apex_chess/features/pgn_review/domain/saved_review_lookup.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-const _fen = '8/8/8/8/8/8/8/8 w - - 0 1';
 const _pgn = '''
 [Event "Saved"]
 [White "Alpha"]
@@ -98,29 +98,36 @@ ArchivedGame _game({
 }
 
 AnalysisTimeline _timeline(AnalysisMode mode) {
+  final game = const CanonicalGameIdentityService().fromPgn(
+    pgn: _pgn,
+    sourceProvider: 'pgn',
+  );
   return AnalysisTimeline(
     moves: [
-      MoveAnalysis(
-        ply: 0,
-        san: 'e4',
-        uci: 'e2e4',
-        fenBefore: _fen,
-        fenAfter: _fen,
-        targetSquare: 'e4',
-        winPercentBefore: 50,
-        winPercentAfter: 52,
-        deltaW: 2,
-        isWhiteMove: true,
-        classification: MoveQuality.best,
-        message: 'Best',
-      ),
+      for (final (index, move) in game.moves.indexed)
+        MoveAnalysis(
+          ply: index,
+          san: move.san,
+          uci: move.uci,
+          fenBefore: move.fenBefore,
+          fenAfter: move.fenAfter,
+          targetSquare: move.uci.substring(2, 4),
+          winPercentBefore: 50,
+          winPercentAfter: 52,
+          deltaW: 2,
+          isWhiteMove: index.isEven,
+          classification: MoveQuality.best,
+          message: 'Best',
+        ),
     ],
-    startingFen: _fen,
+    startingFen: game.startingFen,
     headers: const {'White': 'Alpha', 'Black': 'Beta', 'Result': '1-0'},
     winPercentages: const [52],
     analysisMode: mode == AnalysisMode.quick ? 'quick' : 'deep',
     analysisProfileId: mode == AnalysisMode.quick
         ? 'fast_review'
         : 'deep_review',
+    completionStatus: AnalysisCompletionStatus.complete,
+    expectedPlies: game.moves.length,
   );
 }

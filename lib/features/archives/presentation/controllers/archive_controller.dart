@@ -14,6 +14,7 @@ import '../../../../core/domain/entities/analysis_timeline.dart';
 import '../../../../core/domain/services/evaluation_analyzer.dart';
 import '../../data/archive_repository.dart';
 import '../../domain/archived_game.dart';
+import '../../domain/review_document.dart';
 
 // ─── Filters ─────────────────────────────────────────────────────────
 
@@ -300,7 +301,7 @@ class ArchiveState {
       }
       out.add(g);
     }
-    final collapsed = ArchivedGame.collapseCanonical(out);
+    final collapsed = ArchivedGame.preserveAnalysisVariants(out);
     switch (filters.sort) {
       case ArchiveSort.newest:
         collapsed.sort((a, b) => b.analyzedAt.compareTo(a.analyzedAt));
@@ -349,7 +350,7 @@ class ArchiveController extends Notifier<ArchiveState> {
   Future<void> _reload() async {
     try {
       final repo = await ref.read(archiveRepositoryProvider.future);
-      final all = ArchivedGame.collapseCanonical(repo.loadAll());
+      final all = ArchivedGame.preserveAnalysisVariants(repo.loadAll());
       state = state.copyWith(games: all, isLoading: false, clearError: true);
     } catch (e) {
       state = state.copyWith(
@@ -361,14 +362,16 @@ class ArchiveController extends Notifier<ArchiveState> {
 
   Future<void> refresh() => _reload();
 
-  Future<void> save(ArchivedGame g) async {
+  Future<String> saveReviewDocument(ReviewDocument document) async {
     final repo = await ref.read(archiveRepositoryProvider.future);
-    final sameGame = repo.loadAll().where(
-      (existing) => existing.canonicalGameKey == g.canonicalGameKey,
-    );
-    final canonical = ArchivedGame.collapseCanonical([g, ...sameGame]).first;
-    await repo.save(canonical);
+    final id = await repo.saveReviewDocument(document);
     await _reload();
+    return id;
+  }
+
+  Future<ArchivedGame?> resolveExact(String id) async {
+    final repo = await ref.read(archiveRepositoryProvider.future);
+    return repo.find(id);
   }
 
   Future<void> remove(String id) async {
@@ -395,40 +398,18 @@ class ArchiveController extends Notifier<ArchiveState> {
     final repo = await ref.read(archiveRepositoryProvider.future);
     final existing = repo.find(id);
     if (existing == null) return;
-    final updated = ArchivedGame(
-      id: existing.id,
-      source: existing.source,
-      white: existing.white,
-      black: existing.black,
-      whiteRating: existing.whiteRating,
-      blackRating: existing.blackRating,
-      result: existing.result,
-      playedAt: existing.playedAt,
-      analyzedAt: existing.analyzedAt,
-      depth: existing.depth,
+    if (existing.pgn.trim().isEmpty) return;
+    final document = ReviewDocument.fromCompletedTimeline(
       pgn: existing.pgn,
-      // Counts come from the *new* timeline so a re-analysis
-      // immediately fixes any stale numbers — the integration-audit
-      // "archive Brilliant count doesn't match timeline" fix.
-      qualityCounts: timeline.qualityCounts,
-      averageCpLoss: timeline.averageCpLoss,
-      cpLossSampleCount: timeline.cpLossEligibleCount,
-      totalPlies: timeline.totalPlies,
-      openingName: existing.openingName,
-      ecoCode: existing.ecoCode,
-      cachedTimeline: timeline,
-      classifierVersion: kClassifierVersion,
-      analysisMode: existing.analysisMode,
-      analysisProfileId: timeline.analysisProfileId,
-      providerId: timeline.providerId,
-      pgnHash: timeline.pgnHash ?? existing.pgnHash,
-      cacheKey: timeline.cacheKey ?? existing.cacheKey,
-      tacticalVerifierVersion: timeline.tacticalVerifierVersion,
-      openingBookVersion: timeline.openingBookVersion,
-      analysisSchemaVersion: timeline.analysisSchemaVersion,
+      timeline: timeline,
+      sourceProvider: existing.source.wire,
+      sourceGameId: existing.id,
+      importedAt: existing.playedAt,
+      userIsWhite: existing.analyzedUserIsWhite,
+      createdAt: existing.analyzedAt,
       timeControl: existing.timeControl,
     );
-    await repo.save(updated);
+    await repo.saveReviewDocument(document);
     await _reload();
   }
 

@@ -1238,7 +1238,7 @@ class _GameCard extends ConsumerWidget {
       );
       if (!context.mounted || action == null) return;
       if (action == AlreadyReviewedAction.preview) {
-        _previewSavedReview(context, ref, savedReview);
+        await _previewSavedReview(context, ref, savedReview);
         return;
       }
     }
@@ -1302,11 +1302,19 @@ class _GameCard extends ConsumerWidget {
     );
   }
 
-  void _previewSavedReview(
+  Future<void> _previewSavedReview(
     BuildContext context,
     WidgetRef ref,
     ArchivedGame savedReview,
-  ) {
+  ) async {
+    if (savedReview.canResolveCanonicalDocument &&
+        savedReview.cachedTimeline == null) {
+      final resolved = await ref
+          .read(archiveControllerProvider.notifier)
+          .resolveExact(savedReview.id);
+      if (!context.mounted || resolved == null) return;
+      savedReview = resolved;
+    }
     final userIsWhite = game.userColor == null
         ? null
         : game.userColor == PlayerColor.white;
@@ -1792,6 +1800,7 @@ class _ImportAnalysisDialogState extends ConsumerState<_ImportAnalysisDialog> {
         playedAt: widget.playedAt,
         analysisMode: mode,
         timeControl: widget.timeControl,
+        userIsWhite: widget.userIsWhite,
       );
       if (archiveId != null) {
         unawaited(

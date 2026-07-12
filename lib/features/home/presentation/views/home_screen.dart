@@ -194,7 +194,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       );
       if (!context.mounted || action == null) return;
       if (action == AlreadyReviewedAction.preview) {
-        _previewSavedPgnReview(context, ref, result, savedReview);
+        await _previewSavedPgnReview(context, ref, result, savedReview);
         return;
       }
     }
@@ -260,12 +260,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     );
   }
 
-  void _previewSavedPgnReview(
+  Future<void> _previewSavedPgnReview(
     BuildContext context,
     WidgetRef ref,
     _PgnPasteResult result,
     ArchivedGame savedReview,
-  ) {
+  ) async {
+    if (savedReview.canResolveCanonicalDocument &&
+        savedReview.cachedTimeline == null) {
+      final resolved = await ref
+          .read(archiveControllerProvider.notifier)
+          .resolveExact(savedReview.id);
+      if (!context.mounted || resolved == null) return;
+      savedReview = resolved;
+    }
     final payload = ReviewEntryContract.savedReviewResult(
       savedReview,
       userIsWhite: result.userIsWhite,
@@ -1713,6 +1721,7 @@ class _LocalAnalysisProgressDialogState
           depth: depth,
           source: _archiveSourceForPgn(widget.pgn),
           analysisMode: mode,
+          userIsWhite: widget.userIsWhite,
         );
         if (archiveId != null) {
           unawaited(

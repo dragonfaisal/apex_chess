@@ -244,12 +244,19 @@ void main() {
           pgn: pgn,
           analysisMode: AnalysisMode.quick,
           analysisProfileId: 'fast_review',
+          depth: 14,
+          analysisMovetimeMs: 900,
+          analysisMultiPv: 1,
         ),
         _game(
           id: 'deep',
           pgn: pgn,
           analysisMode: AnalysisMode.deep,
           analysisProfileId: 'deep_review',
+          depth: 22,
+          analysisMovetimeMs: 6000,
+          analysisMultiPv: 3,
+          candidateVerificationEnabled: true,
         ),
       ]),
     );
@@ -257,6 +264,49 @@ void main() {
     expect(state.visible, hasLength(1));
     expect(state.visible.single.id, 'deep');
     expect(state.visible.single.reviewModeLabel, 'Deep');
+  });
+
+  test('Archive keeps canonical Fast and Deep variants distinguishable', () {
+    final state = ArchiveState(
+      games: ArchivedGame.preserveAnalysisVariants([
+        _game(
+          id: 'review-fast',
+          analysisMode: AnalysisMode.quick,
+          analysisProfileId: 'fast_review',
+          recordKind: ArchivedRecordKind.canonicalDocument,
+          canonicalGameId: 'game-sha256',
+          analysisVariantId: 'variant-fast',
+          engineIdentity: 'bridge|Stockfish 17',
+          depth: 22,
+          analysisMovetimeMs: 6000,
+          analysisMultiPv: 3,
+          candidateVerificationEnabled: true,
+        ),
+        _game(
+          id: 'review-deep',
+          analysisMode: AnalysisMode.deep,
+          analysisProfileId: 'deep_review',
+          recordKind: ArchivedRecordKind.canonicalDocument,
+          canonicalGameId: 'game-sha256',
+          analysisVariantId: 'variant-deep',
+          engineIdentity: 'bridge|Stockfish 17',
+          depth: 14,
+          analysisMovetimeMs: 900,
+          analysisMultiPv: 1,
+        ),
+      ]),
+    );
+
+    expect(state.visible, hasLength(2));
+    expect(state.visible.map((game) => game.reviewModeLabel).toSet(), {
+      'Fast',
+      'Deep',
+    });
+    expect(ArchivedGame.collapseCanonical(state.games), hasLength(1));
+    expect(
+      ArchivedGame.collapseCanonical(state.games).single.reviewModeLabel,
+      'Fast',
+    );
   });
 
   test('Archive filters still apply after duplicate collapse', () {
@@ -282,6 +332,9 @@ void main() {
           source: ArchiveSource.chessCom,
           analysisMode: AnalysisMode.quick,
           analysisProfileId: 'fast_review',
+          depth: 14,
+          analysisMovetimeMs: 900,
+          analysisMultiPv: 1,
         ),
         _game(
           id: 'deep',
@@ -289,6 +342,10 @@ void main() {
           source: ArchiveSource.chessCom,
           analysisMode: AnalysisMode.deep,
           analysisProfileId: 'deep_review',
+          depth: 22,
+          analysisMovetimeMs: 6000,
+          analysisMultiPv: 3,
+          candidateVerificationEnabled: true,
         ),
         _game(id: 'wrong-source', source: ArchiveSource.lichess),
       ]),
@@ -404,6 +461,14 @@ ArchivedGame _game({
   String? analysisProfileId,
   bool metricAvailable = false,
   double averageCpLoss = 18,
+  int depth = 18,
+  int? analysisMovetimeMs,
+  int? analysisMultiPv,
+  bool candidateVerificationEnabled = false,
+  ArchivedRecordKind recordKind = ArchivedRecordKind.legacy,
+  String? canonicalGameId,
+  String? analysisVariantId,
+  String? engineIdentity,
 }) {
   final moves = <MoveAnalysis>[];
   var ply = 0;
@@ -445,7 +510,7 @@ ArchivedGame _game({
     black: black,
     result: result,
     analyzedAt: DateTime(2026, 4, 21),
-    depth: 18,
+    depth: depth,
     pgn:
         pgn ??
         '''
@@ -464,6 +529,14 @@ ArchivedGame _game({
     analysisMode: analysisMode,
     analysisProfileId: analysisProfileId,
     cachedTimeline: moves.isEmpty ? null : timeline,
+    recordKind: recordKind,
+    canonicalGameId: canonicalGameId,
+    analysisVariantId: analysisVariantId,
+    engineIdentity: engineIdentity,
+    canonicalIndexVerified: recordKind == ArchivedRecordKind.canonicalDocument,
+    analysisMovetimeMs: analysisMovetimeMs,
+    analysisMultiPv: analysisMultiPv,
+    candidateVerificationEnabled: candidateVerificationEnabled,
   );
 }
 

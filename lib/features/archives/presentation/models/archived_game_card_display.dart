@@ -30,6 +30,8 @@ extension ArchivedGameCardDisplay on ArchivedGame {
       secondaryMeta: [
         sourceLabel,
         reviewModeLabel,
+        if (compactEngineLabel != null) compactEngineLabel!,
+        if (archiveTrustLabel != null) archiveTrustLabel!,
         archiveAccuracyLabel,
         if (timeControl != null && timeControl!.trim().isNotEmpty)
           timeControl!.trim(),
@@ -58,6 +60,7 @@ extension ArchivedGameCardDisplay on ArchivedGame {
   }
 
   String get archiveAccuracyLabel {
+    if (isUnavailable) return 'Recovery available';
     if (!hasVerifiedCpLoss) return 'Metrics unavailable';
     return 'ACPL ${averageCpLoss.toStringAsFixed(1)}';
   }
