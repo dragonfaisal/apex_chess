@@ -1,102 +1,240 @@
-/// PGN Review Controller — O(1) ply navigation over pre-computed timeline.
+/// Authoritative production runtime for offline analysis and review.
 ///
-/// Manages the current ply index and provides instant access to
-/// [MoveAnalysis] data. Emits [NavigationEvent]s to the audio controller.
-/// ZERO network calls during navigation — everything is in-memory.
+/// One immutable timeline and one selected-ply index drive the board, move
+/// list, evaluation, labels, summary, audio, save identity, and exact reopen.
 library;
+
+import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/domain/entities/analysis_timeline.dart';
-import '../../../../core/domain/entities/move_analysis.dart';
-import '../../../../features/archives/domain/archived_game.dart';
-import '../../domain/analysis_contract.dart';
+import 'package:apex_chess/core/domain/entities/analysis_profile.dart';
+import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
+import 'package:apex_chess/core/domain/entities/move_analysis.dart';
+import 'package:apex_chess/features/archives/domain/archived_game.dart';
+import 'package:apex_chess/features/archives/domain/review_document.dart';
+import 'package:apex_chess/features/archives/domain/review_identity.dart';
+import 'package:apex_chess/features/pgn_review/domain/analysis_contract.dart';
+import 'package:apex_chess/features/pgn_review/domain/review_analysis_provider.dart';
+import 'package:apex_chess/features/pgn_review/domain/review_entry_contract.dart';
+import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// State
-// ─────────────────────────────────────────────────────────────────────────────
+enum ReviewRuntimeLifecycle {
+  idle,
+  validating,
+  preparing,
+  analyzing,
+  cancelling,
+  completed,
+  failed,
+  cancelled,
+  reopeningSavedReview,
+}
+
+enum ReviewRuntimeSource {
+  pastedPgn,
+  importedGame,
+  archiveExact,
+  homeSavedPreview,
+  importSavedPreview,
+  completedLocalGame,
+  legacyCompatibility,
+}
+
+enum ReviewRuntimeFailure {
+  none,
+  invalidPgn,
+  engineUnavailable,
+  timeout,
+  cancelled,
+  incompleteEvidence,
+  savedReviewMissing,
+  corruptedSavedReview,
+  saveFailed,
+  unknown,
+}
+
+extension ReviewRuntimeFailureCopy on ReviewRuntimeFailure {
+  String? get safeMessage => switch (this) {
+    ReviewRuntimeFailure.none => null,
+    ReviewRuntimeFailure.invalidPgn => 'The PGN contains an invalid move.',
+    ReviewRuntimeFailure.engineUnavailable =>
+      'Offline analysis is unavailable right now.',
+    ReviewRuntimeFailure.timeout => 'Offline analysis timed out. Try again.',
+    ReviewRuntimeFailure.cancelled => 'Review cancelled.',
+    ReviewRuntimeFailure.incompleteEvidence =>
+      'Analysis stopped before trustworthy evidence was complete.',
+    ReviewRuntimeFailure.savedReviewMissing =>
+      'The exact saved review is unavailable.',
+    ReviewRuntimeFailure.corruptedSavedReview =>
+      'The saved review could not be validated.',
+    ReviewRuntimeFailure.saveFailed =>
+      'Review completed, but could not be saved.',
+    ReviewRuntimeFailure.unknown => 'Could not complete the review.',
+  };
+}
+
+enum ReviewSaveState { idle, saving, saved, failed }
+
+class ReviewRuntimeRequest {
+  const ReviewRuntimeRequest({
+    required this.pgn,
+    required this.profile,
+    required this.source,
+    required this.sourceProvider,
+    this.sourceGameId,
+    this.playedAt,
+    this.timeControl,
+    this.userIsWhite,
+    this.userHandle,
+  });
+
+  final String pgn;
+  final AnalysisProfile profile;
+  final ReviewRuntimeSource source;
+  final AnalysisGameSource sourceProvider;
+  final String? sourceGameId;
+  final DateTime? playedAt;
+  final String? timeControl;
+  final bool? userIsWhite;
+  final String? userHandle;
+}
+
+typedef ReviewExecution =
+    Future<GameReviewResult> Function(GameReviewRequest request);
+typedef ReviewPersistence = Future<String> Function(ReviewDocument document);
+typedef ReviewCancellation = void Function();
 
 class ReviewState {
-  /// The full pre-computed analysis timeline.
-  final AnalysisTimeline? timeline;
-
-  /// Current ply index. -1 is only used when no analysed move exists.
-  final int currentPly;
-
-  /// Whether the timeline is currently being loaded.
-  final bool isLoading;
-
-  /// Error message if loading failed.
-  final String? error;
-
-  /// Board orientation — `false` (default) = White at bottom; `true` =
-  /// Black at bottom. Set automatically from the imported user's
-  /// colour at [ReviewController.loadTimeline] time and toggleable
-  /// via [ReviewController.toggleFlip] for manual override.
-  final bool flipped;
-
-  /// Analysis mode the timeline was produced under. Drives the
-  /// `CoachExplanationService` "Needs Deep Scan" affordance — Quick
-  /// timelines never surface final Brilliant / Great / Forced claims
-  /// without a Deep re-scan. Defaults to [AnalysisMode.deep] so
-  /// pre-existing call sites that haven't been threaded through yet
-  /// get the less-conservative (trusted) behaviour.
-  final AnalysisMode mode;
-
-  /// `true` when the user played the White pieces, `false` when
-  /// Black, `null` when unknown (e.g. a PGN paste without a side
-  /// selector). Used by the coach-explanation service to redirect
-  /// "Allowed forced mate" blame to the correct colour's previous
-  /// ply.
-  final bool? userIsWhite;
-
   const ReviewState({
     this.timeline,
     this.currentPly = -1,
-    this.isLoading = false,
-    this.error,
+    this.lifecycle = ReviewRuntimeLifecycle.idle,
+    this.executionId = 0,
+    this.progressCompleted = 0,
+    this.progressTotal = 0,
+    this.failure = ReviewRuntimeFailure.none,
     this.flipped = false,
     this.mode = AnalysisMode.deep,
     this.userIsWhite,
+    this.source,
+    this.requestedProfile,
+    this.gameId,
+    this.analysisVariantId,
+    this.reviewDocumentId,
+    this.providerId,
+    this.engineIdentity,
+    this.payload,
+    this.canonicalDocument,
+    this.saveState = ReviewSaveState.idle,
+    this.savedDocumentId,
   });
 
+  final AnalysisTimeline? timeline;
+  final int currentPly;
+  final ReviewRuntimeLifecycle lifecycle;
+  final int executionId;
+  final int progressCompleted;
+  final int progressTotal;
+  final ReviewRuntimeFailure failure;
+  final bool flipped;
+  final AnalysisMode mode;
+  final bool? userIsWhite;
+  final ReviewRuntimeSource? source;
+  final AnalysisProfile? requestedProfile;
+  final String? gameId;
+  final String? analysisVariantId;
+  final String? reviewDocumentId;
+  final String? providerId;
+  final String? engineIdentity;
+  final CanonicalAnalysisPayload? payload;
+  final ReviewDocument? canonicalDocument;
+  final ReviewSaveState saveState;
+  final String? savedDocumentId;
+
+  bool get isLoading => switch (lifecycle) {
+    ReviewRuntimeLifecycle.validating ||
+    ReviewRuntimeLifecycle.preparing ||
+    ReviewRuntimeLifecycle.analyzing ||
+    ReviewRuntimeLifecycle.cancelling ||
+    ReviewRuntimeLifecycle.reopeningSavedReview => true,
+    _ => false,
+  };
+
+  bool get isExecuting => switch (lifecycle) {
+    ReviewRuntimeLifecycle.validating ||
+    ReviewRuntimeLifecycle.preparing ||
+    ReviewRuntimeLifecycle.analyzing ||
+    ReviewRuntimeLifecycle.cancelling => true,
+    _ => false,
+  };
+
+  bool get isTrustedComplete =>
+      lifecycle == ReviewRuntimeLifecycle.completed &&
+      timeline?.isComplete == true;
+
+  String? get error => failure.safeMessage;
+
+  double? get progress => progressTotal <= 0
+      ? null
+      : (progressCompleted / progressTotal).clamp(0, 1).toDouble();
+
   ReviewState copyWith({
-    AnalysisTimeline? timeline,
     int? currentPly,
-    bool? isLoading,
-    String? error,
+    ReviewRuntimeLifecycle? lifecycle,
+    int? progressCompleted,
+    int? progressTotal,
+    ReviewRuntimeFailure? failure,
     bool? flipped,
-    AnalysisMode? mode,
-    bool? userIsWhite,
+    ReviewSaveState? saveState,
+    String? savedDocumentId,
+    String? reviewDocumentId,
   }) => ReviewState(
-    timeline: timeline ?? this.timeline,
+    timeline: timeline,
     currentPly: currentPly ?? this.currentPly,
-    isLoading: isLoading ?? this.isLoading,
-    error: error,
+    lifecycle: lifecycle ?? this.lifecycle,
+    executionId: executionId,
+    progressCompleted: progressCompleted ?? this.progressCompleted,
+    progressTotal: progressTotal ?? this.progressTotal,
+    failure: failure ?? this.failure,
     flipped: flipped ?? this.flipped,
-    mode: mode ?? this.mode,
-    userIsWhite: userIsWhite ?? this.userIsWhite,
+    mode: mode,
+    userIsWhite: userIsWhite,
+    source: source,
+    requestedProfile: requestedProfile,
+    gameId: gameId,
+    analysisVariantId: analysisVariantId,
+    reviewDocumentId: reviewDocumentId ?? this.reviewDocumentId,
+    providerId: providerId,
+    engineIdentity: engineIdentity,
+    payload: payload,
+    canonicalDocument: canonicalDocument,
+    saveState: saveState ?? this.saveState,
+    savedDocumentId: savedDocumentId ?? this.savedDocumentId,
   );
 
-  /// O(1) access to the current ply's analysis.
-  MoveAnalysis? get currentMove => timeline?[currentPly];
-
-  /// FEN for the current board position.
-  String get currentFen {
-    if (timeline == null) return _initialFen;
-    if (currentPly < 0) return timeline!.startingFen;
-    return timeline!.moves[currentPly].fenAfter;
+  MoveAnalysis? get currentMove {
+    final activeTimeline = timeline;
+    if (activeTimeline == null ||
+        currentPly < 0 ||
+        currentPly >= activeTimeline.totalPlies) {
+      return null;
+    }
+    return activeTimeline.moves[currentPly];
   }
 
-  /// Total plies in the timeline.
+  String get currentFen {
+    final activeTimeline = timeline;
+    if (activeTimeline == null) return _initialFen;
+    if (currentPly < 0) return activeTimeline.startingFen;
+    return activeTimeline.moves[currentPly].fenAfter;
+  }
+
   int get totalPlies => timeline?.totalPlies ?? 0;
 
-  /// Last move (from, to) for board highlight.
   (String, String)? get lastMove {
-    final move = currentMove;
-    if (move == null) return null;
-    final uci = move.uci;
-    if (uci.length < 4) return null;
+    final uci = currentMove?.uci;
+    if (uci == null || uci.length < 4) return null;
     return (uci.substring(0, 2), uci.substring(2, 4));
   }
 
@@ -104,56 +242,302 @@ class ReviewState {
       'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Navigation Event (for AudioController)
-// ─────────────────────────────────────────────────────────────────────────────
-
 class NavigationEvent {
-  final int oldPly;
-  final int newPly;
-  final MoveAnalysis? moveAnalysis;
-
-  /// Number of plies jumped (absolute).
-  int get jumpSize => (newPly - oldPly).abs();
-
-  /// Whether this is a sequential step (+1 or -1).
-  bool get isSequential => jumpSize == 1;
-
   const NavigationEvent({
     required this.oldPly,
     required this.newPly,
     this.moveAnalysis,
   });
+
+  final int oldPly;
+  final int newPly;
+  final MoveAnalysis? moveAnalysis;
+
+  int get jumpSize => (newPly - oldPly).abs();
+  bool get isSequential => jumpSize == 1;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Notifier
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Callback type for navigation events (consumed by audio controller).
 typedef OnNavigationCallback = void Function(NavigationEvent event);
 
 class ReviewController extends Notifier<ReviewState> {
-  /// Set by the audio controller to receive navigation events.
   OnNavigationCallback? onNavigation;
+
+  int _generation = 0;
+  int _activeGeneration = 0;
+  final Set<int> _cancelledGenerations = <int>{};
+  ReviewCancellation? _cancelExecution;
+  Future<String?>? _saveFuture;
 
   @override
   ReviewState build() {
+    ref.onDispose(() {
+      _cancelledGenerations.add(_activeGeneration);
+      _cancelExecution?.call();
+    });
     return const ReviewState();
   }
 
-  /// Loads a pre-computed timeline into the review controller.
-  ///
-  /// [userIsBlack] auto-flips the board so the imported user is at the
-  /// bottom — the integration-audit fix for the "my games show me at
-  /// the top when I imported as Black" perspective bug.
-  ///
-  /// [mode] is persisted on the state so the coach card can surface
-  /// "Needs Deep Scan" on ambiguous Quick plies. [userIsWhite] is
-  /// persisted so the coach service can attribute "Allowed forced
-  /// mate" to the correct colour's previous ply. Both default to
-  /// backward-compatible values so call sites that haven't been
-  /// threaded through yet still work.
+  Future<bool> analyzeOffline({
+    required ReviewRuntimeRequest request,
+    required ReviewExecution execute,
+    required ReviewCancellation cancelExecution,
+    required ReviewPersistence persist,
+  }) async {
+    if (state.isExecuting) {
+      _cancelledGenerations.add(_activeGeneration);
+      _cancelExecution?.call();
+    }
+    final generation = ++_generation;
+    _activeGeneration = generation;
+    _cancelExecution = cancelExecution;
+    _saveFuture = null;
+    state = ReviewState(
+      lifecycle: ReviewRuntimeLifecycle.validating,
+      executionId: generation,
+      source: request.source,
+      requestedProfile: request.profile,
+      userIsWhite: request.userIsWhite,
+      flipped: request.userIsWhite == false,
+      mode: _modeForProfile(request.profile),
+    );
+
+    late final CanonicalGame canonicalGame;
+    try {
+      canonicalGame = const CanonicalGameIdentityService().fromPgn(
+        pgn: request.pgn,
+        sourceProvider: request.sourceProvider.wire,
+        sourceGameId: request.sourceGameId,
+        importedAt: request.playedAt,
+      );
+    } on Object {
+      if (_isCurrent(generation)) {
+        state = ReviewState(
+          lifecycle: ReviewRuntimeLifecycle.failed,
+          executionId: generation,
+          failure: ReviewRuntimeFailure.invalidPgn,
+          source: request.source,
+          requestedProfile: request.profile,
+          userIsWhite: request.userIsWhite,
+          flipped: request.userIsWhite == false,
+          mode: _modeForProfile(request.profile),
+        );
+      }
+      return false;
+    }
+
+    if (!_isCurrent(generation)) return false;
+    state = ReviewState(
+      lifecycle: ReviewRuntimeLifecycle.preparing,
+      executionId: generation,
+      source: request.source,
+      requestedProfile: request.profile,
+      userIsWhite: request.userIsWhite,
+      flipped: request.userIsWhite == false,
+      mode: _modeForProfile(request.profile),
+      gameId: canonicalGame.gameId.value,
+      progressTotal: canonicalGame.moves.length,
+    );
+
+    await Future<void>.value();
+    if (!_isCurrent(generation)) return false;
+    state = state.copyWith(lifecycle: ReviewRuntimeLifecycle.analyzing);
+
+    try {
+      final result = await execute(
+        GameReviewRequest(
+          pgn: request.pgn,
+          profile: request.profile,
+          userIsWhite: request.userIsWhite,
+          userHandle: request.userHandle,
+          isCancelled: () => !_isCurrent(generation),
+          onProgress: (completed, total) {
+            if (!_isCurrent(generation)) return;
+            state = state.copyWith(
+              lifecycle: ReviewRuntimeLifecycle.analyzing,
+              progressCompleted: completed,
+              progressTotal: total,
+            );
+          },
+        ),
+      );
+      if (!_isCurrent(generation)) return false;
+      final timeline = result.timeline;
+      if (!timeline.isComplete ||
+          timeline.totalPlies != canonicalGame.moves.length) {
+        throw const ReviewDocumentValidationException(
+          'Runtime result is not a complete canonical mainline.',
+        );
+      }
+      final payload =
+          result.analysisResult?.payload ??
+          CanonicalAnalysisPayload.fromTimeline(
+            timeline: timeline,
+            pgn: request.pgn,
+            source: request.sourceProvider,
+            modeUsed: AnalysisReviewMode.offlineLocal,
+            providerKind: AnalysisProviderKind.offlineLocal,
+            userIsWhite: request.userIsWhite,
+            playedAt: request.playedAt,
+            timeControl: request.timeControl,
+            providerMetadata: result.metadata.toContractMetadata(),
+          );
+      final document = ReviewDocument.fromCompletedTimeline(
+        pgn: request.pgn,
+        timeline: timeline,
+        sourceProvider: request.sourceProvider.archiveSource.wire,
+        sourceGameId: request.sourceGameId ?? payload.sourceId,
+        importedAt: request.playedAt,
+        userIsWhite: request.userIsWhite,
+        createdAt: payload.createdAt,
+        timeControl: request.timeControl,
+      );
+      if (!_isCurrent(generation)) return false;
+      state = ReviewState(
+        timeline: timeline,
+        currentPly: timeline.totalPlies == 0 ? -1 : 0,
+        lifecycle: ReviewRuntimeLifecycle.completed,
+        executionId: generation,
+        progressCompleted: timeline.totalPlies,
+        progressTotal: timeline.totalPlies,
+        flipped: request.userIsWhite == false,
+        mode: _modeForProfile(request.profile),
+        userIsWhite: request.userIsWhite,
+        source: request.source,
+        requestedProfile: request.profile,
+        gameId: document.game.gameId.value,
+        analysisVariantId: document.variantId.value,
+        reviewDocumentId: document.documentId,
+        providerId: document.compatibility.providerId,
+        engineIdentity: document.compatibility.engine.declaredIdentity,
+        payload: payload,
+        canonicalDocument: document,
+      );
+      await saveCurrent(persist);
+      return _isCurrent(generation) && state.isTrustedComplete;
+    } on TimeoutException {
+      _fail(generation, ReviewRuntimeFailure.timeout);
+    } on LocalAnalysisException catch (error) {
+      if (error.failure == LocalAnalysisFailure.cancelled ||
+          !_isCurrent(generation)) {
+        _cancelled(generation);
+      } else if (error.failure == LocalAnalysisFailure.invalidPgn) {
+        _fail(generation, ReviewRuntimeFailure.invalidPgn);
+      } else {
+        _fail(generation, ReviewRuntimeFailure.incompleteEvidence);
+      }
+    } on ReviewProviderUnavailableException {
+      _fail(generation, ReviewRuntimeFailure.engineUnavailable);
+    } on ReviewDocumentValidationException {
+      _fail(generation, ReviewRuntimeFailure.incompleteEvidence);
+    } on Object {
+      _fail(generation, ReviewRuntimeFailure.unknown);
+    }
+    return false;
+  }
+
+  Future<String?> saveCurrent(ReviewPersistence persist) {
+    final existing = _saveFuture;
+    if (existing != null && state.saveState != ReviewSaveState.failed) {
+      return existing;
+    }
+    if (state.saveState == ReviewSaveState.failed) _saveFuture = null;
+    final document = state.canonicalDocument;
+    if (!state.isTrustedComplete || document == null) {
+      return Future<String?>.value(null);
+    }
+    final generation = state.executionId;
+    state = state.copyWith(
+      saveState: ReviewSaveState.saving,
+      failure: ReviewRuntimeFailure.none,
+    );
+    final future = () async {
+      try {
+        final id = await persist(document);
+        if (_isCurrent(generation)) {
+          state = state.copyWith(
+            saveState: ReviewSaveState.saved,
+            savedDocumentId: id,
+            reviewDocumentId: id,
+          );
+        }
+        return id;
+      } on Object {
+        if (_isCurrent(generation)) {
+          state = state.copyWith(
+            saveState: ReviewSaveState.failed,
+            failure: ReviewRuntimeFailure.saveFailed,
+          );
+        }
+        return null;
+      }
+    }();
+    _saveFuture = future;
+    return future;
+  }
+
+  bool openSavedReview(
+    ArchivedGame game, {
+    required ReviewRuntimeSource source,
+    bool? legacyUserIsWhite,
+    int initialPly = 0,
+  }) {
+    if (state.isExecuting) cancelActiveAnalysis();
+    final generation = ++_generation;
+    _activeGeneration = generation;
+    _saveFuture = null;
+    state = ReviewState(
+      lifecycle: ReviewRuntimeLifecycle.reopeningSavedReview,
+      executionId: generation,
+      source: source,
+    );
+    if (!ReviewEntryContract.canOpenCachedReview(game)) {
+      state = ReviewState(
+        lifecycle: ReviewRuntimeLifecycle.failed,
+        executionId: generation,
+        failure: game.isUnavailable
+            ? ReviewRuntimeFailure.corruptedSavedReview
+            : ReviewRuntimeFailure.savedReviewMissing,
+        source: source,
+      );
+      return false;
+    }
+    final timeline = game.cachedTimeline!;
+    final immutablePerspective =
+        game.recordKind == ArchivedRecordKind.canonicalDocument
+        ? game.analyzedUserIsWhite
+        : legacyUserIsWhite ?? game.analyzedUserIsWhite;
+    final safePly = timeline.totalPlies == 0
+        ? -1
+        : initialPly.clamp(-1, timeline.totalPlies - 1).toInt();
+    state = ReviewState(
+      timeline: timeline,
+      currentPly: safePly,
+      lifecycle: ReviewRuntimeLifecycle.completed,
+      executionId: generation,
+      progressCompleted: timeline.totalPlies,
+      progressTotal: timeline.totalPlies,
+      flipped: immutablePerspective == false,
+      mode: _modeForProfile(game.analysisProfile),
+      userIsWhite: immutablePerspective,
+      source: source,
+      requestedProfile: game.analysisProfile,
+      gameId: game.canonicalGameId,
+      analysisVariantId: game.analysisVariantId,
+      reviewDocumentId: game.canResolveCanonicalDocument ? game.id : null,
+      providerId: game.providerId,
+      engineIdentity: game.engineIdentity ?? timeline.engineVersion,
+      payload: CanonicalAnalysisPayload.fromArchivedGame(
+        game,
+        userIsWhite: immutablePerspective,
+      ),
+      saveState: game.canResolveCanonicalDocument
+          ? ReviewSaveState.saved
+          : ReviewSaveState.idle,
+      savedDocumentId: game.canResolveCanonicalDocument ? game.id : null,
+    );
+    return true;
+  }
+
   void loadTimeline(
     AnalysisTimeline timeline, {
     bool userIsBlack = false,
@@ -161,19 +545,25 @@ class ReviewController extends Notifier<ReviewState> {
     bool? userIsWhite,
     int initialPly = 0,
   }) {
+    final generation = ++_generation;
+    _activeGeneration = generation;
     final safePly = timeline.totalPlies == 0
         ? -1
-        : initialPly.clamp(0, timeline.totalPlies - 1).toInt();
+        : initialPly.clamp(-1, timeline.totalPlies - 1).toInt();
     state = ReviewState(
       timeline: timeline,
       currentPly: safePly,
+      lifecycle: ReviewRuntimeLifecycle.completed,
+      executionId: generation,
+      progressCompleted: timeline.totalPlies,
+      progressTotal: timeline.totalPlies,
       flipped: userIsBlack,
       mode: mode,
-      // If the caller didn't specify `userIsWhite` explicitly, derive
-      // it from `userIsBlack` — PR #19 flipped based on that so the
-      // inverse is a safe default. `null` remains reachable when a
-      // PGN paste deliberately picks "Unknown side".
       userIsWhite: userIsWhite ?? (userIsBlack ? false : null),
+      source: ReviewRuntimeSource.legacyCompatibility,
+      requestedProfile: AnalysisProfile.fromWire(timeline.analysisProfileId),
+      providerId: timeline.providerId,
+      engineIdentity: timeline.engineVersion,
     );
   }
 
@@ -185,9 +575,10 @@ class ReviewController extends Notifier<ReviewState> {
     int initialPly = 0,
   }) {
     final timeline = payload.timeline;
-    if (timeline == null || timeline.moves.isEmpty) {
+    if (timeline == null || timeline.moves.isEmpty || !timeline.isComplete) {
       state = ReviewState(
-        error: AnalysisFailureReason.savedReviewMissing.safeCopy,
+        lifecycle: ReviewRuntimeLifecycle.failed,
+        failure: ReviewRuntimeFailure.savedReviewMissing,
       );
       return;
     }
@@ -200,66 +591,116 @@ class ReviewController extends Notifier<ReviewState> {
     );
   }
 
-  /// Toggle the manual board-flip override. The orientation persists
-  /// for the lifetime of the loaded timeline.
-  void toggleFlip() {
-    state = state.copyWith(flipped: !state.flipped);
+  bool cancelExecutionIfOwned(int executionId) {
+    if (state.executionId != executionId || !state.isExecuting) return false;
+    cancelActiveAnalysis();
+    return true;
   }
 
-  /// Navigates to a specific ply.
+  void cancelActiveAnalysis() {
+    if (!state.isExecuting) return;
+    final generation = _activeGeneration;
+    _cancelledGenerations.add(generation);
+    state = state.copyWith(lifecycle: ReviewRuntimeLifecycle.cancelling);
+    _cancelExecution?.call();
+    if (state.executionId == generation) {
+      state = ReviewState(
+        lifecycle: ReviewRuntimeLifecycle.cancelled,
+        executionId: generation,
+        failure: ReviewRuntimeFailure.cancelled,
+        source: state.source,
+        requestedProfile: state.requestedProfile,
+        userIsWhite: state.userIsWhite,
+        flipped: state.flipped,
+        mode: state.mode,
+      );
+    }
+  }
+
+  void toggleFlip() => state = state.copyWith(flipped: !state.flipped);
+
   void jumpTo(int ply) {
-    final t = state.timeline;
-    if (t == null) return;
-    if (t.totalPlies == 0) return;
-
-    final clamped = ply.clamp(0, t.totalPlies - 1).toInt();
+    final timeline = state.timeline;
+    if (timeline == null || timeline.totalPlies == 0) return;
+    final clamped = ply.clamp(-1, timeline.totalPlies - 1).toInt();
     if (clamped == state.currentPly) return;
-
     final oldPly = state.currentPly;
     state = state.copyWith(currentPly: clamped);
-
     onNavigation?.call(
       NavigationEvent(
         oldPly: oldPly,
         newPly: clamped,
-        moveAnalysis: t[clamped],
+        moveAnalysis: clamped < 0 ? null : timeline.moves[clamped],
       ),
     );
   }
 
-  /// Step forward one ply.
   void next() {
-    final t = state.timeline;
-    if (t == null || t.totalPlies == 0) return;
-    if (state.currentPly >= t.totalPlies - 1) return;
+    final timeline = state.timeline;
+    if (timeline == null || timeline.totalPlies == 0) return;
+    if (state.currentPly >= timeline.totalPlies - 1) return;
     jumpTo(state.currentPly + 1);
   }
 
-  /// Step backward one ply.
   void prev() {
-    if (state.currentPly <= 0) return;
+    if (state.currentPly <= -1) return;
     jumpTo(state.currentPly - 1);
   }
 
-  /// Jump to the first analysed ply.
-  void goToStart() => jumpTo(0);
+  void goToStart() => jumpTo(-1);
 
-  /// Jump to the final position.
   void goToEnd() {
-    final t = state.timeline;
-    if (t == null) return;
-    jumpTo(t.totalPlies - 1);
+    final timeline = state.timeline;
+    if (timeline == null || timeline.totalPlies == 0) return;
+    jumpTo(timeline.totalPlies - 1);
   }
 
-  /// Clears the timeline (e.g. when navigating away).
   void clear() {
-    state = const ReviewState();
+    if (state.isExecuting) cancelActiveAnalysis();
+    _activeGeneration = ++_generation;
+    _saveFuture = null;
+    state = ReviewState(executionId: _activeGeneration);
   }
-}
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Provider
-// ─────────────────────────────────────────────────────────────────────────────
+  bool _isCurrent(int generation) =>
+      generation == _activeGeneration &&
+      !_cancelledGenerations.contains(generation);
+
+  void _fail(int generation, ReviewRuntimeFailure failure) {
+    if (!_isCurrent(generation)) return;
+    state = ReviewState(
+      lifecycle: ReviewRuntimeLifecycle.failed,
+      executionId: generation,
+      failure: failure,
+      source: state.source,
+      requestedProfile: state.requestedProfile,
+      userIsWhite: state.userIsWhite,
+      flipped: state.flipped,
+      mode: state.mode,
+      gameId: state.gameId,
+    );
+  }
+
+  void _cancelled(int generation) {
+    if (generation != _activeGeneration) return;
+    _cancelledGenerations.add(generation);
+    state = ReviewState(
+      lifecycle: ReviewRuntimeLifecycle.cancelled,
+      executionId: generation,
+      failure: ReviewRuntimeFailure.cancelled,
+      source: state.source,
+      requestedProfile: state.requestedProfile,
+      userIsWhite: state.userIsWhite,
+      flipped: state.flipped,
+      mode: state.mode,
+    );
+  }
+
+  static AnalysisMode _modeForProfile(AnalysisProfile profile) =>
+      profile.id == AnalysisProfileId.fastReview
+      ? AnalysisMode.quick
+      : AnalysisMode.deep;
+}
 
 final reviewControllerProvider =
     NotifierProvider<ReviewController, ReviewState>(ReviewController.new);

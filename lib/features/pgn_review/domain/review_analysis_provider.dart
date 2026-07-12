@@ -17,6 +17,7 @@ import 'package:apex_chess/features/pgn_review/domain/review_summary.dart';
 import 'package:apex_chess/infrastructure/engine/composite_game_analyzer.dart';
 
 typedef ReviewProgress = void Function(int completed, int total);
+typedef ReviewCancellationProbe = bool Function();
 
 class GameReviewRequest {
   const GameReviewRequest({
@@ -25,6 +26,7 @@ class GameReviewRequest {
     this.userIsWhite,
     this.userHandle,
     this.onProgress,
+    this.isCancelled,
   });
 
   final String pgn;
@@ -32,6 +34,7 @@ class GameReviewRequest {
   final bool? userIsWhite;
   final String? userHandle;
   final ReviewProgress? onProgress;
+  final ReviewCancellationProbe? isCancelled;
 
   AnalysisReviewMode get requestedMode =>
       AnalysisReviewMode.fromProfile(profile);
@@ -142,6 +145,10 @@ abstract class ReviewAnalysisProvider {
   bool get isConfigured;
 
   Future<GameReviewResult> analyzeGame(GameReviewRequest request);
+
+  /// Providers without physical cancellation keep the safe default: callers
+  /// still invalidate late results through the runtime generation identity.
+  void cancelActiveAnalysis() {}
 
   Future<AnalysisReviewResult?> analyzeContractRequest(
     GameReviewRequest request,
@@ -422,6 +429,9 @@ class LocalOfflineReviewProvider extends ReviewAnalysisProvider {
   bool get isConfigured => true;
 
   @override
+  void cancelActiveAnalysis() => _analyzer.cancelActiveAnalysis();
+
+  @override
   Future<GameReviewResult> analyzeGame(GameReviewRequest request) async {
     final sw = Stopwatch()..start();
     final requestedMetadata = metadataFor(request);
@@ -432,6 +442,7 @@ class LocalOfflineReviewProvider extends ReviewAnalysisProvider {
       movetime: Duration(milliseconds: request.profile.localMovetimeMs),
       mode: mode,
       onProgress: request.onProgress,
+      isCancelled: request.isCancelled,
     );
     sw.stop();
     final actualMetadata = AnalysisRunMetadata(
@@ -538,6 +549,24 @@ class GameReviewPipeline {
         ? _fastProvider
         : _deepProvider;
   }
+
+  bool get supportsLocalAnalysis => _offlineProvider.isConfigured;
+
+  /// Explicit local execution for production offline review. Fast and Deep
+  /// remain distinct profiles/search policies, but are never mislabeled as
+  /// online merely because their future provider intent is online-first.
+  Future<GameReviewResult> analyzeOffline(GameReviewRequest request) async {
+    if (!_offlineProvider.isConfigured) {
+      throw const ReviewProviderUnavailableException(
+        'Offline review unavailable',
+      );
+    }
+    final result = await _offlineProvider.analyzeGame(request);
+    _logTelemetry(result.telemetry);
+    return result;
+  }
+
+  void cancelLocalAnalysis() => _offlineProvider.cancelActiveAnalysis();
 
   ReviewModeRoutingPlan modePlan({
     required bool isOnline,

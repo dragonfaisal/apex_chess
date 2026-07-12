@@ -19,6 +19,7 @@ MoveAnalysis _move({
   required String uci,
   MoveQuality quality = MoveQuality.good,
   String message = '',
+  String coachExplanation = '',
   int? scoreCpAfter,
   int? mateInAfter,
   String? bestUci,
@@ -39,6 +40,7 @@ MoveAnalysis _move({
     isWhiteMove: isWhite,
     classification: quality,
     message: message,
+    coachExplanation: coachExplanation,
     scoreCpAfter: scoreCpAfter,
     mateInAfter: mateInAfter,
     engineBestMoveUci: bestUci,
@@ -196,7 +198,7 @@ void main() {
     }
   });
 
-  test('coach insight fallback stays short and honest', () {
+  test('coach insight omits generic filler when evidence is absent', () {
     final insight = ReviewCoachInsightDisplay.fromMove(
       _move(
         ply: 2,
@@ -214,15 +216,12 @@ void main() {
     );
 
     expect(insight.quality.label, 'Blunder');
-    expect(insight.explanation.length, lessThanOrEqualTo(86));
-    expect(insight.explanation.toLowerCase(), isNot(contains('stockfish')));
-    expect(insight.explanation, 'This gives the opponent a clear chance.');
+    expect(insight.explanation, isNull);
     expect(insight.betterMove, 'Nf3');
-    expect(insight.betterMoveReason, 'Avoids the worst of the danger.');
-    expect(insight.betterMoveReason, isNot(insight.explanation));
+    expect(insight.betterMoveReason, isNull);
   });
 
-  test('current move explanation appears without a Better Move', () {
+  test('authoritative concise insight appears without a Better Move', () {
     final insight = ReviewCoachInsightDisplay.fromMove(
       _move(
         ply: 0,
@@ -232,49 +231,41 @@ void main() {
         quality: MoveQuality.best,
         bestUci: 'e2e4',
         bestSan: 'e4',
+        coachExplanation: 'Controls the center and opens both bishops.',
       ),
       timeline: _timeline(),
       mode: AnalysisMode.deep,
       userIsWhite: true,
     );
 
-    expect(insight.explanation, 'This move keeps the advantage.');
+    expect(insight.explanation, 'Controls the center and opens both bishops.');
     expect(insight.betterMove, isNull);
     expect(insight.betterMoveReason, isNull);
   });
 
-  test('coach detail maps public qualities to safe explanations', () {
-    final cases = {
-      MoveQuality.brilliant: 'This move finds a rare resource.',
-      MoveQuality.best: 'This move keeps the advantage.',
-      MoveQuality.excellent: 'This move keeps the position under control.',
-      MoveQuality.blunder: 'This gives the opponent a clear chance.',
-      MoveQuality.missedWin: 'This move misses a stronger tactic.',
-    };
-
-    for (final entry in cases.entries) {
+  test('generic and debug-like explanation text is suppressed', () {
+    for (final text in [
+      'This is a good move.',
+      'The engine prefers another move.',
+      'Stockfish PV says d4.',
+      'PV line starts with d4.',
+      'Raw UCI move d2d4.',
+    ]) {
       final insight = ReviewCoachInsightDisplay.fromMove(
         _move(
           ply: 0,
           isWhite: true,
           san: 'Nf3',
           uci: 'g1f3',
-          quality: entry.key,
-          message: '',
+          coachExplanation: text,
         ),
         timeline: _timeline(),
         mode: AnalysisMode.deep,
         userIsWhite: true,
       );
-
-      expect(insight.coachDetail, entry.value);
-      expect(insight.coachDetail.toLowerCase(), isNot(contains('stockfish')));
+      expect(insight.coachDetail, isNull);
+      expect(insight.explanation, isNull);
     }
-
-    expect(
-      ReviewCoachInsightDisplay.empty().coachDetail,
-      'No deeper explanation available for this move.',
-    );
   });
 
   test('timeline active move mapping uses compact ply labels', () {
@@ -329,24 +320,11 @@ void main() {
     expect(noDataDisplay.insight.betterMove, isNull);
     expect(inaccuracyDisplay.bestMoveArrow, ('c7', 'c5'));
     expect(inaccuracyDisplay.insight.betterMove, 'c5');
-    expect(
-      inaccuracyDisplay.insight.explanation,
-      'This move misses a stronger continuation.',
-    );
-    expect(
-      inaccuracyDisplay.insight.betterMoveReason,
-      'Stronger continuation.',
-    );
-    expect(
-      inaccuracyDisplay.insight.betterMoveReason,
-      isNot(inaccuracyDisplay.insight.explanation),
-    );
+    expect(inaccuracyDisplay.insight.explanation, isNull);
+    expect(inaccuracyDisplay.insight.betterMoveReason, isNull);
     expect(blunderDisplay.bestMoveArrow, ('g1', 'f3'));
     expect(blunderDisplay.insight.betterMove, 'Nf3');
-    expect(
-      blunderDisplay.insight.betterMoveReason,
-      'Avoids the worst of the danger.',
-    );
+    expect(blunderDisplay.insight.betterMoveReason, isNull);
   });
 
   test('Better Move appears for all eligible non-top-tier qualities', () {
@@ -385,11 +363,7 @@ void main() {
 
       expect(display.insight.betterMove, entry.value);
       expect(display.bestMoveArrow, ('d2', 'd4'));
-      expect(display.insight.betterMoveReason, isNotNull);
-      expect(
-        display.insight.betterMoveReason,
-        isNot(display.insight.explanation),
-      );
+      expect(display.insight.betterMoveReason, isNull);
     }
   });
 
@@ -462,7 +436,7 @@ void main() {
           userIsWhite: true,
         );
 
-        expect(display.insight.explanation, isNotEmpty);
+        expect(display.insight.explanation, isNull);
         expect(display.insight.betterMove, isNull);
         expect(display.bestMoveArrow, isNull);
       }
@@ -500,7 +474,10 @@ void main() {
     expect(container.read(reviewControllerProvider).currentPly, 0);
 
     controller.prev();
-    expect(container.read(reviewControllerProvider).currentPly, 0);
+    expect(container.read(reviewControllerProvider).currentPly, -1);
+
+    controller.prev();
+    expect(container.read(reviewControllerProvider).currentPly, -1);
 
     controller.next();
     controller.next();

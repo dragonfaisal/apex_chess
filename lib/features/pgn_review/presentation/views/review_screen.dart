@@ -68,7 +68,9 @@ class ReviewScreen extends ConsumerWidget {
         onNext: controller.next,
         onScrub: controller.jumpTo,
         onMoves: () => _showMoveList(context, controller.jumpTo),
-        onExplain: () => _showCoachExplain(context),
+        onExplain: display.insight.hasDetails
+            ? () => _showCoachExplain(context)
+            : null,
         onBetter: display.insight.betterMove == null
             ? null
             : () => _showBestMove(context, display),
@@ -593,16 +595,18 @@ class _CoachInsightPanel extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 5),
-                Text(
-                  insight.explanation,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: ApexTypography.bodyMedium.copyWith(
-                    color: ApexColors.textSecondary,
-                    fontSize: 11,
+                if (insight.explanation != null) ...[
+                  const SizedBox(height: 5),
+                  Text(
+                    insight.explanation!,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: ApexTypography.bodyMedium.copyWith(
+                      color: ApexColors.textSecondary,
+                      fontSize: 11,
+                    ),
                   ),
-                ),
+                ],
                 if (insight.betterMove != null) ...[
                   const SizedBox(height: 6),
                   _BetterMoveHint(
@@ -929,7 +933,7 @@ class _ReviewActionBar extends StatelessWidget {
   final VoidCallback onNext;
   final ValueChanged<int> onScrub;
   final VoidCallback onMoves;
-  final VoidCallback onExplain;
+  final VoidCallback? onExplain;
   final VoidCallback? onBetter;
   final VoidCallback onFlip;
   final VoidCallback onSummary;
@@ -1067,7 +1071,7 @@ class _CoachCommandOrb extends StatefulWidget {
     required this.onSummary,
   });
 
-  final VoidCallback onExplain;
+  final VoidCallback? onExplain;
   final VoidCallback? onBetter;
   final VoidCallback onFlip;
   final VoidCallback onSummary;
@@ -1118,7 +1122,9 @@ class _CoachCommandOrbState extends State<_CoachCommandOrb> {
               right: 12,
               bottom: bottom,
               child: _CoachCommandMenu(
-                onExplain: () => _runCommand(widget.onExplain),
+                onExplain: widget.onExplain == null
+                    ? null
+                    : () => _runCommand(widget.onExplain!),
                 onBetter: widget.onBetter == null
                     ? null
                     : () => _runCommand(widget.onBetter!),
@@ -1208,7 +1214,7 @@ class _CoachCommandMenu extends StatelessWidget {
     required this.onSummary,
   });
 
-  final VoidCallback onExplain;
+  final VoidCallback? onExplain;
   final VoidCallback? onBetter;
   final VoidCallback onFlip;
   final VoidCallback onSummary;
@@ -1216,11 +1222,12 @@ class _CoachCommandMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final actions = <_CoachCommandAction>[
-      _CoachCommandAction(
-        label: 'Explain',
-        icon: Icons.chat_bubble_outline_rounded,
-        onTap: onExplain,
-      ),
+      if (onExplain != null)
+        _CoachCommandAction(
+          label: 'Explain',
+          icon: Icons.chat_bubble_outline_rounded,
+          onTap: onExplain!,
+        ),
       if (onBetter != null)
         _CoachCommandAction(
           label: 'Better',
@@ -1444,7 +1451,7 @@ class _CoachExplainSheet extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 6),
-          if (display == null || insight == null)
+          if (display == null || insight == null || !insight.hasDetails)
             Text(
               'No deeper explanation available for this move.',
               style: ApexTypography.bodyMedium.copyWith(
@@ -1470,16 +1477,18 @@ class _CoachExplainSheet extends ConsumerWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            Text(
-              insight.coachDetail,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              style: ApexTypography.bodyMedium.copyWith(
-                color: ApexColors.textSecondary,
-                fontSize: 13,
+            if (insight.coachDetail != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                insight.coachDetail!,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: ApexTypography.bodyMedium.copyWith(
+                  color: ApexColors.textSecondary,
+                  fontSize: 13,
+                ),
               ),
-            ),
+            ],
             if (insight.betterMove != null) ...[
               const SizedBox(height: 12),
               _BetterMoveHint(

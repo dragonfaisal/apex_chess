@@ -9,15 +9,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
-import 'package:apex_chess/app/di/providers.dart';
 import 'package:apex_chess/features/account/presentation/controllers/account_controller.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/archives/presentation/controllers/archive_controller.dart';
 import 'package:apex_chess/features/archives/presentation/models/archived_game_card_display.dart';
 import 'package:apex_chess/features/pgn_review/domain/review_entry_contract.dart';
+import 'package:apex_chess/features/pgn_review/domain/analysis_contract.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
-import 'package:apex_chess/features/pgn_review/domain/review_analysis_provider.dart';
 import 'package:apex_chess/features/pgn_review/presentation/views/review_summary_screen.dart';
+import 'package:apex_chess/features/pgn_review/presentation/widgets/offline_review_progress_dialog.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
@@ -175,26 +175,20 @@ class _ArchiveScreenState extends ConsumerState<ArchiveScreen> {
     // unknown-side phrasing.
     final bool? userIsWhite = _userColorKnown(ref, game) ? !userIsBlack : null;
     if (ReviewEntryContract.canOpenCachedReview(game)) {
-      final payload = ReviewEntryContract.savedReviewResult(
-        game,
-        userIsWhite: userIsWhite,
-      ).payload;
-      if (payload == null) return;
-      ref
+      final opened = ref
           .read(reviewControllerProvider.notifier)
-          .loadPayload(
-            payload,
-            userIsBlack: userIsBlack,
-            mode: _modeForProfile(game.analysisProfileId),
-            userIsWhite: userIsWhite,
+          .openSavedReview(
+            game,
+            source: ReviewRuntimeSource.archiveExact,
+            legacyUserIsWhite: userIsWhite,
           );
+      if (!opened) return;
       Navigator.of(context).push(
         MaterialPageRoute<void>(builder: (_) => const ReviewSummaryScreen()),
       );
       return;
     }
 
-    final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
     final toastBottomMargin = MediaQuery.paddingOf(context).bottom + 78;
     if (game.pgn.trim().isEmpty) {
@@ -206,66 +200,20 @@ class _ArchiveScreenState extends ConsumerState<ArchiveScreen> {
       );
       return;
     }
-    showDialog<void>(
+    await showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const _ReanalysisDialog(),
+      builder: (_) => OfflineReviewProgressDialog(
+        pgn: game.pgn,
+        profile: game.analysisProfile,
+        source: ReviewRuntimeSource.legacyCompatibility,
+        sourceProvider: AnalysisGameSource.fromArchiveSource(game.source),
+        sourceGameId: game.id,
+        playedAt: game.playedAt,
+        timeControl: game.timeControl,
+        userIsWhite: userIsWhite,
+      ),
     );
-    try {
-      final pipeline = await ref.read(reviewAnalysisPipelineProvider.future);
-      final result = await pipeline.analyzeGame(
-        GameReviewRequest(
-          pgn: game.pgn,
-          profile: game.analysisProfile,
-          userIsWhite: userIsWhite,
-        ),
-      );
-      final timeline = result.timeline;
-      final mode = _modeForProfile(game.analysisProfileId);
-      final payload = result.analysisResult?.payload;
-      final controller = ref.read(reviewControllerProvider.notifier);
-      if (payload != null) {
-        controller.loadPayload(
-          payload,
-          userIsBlack: userIsBlack,
-          mode: mode,
-          userIsWhite: userIsWhite,
-        );
-      } else {
-        controller.loadTimeline(
-          timeline,
-          userIsBlack: userIsBlack,
-          mode: mode,
-          userIsWhite: userIsWhite,
-        );
-      }
-      // Persist the freshly-computed timeline back onto the archive
-      // record so the *next* reopen is instant — even when the user's
-      // archive predates Phase 6 and was originally saved without a
-      // cached timeline.
-      try {
-        await ref
-            .read(archiveControllerProvider.notifier)
-            .updateCachedTimeline(game.id, timeline);
-      } catch (_) {
-        /* persistence is best-effort */
-      }
-      if (!navigator.mounted) return;
-      navigator.pop();
-      navigator.push(
-        MaterialPageRoute<void>(builder: (_) => const ReviewSummaryScreen()),
-      );
-    } catch (e) {
-      if (!navigator.mounted) return;
-      navigator.pop();
-      showApexGlassToastOnMessenger(
-        messenger,
-        bottomMargin: toastBottomMargin,
-        message: ApexCopy.couldNotOpenReview,
-        detail: ApexCopy.tryAgain,
-        type: ApexGlassToastType.warning,
-      );
-    }
   }
 
   /// Did the imported user play this game as Black? Compares the
@@ -295,10 +243,6 @@ class _ArchiveScreenState extends ConsumerState<ArchiveScreen> {
     if (me == null || me.isEmpty) return false;
     return game.white.trim().toLowerCase() == me ||
         game.black.trim().toLowerCase() == me;
-  }
-
-  static AnalysisMode _modeForProfile(String profileId) {
-    return profileId == 'fast_review' ? AnalysisMode.quick : AnalysisMode.deep;
   }
 }
 
@@ -1016,28 +960,6 @@ class _FilterEmptyState extends StatelessWidget {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Re-analysis dialog (re-opening a saved game) ─────────────────────
-
-class _ReanalysisDialog extends StatelessWidget {
-  const _ReanalysisDialog();
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 32),
-      child: GlassPanel.dialog(
-        accentColor: ApexColors.aurora,
-        child: ApexLoadingScaffold(
-          title: ApexCopy.reanalysisPending,
-          messages: const ['Loading saved review...', 'Building review...'],
-          compact: true,
         ),
       ),
     );

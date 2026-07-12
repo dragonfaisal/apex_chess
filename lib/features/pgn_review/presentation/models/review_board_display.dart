@@ -8,10 +8,8 @@ import 'package:flutter/material.dart';
 
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
-import 'package:apex_chess/core/domain/services/coach_explanation_service.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/core/domain/services/move_quality_display.dart';
-import 'package:apex_chess/core/utils/move_explanation.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
 
@@ -271,8 +269,8 @@ class ReviewCoachInsightDisplay {
   const ReviewCoachInsightDisplay({
     required this.moveLabel,
     required this.san,
-    required this.explanation,
-    required this.coachDetail,
+    this.explanation,
+    this.coachDetail,
     required this.quality,
     this.betterMove,
     this.betterMoveReason,
@@ -282,20 +280,24 @@ class ReviewCoachInsightDisplay {
 
   final String moveLabel;
   final String san;
-  final String explanation;
-  final String coachDetail;
+  final String? explanation;
+  final String? coachDetail;
   final ReviewMoveQualityChipDisplay quality;
   final String? betterMove;
   final String? betterMoveReason;
   final String? engineLinePreview;
   final bool needsDeepScan;
 
+  bool get hasDetails =>
+      explanation != null ||
+      coachDetail != null ||
+      betterMove != null ||
+      engineLinePreview != null;
+
   factory ReviewCoachInsightDisplay.empty() {
     return const ReviewCoachInsightDisplay(
       moveLabel: 'Review',
       san: 'Move',
-      explanation: 'Choose a move.',
-      coachDetail: 'No deeper explanation available for this move.',
       quality: ReviewMoveQualityChipDisplay(
         label: 'Move',
         color: Color(0xFF4FC3FF),
@@ -311,79 +313,34 @@ class ReviewCoachInsightDisplay {
     required bool? userIsWhite,
   }) {
     if (move == null) return ReviewCoachInsightDisplay.empty();
-    final explanation = const CoachExplanationService().explain(
-      CoachExplanationInput(
-        move: move,
-        mode: mode,
-        userIsWhite: userIsWhite,
-        previousUserMove: _previousUserMove(
-          move,
-          timeline: timeline,
-          userIsWhite: userIsWhite,
-        ),
-      ),
-    );
     final quality = ReviewMoveQualityChipDisplay.fromMove(move);
-    final betterMove = _betterMoveLabel(move, explanation);
-    final currentMoveExplanation = _currentMoveExplanation(move, explanation);
+    final betterMove = _betterMoveLabel(move);
+    final authoritativeInsight = _authoritativeInsight(move);
     return ReviewCoachInsightDisplay(
       moveLabel: _moveNumberLabel(move.ply),
       san: move.san.isEmpty ? 'Move' : move.san,
-      explanation: currentMoveExplanation,
-      coachDetail: _coachDetailFor(move),
+      explanation: authoritativeInsight,
+      coachDetail: authoritativeInsight,
       quality: quality,
       betterMove: betterMove,
-      betterMoveReason: betterMove == null
-          ? null
-          : explanation.betterMoveReason ?? _safeBetterMoveReason(move),
+      betterMoveReason: betterMove == null ? null : null,
       engineLinePreview: _linePreview(move),
-      needsDeepScan: explanation.needsDeepScan,
+      needsDeepScan:
+          mode == AnalysisMode.quick &&
+          move.classification != MoveQuality.book &&
+          move.multiPvReceived < 3,
     );
   }
 
-  static MoveAnalysis? _previousUserMove(
-    MoveAnalysis move, {
-    required AnalysisTimeline? timeline,
-    required bool? userIsWhite,
-  }) {
-    if (timeline == null || userIsWhite == null) return null;
-    for (var i = move.ply - 1; i >= 0; i--) {
-      final prior = timeline[i];
-      if (prior != null && prior.isWhiteMove == userIsWhite) return prior;
-    }
-    return null;
-  }
-
-  static String? _betterMoveLabel(MoveAnalysis move, CoachExplanation text) {
+  static String? _betterMoveLabel(MoveAnalysis move) {
     if (!ReviewBoardDisplayModel.shouldShowBetterMoveArrow(move)) return null;
-    final san = text.betterMoveSan ?? move.engineBestMoveSan;
+    final san = move.engineBestMoveSan;
     if (san != null && san.trim().isNotEmpty) return san.trim();
     final lineFirstMove = _lineFirstMove(move);
     if (lineFirstMove != null) return lineFirstMove;
     final uci = move.engineBestMoveUci;
     if (uci == null || uci.trim().isEmpty) return null;
     return uci.trim();
-  }
-
-  static String? _safeBetterMoveReason(MoveAnalysis move) {
-    final reason = BetterMoveExplanation.compose(
-      bestMoveUci: move.engineBestMoveUci,
-      bestMoveSan: move.engineBestMoveSan,
-      playedQuality: move.classification,
-    )?.sentence;
-    return reason?.trim().isEmpty == true ? null : reason;
-  }
-
-  static String _currentMoveExplanation(
-    MoveAnalysis move,
-    CoachExplanation explanation,
-  ) {
-    final current = _coachDetailFor(move);
-    if (current.trim().isNotEmpty) return current;
-    return _shortExplanation(
-      explanation.subline,
-      fallback: _fallbackForQuality(MoveQualityDisplay.labelForMove(move)),
-    );
   }
 
   static String? _linePreview(MoveAnalysis move) {
@@ -401,10 +358,11 @@ class ReviewCoachInsightDisplay {
     return first.isEmpty ? null : first;
   }
 
-  static String _shortExplanation(String raw, {required String fallback}) {
+  static String? _authoritativeInsight(MoveAnalysis move) {
+    final raw = move.coachExplanation.trim();
+    if (raw.isEmpty || raw == 'legacy' || _isGenericFiller(raw)) return null;
     var text = raw.trim();
-    if (text.isEmpty) return fallback;
-    if (_containsDebugTerm(text)) return fallback;
+    if (_containsDebugTerm(text)) return null;
     final firstSentence = text.split(RegExp(r'(?<=[.!?])\s+')).first.trim();
     if (firstSentence.isNotEmpty) text = firstSentence;
     text = text.replaceAll(RegExp(r'\s+'), ' ');
@@ -412,49 +370,20 @@ class ReviewCoachInsightDisplay {
     return '${text.substring(0, 83).trimRight()}...';
   }
 
+  static bool _isGenericFiller(String text) {
+    final normalized = text.trim().toLowerCase();
+    return normalized == 'this is a good move.' ||
+        normalized == 'this improves your position.' ||
+        normalized == 'the engine prefers another move.' ||
+        normalized == 'good move.' ||
+        normalized == 'best move.';
+  }
+
   static bool _containsDebugTerm(String text) {
-    final lower = text.toLowerCase();
-    return lower.contains('stockfish') ||
-        lower.contains(' pv') ||
-        lower.contains('centipawn') ||
-        lower.contains('debug');
-  }
-
-  static String _fallbackForQuality(ReviewMoveLabel label) {
-    return switch (label) {
-      ReviewMoveLabel.brilliant => 'Finds a rare resource.',
-      ReviewMoveLabel.great => 'Finds the key idea.',
-      ReviewMoveLabel.best => 'Keeps the advantage.',
-      ReviewMoveLabel.excellent => 'Strong and accurate.',
-      ReviewMoveLabel.good => 'Keeps the position playable.',
-      ReviewMoveLabel.book => 'Known opening move.',
-      ReviewMoveLabel.inaccuracy => 'Drifts from the best line.',
-      ReviewMoveLabel.mistake => 'A stronger move was available.',
-      ReviewMoveLabel.miss => 'Missed a stronger tactic.',
-      ReviewMoveLabel.blunder => 'Gives the opponent a decisive chance.',
-      ReviewMoveLabel.checkmate => 'Checkmate.',
-    };
-  }
-
-  static String _coachDetailFor(MoveAnalysis move) {
-    final label = MoveQualityDisplay.labelForMove(move);
-    if (move.classification == MoveQuality.book || move.inBook) {
-      return 'Book move in the opening.';
-    }
-    return switch (label) {
-      ReviewMoveLabel.brilliant => 'This move finds a rare resource.',
-      ReviewMoveLabel.great => 'This move finds the key idea.',
-      ReviewMoveLabel.best => 'This move keeps the advantage.',
-      ReviewMoveLabel.excellent =>
-        'This move keeps the position under control.',
-      ReviewMoveLabel.good => 'This move keeps the game playable.',
-      ReviewMoveLabel.book => 'Book move in the opening.',
-      ReviewMoveLabel.inaccuracy => 'This move misses a stronger continuation.',
-      ReviewMoveLabel.mistake => 'A stronger move was available.',
-      ReviewMoveLabel.miss => 'This move misses a stronger tactic.',
-      ReviewMoveLabel.blunder => 'This gives the opponent a clear chance.',
-      ReviewMoveLabel.checkmate => 'Checkmate.',
-    };
+    return RegExp(
+      r'\b(stockfish|pv|centipawns?|debug|uci)\b',
+      caseSensitive: false,
+    ).hasMatch(text);
   }
 
   static String _moveNumberLabel(int ply) =>
@@ -535,7 +464,7 @@ class ReviewBoardDisplayModel {
   final String? selectedSquare;
   final (String, String)? bestMoveArrow;
 
-  bool get canGoPrevious => currentPly > 0;
+  bool get canGoPrevious => currentPly > -1;
   bool get canGoNext => currentPly < totalPlies - 1;
   bool get hasBestMove => insight.betterMove != null;
 
@@ -548,8 +477,8 @@ class ReviewBoardDisplayModel {
   }) {
     final safePly = timeline.moves.isEmpty
         ? -1
-        : currentPly.clamp(0, timeline.totalPlies - 1).toInt();
-    final move = timeline[safePly];
+        : currentPly.clamp(-1, timeline.totalPlies - 1).toInt();
+    final move = safePly < 0 ? null : timeline.moves[safePly];
     final lastMove = _lastMoveFromUci(move?.uci);
     final insight = ReviewCoachInsightDisplay.fromMove(
       move,

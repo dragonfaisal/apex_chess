@@ -39,6 +39,7 @@ class CompositeGameAnalyzer {
     int? depth,
     Duration? movetime,
     AnalysisMode mode = AnalysisMode.deep,
+    bool Function()? isCancelled,
   }) async {
     return _local.analyzeFromPgn(
       pgn,
@@ -46,6 +47,9 @@ class CompositeGameAnalyzer {
       depth: depth,
       movetime: movetime,
       mode: mode,
+      isCancelled: isCancelled,
     );
   }
+
+  void cancelActiveAnalysis() => _local.cancelActiveAnalysis();
 }

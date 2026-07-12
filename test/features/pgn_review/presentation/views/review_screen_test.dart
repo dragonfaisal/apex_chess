@@ -21,6 +21,7 @@ MoveAnalysis _move({
   String? bestUci,
   String? bestSan,
   List<EngineLine> engineLines = const <EngineLine>[],
+  String coachExplanation = '',
 }) {
   return MoveAnalysis(
     ply: ply,
@@ -39,6 +40,7 @@ MoveAnalysis _move({
     engineBestMoveUci: bestUci,
     engineBestMoveSan: bestSan,
     engineLines: engineLines,
+    coachExplanation: coachExplanation,
   );
 }
 
@@ -56,6 +58,7 @@ AnalysisTimeline _timeline({
         uci: 'e2e4',
         quality: MoveQuality.best,
         scoreCpAfter: 24,
+        coachExplanation: 'Controls the center and opens both bishops.',
       ),
       _move(
         ply: 1,
@@ -66,6 +69,7 @@ AnalysisTimeline _timeline({
         scoreCpAfter: 45,
         bestUci: 'c7c5',
         bestSan: 'c5',
+        coachExplanation: 'The c5 break was the more active continuation.',
         engineLines: const [
           EngineLine(
             rank: 1,
@@ -84,6 +88,7 @@ AnalysisTimeline _timeline({
         scoreCpAfter: -180,
         bestUci: 'g1f3',
         bestSan: 'Nf3',
+        coachExplanation: 'The early queen move concedes the initiative.',
       ),
     ],
     startingFen: _startFen,
@@ -265,7 +270,7 @@ void main() {
       expect(
         find.descendant(
           of: sheet,
-          matching: find.text('This move misses a stronger continuation.'),
+          matching: find.text('The c5 break was the more active continuation.'),
         ),
         findsOneWidget,
       );
@@ -282,7 +287,7 @@ void main() {
           of: sheet,
           matching: find.text('Stronger continuation.'),
         ),
-        findsOneWidget,
+        findsNothing,
       );
       expect(
         find.descendant(of: sheet, matching: find.text('c5 Nf3')),
@@ -299,7 +304,7 @@ void main() {
       expect(
         find.descendant(
           of: sheet,
-          matching: find.text('This gives the opponent a clear chance.'),
+          matching: find.text('The early queen move concedes the initiative.'),
         ),
         findsOneWidget,
       );
@@ -312,7 +317,7 @@ void main() {
           of: sheet,
           matching: find.text('Avoids the worst of the danger.'),
         ),
-        findsOneWidget,
+        findsNothing,
       );
     },
   );
@@ -333,7 +338,10 @@ void main() {
       find.byKey(const ValueKey('review-coach-better-move')),
       findsNothing,
     );
-    expect(find.text('This move keeps the advantage.'), findsOneWidget);
+    expect(
+      find.text('Controls the center and opens both bishops.'),
+      findsOneWidget,
+    );
     expect(find.textContaining('Better:'), findsNothing);
 
     container.read(reviewControllerProvider.notifier).jumpTo(1);
@@ -344,11 +352,11 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.text('This move misses a stronger continuation.'),
+      find.text('The c5 break was the more active continuation.'),
       findsOneWidget,
     );
     expect(find.text('Better: c5'), findsOneWidget);
-    expect(find.text('Stronger continuation.'), findsOneWidget);
+    expect(find.text('Stronger continuation.'), findsNothing);
     expect(
       find.byKey(const ValueKey('review-coach-line-detail')),
       findsOneWidget,
@@ -359,7 +367,7 @@ void main() {
     await _pumpReview(tester);
 
     expect(find.text('Better: Nf3'), findsOneWidget);
-    expect(find.text('Avoids the worst of the danger.'), findsOneWidget);
+    expect(find.text('Avoids the worst of the danger.'), findsNothing);
     expect(find.text('Better: c5'), findsNothing);
 
     await tester.tap(find.byKey(const ValueKey('review-coach-orb')));
@@ -484,7 +492,10 @@ void main() {
     );
     expect(evalLabel.data, isNotEmpty);
     expect(evalLabel.data, contains('%'));
-    expect(find.text('This move keeps the advantage.'), findsOneWidget);
+    expect(
+      find.text('Controls the center and opens both bishops.'),
+      findsOneWidget,
+    );
 
     container.read(reviewControllerProvider.notifier).jumpTo(1);
     await _pumpReview(tester);

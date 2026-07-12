@@ -10,7 +10,6 @@ library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/domain/entities/analysis_timeline.dart';
 import '../../../../core/domain/services/evaluation_analyzer.dart';
 import '../../data/archive_repository.dart';
 import '../../domain/archived_game.dart';
@@ -383,33 +382,6 @@ class ArchiveController extends Notifier<ArchiveState> {
   Future<void> clearAll() async {
     final repo = await ref.read(archiveRepositoryProvider.future);
     await repo.clear();
-    await _reload();
-  }
-
-  /// Persist a freshly-recomputed [AnalysisTimeline] back onto the
-  /// existing record so subsequent re-opens are instant. No-op if the
-  /// id is missing from the in-memory list (the user may have deleted
-  /// the record while analysis was running).
-  Future<void> updateCachedTimeline(
-    String id,
-    AnalysisTimeline timeline,
-  ) async {
-    if (!timeline.isComplete) return;
-    final repo = await ref.read(archiveRepositoryProvider.future);
-    final existing = repo.find(id);
-    if (existing == null) return;
-    if (existing.pgn.trim().isEmpty) return;
-    final document = ReviewDocument.fromCompletedTimeline(
-      pgn: existing.pgn,
-      timeline: timeline,
-      sourceProvider: existing.source.wire,
-      sourceGameId: existing.id,
-      importedAt: existing.playedAt,
-      userIsWhite: existing.analyzedUserIsWhite,
-      createdAt: existing.analyzedAt,
-      timeControl: existing.timeControl,
-    );
-    await repo.saveReviewDocument(document);
     await _reload();
   }
 

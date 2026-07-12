@@ -19,7 +19,6 @@ import 'package:apex_chess/features/account/domain/apex_account.dart';
 import 'package:apex_chess/features/account/presentation/controllers/account_controller.dart';
 import 'package:apex_chess/features/account/presentation/views/connect_account_screen.dart';
 import 'package:apex_chess/features/apex_academy/presentation/views/apex_academy_screen.dart';
-import 'package:apex_chess/features/archives/data/archive_save_hook.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/archives/presentation/controllers/archive_controller.dart';
 import 'package:apex_chess/features/archives/presentation/views/archive_screen.dart';
@@ -30,22 +29,20 @@ import 'package:apex_chess/features/mistake_vault/data/mistake_vault_save_hook.d
 import 'package:apex_chess/features/home/presentation/controllers/home_activity_controller.dart';
 import 'package:apex_chess/features/home/presentation/pgn_paste_display_state.dart';
 import 'package:apex_chess/features/pgn_review/domain/saved_review_lookup.dart';
-import 'package:apex_chess/features/pgn_review/domain/review_entry_contract.dart';
+import 'package:apex_chess/features/pgn_review/domain/analysis_contract.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
-import 'package:apex_chess/features/pgn_review/domain/review_analysis_provider.dart';
 import 'package:apex_chess/features/pgn_review/presentation/views/review_summary_screen.dart';
 import 'package:apex_chess/features/pgn_review/presentation/widgets/already_reviewed_dialog.dart';
+import 'package:apex_chess/features/pgn_review/presentation/widgets/offline_review_progress_dialog.dart';
 import 'package:apex_chess/features/profile/presentation/views/profile_screen.dart';
 import 'package:apex_chess/features/profile_scanner/presentation/controllers/profile_scanner_controller.dart';
 import 'package:apex_chess/features/profile_scanner/presentation/views/profile_scanner_screen.dart';
 import 'package:apex_chess/infrastructure/engine/eco_book.dart';
-import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
 import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_account_pill.dart';
-import 'package:apex_chess/shared_ui/widgets/apex_loading.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_profile_avatar_button.dart';
 import 'package:apex_chess/shared_ui/widgets/apex_snack.dart';
 import 'package:apex_chess/shared_ui/widgets/glass_panel.dart';
@@ -198,47 +195,39 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         return;
       }
     }
-    if (!_canAnalyzeProfile(context, ref, result.profile)) return;
     if (!context.mounted) return;
     showDialog(
       context: context,
       barrierDismissible: false,
       barrierColor: ApexColors.spaceVoid.withValues(alpha: 0.72),
-      builder: (_) => _LocalAnalysisProgressDialog(
+      builder: (_) => OfflineReviewProgressDialog(
         pgn: result.pgn,
         profile: result.profile,
+        source: ReviewRuntimeSource.pastedPgn,
+        sourceProvider: AnalysisGameSource.fromPgn(result.pgn),
         userIsWhite: result.userIsWhite,
         userHandle: result.userHandle,
+        onCompleted: (runtimeRef, runtime) {
+          final timeline = runtime.timeline;
+          final archiveId = runtime.savedDocumentId;
+          if (timeline != null && archiveId != null) {
+            unawaited(
+              saveMistakeDrillsFromTimeline(
+                ref: runtimeRef,
+                timeline: timeline,
+                archiveId: archiveId,
+                userIsWhite: runtime.userIsWhite,
+              ),
+            );
+          }
+          unawaited(
+            runtimeRef
+                .read(homeActivityControllerProvider.notifier)
+                .markCompleted(HomeActivityKind.pgn),
+          );
+        },
       ),
     );
-  }
-
-  bool _canAnalyzeProfile(
-    BuildContext context,
-    WidgetRef ref,
-    AnalysisProfile profile,
-  ) {
-    final pipeline = ref.read(reviewAnalysisPipelineProvider).valueOrNull;
-    final plan =
-        pipeline?.modePlan(
-          isOnline: !ref.read(connectionPresenceProvider).isOffline,
-        ) ??
-        ReviewModeRoutingPlan.build(
-          isOnline: !ref.read(connectionPresenceProvider).isOffline,
-          onlineFastConfigured: false,
-          onlineDeepConfigured: false,
-        );
-    final option = plan.optionFor(profile);
-    if (option.available) return true;
-    showApexGlassToast(
-      context,
-      message: option.unavailableMessage ?? ApexCopy.serviceUnavailable,
-      detail: profile.id == AnalysisProfileId.offlineReview
-          ? null
-          : ApexCopy.useOfflineReview,
-      type: ApexGlassToastType.warning,
-    );
-    return false;
   }
 
   ArchivedGame? _openableSavedReviewForPgn(
@@ -274,28 +263,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       if (!context.mounted || resolved == null) return;
       savedReview = resolved;
     }
-    final payload = ReviewEntryContract.savedReviewResult(
-      savedReview,
-      userIsWhite: result.userIsWhite,
-    ).payload;
-    if (payload == null) return;
-    ref
+    final opened = ref
         .read(reviewControllerProvider.notifier)
-        .loadPayload(
-          payload,
-          userIsBlack: result.userIsWhite == false,
-          mode: _modeForSavedReview(savedReview),
-          userIsWhite: result.userIsWhite,
+        .openSavedReview(
+          savedReview,
+          source: ReviewRuntimeSource.homeSavedPreview,
+          legacyUserIsWhite: result.userIsWhite,
         );
+    if (!opened) return;
     Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const ReviewSummaryScreen()),
     );
-  }
-
-  AnalysisMode _modeForSavedReview(ArchivedGame savedReview) {
-    return savedReview.analysisProfileId == 'fast_review'
-        ? AnalysisMode.quick
-        : AnalysisMode.deep;
   }
 }
 
@@ -1138,32 +1116,22 @@ class _ReviewModeButtons extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final pipeline = ref.watch(reviewAnalysisPipelineProvider).valueOrNull;
-    final isOnline = !ref.watch(connectionPresenceProvider).isOffline;
-    final plan =
-        pipeline?.modePlan(isOnline: isOnline) ??
-        ReviewModeRoutingPlan.build(
-          isOnline: isOnline,
-          onlineFastConfigured: false,
-          onlineDeepConfigured: false,
-        );
-    final options = plan.pickerOptions;
+    final pipeline = ref.watch(reviewAnalysisPipelineProvider);
+    final available =
+        pipeline.valueOrNull?.supportsLocalAnalysis ?? !pipeline.hasError;
+    final profiles = AnalysisProfile.values;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final option in options) ...[
+        for (final profile in profiles) ...[
           _DialogPrimaryAction(
-            label: option.label,
-            detail: option.available
-                ? null
-                : option.unavailableMessage ?? ApexCopy.serviceUnavailable,
-            icon: _iconForProfile(option.profile),
-            enabled: option.available,
-            onTap: option.profile == null
-                ? null
-                : () => onSelected(option.profile!),
+            label: profile.label,
+            detail: available ? profile.warning : ApexCopy.serviceUnavailable,
+            icon: _iconForProfile(profile),
+            enabled: available,
+            onTap: () => onSelected(profile),
           ),
-          if (option != options.last) const SizedBox(height: 10),
+          if (profile != profiles.last) const SizedBox(height: 10),
         ],
       ],
     );
@@ -1614,223 +1582,6 @@ class _TileCardState extends State<_TileCard> {
       ),
     );
   }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PGN review progress dialog — backed by LocalGameAnalyzer.
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _LocalAnalysisProgressDialog extends ConsumerStatefulWidget {
-  const _LocalAnalysisProgressDialog({
-    required this.pgn,
-    required this.profile,
-    this.userIsWhite,
-    this.userHandle,
-  });
-  final String pgn;
-  final AnalysisProfile profile;
-
-  /// `true` → user played White, `false` → Black, `null` → unknown.
-  /// When non-null the review board auto-flips for Black users and the
-  /// Mistake Vault hook only ingests that colour's plies.
-  final bool? userIsWhite;
-
-  /// Optional handle the user typed on the paste dialog. Reserved for
-  /// future archive-metadata enhancements; currently unused by this
-  /// dialog.
-  final String? userHandle;
-
-  @override
-  ConsumerState<_LocalAnalysisProgressDialog> createState() =>
-      _LocalAnalysisProgressDialogState();
-}
-
-class _LocalAnalysisProgressDialogState
-    extends ConsumerState<_LocalAnalysisProgressDialog> {
-  int _completed = 0;
-  int _total = 1;
-  bool _done = false;
-  // Guards the post-frame navigation callback so it is enqueued at most once,
-  // even if build() runs multiple times before the callback fires. Without
-  // this, an ancestor rebuild between `_done = true` and the next frame would
-  // queue a second pop→push pair and tear down the freshly-pushed review.
-  bool _navigated = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _runAnalysis();
-  }
-
-  Future<void> _runAnalysis() async {
-    try {
-      final pipeline = await ref.read(reviewAnalysisPipelineProvider.future);
-      final result = await pipeline.analyzeGame(
-        GameReviewRequest(
-          pgn: widget.pgn,
-          profile: widget.profile,
-          userIsWhite: widget.userIsWhite,
-          userHandle: widget.userHandle,
-          onProgress: (c, t) {
-            if (mounted) {
-              setState(() {
-                _completed = c;
-                _total = t;
-              });
-            }
-          },
-        ),
-      );
-      final timeline = result.timeline;
-      final mode = widget.profile.id == AnalysisProfileId.fastReview
-          ? AnalysisMode.quick
-          : AnalysisMode.deep;
-      final depth = result.metadata.depth;
-      if (mounted) {
-        final payload = result.analysisResult?.payload;
-        final controller = ref.read(reviewControllerProvider.notifier);
-        if (payload != null) {
-          controller.loadPayload(
-            payload,
-            userIsBlack: widget.userIsWhite == false,
-            mode: mode,
-            userIsWhite: widget.userIsWhite,
-          );
-        } else {
-          controller.loadTimeline(
-            timeline,
-            // Auto-flip the board if the user told us they played
-            // Black. Unknown-side PGNs keep White at the bottom.
-            userIsBlack: widget.userIsWhite == false,
-            // Phase 20.1: thread the analysis mode and the user's
-            // colour so the coach card can attribute "Allowed
-            // forced mate" correctly and surface the "Needs Deep
-            // Scan" chip on Quick-mode ambiguous plies.
-            mode: mode,
-            userIsWhite: widget.userIsWhite,
-          );
-        }
-        // Archive save is awaited so we have the id to hand the
-        // Mistake Vault hook; both are still best-effort and never
-        // block the review flow on failure.
-        final archiveId = await saveAnalysisToArchive(
-          ref: ref,
-          timeline: timeline,
-          pgn: widget.pgn,
-          depth: depth,
-          source: _archiveSourceForPgn(widget.pgn),
-          analysisMode: mode,
-          userIsWhite: widget.userIsWhite,
-        );
-        if (archiveId != null) {
-          unawaited(
-            saveMistakeDrillsFromTimeline(
-              ref: ref,
-              timeline: timeline,
-              archiveId: archiveId,
-              // When the user specified a colour on the paste dialog, only
-              // that side's mistakes flow into the Vault. Unknown-side
-              // paste keeps the legacy both-sides behaviour.
-              userIsWhite: widget.userIsWhite,
-            ),
-          );
-        }
-        unawaited(
-          ref
-              .read(homeActivityControllerProvider.notifier)
-              .markCompleted(HomeActivityKind.pgn),
-        );
-        if (!mounted) return;
-        setState(() => _done = true);
-      }
-    } on LocalAnalysisException catch (e) {
-      if (mounted) setState(() => _error = e.userMessage);
-    } on ReviewProviderUnavailableException catch (e) {
-      if (mounted) setState(() => _error = e.message);
-    } catch (e) {
-      if (mounted) setState(() => _error = ApexCopy.analysisFailed);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_done && !_navigated) {
-      _navigated = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        Navigator.of(context).pop();
-        // Phase 20.1 § 3: land on the ReviewSummaryScreen first so the
-        // user gets accuracy + counts + phase breakdown + CTAs before
-        // jumping into move-by-move review. The summary screen's
-        // "Review Moves" CTA pushes ReviewScreen itself.
-        Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const ReviewSummaryScreen()));
-      });
-    }
-
-    return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-      child: GlassPanel.dialog(
-        accentColor: _error == null ? ApexColors.sapphire : ApexColors.ruby,
-        child: _error != null ? _errorContent() : _progressContent(),
-      ),
-    );
-  }
-
-  Widget _progressContent() {
-    final progress = _total > 0 ? _completed / _total : 0.0;
-    return ApexLoadingScaffold(
-      title: widget.profile.label,
-      messages: const [
-        'Reading PGN...',
-        'Checking opening...',
-        'Building review...',
-        'Analyzing tactics...',
-        'Saving review...',
-      ],
-      progress: progress,
-      progressMessage: '$_completed / $_total plies analyzed',
-      compact: true,
-    );
-  }
-
-  Widget _errorContent() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Icon(Icons.error_outline_rounded, color: ApexColors.ruby, size: 22),
-            const SizedBox(width: 10),
-            Text(
-              'Review Error',
-              style: ApexTypography.titleMedium.copyWith(
-                color: ApexColors.ruby,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Text(_error!, style: ApexTypography.bodyLarge),
-        const SizedBox(height: 16),
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text('OK', style: TextStyle(color: ApexColors.sapphire)),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-ArchiveSource _archiveSourceForPgn(String pgn) {
-  final tags = const GameIdentityService().parseTags(pgn);
-  return ArchiveSource.fromPgnSite(tags['Site']);
 }
 
 // ── Account strip (top of home) ─────────────────────────────────────────

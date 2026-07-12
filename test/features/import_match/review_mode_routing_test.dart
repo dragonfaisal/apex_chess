@@ -1,3 +1,4 @@
+import 'package:apex_chess/app/di/providers.dart';
 import 'package:apex_chess/core/domain/entities/analysis_profile.dart';
 import 'package:apex_chess/features/import_match/presentation/views/import_match_screen.dart';
 import 'package:apex_chess/features/pgn_review/domain/review_analysis_provider.dart';
@@ -68,6 +69,51 @@ void main() {
     expect(find.text('Deep'), findsNothing);
     expect(find.text('Offline Review'), findsOneWidget);
   });
+
+  testWidgets('production offline picker exposes local Fast Deep and Offline', (
+    tester,
+  ) async {
+    final pipeline = GameReviewPipeline(
+      fastProvider: const _StubProvider(configured: false),
+      deepProvider: const _StubProvider(configured: false),
+      offlineProvider: const _StubProvider(configured: true),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          reviewAnalysisPipelineProvider.overrideWith((ref) async => pipeline),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(body: Center(child: DepthPickerDialog())),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Fast Review'), findsOneWidget);
+    expect(find.text('Deep Review'), findsOneWidget);
+    expect(find.text('Offline Review'), findsOneWidget);
+    expect(find.text('Unavailable'), findsNothing);
+  });
+}
+
+class _StubProvider extends ReviewAnalysisProvider {
+  const _StubProvider({required this.configured});
+
+  final bool configured;
+
+  @override
+  String get providerId => 'stub';
+
+  @override
+  String get engineVersion => 'stub';
+
+  @override
+  bool get isConfigured => configured;
+
+  @override
+  Future<GameReviewResult> analyzeGame(GameReviewRequest request) =>
+      throw UnimplementedError();
 }
 
 class _Host extends StatelessWidget {

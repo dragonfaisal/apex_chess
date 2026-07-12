@@ -110,6 +110,10 @@ class LocalGameAnalyzer {
 
   String get engineVersion => _eval.engineVersion;
 
+  /// Requests an immediate UCI stop for the active search. The runtime also
+  /// invalidates the execution generation, so a racing result cannot commit.
+  void cancelActiveAnalysis() => _eval.cancelActiveSearch();
+
   Future<AnalysisTimeline> analyzeFromPgn(
     String pgn, {
     void Function(int completed, int total)? onProgress,
