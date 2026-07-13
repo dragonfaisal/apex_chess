@@ -83,6 +83,10 @@ class AnalysisDebugExport {
     'baseClassification': m.baseClassification.name,
     'finalClassification': m.finalClassification.name,
     'reasonCode': m.reasonCode,
+    'policyVersion': m.classifierVersion,
+    'reasonCodes': m.classificationReasonCodes,
+    'failedGates': m.classificationFailedGates,
+    'classificationEvidence': m.classificationEvidence?.toJson(),
     'playedEqualsPV1': m.playedEqualsPv1,
     'pv1': _linePayload(m, 0),
     'pv2': _linePayload(m, 1),
@@ -144,7 +148,6 @@ class AnalysisDebugExport {
     'verificationDepth': m.tacticalVerdict.verificationDepth,
     'verificationMultiPV': m.tacticalVerdict.verificationMultiPV,
     'finalReasonCode': m.reasonCode,
-    'humanExplanation': m.tacticalVerdict.humanExplanation,
     'analysisMode': m.analysisMode,
     'classifierVersion': m.classifierVersion,
     'engineVersion': m.engineVersion,
@@ -155,7 +158,6 @@ class AnalysisDebugExport {
     'mateInAfter': m.mateInAfter,
     'openingName': m.openingName,
     'ecoCode': m.ecoCode,
-    'message': m.message,
   };
 
   static Map<String, Object?>? _linePayload(MoveAnalysis m, int index) {

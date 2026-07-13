@@ -13,6 +13,7 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:apex_chess/core/domain/entities/classification_evidence.dart';
 import 'package:apex_chess/core/domain/entities/deep_tactical_verdict.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 
@@ -31,6 +32,21 @@ void main() {
         engineBestMoveUci: 'a1a2',
         playedMoveUci: 'a1a2',
         isSacrifice: true,
+        candidateEvidence: const <ClassificationCandidateEvidence>[
+          ClassificationCandidateEvidence(
+            rootUci: 'a1a2',
+            rank: 1,
+            score: ClassificationScore.cp(500),
+            achievedDepth: 22,
+            isLegal: true,
+            pvComplete: true,
+          ),
+        ],
+        requestedMultiPv: 1,
+        receivedMultiPv: 1,
+        candidateSetCoherent: true,
+        bestMovePv1Consistent: true,
+        searchQualityMet: true,
       );
       expect(r.quality, isNot(MoveQuality.brilliant));
       // 20 cp loss + still engine #1 → Best.
@@ -48,6 +64,37 @@ void main() {
         isSacrifice: true,
         multiPvWhiteWinPercents: [95.0, 72.0, 64.0],
         tacticalVerdict: _verifiedTactical(forcedMate: true),
+        candidateEvidence: const <ClassificationCandidateEvidence>[
+          ClassificationCandidateEvidence(
+            rootUci: 'd1h5',
+            rank: 1,
+            score: ClassificationScore.mate(3),
+            achievedDepth: 24,
+            isLegal: true,
+            pvComplete: true,
+          ),
+          ClassificationCandidateEvidence(
+            rootUci: 'e2e4',
+            rank: 2,
+            score: ClassificationScore.cp(200),
+            achievedDepth: 24,
+            isLegal: true,
+            pvComplete: true,
+          ),
+          ClassificationCandidateEvidence(
+            rootUci: 'c2c4',
+            rank: 3,
+            score: ClassificationScore.cp(100),
+            achievedDepth: 24,
+            isLegal: true,
+            pvComplete: true,
+          ),
+        ],
+        requestedMultiPv: 3,
+        receivedMultiPv: 3,
+        candidateSetCoherent: true,
+        bestMovePv1Consistent: true,
+        searchQualityMet: true,
         alternativeEvidenceComplete: true,
         deepVerificationComplete: true,
       );
@@ -114,6 +161,37 @@ void main() {
         isSacrifice: true,
         multiPvWhiteWinPercents: [51.0, 50.0, 49.0],
         tacticalVerdict: _verifiedTactical(),
+        candidateEvidence: const <ClassificationCandidateEvidence>[
+          ClassificationCandidateEvidence(
+            rootUci: 'b2b4',
+            rank: 1,
+            score: ClassificationScore.cp(20),
+            achievedDepth: 24,
+            isLegal: true,
+            pvComplete: true,
+          ),
+          ClassificationCandidateEvidence(
+            rootUci: 'e2e4',
+            rank: 2,
+            score: ClassificationScore.cp(-100),
+            achievedDepth: 24,
+            isLegal: true,
+            pvComplete: true,
+          ),
+          ClassificationCandidateEvidence(
+            rootUci: 'c2c4',
+            rank: 3,
+            score: ClassificationScore.cp(-200),
+            achievedDepth: 24,
+            isLegal: true,
+            pvComplete: true,
+          ),
+        ],
+        requestedMultiPv: 3,
+        receivedMultiPv: 3,
+        candidateSetCoherent: true,
+        bestMovePv1Consistent: true,
+        searchQualityMet: true,
         alternativeEvidenceComplete: true,
         deepVerificationComplete: true,
       );
@@ -126,12 +204,24 @@ void main() {
       // Win% sigmoid in the wings of -800 cp barely changes for a
       // 50 cp slip — pre-Phase 6 this could read as Inaccuracy via
       // `deltaW ≤ -2`. The cp-floor now caps at Excellent.
-      final r = analyzer.analyze(prevCp: -800, currCp: -850, isWhiteMove: true);
+      final r = analyzer.analyze(
+        prevCp: -800,
+        currCp: -850,
+        isWhiteMove: true,
+        engineBestMoveUci: 'e2e4',
+        playedMoveUci: 'd2d4',
+      );
       expect(r.quality, MoveQuality.excellent);
     });
 
     test('caps to Inaccuracy when cp-loss ≤ 120', () {
-      final r = analyzer.analyze(prevCp: 0, currCp: -100, isWhiteMove: true);
+      final r = analyzer.analyze(
+        prevCp: 0,
+        currCp: -100,
+        isWhiteMove: true,
+        engineBestMoveUci: 'e2e4',
+        playedMoveUci: 'd2d4',
+      );
       expect(r.quality, isIn([MoveQuality.inaccuracy, MoveQuality.good]));
       // Either tier is acceptable per spec — the key is *not*
       // Mistake / Blunder.
@@ -142,12 +232,24 @@ void main() {
     test('Blunder requires cp-loss > 250', () {
       // 150 cp loss should never read as Blunder, even if Win% says
       // so. Concretely a slip from +0 → -150 lands in Mistake.
-      final r = analyzer.analyze(prevCp: 0, currCp: -150, isWhiteMove: true);
+      final r = analyzer.analyze(
+        prevCp: 0,
+        currCp: -150,
+        isWhiteMove: true,
+        engineBestMoveUci: 'e2e4',
+        playedMoveUci: 'd2d4',
+      );
       expect(r.quality, isNot(MoveQuality.blunder));
     });
 
     test('Blunder fires when cp-loss > 250 AND Win% drops', () {
-      final r = analyzer.analyze(prevCp: 100, currCp: -300, isWhiteMove: true);
+      final r = analyzer.analyze(
+        prevCp: 100,
+        currCp: -300,
+        isWhiteMove: true,
+        engineBestMoveUci: 'e2e4',
+        playedMoveUci: 'd2d4',
+      );
       expect(r.quality, MoveQuality.blunder);
     });
   });
@@ -160,6 +262,8 @@ void main() {
         prevCp: -1200,
         currCp: -1500,
         isWhiteMove: true,
+        engineBestMoveUci: 'e2e4',
+        playedMoveUci: 'd2d4',
       );
       expect(r.quality, isNot(MoveQuality.blunder));
     });
@@ -168,7 +272,13 @@ void main() {
       // From +800 to +600 — still winning. Pre-Phase 6 the Win%
       // sigmoid + cp-loss combo could land here as Blunder, which
       // misrepresents an inaccuracy that gives back small advantage.
-      final r = analyzer.analyze(prevCp: 800, currCp: 600, isWhiteMove: true);
+      final r = analyzer.analyze(
+        prevCp: 800,
+        currCp: 600,
+        isWhiteMove: true,
+        engineBestMoveUci: 'e2e4',
+        playedMoveUci: 'd2d4',
+      );
       expect(r.quality, isNot(MoveQuality.blunder));
     });
   });
@@ -181,6 +291,21 @@ void main() {
         isWhiteMove: true,
         engineBestMoveUci: 'e1h1', // king-captures-rook (dartchess form)
         playedMoveUci: 'e1g1', // king-target form
+        candidateEvidence: const <ClassificationCandidateEvidence>[
+          ClassificationCandidateEvidence(
+            rootUci: 'e1g1',
+            rank: 1,
+            score: ClassificationScore.cp(0),
+            achievedDepth: 22,
+            isLegal: true,
+            pvComplete: true,
+          ),
+        ],
+        requestedMultiPv: 1,
+        receivedMultiPv: 1,
+        candidateSetCoherent: true,
+        bestMovePv1Consistent: true,
+        searchQualityMet: true,
       );
       expect(r.quality, MoveQuality.best);
     });

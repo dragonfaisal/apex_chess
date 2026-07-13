@@ -4,6 +4,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
+import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/features/archives/domain/review_identity.dart';
 
 void main() {
@@ -153,7 +154,7 @@ void main() {
           pgn: _basePgn,
           sourceProvider: 'pgn',
         );
-        final fast = _timeline();
+        final fast = _timeline().copyWith(classifierVersion: 5);
         final samePolicyLater = fast.copyWith(
           completedAt: DateTime.utc(2030, 1, 1),
           engineSearchCount: 99,
@@ -170,7 +171,9 @@ void main() {
         final engine18 = fast.copyWith(
           engineVersion: 'apex-stockfish-bridge/0.4.0|Stockfish 18',
         );
-        final classifier6 = fast.copyWith(classifierVersion: 6);
+        final classifier6 = fast.copyWith(
+          classifierVersion: kApexClassifierVersion,
+        );
 
         String id(AnalysisTimeline timeline) =>
             AnalysisVariantId.fromCompatibility(

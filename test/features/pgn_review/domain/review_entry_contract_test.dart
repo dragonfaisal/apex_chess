@@ -39,6 +39,48 @@ void main() {
     expect(intent.destination, ReviewEntryDestination.board);
   });
 
+  test('historic canonical variant reopens without current-policy reuse', () {
+    final current = _gameWithTimeline();
+    final historicTimeline = AnalysisTimeline(
+      startingFen: current.cachedTimeline!.startingFen,
+      moves: current.cachedTimeline!.moves,
+      headers: current.cachedTimeline!.headers,
+      winPercentages: current.cachedTimeline!.winPercentages,
+      classifierVersion: 5,
+      analysisSchemaVersion: 3,
+      completionStatus: AnalysisCompletionStatus.complete,
+      expectedPlies: 1,
+    );
+    final historic = ArchivedGame(
+      id: 'historic-variant',
+      source: current.source,
+      white: current.white,
+      black: current.black,
+      result: current.result,
+      analyzedAt: current.analyzedAt,
+      depth: current.depth,
+      pgn: current.pgn,
+      qualityCounts: historicTimeline.qualityCounts,
+      averageCpLoss: historicTimeline.averageCpLoss,
+      totalPlies: historicTimeline.totalPlies,
+      cachedTimeline: historicTimeline,
+      classifierVersion: 5,
+      analysisSchemaVersion: 3,
+      recordKind: ArchivedRecordKind.canonicalDocument,
+      canonicalGameId: 'game-sha256',
+      analysisVariantId: 'variant-sha256-v5',
+      canonicalIndexVerified: true,
+    );
+
+    expect(historic.isCacheCurrent, isFalse);
+    expect(historic.isExactStoredVariantReopenable, isTrue);
+    expect(ReviewEntryContract.canOpenCachedReview(historic), isTrue);
+    expect(
+      ReviewEntryIntent.savedReview(historic).destination,
+      ReviewEntryDestination.summary,
+    );
+  });
+
   test('missing saved review falls back to Archive safely', () {
     final intent = ReviewEntryIntent.savedReview(null);
 

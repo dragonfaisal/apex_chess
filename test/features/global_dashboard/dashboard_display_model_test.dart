@@ -198,7 +198,7 @@ void main() {
     expect(trend.points, isEmpty);
   });
 
-  test('Move quality breakdown renders all 10 public labels', () {
+  test('Move quality breakdown renders every factual public label', () {
     final stats = buildDashboardStatsForTesting([
       _game(
         id: 'q1',
@@ -214,6 +214,8 @@ void main() {
           MoveQuality.missedWin: 9,
           MoveQuality.blunder: 10,
           MoveQuality.forced: 11,
+          MoveQuality.onlyMove: 12,
+          MoveQuality.unavailable: 13,
         },
       ),
     ]);
@@ -222,6 +224,8 @@ void main() {
     expect(display.items.map((i) => i.label), [
       'Brilliant',
       'Great',
+      'Only Move',
+      'Forced',
       'Best',
       'Excellent',
       'Good',
@@ -230,8 +234,10 @@ void main() {
       'Mistake',
       'Miss',
       'Blunder',
+      'Unavailable',
     ]);
-    expect(display.items.any((i) => i.label == 'forced'), isFalse);
+    expect(display.items.singleWhere((i) => i.label == 'Forced').count, 11);
+    expect(display.items.singleWhere((i) => i.label == 'Only Move').count, 12);
     expect(display.items.singleWhere((i) => i.label == 'Miss').count, 9);
     expect(display.items.singleWhere((i) => i.label == 'Mistake').count, 8);
     expect(

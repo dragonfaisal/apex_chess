@@ -41,7 +41,8 @@ MoveAnalysis _m({
   classification: cls,
   moverCpLoss: deltaW < 0 ? (-deltaW).round() : 0,
   inBook: cls == MoveQuality.book,
-  engineEvaluationAvailable: cls != MoveQuality.book,
+  engineEvaluationAvailable:
+      cls != MoveQuality.book && cls != MoveQuality.unavailable,
   ecoCode: eco,
   openingName: openingName,
   message: message,
@@ -71,6 +72,8 @@ void main() {
         _m(ply: 5, isWhite: false, cls: MoveQuality.forced),
         _m(ply: 6, isWhite: true, cls: MoveQuality.mistake, deltaW: -12),
         _m(ply: 7, isWhite: false, cls: MoveQuality.missedWin, deltaW: -20),
+        _m(ply: 8, isWhite: true, cls: MoveQuality.onlyMove),
+        _m(ply: 9, isWhite: false, cls: MoveQuality.unavailable),
       ]);
       final s = svc.compute(timeline: t, userIsWhite: true);
       expect(s.counts.best, 2);
@@ -80,7 +83,9 @@ void main() {
       expect(s.counts.forced, 1);
       expect(s.counts.mistake, 1);
       expect(s.counts.missedWin, 1);
-      expect(s.counts.totalClassified, 8);
+      expect(s.counts.onlyMove, 1);
+      expect(s.counts.unavailable, 1);
+      expect(s.counts.totalClassified, 10);
     });
 
     test('Per-player split: user (White) and opponent (Black) counts add up '

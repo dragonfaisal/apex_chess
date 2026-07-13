@@ -76,8 +76,11 @@ class LocalEvalService {
   String get engineVersion => _engine.bridgeVersion;
 
   void cancelActiveSearch() {
+    _cancellationEpoch++;
     if (_engine.isRunning) _engine.stop();
   }
+
+  int _cancellationEpoch = 0;
 
   /// Serializes evaluate() calls so only one UCI search is in flight at a
   /// time. Essential — the engine has a single position slot.
@@ -91,20 +94,31 @@ class LocalEvalService {
     int multiPv = 1,
   }) {
     final completer = Completer<(EvalSnapshot?, EvalError?)>();
+    final requestCancellationEpoch = _cancellationEpoch;
     final previous = _queue;
     _queue = previous.then((_) async {
       try {
+        if (_isCancelled(requestCancellationEpoch)) {
+          completer.complete((null, EvalError.cancelled));
+          return;
+        }
         final result = await _runOne(
           fen,
           depth: depth ?? _defaultDepth,
           movetime: movetime,
           timeout: timeout ?? _defaultTimeout,
           multiPv: multiPv,
+          cancellationEpoch: requestCancellationEpoch,
         );
         completer.complete(result);
       } catch (_) {
         // Never let the queue die.
-        completer.complete((null, EvalError.serverError));
+        completer.complete((
+          null,
+          _isCancelled(requestCancellationEpoch)
+              ? EvalError.cancelled
+              : EvalError.serverError,
+        ));
       }
     });
     return completer.future;
@@ -116,7 +130,11 @@ class LocalEvalService {
     Duration? movetime,
     required Duration timeout,
     required int multiPv,
+    required int cancellationEpoch,
   }) async {
+    if (_isCancelled(cancellationEpoch)) {
+      return (null, EvalError.cancelled);
+    }
     // Reject obviously malformed FENs *before* we touch the engine. The
     // UCI position parser inside Stockfish 17 is not defensive against
     // every shape of bad input — feeding it a string that fails this
@@ -131,8 +149,14 @@ class LocalEvalService {
       try {
         await _engine.start();
       } on Object {
+        if (_isCancelled(cancellationEpoch)) {
+          return (null, EvalError.cancelled);
+        }
         return (null, EvalError.offline);
       }
+    }
+    if (_isCancelled(cancellationEpoch)) {
+      return (null, EvalError.cancelled);
     }
     if (engineVersion.toLowerCase().contains('stub')) {
       return (null, EvalError.offline);
@@ -145,14 +169,22 @@ class LocalEvalService {
       // Engine not running — start() above would have bailed; re-report.
       return (null, EvalError.offline);
     }
-    if (!await _awaitReadyOk(const Duration(seconds: 2))) {
+    final stoppedReady = await _awaitReadyOk(const Duration(seconds: 2));
+    if (_isCancelled(cancellationEpoch)) {
+      return (null, EvalError.cancelled);
+    }
+    if (!stoppedReady) {
       return (null, EvalError.synchronizationTimeout);
     }
 
     // ── 2. Reset per-position state; this prevents the engine from using
     //     its transposition table built against the previous FEN. ──
     _engine.send(const UciNewGame());
-    if (!await _awaitReadyOk(const Duration(seconds: 2))) {
+    final newGameReady = await _awaitReadyOk(const Duration(seconds: 2));
+    if (_isCancelled(cancellationEpoch)) {
+      return (null, EvalError.cancelled);
+    }
+    if (!newGameReady) {
       return (null, EvalError.synchronizationTimeout);
     }
 
@@ -162,7 +194,11 @@ class LocalEvalService {
     _engine.send(
       UciSetOption(name: 'MultiPV', value: requestedMultiPv.toString()),
     );
-    if (!await _awaitReadyOk(const Duration(seconds: 2))) {
+    final multiPvReady = await _awaitReadyOk(const Duration(seconds: 2));
+    if (_isCancelled(cancellationEpoch)) {
+      return (null, EvalError.cancelled);
+    }
+    if (!multiPvReady) {
       return (null, EvalError.synchronizationTimeout);
     }
 
@@ -207,21 +243,23 @@ class LocalEvalService {
 
     try {
       final best = await bestMoveCompleter.future.timeout(timeout);
+      if (_isCancelled(cancellationEpoch)) {
+        return (null, EvalError.cancelled);
+      }
       final elapsedMs = DateTime.now()
           .difference(searchStartedAt)
           .inMilliseconds;
       final isWhiteToMove = _sideToMoveIsWhite(fen);
 
-      final selectedFrame = _selectCompletedFrame(
+      final normalizedBestMove = _normalizeCastlingUci(best.move);
+      final selectedFrame = _selectValidatedFrame(
         framesByDepth,
-        requestedMultiPv: requestedMultiPv,
-      );
-      final lines = _buildEngineLines(
         fen: fen,
-        infosByRank: selectedFrame,
         requestedMultiPv: requestedMultiPv,
         isWhiteToMove: isWhiteToMove,
+        normalizedBestMove: normalizedBestMove,
       );
+      final lines = selectedFrame?.lines ?? const <EngineLine>[];
       final bestLine = lines.isNotEmpty ? lines.first : null;
       final secondLine = lines.length >= 2 ? lines[1] : null;
       final scoreCpWhite = bestLine?.scoreCp;
@@ -233,7 +271,7 @@ class LocalEvalService {
       if (bestLine == null ||
           (scoreCpWhite == null) == (mateInWhite == null) ||
           mateInWhite == 0 ||
-          _normalizeCastlingUci(best.move) != bestLine.moveUci) {
+          normalizedBestMove != bestLine.moveUci) {
         return (null, EvalError.malformedResponse);
       }
 
@@ -273,17 +311,23 @@ class LocalEvalService {
           requestedDepth: depth,
           requestedMovetimeMs: movetime?.inMilliseconds,
           requestedMultiPv: requestedMultiPv,
-          nodes: selectedFrame[1]?.nodes,
-          engineTimeMs: selectedFrame[1]?.time?.inMilliseconds,
+          nodes: selectedFrame?.infosByRank[1]?.nodes,
+          engineTimeMs: selectedFrame?.infosByRank[1]?.time?.inMilliseconds,
           elapsedMs: elapsedMs,
           engineVersion: engineVersion,
         ),
         null,
       );
     } on TimeoutException {
+      if (_isCancelled(cancellationEpoch)) {
+        return (null, EvalError.cancelled);
+      }
       _engine.send(const UciStop());
       return (null, EvalError.searchTimeout);
     } catch (_) {
+      if (_isCancelled(cancellationEpoch)) {
+        return (null, EvalError.cancelled);
+      }
       return (null, EvalError.serverError);
     } finally {
       await sub.cancel();
@@ -358,9 +402,21 @@ class LocalEvalService {
           .map(_normalizeCastlingUci)
           .toList(growable: false);
       if (pvMoves.isEmpty) break;
+      if (!_isLegalPv(fen, pvMoves)) break;
       final moveUci = pvMoves.first;
       if (_tryUciToSan(fen, moveUci) == null) break;
       if (!roots.add(moveUci)) break;
+      final whiteWinPercent = win.forCp(cp: scoreCpWhite, mate: mateInWhite);
+      final moverWinPercent = isWhiteToMove
+          ? whiteWinPercent
+          : 100.0 - whiteWinPercent;
+      if (lines.isNotEmpty) {
+        final priorWhiteWin = lines.last.whiteWinPercent;
+        final priorMoverWin = isWhiteToMove
+            ? priorWhiteWin
+            : 100.0 - priorWhiteWin;
+        if (moverWinPercent > priorMoverWin) break;
+      }
       lines.add(
         EngineLine(
           rank: rank,
@@ -369,7 +425,7 @@ class LocalEvalService {
           scoreCp: scoreCpWhite,
           mateIn: mateInWhite,
           depth: info.depth!,
-          whiteWinPercent: win.forCp(cp: scoreCpWhite, mate: mateInWhite),
+          whiteWinPercent: whiteWinPercent,
           pvMoves: pvMoves,
         ),
       );
@@ -377,39 +433,46 @@ class LocalEvalService {
     return lines;
   }
 
-  Map<int, EngineInfo> _selectCompletedFrame(
+  _ValidatedEngineFrame? _selectValidatedFrame(
     Map<int, Map<int, EngineInfo>> framesByDepth, {
+    required String fen,
     required int requestedMultiPv,
+    required bool isWhiteToMove,
+    required String normalizedBestMove,
   }) {
     final depths = framesByDepth.keys.toList(growable: false)
       ..sort((a, b) => b.compareTo(a));
 
+    _ValidatedEngineFrame? deepestPartial;
     for (final depth in depths) {
-      final frame = framesByDepth[depth]!;
-      if (_contiguousRankCount(frame, requestedMultiPv) == requestedMultiPv) {
-        return frame;
+      final infosByRank = framesByDepth[depth]!;
+      final lines = _buildEngineLines(
+        fen: fen,
+        infosByRank: infosByRank,
+        requestedMultiPv: requestedMultiPv,
+        isWhiteToMove: isWhiteToMove,
+      );
+      if (lines.isEmpty || lines.first.moveUci != normalizedBestMove) {
+        continue;
       }
+      final candidate = _ValidatedEngineFrame(
+        infosByRank: infosByRank,
+        lines: lines,
+      );
+      if (lines.length == requestedMultiPv) {
+        return candidate;
+      }
+      deepestPartial ??= candidate;
     }
-
-    for (final depth in depths) {
-      final frame = framesByDepth[depth]!;
-      if (_contiguousRankCount(frame, requestedMultiPv) > 0) return frame;
-    }
-    return const <int, EngineInfo>{};
+    return deepestPartial;
   }
 
-  int _contiguousRankCount(Map<int, EngineInfo> frame, int requestedMultiPv) {
-    var count = 0;
-    for (var rank = 1; rank <= requestedMultiPv; rank++) {
-      if (!frame.containsKey(rank)) break;
-      count++;
-    }
-    return count;
-  }
+  bool _isCancelled(int requestCancellationEpoch) =>
+      requestCancellationEpoch != _cancellationEpoch;
 
   String? _tryUciToSan(String fen, String? uci) {
     try {
-      if (uci == null || uci.length < 4) return null;
+      if (uci == null || (uci.length != 4 && uci.length != 5)) return null;
       final pos = Chess.fromSetup(Setup.parseFen(fen));
       final from = _parseSquare(uci.substring(0, 2));
       final to = _parseSquare(uci.substring(2, 4));
@@ -423,12 +486,43 @@ class LocalEvalService {
           'n' => Role.knight,
           _ => null,
         };
+        if (promotion == null) return null;
       }
       final move = NormalMove(from: from, to: to, promotion: promotion);
       if (!pos.isLegal(move)) return null;
       return pos.makeSan(move).$2;
     } catch (_) {
       return null;
+    }
+  }
+
+  bool _isLegalPv(String fen, List<String> pvMoves) {
+    try {
+      Position position = Chess.fromSetup(Setup.parseFen(fen));
+      for (final rawUci in pvMoves) {
+        final uci = _normalizeCastlingUci(rawUci);
+        if (uci.length != 4 && uci.length != 5) return false;
+        final from = _parseSquare(uci.substring(0, 2));
+        final to = _parseSquare(uci.substring(2, 4));
+        if (from == null || to == null) return false;
+        Role? promotion;
+        if (uci.length == 5) {
+          promotion = switch (uci[4]) {
+            'q' => Role.queen,
+            'r' => Role.rook,
+            'b' => Role.bishop,
+            'n' => Role.knight,
+            _ => null,
+          };
+          if (promotion == null) return false;
+        }
+        final move = NormalMove(from: from, to: to, promotion: promotion);
+        if (!position.isLegal(move)) return false;
+        position = position.play(move);
+      }
+      return true;
+    } on Object {
+      return false;
     }
   }
 
@@ -453,6 +547,13 @@ class LocalEvalService {
       _ => uci,
     };
   }
+}
+
+class _ValidatedEngineFrame {
+  const _ValidatedEngineFrame({required this.infosByRank, required this.lines});
+
+  final Map<int, EngineInfo> infosByRank;
+  final List<EngineLine> lines;
 }
 
 /// Cheap structural check on a FEN. Does not validate legality — only

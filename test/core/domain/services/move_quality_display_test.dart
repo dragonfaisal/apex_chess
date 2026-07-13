@@ -48,25 +48,24 @@ void main() {
     );
   });
 
-  test('forced maps to Great only when outcome-changing', () {
+  test('Only Move and Forced remain distinct stored public labels', () {
     expect(
       MoveQualityDisplay.labelForMove(
         move(MoveQuality.forced, reasonCode: 'ordinary_pv1'),
       ),
-      ReviewMoveLabel.best,
+      ReviewMoveLabel.forced,
     );
     expect(
       MoveQualityDisplay.labelForMove(
-        move(MoveQuality.forced, reasonCode: 'only_move_avoids_mate'),
+        move(MoveQuality.onlyMove, reasonCode: 'only_move_avoids_mate'),
       ),
-      ReviewMoveLabel.great,
+      ReviewMoveLabel.onlyMove,
     );
   });
 
-  test('public labels hide internal forced solid theory names', () {
+  test('public labels expose factual forced tiers without reconstruction', () {
     final labels = MoveQualityDisplay.countOrder.map((e) => e.label).toList();
-    expect(labels, containsAll(['Miss', 'Mistake']));
-    expect(labels, isNot(contains('Forced')));
+    expect(labels, containsAll(['Miss', 'Mistake', 'Only Move', 'Forced']));
     expect(labels, isNot(contains('Solid')));
     expect(labels, isNot(contains('Theory')));
     expect(MoveQualityDisplay.labelTextForQuality(MoveQuality.good), 'Good');

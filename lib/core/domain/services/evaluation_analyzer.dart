@@ -19,8 +19,10 @@
 /// rook).
 library;
 
-import 'package:apex_chess/core/domain/services/move_classifier.dart';
+import 'package:apex_chess/core/domain/entities/classification_evidence.dart';
 import 'package:apex_chess/core/domain/entities/deep_tactical_verdict.dart';
+import 'package:apex_chess/core/domain/services/analysis_versions.dart';
+import 'package:apex_chess/core/domain/services/move_classifier.dart';
 import 'package:apex_chess/core/domain/services/win_percent_calculator.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:flutter/material.dart';
@@ -39,14 +41,12 @@ enum MoveQuality {
   mistake('?', 'Mistake', ApexColors.mistake, 'mistake.svg'),
   blunder('??', 'Blunder', ApexColors.blunder, 'blunder.svg'),
   book('📖', 'Theory', ApexColors.book, 'book.svg'),
-  // Phase A: research-backed extensions. Forced = only move that
-  // holds; mover Win% drift is bounded but the move was the one
-  // path forward (spec § 3.6.2). MissedWin = mover was winning,
-  // played a line that drops the position to roughly equal/worse
-  // (spec § 3.6.5). Both reuse existing palette entries to honour
-  // the "no UI redesign" rule.
+  // Policy v6 keeps Forced (exactly one legal response) separate from
+  // Only Move (multiple legal moves, one outcome-preserving candidate).
   forced('!', 'Forced', ApexColors.textSecondary, 'forced.svg'),
-  missedWin('?!', 'Missed Win', ApexColors.mistake, 'missed_win.svg');
+  onlyMove('!', 'Only Move', ApexColors.best, 'forced.svg'),
+  missedWin('?!', 'Missed Win', ApexColors.mistake, 'missed_win.svg'),
+  unavailable('—', 'Unavailable', ApexColors.textSecondary, 'good.svg');
 
   final String symbol;
   final String label;
@@ -73,6 +73,10 @@ class MoveAnalysisResult {
   final int? moverCpLoss;
   final String message;
   final String? engineBestMove;
+  final int policyVersion;
+  final List<String> reasonCodes;
+  final List<String> failedGates;
+  final Map<String, Object?> diagnosticJson;
 
   const MoveAnalysisResult({
     required this.quality,
@@ -85,18 +89,24 @@ class MoveAnalysisResult {
     this.moverCpLoss,
     required this.message,
     this.engineBestMove,
+    this.policyVersion = kApexClassifierVersion,
+    this.reasonCodes = const <String>[],
+    this.failedGates = const <String>[],
+    this.diagnosticJson = const <String, Object?>{},
   });
 
   factory MoveAnalysisResult.none() => const MoveAnalysisResult(
-    quality: MoveQuality.good,
-    baseQuality: MoveQuality.good,
-    reasonCode: 'none',
+    quality: MoveQuality.unavailable,
+    baseQuality: MoveQuality.unavailable,
+    reasonCode: 'classification_unavailable',
     playedEqualsPv1: false,
-    deltaW: 0,
-    winPercentBefore: 50,
-    winPercentAfter: 50,
+    deltaW: double.nan,
+    winPercentBefore: double.nan,
+    winPercentAfter: double.nan,
     moverCpLoss: null,
-    message: 'Awaiting analysis…',
+    message: 'Move classification unavailable.',
+    reasonCodes: <String>['classification_unavailable'],
+    failedGates: <String>['core.evidence_unavailable'],
   );
 }
 
@@ -169,6 +179,17 @@ class EvaluationAnalyzer {
     double? secondBestWhiteWinPercent,
     List<double>? multiPvWhiteWinPercents,
     double? altLineWhiteWinPercent,
+    List<ClassificationCandidateEvidence> candidateEvidence =
+        const <ClassificationCandidateEvidence>[],
+    int requestedMultiPv = 1,
+    int? receivedMultiPv,
+    bool candidateSetCoherent = false,
+    bool bestMovePv1Consistent = false,
+    bool searchQualityMet = false,
+    int? achievedDepthFloor,
+    int? legalMoveCount,
+    ClassificationForcedState forcedState =
+        ClassificationForcedState.unavailable,
     bool isCapture = false,
     bool isFreeCapture = false,
     bool isRecapture = false,
@@ -179,6 +200,7 @@ class EvaluationAnalyzer {
     bool suppressTrophyTiers = false,
     bool alternativeEvidenceComplete = false,
     bool deepVerificationComplete = false,
+    ClassificationUnavailableReason? unavailableReason,
   }) {
     final detailed = classifyDetailed(
       prevCp: prevCp,
@@ -196,6 +218,15 @@ class EvaluationAnalyzer {
       secondBestWhiteWinPercent: secondBestWhiteWinPercent,
       multiPvWhiteWinPercents: multiPvWhiteWinPercents,
       altLineWhiteWinPercent: altLineWhiteWinPercent,
+      candidateEvidence: candidateEvidence,
+      requestedMultiPv: requestedMultiPv,
+      receivedMultiPv: receivedMultiPv,
+      candidateSetCoherent: candidateSetCoherent,
+      bestMovePv1Consistent: bestMovePv1Consistent,
+      searchQualityMet: searchQualityMet,
+      achievedDepthFloor: achievedDepthFloor,
+      legalMoveCount: legalMoveCount,
+      forcedState: forcedState,
       isCapture: isCapture,
       isFreeCapture: isFreeCapture,
       isRecapture: isRecapture,
@@ -206,7 +237,19 @@ class EvaluationAnalyzer {
       suppressTrophyTiers: suppressTrophyTiers,
       alternativeEvidenceComplete: alternativeEvidenceComplete,
       deepVerificationComplete: deepVerificationComplete,
+      unavailableReason: unavailableReason,
     );
+    return _resultFromDecision(detailed);
+  }
+
+  /// Classify an already-normalized immutable evidence record.
+  MoveAnalysisResult analyzeEvidence(MoveClassificationEvidence evidence) =>
+      _resultFromDecision(_classifier.classifyEvidence(evidence));
+
+  MoveAnalysisResult _resultFromDecision(MoveClassification detailed) {
+    if (detailed.quality == MoveQuality.unavailable) {
+      throw IncompleteMoveEvidenceException(detailed.reasonCode);
+    }
     return MoveAnalysisResult(
       quality: detailed.quality,
       baseQuality: detailed.baseQuality,
@@ -218,6 +261,10 @@ class EvaluationAnalyzer {
       moverCpLoss: detailed.moverCpLoss,
       message: detailed.message,
       engineBestMove: detailed.engineBestMoveUci,
+      policyVersion: detailed.policyVersion,
+      reasonCodes: detailed.reasonCodes,
+      failedGates: detailed.failedGates,
+      diagnosticJson: detailed.diagnosticJson,
     );
   }
 
@@ -239,6 +286,17 @@ class EvaluationAnalyzer {
     double? secondBestWhiteWinPercent,
     List<double>? multiPvWhiteWinPercents,
     double? altLineWhiteWinPercent,
+    List<ClassificationCandidateEvidence> candidateEvidence =
+        const <ClassificationCandidateEvidence>[],
+    int requestedMultiPv = 1,
+    int? receivedMultiPv,
+    bool candidateSetCoherent = false,
+    bool bestMovePv1Consistent = false,
+    bool searchQualityMet = false,
+    int? achievedDepthFloor,
+    int? legalMoveCount,
+    ClassificationForcedState forcedState =
+        ClassificationForcedState.unavailable,
     bool isCapture = false,
     bool isFreeCapture = false,
     bool isRecapture = false,
@@ -249,6 +307,7 @@ class EvaluationAnalyzer {
     bool suppressTrophyTiers = false,
     bool alternativeEvidenceComplete = false,
     bool deepVerificationComplete = false,
+    ClassificationUnavailableReason? unavailableReason,
   }) {
     final pvList = multiPvWhiteWinPercents;
     return _classifier.classify(
@@ -274,9 +333,19 @@ class EvaluationAnalyzer {
         secondBestWhiteWinPercent: secondBestWhiteWinPercent,
         multiPvWhiteWinPercents: pvList,
         altLineWhiteWinPercent: altLineWhiteWinPercent,
+        candidateEvidence: candidateEvidence,
+        requestedMultiPv: requestedMultiPv,
+        receivedMultiPv: receivedMultiPv,
+        candidateSetCoherent: candidateSetCoherent,
+        bestMovePv1Consistent: bestMovePv1Consistent,
+        searchQualityMet: searchQualityMet,
+        achievedDepthFloor: achievedDepthFloor,
+        legalMoveCount: legalMoveCount,
+        forcedState: forcedState,
         suppressTrophyTiers: suppressTrophyTiers,
         alternativeEvidenceComplete: alternativeEvidenceComplete,
         deepVerificationComplete: deepVerificationComplete,
+        unavailableReason: unavailableReason,
       ),
     );
   }

@@ -51,18 +51,27 @@ class EngineLine {
     'pvMoves': pvMoves,
   };
 
-  factory EngineLine.fromJson(Map<dynamic, dynamic> j) => EngineLine(
-    rank: (j['rank'] as num?)?.toInt() ?? 1,
-    moveUci: j['moveUci'] as String?,
-    moveSan: j['moveSan'] as String?,
-    scoreCp: (j['scoreCp'] as num?)?.toInt(),
-    mateIn: (j['mateIn'] as num?)?.toInt(),
-    depth: (j['depth'] as num?)?.toInt() ?? 0,
-    whiteWinPercent: (j['whiteWinPercent'] as num?)?.toDouble() ?? 50.0,
-    pvMoves:
-        (j['pvMoves'] as List<dynamic>?)
-            ?.map((e) => e.toString())
-            .toList(growable: false) ??
-        const <String>[],
-  );
+  factory EngineLine.fromJson(Map<dynamic, dynamic> j) {
+    final scoreCp = (j['scoreCp'] as num?)?.toInt();
+    final mateIn = (j['mateIn'] as num?)?.toInt();
+    if ((scoreCp == null) == (mateIn == null) || mateIn == 0) {
+      throw const FormatException(
+        'Persisted engine line requires one unambiguous CP-or-mate score.',
+      );
+    }
+    return EngineLine(
+      rank: (j['rank'] as num).toInt(),
+      moveUci: j['moveUci'] as String?,
+      moveSan: j['moveSan'] as String?,
+      scoreCp: scoreCp,
+      mateIn: mateIn,
+      depth: (j['depth'] as num).toInt(),
+      whiteWinPercent: (j['whiteWinPercent'] as num).toDouble(),
+      pvMoves:
+          (j['pvMoves'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList(growable: false) ??
+          const <String>[],
+    );
+  }
 }

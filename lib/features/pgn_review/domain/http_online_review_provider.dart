@@ -519,6 +519,8 @@ class HttpOnlineReviewProvider extends OnlineReviewProvider {
       pgnHash: request?.inputHash,
       cacheKey: request?.canonicalGameKey,
       cacheHit: json['cached'] as bool? ?? false,
+      completionStatus: AnalysisCompletionStatus.complete,
+      expectedPlies: moves.length,
     );
   }
 
@@ -745,6 +747,7 @@ class HttpOnlineReviewProvider extends OnlineReviewProvider {
     return switch (raw) {
       'brilliant' => MoveQuality.brilliant,
       'great' || 'greatFind' => MoveQuality.great,
+      'onlyMove' || 'only_move' || 'only-move' => MoveQuality.onlyMove,
       'best' => MoveQuality.best,
       'excellent' => MoveQuality.excellent,
       'book' => MoveQuality.book,
@@ -753,7 +756,8 @@ class HttpOnlineReviewProvider extends OnlineReviewProvider {
       'blunder' => MoveQuality.blunder,
       'forced' => MoveQuality.forced,
       'missedWin' || 'missed_win' => MoveQuality.missedWin,
-      _ => MoveQuality.good,
+      'unavailable' || 'unclassified' || 'unknown' => MoveQuality.unavailable,
+      _ => MoveQuality.unavailable,
     };
   }
 

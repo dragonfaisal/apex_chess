@@ -108,7 +108,6 @@ class AnalysisTimeline {
       .where(
         (move) =>
             move.engineEvaluationAvailable &&
-            !move.inBook &&
             move.classification != MoveQuality.book &&
             move.moverCpLoss != null,
       )
@@ -124,7 +123,6 @@ class AnalysisTimeline {
     final eligible = moves.where(
       (move) =>
           move.engineEvaluationAvailable &&
-          !move.inBook &&
           move.classification != MoveQuality.book &&
           move.moverCpLoss != null,
     );
@@ -155,7 +153,6 @@ class AnalysisTimeline {
     for (final m in moves) {
       if (m.isWhiteMove != isWhite ||
           !m.engineEvaluationAvailable ||
-          m.inBook ||
           m.classification == MoveQuality.book ||
           m.moverCpLoss == null) {
         continue;

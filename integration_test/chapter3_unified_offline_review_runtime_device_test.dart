@@ -37,6 +37,8 @@ void main() {
       overrides: apexDefaultProviderOverrides(),
     );
     var providerExecutions = 0;
+    var observedEngineCalls = 0;
+    var observedClassifierDecisions = 0;
     var staleEventsApplied = 0;
 
     await tester.pumpWidget(
@@ -78,9 +80,12 @@ void main() {
 
     Future<String> persist(ReviewDocument document) async =>
         repository.saveReviewDocument(document);
-    Future<GameReviewResult> execute(GameReviewRequest request) {
+    Future<GameReviewResult> execute(GameReviewRequest request) async {
       providerExecutions++;
-      return pipeline.analyzeOffline(request);
+      final result = await pipeline.analyzeOffline(request);
+      observedEngineCalls += result.telemetry.engineCallsCount;
+      observedClassifierDecisions += result.timeline.totalPlies;
+      return result;
     }
 
     final physicalCancellationWatch = Stopwatch()..start();
@@ -142,6 +147,10 @@ void main() {
     );
     expect(fastState.timeline!.depth, isNotNull);
     expect(fastState.timeline!.depth, greaterThan(0));
+    expect(fastState.timeline!.engineVersion, contains('Stockfish 17'));
+    expect(fastState.timeline!.moves.single.scoreCpAfter, isNull);
+    expect(fastState.timeline!.moves.single.mateInAfter, isNotNull);
+    expect(fastState.timeline!.moves.single.moverCpLoss, isNull);
     final fastAchievedMultiPv = _minimumReceivedMultiPv(fastState.timeline!);
     expect(fastAchievedMultiPv, greaterThanOrEqualTo(1));
 
@@ -174,6 +183,7 @@ void main() {
     );
     expect(deepState.timeline!.depth, isNotNull);
     expect(deepState.timeline!.depth, greaterThan(0));
+    expect(deepState.timeline!.engineVersion, contains('Stockfish 17'));
     final deepAchievedMultiPv = _minimumReceivedMultiPv(deepState.timeline!);
     expect(deepAchievedMultiPv, greaterThanOrEqualTo(1));
 
@@ -274,6 +284,8 @@ void main() {
     repository = await ArchiveRepository.open();
     final reopenContainer = ProviderContainer();
     final executionsBeforeReopen = providerExecutions;
+    final engineCallsBeforeReopen = observedEngineCalls;
+    final classifierDecisionsBeforeReopen = observedClassifierDecisions;
     final exactDeep = repository.find(deepDocumentId)!;
     final reopenWatch = Stopwatch()..start();
     final opened = reopenContainer
@@ -286,6 +298,8 @@ void main() {
     expect(reopened.requestedProfile, AnalysisProfile.deepReview);
     expect(reopened.userIsWhite, isFalse);
     expect(providerExecutions, executionsBeforeReopen);
+    expect(observedEngineCalls, engineCallsBeforeReopen);
+    expect(observedClassifierDecisions, classifierDecisionsBeforeReopen);
     expect(repository.loadReviewDocument(fastDocumentId), isNotNull);
 
     // ignore: avoid_print
@@ -294,6 +308,7 @@ void main() {
         'proof': 'chapter3_unified_offline_review_runtime',
         'platform': Platform.operatingSystemVersion,
         'deviceModel': 'Samsung SM-S908U1',
+        'engineIdentity': deepState.timeline!.engineVersion,
         'fastProfile': {
           'depthRequested': AnalysisProfile.fastReview.localDepth,
           'depthAchieved': fastState.timeline!.depth,
@@ -313,8 +328,9 @@ void main() {
         'physicalCancellationMs': physicalCancellationWatch.elapsedMilliseconds,
         'variantCount': repository.listVariants(reopened.gameId!).length,
         'staleEventsApplied': staleEventsApplied,
-        'engineCallsOnReopen': providerExecutions - executionsBeforeReopen,
-        'classifierRerunsOnReopen': 0,
+        'engineCallsOnReopen': observedEngineCalls - engineCallsBeforeReopen,
+        'classifierRerunsOnReopen':
+            observedClassifierDecisions - classifierDecisionsBeforeReopen,
         'reopenLatencyMs': reopenWatch.elapsedMilliseconds,
         'navigation1000JumpsMs': navigationWatch.elapsedMilliseconds,
         'finalPly': 99,
@@ -396,6 +412,7 @@ AnalysisTimeline _timelineFor(String pgn, AnalysisProfile profile) {
           multiPvReceived: profile.localMultiPv,
           searchQualityMet: true,
           message: 'Best',
+          classifierVersion: 5,
           engineVersion: _engine,
         ),
     ],
@@ -405,6 +422,8 @@ AnalysisTimeline _timelineFor(String pgn, AnalysisProfile profile) {
     analysisProfileId: profile.id.wire,
     providerId: 'local_offline',
     engineVersion: _engine,
+    classifierVersion: 5,
+    analysisSchemaVersion: 3,
     requestedDepth: profile.localDepth,
     depth: profile.localDepth,
     movetimeMs: profile.localMovetimeMs,

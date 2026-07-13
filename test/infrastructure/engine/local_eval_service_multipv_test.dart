@@ -162,6 +162,96 @@ void main() {
     );
 
     test(
+      'falls back to a lower complete frame when a higher frame has duplicate roots',
+      () async {
+        final engine = _FakeChessEngine(
+          bestMove: 'e2e4',
+          infos: const [
+            EngineInfo(depth: 11, multipv: 1, scoreCp: 28, pv: ['e2e4']),
+            EngineInfo(depth: 11, multipv: 2, scoreCp: 18, pv: ['d2d4']),
+            EngineInfo(depth: 12, multipv: 1, scoreCp: 30, pv: ['e2e4']),
+            EngineInfo(depth: 12, multipv: 2, scoreCp: 20, pv: ['e2e4']),
+          ],
+        );
+        final service = LocalEvalService(engine: engine);
+
+        final (snapshot, error) = await service.evaluate(
+          startFen,
+          depth: 12,
+          multiPv: 2,
+          timeout: const Duration(seconds: 1),
+        );
+
+        expect(error, isNull);
+        expect(snapshot, isNotNull);
+        expect(snapshot!.depth, 11);
+        expect(snapshot.engineLines.map((line) => line.moveUci), [
+          'e2e4',
+          'd2d4',
+        ]);
+        expect(snapshot.multiPvComplete, isTrue);
+      },
+    );
+
+    test(
+      'falls back when a higher frame ranks a stronger line below PV1',
+      () async {
+        final engine = _FakeChessEngine(
+          bestMove: 'e2e4',
+          infos: const [
+            EngineInfo(depth: 11, multipv: 1, scoreCp: 28, pv: ['e2e4']),
+            EngineInfo(depth: 11, multipv: 2, scoreCp: 18, pv: ['d2d4']),
+            EngineInfo(depth: 12, multipv: 1, scoreCp: 30, pv: ['e2e4']),
+            EngineInfo(depth: 12, multipv: 2, scoreCp: 40, pv: ['d2d4']),
+          ],
+        );
+        final service = LocalEvalService(engine: engine);
+
+        final (snapshot, error) = await service.evaluate(
+          startFen,
+          depth: 12,
+          multiPv: 2,
+          timeout: const Duration(seconds: 1),
+        );
+
+        expect(error, isNull);
+        expect(snapshot, isNotNull);
+        expect(snapshot!.depth, 11);
+        expect(snapshot.engineLines.map((line) => line.scoreCp), [28, 18]);
+        expect(snapshot.multiPvComplete, isTrue);
+      },
+    );
+
+    test(
+      'prefers a bestmove-coherent partial frame over a conflicting lower complete frame',
+      () async {
+        final engine = _FakeChessEngine(
+          bestMove: 'e2e4',
+          infos: const [
+            EngineInfo(depth: 11, multipv: 1, scoreCp: 28, pv: ['d2d4']),
+            EngineInfo(depth: 11, multipv: 2, scoreCp: 18, pv: ['e2e4']),
+            EngineInfo(depth: 12, multipv: 1, scoreCp: 30, pv: ['e2e4']),
+          ],
+        );
+        final service = LocalEvalService(engine: engine);
+
+        final (snapshot, error) = await service.evaluate(
+          startFen,
+          depth: 12,
+          multiPv: 2,
+          timeout: const Duration(seconds: 1),
+        );
+
+        expect(error, isNull);
+        expect(snapshot, isNotNull);
+        expect(snapshot!.depth, 12);
+        expect(snapshot.bestMoveUci, 'e2e4');
+        expect(snapshot.engineLines, hasLength(1));
+        expect(snapshot.multiPvComplete, isFalse);
+      },
+    );
+
+    test(
       'reports a deepest PV1-only frame truthfully when no complete MultiPV frame exists',
       () async {
         final engine = _FakeChessEngine(
@@ -207,6 +297,95 @@ void main() {
       final (snapshot, error) = await service.evaluate(startFen, depth: 12);
       expect(snapshot, isNull);
       expect(error, isNotNull);
+    });
+
+    test('rejects ambiguous cp and mate scores', () async {
+      final service = LocalEvalService(
+        engine: _FakeChessEngine(
+          bestMove: 'e2e4',
+          infos: const [
+            EngineInfo(
+              depth: 12,
+              multipv: 1,
+              scoreCp: 30,
+              scoreMate: 3,
+              pv: ['e2e4'],
+            ),
+          ],
+        ),
+      );
+
+      final (snapshot, error) = await service.evaluate(startFen, depth: 12);
+      expect(snapshot, isNull);
+      expect(error, EvalError.malformedResponse);
+    });
+
+    test('rejects mate zero as non-authoritative evidence', () async {
+      final service = LocalEvalService(
+        engine: _FakeChessEngine(
+          bestMove: 'e2e4',
+          infos: const [
+            EngineInfo(depth: 12, multipv: 1, scoreMate: 0, pv: ['e2e4']),
+          ],
+        ),
+      );
+
+      final (snapshot, error) = await service.evaluate(startFen, depth: 12);
+      expect(snapshot, isNull);
+      expect(error, EvalError.malformedResponse);
+    });
+
+    test('rejects an illegal PV root', () async {
+      final service = LocalEvalService(
+        engine: _FakeChessEngine(
+          bestMove: 'e2e5',
+          infos: const [
+            EngineInfo(depth: 12, multipv: 1, scoreCp: 30, pv: ['e2e5']),
+          ],
+        ),
+      );
+
+      final (snapshot, error) = await service.evaluate(startFen, depth: 12);
+      expect(snapshot, isNull);
+      expect(error, EvalError.malformedResponse);
+    });
+
+    test(
+      'rejects an illegal continuation inside an otherwise legal PV',
+      () async {
+        final service = LocalEvalService(
+          engine: _FakeChessEngine(
+            bestMove: 'e2e4',
+            infos: const [
+              EngineInfo(
+                depth: 12,
+                multipv: 1,
+                scoreCp: 30,
+                pv: ['e2e4', 'e7e5', 'e4e5'],
+              ),
+            ],
+          ),
+        );
+
+        final (snapshot, error) = await service.evaluate(startFen, depth: 12);
+        expect(snapshot, isNull);
+        expect(error, EvalError.malformedResponse);
+      },
+    );
+
+    test('rejects a malformed PV root', () async {
+      final service = LocalEvalService(
+        engine: _FakeChessEngine(
+          bestMove: 'e2e4x',
+          infos: const [
+            EngineInfo(depth: 12, multipv: 1, scoreCp: 30, pv: ['e2e4x']),
+          ],
+        ),
+      );
+
+      final (snapshot, error) = await service.evaluate(startFen, depth: 12);
+      expect(snapshot, isNull);
+      expect(error, EvalError.malformedResponse);
     });
 
     test('rejects missing PV1 even when PV2 exists', () async {

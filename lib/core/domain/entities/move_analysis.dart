@@ -7,6 +7,7 @@ library;
 
 import 'package:apex_chess/core/domain/entities/engine_line.dart';
 import 'package:apex_chess/core/domain/entities/deep_tactical_verdict.dart';
+import 'package:apex_chess/core/domain/entities/classification_evidence.dart';
 import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 
@@ -65,6 +66,16 @@ class MoveAnalysis {
 
   /// Stable machine-readable reason for calibration/debug export.
   final String reasonCode;
+
+  /// Versioned provider-neutral facts that reproduce the stored decision.
+  /// Historic records written before analysis schema v4 leave this null;
+  /// absence is unavailable evidence, never a neutral evaluation.
+  final MoveClassificationEvidence? classificationEvidence;
+
+  /// Structured decision diagnostics. These are machine facts only and are
+  /// not rendered as explanation prose.
+  final List<String> classificationReasonCodes;
+  final List<String> classificationFailedGates;
 
   /// Whether the played move matched the engine's PV1 move.
   final bool playedEqualsPv1;
@@ -147,6 +158,9 @@ class MoveAnalysis {
     MoveQuality? baseClassification,
     MoveQuality? finalClassification,
     this.reasonCode = 'legacy',
+    this.classificationEvidence,
+    this.classificationReasonCodes = const <String>[],
+    this.classificationFailedGates = const <String>[],
     this.playedEqualsPv1 = false,
     this.moverCpLoss,
     this.engineEvaluationAvailable = true,
@@ -208,6 +222,9 @@ class MoveAnalysis {
     'baseClassification': baseClassification.name,
     'finalClassification': finalClassification.name,
     'reasonCode': reasonCode,
+    'classificationEvidence': classificationEvidence?.toJson(),
+    'classificationReasonCodes': classificationReasonCodes,
+    'classificationFailedGates': classificationFailedGates,
     'playedEqualsPv1': playedEqualsPv1,
     'moverCpLoss': moverCpLoss,
     'engineEvaluationAvailable': engineEvaluationAvailable,
@@ -240,6 +257,10 @@ class MoveAnalysis {
   };
 
   factory MoveAnalysis.fromJson(Map<dynamic, dynamic> j) {
+    final hasStoredNumericEvidence =
+        j['winPercentBefore'] is num &&
+        j['winPercentAfter'] is num &&
+        j['deltaW'] is num;
     final classRaw = j['classification'] as String?;
     MoveQuality? classification;
     for (final quality in MoveQuality.values) {
@@ -283,11 +304,26 @@ class MoveAnalysis {
         classification,
       ),
       reasonCode: j['reasonCode'] as String? ?? 'legacy',
+      classificationEvidence: j['classificationEvidence'] is Map
+          ? MoveClassificationEvidence.fromJson(
+              j['classificationEvidence'] as Map,
+            )
+          : null,
+      classificationReasonCodes:
+          (j['classificationReasonCodes'] as List<dynamic>?)
+              ?.map((value) => value.toString())
+              .toList(growable: false) ??
+          <String>[j['reasonCode'] as String? ?? 'legacy'],
+      classificationFailedGates:
+          (j['classificationFailedGates'] as List<dynamic>?)
+              ?.map((value) => value.toString())
+              .toList(growable: false) ??
+          const <String>[],
       playedEqualsPv1: j['playedEqualsPv1'] as bool? ?? false,
       moverCpLoss: (j['moverCpLoss'] as num?)?.toInt(),
       engineEvaluationAvailable:
           j['engineEvaluationAvailable'] as bool? ??
-          !(j['inBook'] as bool? ?? false),
+          (hasStoredNumericEvidence && !(j['inBook'] as bool? ?? false)),
       requestedDepth: (j['requestedDepth'] as num?)?.toInt(),
       achievedDepthBefore: (j['achievedDepthBefore'] as num?)?.toInt(),
       achievedDepthAfter: (j['achievedDepthAfter'] as num?)?.toInt(),

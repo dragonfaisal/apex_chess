@@ -13,6 +13,8 @@ import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 enum ReviewMoveLabel {
   brilliant('Brilliant', ApexColors.brilliant),
   great('Great', ApexColors.great),
+  onlyMove('Only Move', ApexColors.best),
+  forced('Forced', ApexColors.textSecondary),
   best('Best', ApexColors.best),
   excellent('Excellent', ApexColors.excellent),
   good('Good', ApexColors.good),
@@ -21,6 +23,7 @@ enum ReviewMoveLabel {
   mistake('Mistake', ApexColors.mistake),
   miss('Miss', ApexColors.miss),
   blunder('Blunder', ApexColors.blunder),
+  unavailable('Unavailable', ApexColors.textSecondary),
   checkmate('Checkmate', ApexColors.checkmate);
 
   const ReviewMoveLabel(this.label, this.color);
@@ -34,6 +37,8 @@ class MoveQualityDisplay {
   static const countOrder = <ReviewMoveLabel>[
     ReviewMoveLabel.brilliant,
     ReviewMoveLabel.great,
+    ReviewMoveLabel.onlyMove,
+    ReviewMoveLabel.forced,
     ReviewMoveLabel.best,
     ReviewMoveLabel.excellent,
     ReviewMoveLabel.good,
@@ -42,6 +47,7 @@ class MoveQualityDisplay {
     ReviewMoveLabel.mistake,
     ReviewMoveLabel.miss,
     ReviewMoveLabel.blunder,
+    ReviewMoveLabel.unavailable,
   ];
 
   static ReviewMoveLabel labelForMove(MoveAnalysis move) {
@@ -66,6 +72,10 @@ class MoveQualityDisplay {
         return ReviewMoveLabel.brilliant;
       case MoveQuality.great:
         return ReviewMoveLabel.great;
+      case MoveQuality.onlyMove:
+        return ReviewMoveLabel.onlyMove;
+      case MoveQuality.forced:
+        return ReviewMoveLabel.forced;
       case MoveQuality.best:
         return ReviewMoveLabel.best;
       case MoveQuality.excellent:
@@ -82,10 +92,8 @@ class MoveQualityDisplay {
         return ReviewMoveLabel.blunder;
       case MoveQuality.missedWin:
         return ReviewMoveLabel.miss;
-      case MoveQuality.forced:
-        return _forcedIsOutcomeChanging(move)
-            ? ReviewMoveLabel.great
-            : ReviewMoveLabel.best;
+      case MoveQuality.unavailable:
+        return ReviewMoveLabel.unavailable;
     }
   }
 
@@ -106,6 +114,10 @@ class MoveQualityDisplay {
         return MoveQuality.brilliant;
       case ReviewMoveLabel.great:
         return MoveQuality.great;
+      case ReviewMoveLabel.onlyMove:
+        return MoveQuality.onlyMove;
+      case ReviewMoveLabel.forced:
+        return MoveQuality.forced;
       case ReviewMoveLabel.best:
         return MoveQuality.best;
       case ReviewMoveLabel.excellent:
@@ -122,6 +134,8 @@ class MoveQualityDisplay {
         return MoveQuality.missedWin;
       case ReviewMoveLabel.blunder:
         return MoveQuality.blunder;
+      case ReviewMoveLabel.unavailable:
+        return MoveQuality.unavailable;
     }
   }
 
@@ -130,27 +144,5 @@ class MoveQualityDisplay {
     final mate = move.mateInAfter;
     if (mate == null) return true;
     return move.isWhiteMove ? mate > 0 : mate < 0;
-  }
-
-  static bool _forcedIsOutcomeChanging(MoveAnalysis? move) {
-    if (move == null) return false;
-    final reason = move.reasonCode;
-    if (reason.contains('ordinary') || reason.contains('pv1_best')) {
-      return false;
-    }
-    if (reason.contains('mate') ||
-        reason.contains('only') ||
-        reason.contains('defens') ||
-        reason.contains('resource') ||
-        reason.contains('saving') ||
-        reason.contains('tactical')) {
-      return true;
-    }
-    final tactical = move.tacticalVerdict;
-    return tactical.isOnlyMove ||
-        tactical.matingNet ||
-        tactical.forcedMate ||
-        tactical.forcedPromotion ||
-        tactical.decisiveMaterialWin;
   }
 }

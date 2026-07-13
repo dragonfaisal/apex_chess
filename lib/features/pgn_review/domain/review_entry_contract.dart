@@ -79,7 +79,9 @@ class ReviewEntryContract {
 
   static bool canOpenCachedReview(ArchivedGame game) {
     final timeline = game.cachedTimeline;
-    if (!game.isCacheCurrent || timeline == null || !timeline.isComplete) {
+    final policyEligible =
+        game.isCacheCurrent || game.isExactStoredVariantReopenable;
+    if (!policyEligible || timeline == null || !timeline.isComplete) {
       return false;
     }
     try {

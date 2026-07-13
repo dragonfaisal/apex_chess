@@ -26,18 +26,18 @@ void main() {
   const classifier = MoveClassifier();
 
   test('missing before or after score cannot be classified', () {
-    expect(
-      () => classifier.classify(
-        const MoveClassificationInput(
-          isWhiteMove: true,
-          prevWhiteCp: null,
-          prevWhiteMate: null,
-          currWhiteCp: 0,
-          currWhiteMate: null,
-        ),
+    final cls = classifier.classify(
+      const MoveClassificationInput(
+        isWhiteMove: true,
+        prevWhiteCp: null,
+        prevWhiteMate: null,
+        currWhiteCp: 0,
+        currWhiteMate: null,
       ),
-      throwsA(isA<IncompleteMoveEvidenceException>()),
     );
+    expect(cls.quality, MoveQuality.unavailable);
+    expect(cls.deltaW.isNaN, isTrue);
+    expect(cls.reasonCode, contains('missingEvaluationBefore'));
   });
 
   // ─── Brilliant gate ──────────────────────────────────────────────────
@@ -92,6 +92,7 @@ void main() {
           prevWhiteMate: null,
           currWhiteCp: null,
           currWhiteMate: -3,
+          engineBestMoveUci: 'e2e4',
           playedMoveUci: 'd1h5',
           isSacrifice: true,
         ),
@@ -138,108 +139,105 @@ void main() {
       expect(cls.quality, isNot(MoveQuality.brilliant));
     });
 
-    test(
-      'Low-depth rejected, high-depth verified queen sac can be Brilliant',
-      () {
-        final cls = classifier.classify(
-          const MoveClassificationInput(
-            isWhiteMove: false,
-            prevWhiteCp: -250,
-            prevWhiteMate: null,
-            currWhiteCp: null,
-            currWhiteMate: -3,
-            engineBestMoveUci: 'b2a1',
-            playedMoveUci: 'b2a1',
-            isCapture: true,
-            tacticalVerdict: DeepTacticalVerdict(
-              isCandidate: true,
-              verified: true,
-              candidateType: 'queen_sacrifice',
-              isBestOrNearBest: true,
-              isOnlyMove: false,
-              isNonObvious: true,
-              lowDepthRejectedHighDepthApproved: true,
-              forcingLineLength: 3,
-              forcedMate: true,
-              forcedPromotion: true,
-              decisiveMaterialWin: false,
-              sacrificeTrajectory: true,
-              delayedSacrifice: true,
-              queenSacrifice: true,
-              rookSacrifice: false,
-              decoy: true,
-              deflection: false,
-              matingNet: true,
-              promotionNet: true,
-              reasonCode: 'queen_sacrifice_mating_net',
-              humanExplanation:
-                  'The queen can be captured, but the pawn promotes with checkmate.',
-              lowDepthRank: null,
-              highDepthRank: 1,
-              nonObviousScore: 1,
-              candidateVerified: true,
-              verificationDepth: 24,
-              verificationMultiPV: 5,
-              firstCommitmentPly: 0,
-            ),
-            alternativeEvidenceComplete: true,
-            deepVerificationComplete: true,
+    test('legacy tactical verdict without exact candidates is not Brilliant', () {
+      final cls = classifier.classify(
+        const MoveClassificationInput(
+          isWhiteMove: false,
+          prevWhiteCp: -250,
+          prevWhiteMate: null,
+          currWhiteCp: null,
+          currWhiteMate: -3,
+          engineBestMoveUci: 'b2a1',
+          playedMoveUci: 'b2a1',
+          isCapture: true,
+          tacticalVerdict: DeepTacticalVerdict(
+            isCandidate: true,
+            verified: true,
+            candidateType: 'queen_sacrifice',
+            isBestOrNearBest: true,
+            isOnlyMove: false,
+            isNonObvious: true,
+            lowDepthRejectedHighDepthApproved: true,
+            forcingLineLength: 3,
+            forcedMate: true,
+            forcedPromotion: true,
+            decisiveMaterialWin: false,
+            sacrificeTrajectory: true,
+            delayedSacrifice: true,
+            queenSacrifice: true,
+            rookSacrifice: false,
+            decoy: true,
+            deflection: false,
+            matingNet: true,
+            promotionNet: true,
+            reasonCode: 'queen_sacrifice_mating_net',
+            humanExplanation:
+                'The queen can be captured, but the pawn promotes with checkmate.',
+            lowDepthRank: null,
+            highDepthRank: 1,
+            nonObviousScore: 1,
+            candidateVerified: true,
+            verificationDepth: 24,
+            verificationMultiPV: 5,
+            firstCommitmentPly: 0,
           ),
-        );
-        expect(cls.quality, MoveQuality.brilliant);
-        expect(cls.reasonCode, 'queen_sacrifice_mating_net');
-      },
-    );
+          alternativeEvidenceComplete: true,
+          deepVerificationComplete: true,
+        ),
+      );
+      expect(cls.quality, isNot(MoveQuality.brilliant));
+      expect(cls.failedGates, contains('alternatives.coherent'));
+    });
 
-    test(
-      'First commitment in verified mating net becomes Brilliant or Great',
-      () {
-        final cls = classifier.classify(
-          const MoveClassificationInput(
-            isWhiteMove: false,
-            prevWhiteCp: -180,
-            prevWhiteMate: null,
-            currWhiteCp: -220,
-            currWhiteMate: null,
-            engineBestMoveUci: 'f8b4',
-            playedMoveUci: 'f8b4',
-            tacticalVerdict: DeepTacticalVerdict(
-              isCandidate: true,
-              verified: true,
-              candidateType: 'sacrifice_trajectory',
-              isBestOrNearBest: true,
-              isOnlyMove: false,
-              isNonObvious: true,
-              lowDepthRejectedHighDepthApproved: true,
-              forcingLineLength: 5,
-              forcedMate: true,
-              forcedPromotion: true,
-              decisiveMaterialWin: false,
-              sacrificeTrajectory: true,
-              delayedSacrifice: true,
-              queenSacrifice: false,
-              rookSacrifice: false,
-              decoy: true,
-              deflection: true,
-              matingNet: true,
-              promotionNet: true,
-              reasonCode: 'delayed_sacrifice_mating_net',
-              humanExplanation: 'This starts a forcing mating net.',
-              highDepthRank: 1,
-              nonObviousScore: 0.9,
-              candidateVerified: true,
-              verificationDepth: 24,
-              verificationMultiPV: 5,
-              firstCommitmentPly: 0,
-            ),
-            alternativeEvidenceComplete: true,
-            deepVerificationComplete: true,
+    test('legacy mating-net prose cannot manufacture Brilliant or Great', () {
+      final cls = classifier.classify(
+        const MoveClassificationInput(
+          isWhiteMove: false,
+          prevWhiteCp: -180,
+          prevWhiteMate: null,
+          currWhiteCp: -220,
+          currWhiteMate: null,
+          engineBestMoveUci: 'f8b4',
+          playedMoveUci: 'f8b4',
+          tacticalVerdict: DeepTacticalVerdict(
+            isCandidate: true,
+            verified: true,
+            candidateType: 'sacrifice_trajectory',
+            isBestOrNearBest: true,
+            isOnlyMove: false,
+            isNonObvious: true,
+            lowDepthRejectedHighDepthApproved: true,
+            forcingLineLength: 5,
+            forcedMate: true,
+            forcedPromotion: true,
+            decisiveMaterialWin: false,
+            sacrificeTrajectory: true,
+            delayedSacrifice: true,
+            queenSacrifice: false,
+            rookSacrifice: false,
+            decoy: true,
+            deflection: true,
+            matingNet: true,
+            promotionNet: true,
+            reasonCode: 'delayed_sacrifice_mating_net',
+            humanExplanation: 'This starts a forcing mating net.',
+            highDepthRank: 1,
+            nonObviousScore: 0.9,
+            candidateVerified: true,
+            verificationDepth: 24,
+            verificationMultiPV: 5,
+            firstCommitmentPly: 0,
           ),
-        );
-        expect(cls.quality, anyOf(MoveQuality.brilliant, MoveQuality.great));
-        expect(cls.reasonCode, isNot('pv1_best'));
-      },
-    );
+          alternativeEvidenceComplete: true,
+          deepVerificationComplete: true,
+        ),
+      );
+      expect(
+        cls.quality,
+        isNot(anyOf(MoveQuality.brilliant, MoveQuality.great)),
+      );
+      expect(cls.failedGates, contains('alternatives.complete'));
+    });
 
     test('Sound sacrifice without MultiPV evidence is NOT Brilliant', () {
       final cls = classifier.classify(
@@ -427,6 +425,8 @@ void main() {
           prevWhiteMate: null,
           currWhiteCp: 100,
           currWhiteMate: null,
+          engineBestMoveUci: 'e7e5',
+          playedMoveUci: 'd7d5',
         ),
       );
       expect(cls.quality, MoveQuality.blunder);
@@ -453,7 +453,7 @@ void main() {
         // Mover-POV after = 100, mover-POV before ≈ 67 (Lichess sigmoid
         // at -200 cp is ~33 % white-POV → 67 % black-POV). ΔW > 0.
         expect(cls.deltaW, greaterThan(0));
-        expect(cls.quality, MoveQuality.best);
+        expect(cls.quality, MoveQuality.excellent);
       },
     );
   });
@@ -478,12 +478,12 @@ void main() {
         );
         expect(cls.winPercentBefore, 100.0);
         expect(cls.winPercentAfter, 100.0);
-        expect(cls.quality, MoveQuality.best);
+        expect(cls.quality, MoveQuality.excellent);
       },
     );
 
-    test('Position with mate=-3 (Black mates White) — White move stays in '
-        'a forced-mate-against-mover and is Blunder per spec § 3.4', () {
+    test('already-mated White move that hastens mate is a native mate-domain '
+        'Mistake', () {
       final cls = classifier.classify(
         const MoveClassificationInput(
           isWhiteMove: true,
@@ -491,13 +491,15 @@ void main() {
           prevWhiteMate: -3,
           currWhiteCp: null,
           currWhiteMate: -2,
+          engineBestMoveUci: 'e2e4',
+          playedMoveUci: 'd2d4',
         ),
       );
       expect(cls.winPercentBefore, 0.0);
       expect(cls.winPercentAfter, 0.0);
-      // Spec § 3.4: any move that results in a forced mate against
-      // the mover is a Blunder regardless of cp / damping.
-      expect(cls.quality, MoveQuality.blunder);
+      expect(cls.quality, MoveQuality.mistake);
+      expect(cls.reasonCode, 'mate_against_hastened');
+      expect(cls.moverCpLoss, isNull);
     });
   });
 
@@ -514,7 +516,7 @@ void main() {
           playedMoveUci: 'd1h5',
         ),
       );
-      expect(cls.playedEqualsPv1, isTrue);
+      expect(cls.playedEqualsPv1, isFalse);
       expect(cls.quality, MoveQuality.blunder);
       expect(cls.reasonCode, 'baseline_blunder');
     });
@@ -580,12 +582,14 @@ void main() {
           playedMoveUci: 'e2e4',
           isSacrifice: true,
           isBook: true,
+          searchQualityMet: true,
           ecoCode: 'C00',
           openingName: 'French Defense',
         ),
       );
       expect(cls.quality, MoveQuality.book);
-      expect(cls.message, contains('French Defense'));
+      expect(cls.reasonCode, 'verified_book_safe');
+      expect(cls.message, 'Opening theory.');
     });
 
     test('isBook=true but ΔW < -20 ⇒ severe drop overrides ⇒ Blunder', () {
@@ -596,7 +600,10 @@ void main() {
           prevWhiteMate: null,
           currWhiteCp: -800,
           currWhiteMate: null,
+          engineBestMoveUci: 'e2e4',
+          playedMoveUci: 'd2d4',
           isBook: true,
+          searchQualityMet: true,
         ),
       );
       expect(cls.quality, MoveQuality.blunder);
@@ -605,7 +612,7 @@ void main() {
 
   // ─── Missed Win ───────────────────────────────────────────────────
   group('Missed Win', () {
-    test('Mover was forced-mate-up, drops to merely-better ⇒ Missed Win', () {
+    test('forced-mate loss without complete candidates is not Missed Win', () {
       // White had mate-in-4 (mate=+4), played a move that lost the
       // forced sequence but stays ahead in cp.
       final cls = classifier.classify(
@@ -617,10 +624,10 @@ void main() {
           currWhiteMate: null,
         ),
       );
-      expect(cls.quality, MoveQuality.missedWin);
+      expect(cls.quality, isNot(MoveQuality.missedWin));
     });
 
-    test('Mover was winning (Win% > 70), drops to equal ⇒ Missed Win', () {
+    test('winning-to-equal without complete candidates is not Missed Win', () {
       // ΔW lands in (-20, -10] and crosses winning → equal.
       final cls = classifier.classify(
         const MoveClassificationInput(
@@ -631,10 +638,7 @@ void main() {
           currWhiteMate: null,
         ),
       );
-      // Severity must be Missed Win (or Mistake — spec puts both on
-      // the table; we resolve to Missed Win when not severe enough
-      // to be Blunder).
-      expect(cls.quality, MoveQuality.missedWin);
+      expect(cls.quality, isNot(MoveQuality.missedWin));
     });
 
     test(
@@ -647,12 +651,14 @@ void main() {
             prevWhiteMate: null,
             currWhiteCp: -400,
             currWhiteMate: null,
+            engineBestMoveUci: 'e2e4',
+            playedMoveUci: 'd2d4',
             multiPvWhiteWinPercents: [82.0, 58.0, 45.0],
             alternativeEvidenceComplete: true,
           ),
         );
         expect(cls.quality, MoveQuality.blunder);
-        expect(cls.reasonCode, 'missed_win_collapse');
+        expect(cls.reasonCode, 'baseline_blunder');
       },
     );
 
@@ -666,19 +672,21 @@ void main() {
             prevWhiteMate: null,
             currWhiteCp: 400,
             currWhiteMate: null,
+            engineBestMoveUci: 'e7e5',
+            playedMoveUci: 'd7d5',
             multiPvWhiteWinPercents: [18.0, 45.0, 52.0],
             alternativeEvidenceComplete: true,
           ),
         );
         expect(cls.quality, MoveQuality.blunder);
-        expect(cls.reasonCode, 'missed_win_collapse');
+        expect(cls.reasonCode, 'baseline_blunder');
       },
     );
   });
 
   // ─── Forced (MultiPV) ─────────────────────────────────────────────
   group('Forced', () {
-    test('Only one MultiPV line holds; played that line ⇒ Forced', () {
+    test('lossy MultiPV gaps cannot manufacture Forced', () {
       // White: PV1 ≈ 60 (mover-POV 60), PV2/3 drop > 20 pp.
       final cls = classifier.classify(
         const MoveClassificationInput(
@@ -693,30 +701,33 @@ void main() {
           alternativeEvidenceComplete: true,
         ),
       );
-      expect(cls.quality, MoveQuality.forced);
-      expect(cls.reasonCode, 'only_defense');
+      expect(cls.quality, isNot(MoveQuality.forced));
+      expect(cls.reasonCode, 'baseline_excellent');
     });
 
-    test('PV1 simple free material capture stays Best, not Forced/Great', () {
-      final cls = classifier.classify(
-        const MoveClassificationInput(
-          isWhiteMove: true,
-          prevWhiteCp: 50,
-          prevWhiteMate: null,
-          currWhiteCp: 220,
-          currWhiteMate: null,
-          engineBestMoveUci: 'a1a8',
-          playedMoveUci: 'a1a8',
-          isCapture: true,
-          isFreeCapture: true,
-          multiPvWhiteWinPercents: [72.0, 35.0, 30.0],
-        ),
-      );
-      expect(cls.quality, MoveQuality.best);
-      expect(cls.quality, isNot(MoveQuality.forced));
-      expect(cls.quality, isNot(MoveQuality.great));
-      expect(cls.reasonCode, 'pv1_best');
-    });
+    test(
+      'PV1 string without coherent search proof is not Best/Forced/Great',
+      () {
+        final cls = classifier.classify(
+          const MoveClassificationInput(
+            isWhiteMove: true,
+            prevWhiteCp: 50,
+            prevWhiteMate: null,
+            currWhiteCp: 220,
+            currWhiteMate: null,
+            engineBestMoveUci: 'a1a8',
+            playedMoveUci: 'a1a8',
+            isCapture: true,
+            isFreeCapture: true,
+            multiPvWhiteWinPercents: [72.0, 35.0, 30.0],
+          ),
+        );
+        expect(cls.quality, MoveQuality.excellent);
+        expect(cls.quality, isNot(MoveQuality.forced));
+        expect(cls.quality, isNot(MoveQuality.great));
+        expect(cls.reasonCode, 'baseline_excellent');
+      },
+    );
 
     test('Two of three MultiPV lines hold ⇒ NOT Forced', () {
       final cls = classifier.classify(
@@ -756,7 +767,7 @@ void main() {
 
   // ─── Great (PV1 vs PV2) ───────────────────────────────────────────
   group('Great', () {
-    test('Engine-best move with PV1 ≥ 10 pp better than PV2 ⇒ Great', () {
+    test('lossy Win-percent alternatives cannot manufacture Great', () {
       // White: prev cp 50 (54.6 % Win%), played move lands at +250 cp
       // (mover-POV ≈ 71 %), and the engine's #2 line was only worth
       // ~50 % (mover-POV). Gap = 21 pp ≥ 10 pp threshold.
@@ -775,7 +786,7 @@ void main() {
           isCapture: true,
         ),
       );
-      expect(cls.quality, MoveQuality.great);
+      expect(cls.quality, isNot(MoveQuality.great));
     });
 
     test('outcome swing without complete alternatives is NOT Great', () {
@@ -795,7 +806,7 @@ void main() {
       expect(cls.quality, isNot(MoveQuality.great));
     });
 
-    test('Great requires a human-meaningful reason code', () {
+    test('human motif hints without exact candidates cannot produce Great', () {
       final cls = classifier.classify(
         const MoveClassificationInput(
           isWhiteMove: true,
@@ -810,17 +821,8 @@ void main() {
           alternativeEvidenceComplete: true,
         ),
       );
-      expect(cls.quality, MoveQuality.great);
-      expect(
-        cls.reasonCode,
-        isIn([
-          'only_move',
-          'only_defense',
-          'defensive_resource',
-          'avoids_mate',
-          'tactical_breakthrough',
-        ]),
-      );
+      expect(cls.quality, isNot(MoveQuality.great));
+      expect(cls.reasonCode, 'baseline_excellent');
     });
   });
 
@@ -869,6 +871,8 @@ void main() {
           prevWhiteMate: null,
           currWhiteCp: 1450,
           currWhiteMate: null,
+          engineBestMoveUci: 'e2e4',
+          playedMoveUci: 'd2d4',
         ),
       );
       expect(
@@ -892,6 +896,8 @@ void main() {
             prevWhiteMate: null,
             currWhiteCp: -600,
             currWhiteMate: null,
+            engineBestMoveUci: 'e2e4',
+            playedMoveUci: 'd2d4',
           ),
         );
         expect(cls.quality, MoveQuality.blunder);

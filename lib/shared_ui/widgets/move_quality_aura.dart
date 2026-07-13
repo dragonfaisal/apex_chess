@@ -1,10 +1,12 @@
 /// Per-quality neon vapor aura rendered on the target square of the last move.
 ///
-/// Four qualities get a breathing aura; everything else renders nothing.
+/// Trusted highlight qualities get a breathing aura; everything else renders
+/// nothing.
 ///
 ///   * **Brilliant** — ruby → aurora (sapphire/cyan) gradient.
 ///   * **Best Move** — emerald glow.
 ///   * **Excellent / Great Move** — electric blue neon.
+///   * **Only Move** — restrained electric blue, distinct from Great.
 ///   * **Blunder** — crimson warning aura.
 ///
 /// The widget is sized to its parent (caller places it inside a
@@ -28,17 +30,15 @@ import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
       // Ruby + cyan — the "wow" combo specified for brilliant moves.
       return (inner: ApexColors.aurora, outer: ApexColors.ruby);
     case MoveQuality.great:
-      // Same wow palette as Brilliant — Great is "the *only* winning
-      // move" rather than a sacrifice, but visually it deserves the
-      // same celebratory aura.
+      // Great remains a high-trust tactical find.
       return (inner: ApexColors.aurora, outer: ApexColors.ruby);
+    case MoveQuality.onlyMove:
+      // Only Move is important but not a celebratory Brilliant/Great badge.
+      return (inner: ApexColors.sapphireBright, outer: ApexColors.electricNeon);
     case MoveQuality.best:
       return (inner: ApexColors.emeraldBright, outer: ApexColors.emerald);
     case MoveQuality.excellent:
-      return (
-        inner: ApexColors.sapphireBright,
-        outer: ApexColors.electricNeon,
-      );
+      return (inner: ApexColors.sapphireBright, outer: ApexColors.electricNeon);
     case MoveQuality.blunder:
       return (inner: ApexColors.rubyBright, outer: ApexColors.rubyDeep);
     case MoveQuality.missedWin:
@@ -52,15 +52,13 @@ import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
     case MoveQuality.mistake:
     case MoveQuality.book:
     case MoveQuality.forced:
+    case MoveQuality.unavailable:
       return null;
   }
 }
 
 class MoveQualityAura extends StatefulWidget {
-  const MoveQualityAura({
-    super.key,
-    required this.quality,
-  });
+  const MoveQualityAura({super.key, required this.quality});
 
   final MoveQuality quality;
 
@@ -99,7 +97,7 @@ class _MoveQualityAuraState extends State<MoveQualityAura>
           // Ease-in-out sine so the breath doesn't feel mechanical.
           final t = Curves.easeInOutSine.transform(_breath.value);
           final peak = 0.35 + 0.35 * t; // 0.35..0.70
-          final mid = 0.18 + 0.18 * t;  // 0.18..0.36
+          final mid = 0.18 + 0.18 * t; // 0.18..0.36
           return DecoratedBox(
             decoration: BoxDecoration(
               // Inset the gradient so the rim hugs the square without

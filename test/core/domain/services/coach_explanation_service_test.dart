@@ -591,4 +591,49 @@ void main() {
       }
     });
   });
+
+  group('Chapter 4 evidence-only labels', () {
+    test('Unavailable stays neutral and suppresses better-move copy', () {
+      final cls = svc.explain(
+        CoachExplanationInput(
+          move: _m(
+            san: 'Nf3',
+            uci: 'g1f3',
+            bestUci: 'd2d4',
+            bestSan: 'd4',
+            classification: MoveQuality.unavailable,
+            message: 'raw engine detail must not surface',
+          ),
+          mode: AnalysisMode.deep,
+        ),
+      );
+
+      expect(cls.headline, contains('Unavailable'));
+      expect(
+        cls.subline,
+        'Move quality could not be verified from complete analysis.',
+      );
+      expect(cls.betterMoveSan, isNull);
+      expect(cls.needsDeepScan, isFalse);
+    });
+
+    test('Only Move and Forced use distinct grounded copy', () {
+      final onlyMove = svc.explain(
+        CoachExplanationInput(
+          move: _m(classification: MoveQuality.onlyMove),
+          mode: AnalysisMode.deep,
+        ),
+      );
+      final forced = svc.explain(
+        CoachExplanationInput(
+          move: _m(classification: MoveQuality.forced),
+          mode: AnalysisMode.deep,
+        ),
+      );
+
+      expect(onlyMove.subline, contains('preserves the position'));
+      expect(forced.subline, contains('no legal alternative'));
+      expect(onlyMove.subline, isNot(forced.subline));
+    });
+  });
 }

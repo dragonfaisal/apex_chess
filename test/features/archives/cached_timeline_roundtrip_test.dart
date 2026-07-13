@@ -322,7 +322,8 @@ void main() {
       depth: 14,
       pgn: '*',
     );
-    expect(game.displayCount(ReviewMoveLabel.best), 2);
+    expect(game.displayCount(ReviewMoveLabel.best), 1);
+    expect(game.displayCount(ReviewMoveLabel.forced), 1);
     expect(game.displayCount(ReviewMoveLabel.miss), 1);
     expect(game.displayCount(ReviewMoveLabel.great), 0);
   });

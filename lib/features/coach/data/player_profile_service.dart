@@ -30,10 +30,7 @@ class PlayerProfileService {
   /// — when supplied, we filter per-move stats to the player's *own*
   /// plies so the profile reflects them, not their opponent. When
   /// `null`, every ply across both colours contributes equally.
-  PlayerProfile build({
-    required List<ArchivedGame> games,
-    String? me,
-  }) {
+  PlayerProfile build({required List<ArchivedGame> games, String? me}) {
     if (games.isEmpty) return PlayerProfile.empty();
     final myKey = me?.trim().toLowerCase();
 
@@ -67,7 +64,8 @@ class PlayerProfileService {
 
       // Opening usage — credit the player's colour outcome.
       if (g.openingName != null) {
-        final won = (playedAsWhite && g.result == '1-0') ||
+        final won =
+            (playedAsWhite && g.result == '1-0') ||
             (playedAsBlack && g.result == '0-1');
         final acc = openingByName.putIfAbsent(
           g.openingName!,
@@ -84,9 +82,13 @@ class PlayerProfileService {
         if (filterByColour) {
           final isMine =
               (playedAsWhite && m.isWhiteMove) ||
-                  (playedAsBlack && !m.isWhiteMove);
+              (playedAsBlack && !m.isWhiteMove);
           if (!isMine) continue;
         }
+        // Incomplete engine evidence is not a neutral move sample. Excluding
+        // it prevents unavailable plies from improving accuracy or creating
+        // unsupported training signals.
+        if (m.classification == MoveQuality.unavailable) continue;
 
         // Tally per-quality counters for the *player's* moves.
         // Phase A note: MissedWin is tracked as its own axis (per
@@ -99,8 +101,7 @@ class PlayerProfileService {
         switch (m.classification) {
           case MoveQuality.blunder:
             blundersMine += 1;
-            tacticTags['blunder'] =
-                (tacticTags['blunder'] ?? 0) + 1;
+            tacticTags['blunder'] = (tacticTags['blunder'] ?? 0) + 1;
             break;
           case MoveQuality.mistake:
             mistakesMine += 1;
@@ -109,8 +110,7 @@ class PlayerProfileService {
           case MoveQuality.missedWin:
             missedWinsMine += 1;
             mistakesMine += 1;
-            tacticTags['missed-win'] =
-                (tacticTags['missed-win'] ?? 0) + 1;
+            tacticTags['missed-win'] = (tacticTags['missed-win'] ?? 0) + 1;
             tacticTags['mistake'] = (tacticTags['mistake'] ?? 0) + 1;
             break;
           case MoveQuality.brilliant:
@@ -144,8 +144,7 @@ class PlayerProfileService {
         if (m.classification == MoveQuality.blunder ||
             m.classification == MoveQuality.mistake ||
             m.classification == MoveQuality.missedWin) {
-          if (m.engineBestMoveUci != null &&
-              m.engineBestMoveUci != m.uci) {
+          if (m.engineBestMoveUci != null && m.engineBestMoveUci != m.uci) {
             tacticTags['missed-tactic'] =
                 (tacticTags['missed-tactic'] ?? 0) + 1;
           }
@@ -157,11 +156,9 @@ class PlayerProfileService {
               (m.targetSquare.startsWith('e') ||
                   m.targetSquare.startsWith('f') ||
                   m.targetSquare.startsWith('g'))) {
-            tacticTags['king-safety'] =
-                (tacticTags['king-safety'] ?? 0) + 1;
+            tacticTags['king-safety'] = (tacticTags['king-safety'] ?? 0) + 1;
           }
-          if (timeline.totalPlies > 60 &&
-              m.ply >= timeline.totalPlies - 20) {
+          if (timeline.totalPlies > 60 && m.ply >= timeline.totalPlies - 20) {
             tacticTags['endgame-conversion'] =
                 (tacticTags['endgame-conversion'] ?? 0) + 1;
           }
@@ -191,15 +188,18 @@ class PlayerProfileService {
       });
     }
 
-    final openings = openingByName.entries
-        .map((e) => OpeningStat(
-              name: e.key,
-              eco: e.value.eco,
-              gameCount: e.value.games,
-              winCount: e.value.wins,
-            ))
-        .toList()
-      ..sort((a, b) => b.gameCount.compareTo(a.gameCount));
+    final openings =
+        openingByName.entries
+            .map(
+              (e) => OpeningStat(
+                name: e.key,
+                eco: e.value.eco,
+                gameCount: e.value.games,
+                winCount: e.value.wins,
+              ),
+            )
+            .toList()
+          ..sort((a, b) => b.gameCount.compareTo(a.gameCount));
 
     final tags = tacticTags.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
@@ -230,34 +230,43 @@ class PlayerProfileService {
     final out = <TrainingSuggestion>[];
 
     if (profile.blundersPerGame >= 1.5) {
-      out.add(TrainingSuggestion(
-        id: 'reduce-blunders',
-        headline: 'Cut your blunders in half',
-        body: 'You average ${profile.blundersPerGame.toStringAsFixed(1)} '
-            'blunders per game. Spend a few minutes a day on tactics '
-            'puzzles and double-check long captures before committing.',
-        severity: TrainingSeverity.high,
-      ));
+      out.add(
+        TrainingSuggestion(
+          id: 'reduce-blunders',
+          headline: 'Cut your blunders in half',
+          body:
+              'You average ${profile.blundersPerGame.toStringAsFixed(1)} '
+              'blunders per game. Spend a few minutes a day on tactics '
+              'puzzles and double-check long captures before committing.',
+          severity: TrainingSeverity.high,
+        ),
+      );
     } else if (profile.blundersPerGame >= 0.6) {
-      out.add(TrainingSuggestion(
-        id: 'reduce-blunders',
-        headline: 'Tighten up tactical vision',
-        body: 'Blunders/game: ${profile.blundersPerGame.toStringAsFixed(1)}. '
-            'Try a daily 10-puzzle warm-up before rated play.',
-        severity: TrainingSeverity.medium,
-      ));
+      out.add(
+        TrainingSuggestion(
+          id: 'reduce-blunders',
+          headline: 'Tighten up tactical vision',
+          body:
+              'Blunders/game: ${profile.blundersPerGame.toStringAsFixed(1)}. '
+              'Try a daily 10-puzzle warm-up before rated play.',
+          severity: TrainingSeverity.medium,
+        ),
+      );
     }
 
     if (profile.weakestPhase != null) {
       final phase = profile.weakestPhase!;
-      out.add(TrainingSuggestion(
-        id: 'phase-${phase.name}',
-        headline: 'Strengthen your ${phase.label.toLowerCase()}',
-        body: 'Your largest Win% drops happen in the ${phase.label}. '
-            'Focus the next training block on ${phase.label.toLowerCase()} '
-            'patterns and re-visit the move report from your worst games.',
-        severity: TrainingSeverity.medium,
-      ));
+      out.add(
+        TrainingSuggestion(
+          id: 'phase-${phase.name}',
+          headline: 'Strengthen your ${phase.label.toLowerCase()}',
+          body:
+              'Your largest Win% drops happen in the ${phase.label}. '
+              'Focus the next training block on ${phase.label.toLowerCase()} '
+              'patterns and re-visit the move report from your worst games.',
+          severity: TrainingSeverity.medium,
+        ),
+      );
     }
 
     for (final tag in profile.tacticalWeaknesses.take(3)) {
@@ -292,23 +301,28 @@ class PlayerProfileService {
               'in one solid repertoire for each colour.',
         _ => 'Review the games tagged with this weakness in your archive.',
       };
-      out.add(TrainingSuggestion(
-        id: tag,
-        headline: headline,
-        body: body,
-        severity: TrainingSeverity.medium,
-      ));
+      out.add(
+        TrainingSuggestion(
+          id: tag,
+          headline: headline,
+          body: body,
+          severity: TrainingSeverity.medium,
+        ),
+      );
     }
 
     if (profile.averageAccuracy >= 92 && out.isEmpty) {
-      out.add(const TrainingSuggestion(
-        id: 'maintain',
-        headline: 'Maintain peak accuracy',
-        body: 'Your accuracy is consistently above 92%. Keep the same '
-            'routine — solve a handful of harder tactics each week to '
-            'stay sharp.',
-        severity: TrainingSeverity.low,
-      ));
+      out.add(
+        const TrainingSuggestion(
+          id: 'maintain',
+          headline: 'Maintain peak accuracy',
+          body:
+              'Your accuracy is consistently above 92%. Keep the same '
+              'routine — solve a handful of harder tactics each week to '
+              'stay sharp.',
+          severity: TrainingSeverity.low,
+        ),
+      );
     }
 
     return out;
@@ -342,10 +356,7 @@ class _OpeningAccumulator {
 final playerProfileProvider = Provider<PlayerProfile>((ref) {
   final state = ref.watch(archiveControllerProvider);
   const service = PlayerProfileService();
-  return service.build(
-    games: state.games,
-    me: state.filters.perspective,
-  );
+  return service.build(games: state.games, me: state.filters.perspective);
 });
 
 final trainingSuggestionsProvider = Provider<List<TrainingSuggestion>>((ref) {

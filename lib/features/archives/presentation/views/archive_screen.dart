@@ -163,11 +163,9 @@ class _ArchiveScreenState extends ConsumerState<ArchiveScreen> {
       }
       game = resolved;
     }
-    // Phase 6 instant-reopen: if the saved record carries a *current*
-    // cached timeline, push the review screen straight away without
-    // spawning the engine. Phase A audit: stale-cache invalidation —
-    // when the classifier brain has changed under our feet, force a
-    // re-scan rather than show counts produced by the old brain.
+    // Exact canonical variants reopen under their stored compatibility
+    // contract, including historic classifier policies. Legacy cache rows
+    // still require the current policy before they can bypass analysis.
     final userIsBlack = _userIsBlack(ref, game);
     // `userIsWhite` for the coach service: if the archive row knows
     // which colour the user played, pass the opposite of `userIsBlack`;

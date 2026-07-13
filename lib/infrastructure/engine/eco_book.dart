@@ -18,10 +18,10 @@
 ///      position reached by different move orders still matches.
 ///   3. Index that prefix → [EcoEntry] in an in-memory map.
 ///
-/// The analyzer calls [contains] / [lookup] on every pre-move FEN. A hit
-/// means the move played reaches a known theoretical position and can be
-/// classified as [MoveQuality.book] — bypassing the Stockfish search and
-/// saving substantial battery in the opening phase.
+/// The analyzer calls [contains] / [lookup] for the position reached by each
+/// played move. A hit is verified Book evidence, but it does not bypass the
+/// objective Stockfish before/after comparison: policy v6 still evaluates
+/// the move so a stale or shallow book entry cannot conceal a severe loss.
 ///
 /// If loading fails (asset missing, corrupt, or on platforms where
 /// `rootBundle` is unavailable — tests) the book silently degrades to an

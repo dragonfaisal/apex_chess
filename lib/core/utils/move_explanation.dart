@@ -51,6 +51,7 @@ class BetterMoveExplanation {
     required String? bestMoveSan,
     required MoveQuality playedQuality,
   }) {
+    if (playedQuality == MoveQuality.unavailable) return null;
     if (bestMoveUci == null) return null;
     final norm = normalizeCastlingUci(bestMoveUci);
     if (norm.length < 4) return null;
@@ -92,13 +93,17 @@ class BetterMoveExplanation {
       case MoveQuality.good:
       case MoveQuality.excellent:
         return 'Improves the line.';
+      case MoveQuality.onlyMove:
+        return 'Preserves the position.';
       case MoveQuality.forced:
-        return 'Keeps the position alive.';
+        return 'Answers the forced sequence.';
       case MoveQuality.best:
       case MoveQuality.brilliant:
       case MoveQuality.great:
       case MoveQuality.book:
         return 'Keeps the initiative.';
+      case MoveQuality.unavailable:
+        return 'Analysis evidence is unavailable.';
     }
   }
 }

@@ -253,6 +253,8 @@ class ReviewMoveQualityChipDisplay {
     return switch (label) {
       ReviewMoveLabel.brilliant => '!!',
       ReviewMoveLabel.great => '!',
+      ReviewMoveLabel.onlyMove => 'Only',
+      ReviewMoveLabel.forced => 'Forced',
       ReviewMoveLabel.best => '*',
       ReviewMoveLabel.excellent => '+',
       ReviewMoveLabel.good => '',
@@ -260,6 +262,7 @@ class ReviewMoveQualityChipDisplay {
       ReviewMoveLabel.inaccuracy => '?!',
       ReviewMoveLabel.mistake || ReviewMoveLabel.miss => '?',
       ReviewMoveLabel.blunder => '??',
+      ReviewMoveLabel.unavailable => '—',
       ReviewMoveLabel.checkmate => '#',
     };
   }
@@ -527,7 +530,9 @@ class ReviewBoardDisplayModel {
       MoveQuality.great ||
       MoveQuality.best ||
       MoveQuality.book ||
-      MoveQuality.forced => false,
+      MoveQuality.onlyMove ||
+      MoveQuality.forced ||
+      MoveQuality.unavailable => false,
       MoveQuality.excellent ||
       MoveQuality.good ||
       MoveQuality.inaccuracy ||

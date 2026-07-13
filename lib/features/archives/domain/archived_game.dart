@@ -215,6 +215,22 @@ class ArchivedGame {
       canonicalGameId != null &&
       analysisVariantId != null;
 
+  /// A validated canonical variant is an immutable historical result, not a
+  /// cache candidate for the current policy. It remains safe to reopen under
+  /// its stored compatibility contract even after classifier/schema bumps.
+  /// Legacy cache rows deliberately do not receive this exemption.
+  bool get isExactStoredVariantReopenable {
+    final timeline = cachedTimeline;
+    return canResolveCanonicalDocument &&
+        timeline != null &&
+        timeline.isComplete &&
+        timeline.classifierVersion == classifierVersion &&
+        timeline.tacticalVerifierVersion == tacticalVerifierVersion &&
+        timeline.openingBookVersion == openingBookVersion &&
+        timeline.analysisSchemaVersion == analysisSchemaVersion &&
+        (cacheKey == null || timeline.cacheKey == cacheKey);
+  }
+
   bool get isCanonicalPolicyCurrent =>
       classifierVersion == kApexClassifierVersion &&
       tacticalVerifierVersion == kApexTacticalVerifierVersion &&
@@ -230,10 +246,11 @@ class ArchivedGame {
   /// present, falling back to the persisted `qualityCounts` map for
   /// older records that pre-date the Phase A integration audit.
   Map<MoveQuality, int> get qualityCountsLive {
-    if (canResolveCanonicalDocument &&
-        isCanonicalPolicyCurrent &&
-        cachedTimeline == null) {
+    if (canResolveCanonicalDocument && cachedTimeline == null) {
       return Map<MoveQuality, int>.unmodifiable(qualityCounts);
+    }
+    if (isExactStoredVariantReopenable) {
+      return cachedTimeline!.qualityCounts;
     }
     if (!isCacheCurrent) return const <MoveQuality, int>{};
     return cachedTimeline!.qualityCounts;
@@ -241,9 +258,9 @@ class ArchivedGame {
 
   bool get hasVerifiedCpLoss =>
       (canResolveCanonicalDocument &&
-          isCanonicalPolicyCurrent &&
           cachedTimeline == null &&
           cpLossSampleCount > 0) ||
+      (isExactStoredVariantReopenable && cachedTimeline!.hasVerifiedCpLoss) ||
       (isCacheCurrent && cachedTimeline!.hasVerifiedCpLoss);
 
   // All count getters route through [qualityCountsLive] so they reflect
@@ -259,7 +276,7 @@ class ArchivedGame {
   int get missCount => displayCount(ReviewMoveLabel.miss);
 
   Map<ReviewMoveLabel, int> get displayQualityCountsLive {
-    if (isCacheCurrent) {
+    if (isCacheCurrent || isExactStoredVariantReopenable) {
       final tl = cachedTimeline!;
       final out = <ReviewMoveLabel, int>{};
       for (final move in tl.moves) {
@@ -626,7 +643,7 @@ class ArchivedGame {
       openingName: h['Opening'],
       ecoCode: h['ECO'],
       cachedTimeline: timeline,
-      classifierVersion: kClassifierVersion,
+      classifierVersion: timeline.classifierVersion,
       analysisMode: analysisMode,
       analysisProfileId: timeline.analysisProfileId,
       providerId: timeline.providerId,

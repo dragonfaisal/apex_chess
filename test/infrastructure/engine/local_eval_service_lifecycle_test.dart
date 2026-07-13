@@ -90,6 +90,68 @@ void main() {
       expect(engine.commands.whereType<UciPosition>(), isEmpty);
     });
 
+    test('stop-generated bestmove is reported as cancellation', () async {
+      final engine = _LifecycleFakeEngine(
+        emitBestMove: false,
+        emitBestMoveOnStop: true,
+      );
+      final service = LocalEvalService(engine: engine);
+
+      final pending = service.evaluate(
+        startFen,
+        depth: 8,
+        timeout: const Duration(seconds: 1),
+      );
+      await engine.firstGoStarted.future;
+      service.cancelActiveSearch();
+
+      final (snapshot, error) = await pending;
+      expect(snapshot, isNull);
+      expect(error, EvalError.cancelled);
+      expect(engine.commands.whereType<UciStop>(), isNotEmpty);
+    });
+
+    test(
+      'cancellation rejects queued old work while allowing new work',
+      () async {
+        final engine = _LifecycleFakeEngine(
+          emitBestMoveOnStop: true,
+          holdFirstSearchUntilStop: true,
+        );
+        final service = LocalEvalService(engine: engine);
+
+        final active = service.evaluate(
+          startFen,
+          depth: 8,
+          timeout: const Duration(seconds: 1),
+        );
+        await engine.firstGoStarted.future;
+        final queuedBeforeCancel = service.evaluate(
+          afterE4Fen,
+          depth: 8,
+          timeout: const Duration(seconds: 1),
+        );
+
+        service.cancelActiveSearch();
+        final queuedAfterCancel = service.evaluate(
+          afterE4Fen,
+          depth: 8,
+          timeout: const Duration(seconds: 1),
+        );
+
+        final results = await Future.wait([
+          active,
+          queuedBeforeCancel,
+          queuedAfterCancel,
+        ]);
+        expect(results[0].$2, EvalError.cancelled);
+        expect(results[1].$2, EvalError.cancelled);
+        expect(results[2].$2, isNull);
+        expect(results[2].$1, isNotNull);
+        expect(engine.commands.whereType<UciGo>(), hasLength(2));
+      },
+    );
+
     test(
       'repeated start ready stop and dispose path remains idempotent',
       () async {
@@ -123,18 +185,24 @@ class _LifecycleFakeEngine implements ChessEngine {
     this.emitBestMove = true,
     this.emitReady = true,
     this.searchDelay = Duration.zero,
+    this.emitBestMoveOnStop = false,
+    this.holdFirstSearchUntilStop = false,
   });
 
   final bool emitBestMove;
   final bool emitReady;
   final Duration searchDelay;
+  final bool emitBestMoveOnStop;
+  final bool holdFirstSearchUntilStop;
   final commands = <UciCommand>[];
   final _events = StreamController<EngineEvent>.broadcast();
+  final firstGoStarted = Completer<void>();
 
   var startCount = 0;
   var disposeCount = 0;
   var searchInFlight = false;
   var overlapDetected = false;
+  var searchCount = 0;
   String? currentFen;
 
   @override
@@ -162,29 +230,46 @@ class _LifecycleFakeEngine implements ChessEngine {
     } else if (command is UciGo) {
       if (searchInFlight) overlapDetected = true;
       searchInFlight = true;
-      if (emitBestMove) {
+      searchCount++;
+      if (!firstGoStarted.isCompleted) firstGoStarted.complete();
+      if (emitBestMove && !(holdFirstSearchUntilStop && searchCount == 1)) {
         Future<void>.delayed(searchDelay, () {
           if (_events.isClosed) return;
-          final blackToMove = currentFen?.split(' ')[1] == 'b';
-          final root = blackToMove ? 'e7e5' : 'e2e4';
-          _events
-            ..add(
-              EngineInfo(
-                depth: 8,
-                multipv: 1,
-                scoreCp: 20,
-                nodes: 1000,
-                nps: 2000,
-                pv: [root],
-              ),
-            )
-            ..add(EngineBestMove(move: root));
+          _emitCompletedSearch();
           searchInFlight = false;
         });
       }
     } else if (command is UciStop) {
+      final wasInFlight = searchInFlight;
       searchInFlight = false;
+      if (wasInFlight && emitBestMoveOnStop) {
+        scheduleMicrotask(() {
+          if (_events.isClosed) return;
+          _events.add(EngineBestMove(move: _rootForCurrentPosition()));
+        });
+      }
     }
+  }
+
+  String _rootForCurrentPosition() {
+    final blackToMove = currentFen?.split(' ')[1] == 'b';
+    return blackToMove ? 'e7e5' : 'e2e4';
+  }
+
+  void _emitCompletedSearch() {
+    final root = _rootForCurrentPosition();
+    _events
+      ..add(
+        EngineInfo(
+          depth: 8,
+          multipv: 1,
+          scoreCp: 20,
+          nodes: 1000,
+          nps: 2000,
+          pv: [root],
+        ),
+      )
+      ..add(EngineBestMove(move: root));
   }
 
   @override

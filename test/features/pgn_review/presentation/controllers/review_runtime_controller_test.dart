@@ -3,12 +3,15 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dartchess/dartchess.dart';
 
 import 'package:apex_chess/core/domain/entities/analysis_profile.dart';
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
+import 'package:apex_chess/core/domain/entities/classification_evidence.dart';
 import 'package:apex_chess/core/domain/entities/engine_line.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
+import 'package:apex_chess/core/domain/services/win_percent_calculator.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/archives/domain/review_document.dart';
 import 'package:apex_chess/features/archives/domain/review_identity.dart';
@@ -535,42 +538,7 @@ GameReviewResult _result(GameReviewRequest request) {
     startingFen: game.startingFen,
     moves: [
       for (final (index, move) in game.moves.indexed)
-        MoveAnalysis(
-          ply: index,
-          san: move.san,
-          uci: move.uci,
-          fenBefore: move.fenBefore,
-          fenAfter: move.fenAfter,
-          targetSquare: move.uci.substring(2, 4),
-          winPercentBefore: 50,
-          winPercentAfter: 51,
-          deltaW: 1,
-          isWhiteMove: index.isEven,
-          classification: MoveQuality.best,
-          moverCpLoss: 0,
-          scoreCpAfter: 10,
-          requestedDepth: profile.localDepth,
-          achievedDepthBefore: profile.localDepth,
-          achievedDepthAfter: profile.localDepth,
-          multiPvReceived: profile.localMultiPv,
-          searchQualityMet: true,
-          engineLines: [
-            for (var rank = 0; rank < profile.localMultiPv; rank++)
-              EngineLine(
-                rank: rank + 1,
-                moveUci: const ['e2e4', 'd2d4', 'g1f3'][rank],
-                scoreCp: 10 - rank,
-                depth: profile.localDepth,
-                whiteWinPercent: 51,
-              ),
-          ],
-          message: 'Best',
-          coachExplanation: 'Maintains the evaluated position.',
-          analysisMode: profile.id == AnalysisProfileId.fastReview
-              ? 'quick'
-              : 'deep',
-          engineVersion: _engine,
-        ),
+        _analysisMove(index: index, move: move, profile: profile),
     ],
     headers: game.headers,
     winPercentages: [for (final _ in game.moves) 51],
@@ -624,6 +592,134 @@ GameReviewResult _result(GameReviewRequest request) {
     fromCache: false,
   );
 }
+
+MoveAnalysis _analysisMove({
+  required int index,
+  required CanonicalGameMove move,
+  required AnalysisProfile profile,
+}) {
+  final legalRoots = _legalRootUcis(move.fenBefore);
+  legalRoots.remove(move.uci);
+  legalRoots.insert(0, move.uci);
+  final roots = legalRoots.take(profile.localMultiPv).toList(growable: false);
+  final evidence = MoveClassificationEvidence(
+    mover: index.isEven ? ClassificationMover.white : ClassificationMover.black,
+    evaluationBefore: const ClassificationScore.cp(10),
+    playedMoveEvaluation: const ClassificationScore.cp(10),
+    bestMoveEvaluation: const ClassificationScore.cp(10),
+    playedMoveUci: move.uci,
+    bestMoveUci: move.uci,
+    candidates: [
+      for (final (rank, root) in roots.indexed)
+        ClassificationCandidateEvidence(
+          rootUci: root,
+          rank: rank + 1,
+          score: const ClassificationScore.cp(10),
+          achievedDepth: profile.localDepth,
+          isLegal: true,
+          pvComplete: true,
+        ),
+    ],
+    requestedMultiPv: profile.localMultiPv,
+    receivedMultiPv: roots.length,
+    candidateSetComplete: roots.length == profile.localMultiPv,
+    candidateSetCoherent: true,
+    bestMovePv1Consistent: true,
+    searchQualityMet: true,
+    achievedDepthFloor: profile.localDepth,
+    legalMoveCount: legalRoots.length,
+    bookState: ClassificationBookState.notBook,
+    verificationState: profile.candidateVerificationEnabled
+        ? ClassificationVerificationState.complete
+        : ClassificationVerificationState.notRequested,
+    forcedState: legalRoots.length == 1
+        ? ClassificationForcedState.onlyLegalMove
+        : ClassificationForcedState.notForced,
+  );
+  final decision = const EvaluationAnalyzer().analyzeEvidence(evidence);
+  final engineLines = [
+    for (final (rank, root) in roots.indexed)
+      EngineLine(
+        rank: rank + 1,
+        moveUci: root,
+        scoreCp: 10,
+        depth: profile.localDepth,
+        whiteWinPercent: const WinPercentCalculator().forCp(cp: 10),
+        pvMoves: <String>[root],
+      ),
+  ];
+  return MoveAnalysis(
+    ply: index,
+    san: move.san,
+    uci: move.uci,
+    fenBefore: move.fenBefore,
+    fenAfter: move.fenAfter,
+    targetSquare: move.uci.substring(2, 4),
+    winPercentBefore: decision.winPercentBefore,
+    winPercentAfter: decision.winPercentAfter,
+    deltaW: decision.deltaW,
+    isWhiteMove: index.isEven,
+    classification: decision.quality,
+    baseClassification: decision.baseQuality,
+    finalClassification: decision.quality,
+    reasonCode: decision.reasonCode,
+    classificationEvidence: evidence,
+    classificationReasonCodes: decision.reasonCodes,
+    classificationFailedGates: decision.failedGates,
+    playedEqualsPv1: decision.playedEqualsPv1,
+    moverCpLoss: decision.moverCpLoss,
+    scoreCpAfter: 10,
+    requestedDepth: profile.localDepth,
+    achievedDepthBefore: profile.localDepth,
+    achievedDepthAfter: profile.localDepth,
+    multiPvReceived: roots.length,
+    searchQualityMet: true,
+    engineBestMoveUci: move.uci,
+    engineLines: engineLines,
+    message: decision.message,
+    coachExplanation: 'Maintains the evaluated position.',
+    analysisMode: profile.id == AnalysisProfileId.fastReview ? 'quick' : 'deep',
+    engineVersion: _engine,
+  );
+}
+
+List<String> _legalRootUcis(String fen) {
+  final position = Chess.fromSetup(Setup.parseFen(fen));
+  final roots = <String>[];
+  position.legalMoves.forEach((from, destinations) {
+    final piece = position.board.pieceAt(from);
+    for (final to in destinations.squares) {
+      final promotes =
+          piece?.role == Role.pawn && (to.rank == 0 || to.rank == 7);
+      final roles = promotes
+          ? const <Role>[Role.queen, Role.rook, Role.bishop, Role.knight]
+          : const <Role?>[null];
+      for (final role in roles) {
+        final candidate = NormalMove(from: from, to: to, promotion: role);
+        if (position.isLegal(candidate)) {
+          roots.add(
+            normalizeCastlingUci(
+              '${_squareName(from)}${_squareName(to)}'
+              '${role == null ? '' : _roleName(role)}',
+            ),
+          );
+        }
+      }
+    }
+  });
+  return roots.toSet().toList(growable: true)..sort();
+}
+
+String _squareName(Square square) =>
+    '${String.fromCharCode('a'.codeUnitAt(0) + square.file)}${square.rank + 1}';
+
+String _roleName(Role role) => switch (role) {
+  Role.queen => 'q',
+  Role.rook => 'r',
+  Role.bishop => 'b',
+  Role.knight => 'n',
+  _ => '',
+};
 
 GameReviewResult _copyResult(
   GameReviewResult original,

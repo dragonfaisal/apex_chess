@@ -279,6 +279,7 @@ ReviewDocument _document({
         multiPvReceived: profile == 'deep_review' ? 3 : 1,
         searchQualityMet: true,
         message: 'Best',
+        classifierVersion: 5,
         engineVersion: 'apex-stockfish-bridge/0.3.0|$engine',
       ),
   ];
@@ -291,6 +292,8 @@ ReviewDocument _document({
     analysisProfileId: profile,
     providerId: 'local_offline',
     engineVersion: 'apex-stockfish-bridge/0.3.0|$engine',
+    classifierVersion: 5,
+    analysisSchemaVersion: 3,
     requestedDepth: requested,
     depth: achieved,
     movetimeMs: profile == 'deep_review' ? 6000 : 900,

@@ -177,6 +177,17 @@ class CoachExplanationService {
       );
     }
 
+    // Missing or incomplete evidence is a neutral state, not a move verdict.
+    // Keep raw classifier/engine internals out of player-facing copy and never
+    // offer a better-line suggestion from an unavailable decision.
+    if (m.classification == MoveQuality.unavailable) {
+      final moveNum = _moveNumberLabel(m.ply);
+      return CoachExplanation(
+        headline: '$moveNum ${m.san} — Unavailable',
+        subline: 'Move quality could not be verified from complete analysis.',
+      );
+    }
+
     // ── Rule 3: "Allowed forced mate" — the current ply's
     // classification is Blunder *and* the classifier flagged it as
     // allowing mate (message starts with `Blunder — allows forced
@@ -214,7 +225,7 @@ class CoachExplanationService {
 
     // ── Rule 5: Quick-mode "Needs Deep Scan" affordance. When the
     // classifier ran with `suppressTrophyTiers` the brain
-    // deliberately avoids Brilliant / Great / Forced; anything that
+    // deliberately avoids Brilliant / Great / Only Move / Forced; anything that
     // landed as "best" despite a suspicious positional profile is a
     // candidate for a Deep re-scan. The UI surfaces an amber chip
     // with a re-analyze CTA — this service never promotes the tier
@@ -324,7 +335,7 @@ class CoachExplanationService {
 
   /// Whether to surface a `Better: <SAN>` subline. Suppressed when:
   ///   * the classifier said the played move *was* the engine's #1,
-  ///   * classification is Book / Brilliant / Great / Forced / Best
+  ///   * classification is Book / Brilliant / Great / Only Move / Forced / Best
   ///     (surfacing a "better" line on these reads as a bug),
   ///   * the engine never offered a top line (`engineBestMoveSan`
   ///     is `null`).
@@ -335,8 +346,10 @@ class CoachExplanationService {
       case MoveQuality.book:
       case MoveQuality.brilliant:
       case MoveQuality.great:
+      case MoveQuality.onlyMove:
       case MoveQuality.best:
       case MoveQuality.forced:
+      case MoveQuality.unavailable:
         return false;
       case MoveQuality.excellent:
       case MoveQuality.good:
@@ -363,7 +376,9 @@ class CoachExplanationService {
       case MoveQuality.brilliant:
         return 'A rare tactical resource — near-best with a sacrifice.';
       case MoveQuality.great:
-        return 'Only this move holds the advantage.';
+        return 'A strong find backed by the available alternatives.';
+      case MoveQuality.onlyMove:
+        return 'Only this move preserves the position.';
       case MoveQuality.best:
         return 'Top choice.';
       case MoveQuality.excellent:
@@ -379,9 +394,11 @@ class CoachExplanationService {
       case MoveQuality.blunder:
         return 'Gives the opponent a decisive chance.';
       case MoveQuality.forced:
-        return 'Only move - any other loses.';
+        return 'Forced response - no legal alternative.';
       case MoveQuality.book:
         return 'Opening book.';
+      case MoveQuality.unavailable:
+        return 'Move quality is unavailable.';
     }
   }
 
@@ -410,8 +427,10 @@ class CoachExplanationService {
     }
 
     switch (m.classification) {
+      case MoveQuality.onlyMove:
+        return 'Only this move preserves the position.';
       case MoveQuality.forced:
-        return 'Only move - all alternatives allow the attack to break through.';
+        return 'Forced response - no legal alternative.';
       case MoveQuality.great:
         return tacticalCopy.isNotEmpty
             ? tacticalCopy
@@ -422,6 +441,8 @@ class CoachExplanationService {
             : 'The sacrifice opens the king and keeps the attack alive.';
       case MoveQuality.missedWin:
         return 'A decisive winning line was available.';
+      case MoveQuality.unavailable:
+        return 'Move quality could not be verified from complete analysis.';
       case MoveQuality.book:
       case MoveQuality.best:
       case MoveQuality.excellent:

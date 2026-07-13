@@ -1,101 +1,67 @@
-/// Phase A move-classification brain.
+/// Versioned Apex move-classification policy.
 ///
-/// Win% delta is the **primary** signal; cp-loss is a *safety net*
-/// that softens (never escalates) the Win%-derived tier so a
-/// flat-but-tiny cp drift in the wings of the sigmoid never reads
-/// as Mistake / Blunder. All thresholds come from the published
-/// Apex Chess spec (see `docs/specs/apex_chess_analysis_training_ux_spec.md`).
-///
-/// No code is copied from Lichess (AGPL) or Chesskit (AGPL) — only
-/// the published math (Win% sigmoid) and the boundary numbers
-/// (Δ Win% per tier) are used, both of which are public domain.
-///
-/// Thresholds (from spec § 3.3.2 + § 3.6):
-///
-///   ΔW < −20       ⇒ Blunder
-///   −20 ≤ ΔW < −10 ⇒ Mistake
-///   −10 ≤ ΔW < −5  ⇒ Inaccuracy
-///   −5 ≤ ΔW < −2   ⇒ Good
-///   ΔW ≥ −2        ⇒ Excellent (Best when matches engine #1)
-///
-/// Special tiers layer on top:
-///
-///   * **Book**       – caller's `isBook` flag is true *and* the
-///                       drop is not severe (ΔW > −20).
-///   * **Forced**     – only one of `multiPvWinPercents` is within
-///                       5 pp of the best line; mover played that
-///                       line; others drop > 20 pp.
-///   * **Missed Win** – mover was winning (mover Win% > 70 before)
-///                       and chose a line that drops the position
-///                       to roughly equal/worse (mover Win% < 60
-///                       after) **or** ΔW ≤ −20 from a winning
-///                       position.
-///   * **Great**      – ΔW > 10 *and* the move is a clear gap
-///                       above the second-best line (≥ 10 pp), or
-///                       the move flips the eval region (lost →
-///                       equal, equal → winning).
-///   * **Brilliant**  – sacrifice + non-recapture + near-best +
-///                       ΔW ≥ −2 + mover-POV Win% post-move ≥ 50 +
-///                       no alternative line trivially winning +
-///                       not already crushing + does not allow
-///                       opponent forced mate + caller asserts the
-///                       ply is the *first* ply committing the
-///                       sacrifice.
+/// [classifyEvidence] is the single authoritative production boundary. The
+/// legacy [classify] API is retained only as an adapter while engine callers
+/// migrate to the immutable evidence contract.
 library;
 
+import 'dart:convert';
+
+import 'package:apex_chess/core/domain/entities/classification_evidence.dart';
 import 'package:apex_chess/core/domain/entities/deep_tactical_verdict.dart';
+import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart'
     show MoveQuality, normalizeCastlingUci;
 import 'package:apex_chess/core/domain/services/win_percent_calculator.dart';
 
-/// Result of a single classification pass — a thin value type so the
-/// classifier is testable in isolation.
+/// Deterministic result of one policy pass.
+///
+/// [message] remains as a compatibility field for existing product surfaces.
+/// Evidence and [diagnosticJson] never contain human prose.
 class MoveClassification {
-  const MoveClassification({
+  MoveClassification({
     required this.quality,
     required this.baseQuality,
-    required this.reasonCode,
+    required List<String> reasonCodes,
+    required List<String> failedGates,
     required this.playedEqualsPv1,
     required this.deltaW,
     required this.winPercentBefore,
     required this.winPercentAfter,
     required this.moverCpLoss,
     required this.message,
+    required this.policyVersion,
+    required Map<String, Object?> diagnosticJson,
     this.engineBestMoveUci,
-  });
+  }) : reasonCodes = List<String>.unmodifiable(reasonCodes),
+       failedGates = List<String>.unmodifiable(failedGates),
+       diagnosticJson = Map<String, Object?>.unmodifiable(diagnosticJson);
 
   final MoveQuality quality;
   final MoveQuality baseQuality;
-  final String reasonCode;
+  final List<String> reasonCodes;
+  final List<String> failedGates;
   final bool playedEqualsPv1;
-
-  /// Mover-POV Win% delta across the played ply. Negative ⇒ mover
-  /// worsened their position; positive ⇒ improved.
   final double deltaW;
-
-  /// White-POV Win% before / after the played move. Stored as
-  /// white-POV so a downstream graph can render the eval line
-  /// directly.
   final double winPercentBefore;
   final double winPercentAfter;
-
-  /// Mover-POV centipawn loss; `null` whenever either side of the
-  /// comparison is a mate verdict.
   final int? moverCpLoss;
-
-  /// Human-readable, terse explanation. Always single-line so the
-  /// review card / move report can render without truncation
-  /// surprises.
   final String message;
-
-  /// Engine's #1 candidate UCI for the position before the move,
-  /// stored verbatim so the UI can build a "better-move" arrow.
+  final int policyVersion;
+  final Map<String, Object?> diagnosticJson;
   final String? engineBestMoveUci;
+
+  String get reasonCode =>
+      reasonCodes.isEmpty ? 'classification_unavailable' : reasonCodes.first;
+
+  String get diagnosticJsonString => jsonEncode(diagnosticJson);
 }
 
-/// Inputs collected by the analysis pipeline before classification
-/// runs. A single struct so a) the parameter list does not balloon
-/// and b) tests can construct synthetic positions cleanly.
+/// Compatibility input used by older call sites.
+///
+/// New engine integrations should construct [MoveClassificationEvidence]
+/// directly. In particular, a Win%-only list is not exact candidate evidence;
+/// callers must provide [candidateEvidence] for evidence-heavy labels.
 class MoveClassificationInput {
   const MoveClassificationInput({
     required this.isWhiteMove,
@@ -108,6 +74,15 @@ class MoveClassificationInput {
     this.secondBestWhiteWinPercent,
     this.multiPvWhiteWinPercents,
     this.altLineWhiteWinPercent,
+    this.candidateEvidence = const <ClassificationCandidateEvidence>[],
+    this.requestedMultiPv = 1,
+    this.receivedMultiPv,
+    this.candidateSetCoherent = false,
+    this.bestMovePv1Consistent = false,
+    this.searchQualityMet = false,
+    this.achievedDepthFloor,
+    this.legalMoveCount,
+    this.forcedState = ClassificationForcedState.unavailable,
     this.isSacrifice = false,
     this.isCapture = false,
     this.isFreeCapture = false,
@@ -122,105 +97,106 @@ class MoveClassificationInput {
     this.suppressTrophyTiers = false,
     this.alternativeEvidenceComplete = false,
     this.deepVerificationComplete = false,
+    this.unavailableReason,
   });
 
-  /// Side that just made the played move.
   final bool isWhiteMove;
-
-  /// Engine verdict (white-POV) of the position **before** the move.
-  /// Mate score takes precedence over cp when present.
   final int? prevWhiteCp;
   final int? prevWhiteMate;
-
-  /// Engine verdict (white-POV) of the position **after** the move.
   final int? currWhiteCp;
   final int? currWhiteMate;
-
-  /// Engine's #1 candidate from the previous position (UCI). When
-  /// the played UCI matches this, the move is at least Best.
   final String? engineBestMoveUci;
   final String? playedMoveUci;
 
-  /// White-POV Win% of the engine's #2 line at the previous
-  /// position. Used by the Great gate so we can compare PV1 vs PV2.
+  /// Deprecated lossy candidate fields. They are ignored by policy v6.
   final double? secondBestWhiteWinPercent;
-
-  /// MultiPV white-POV Win% list (PV1, PV2, …). Used by the Forced
-  /// gate (only one line stays within 5 pp of the best, others drop
-  /// > 20 pp).
   final List<double>? multiPvWhiteWinPercents;
-
-  /// White-POV Win% of the *best non-sacrificial* alternative from
-  /// the previous position. Used by the Brilliant gate so a "win
-  /// more" sacrifice (where a non-sac line is already trivially
-  /// winning) can be excluded.
   final double? altLineWhiteWinPercent;
 
-  /// Caller asserts the played move surrendered ≥ minor-piece
-  /// material. The classifier never invents sacrifices on its own.
+  final List<ClassificationCandidateEvidence> candidateEvidence;
+  final int requestedMultiPv;
+  final int? receivedMultiPv;
+  final bool candidateSetCoherent;
+  final bool bestMovePv1Consistent;
+  final bool searchQualityMet;
+  final int? achievedDepthFloor;
+  final int? legalMoveCount;
+  final ClassificationForcedState forcedState;
+
   final bool isSacrifice;
-
-  /// Caller asserts the move captures material.
   final bool isCapture;
-
-  /// Caller asserts the capture wins material cleanly.
   final bool isFreeCapture;
-
-  /// Caller asserts the move is a recapture.
   final bool isRecapture;
-
-  /// Caller asserts the move has a tactical feature (check, promotion,
-  /// sacrifice, discovered tactical sequence, etc.).
   final bool hasTacticalMotif;
-
-  /// Candidate-only tactical verification, produced by the shared analysis
-  /// brain. MultiPV is evidence; this result supplies the human tactical
-  /// story across the next few plies.
   final DeepTacticalVerdict tacticalVerdict;
-
-  /// Caller asserts the move is a routine recapture (e.g. opponent
-  /// played NxN, mover played NxN). Trivial recaptures can never
-  /// be Brilliant per spec § 3.6.6.
   final bool isTrivialRecapture;
-
-  /// Caller asserts the played ply is the **first** ply that
-  /// commits the sacrificial material deficit. Without this gate
-  /// the analyser would label every consolidating move that
-  /// follows the sac as Brilliant, which is wrong (spec § 3.6.6.4).
   final bool isFirstSacrificePly;
-
-  /// Caller flagged the position as inside an opening-book line.
-  /// When true the default classification is Book/Theory unless a
-  /// severe engine drop overrides it.
   final bool isBook;
-
-  /// Optional opening metadata for the result message.
   final String? openingName;
   final String? ecoCode;
 
-  /// When `true`, the classifier skips the Brilliant / Great / Forced
-  /// short-circuits and routes straight to the Win% / cp-loss ladder.
-  ///
-  /// Used by Quick scans (D14, single PV) — those scans cannot honestly
-  /// verify a Brilliant / Great / Forced claim (the spec requires
-  /// deeper search + MultiPV for all three, § 3.6.2/4/6). Surfacing
-  /// a trophy tier off a shallow search misleads the user, so Quick
-  /// mode emits only Blunder / Mistake / Inaccuracy / Good / Excellent /
-  /// Best / Book / MissedWin.
+  /// Retained for source compatibility only. Policy v6 never reads a profile
+  /// mode; evidence availability suppresses special labels naturally.
   final bool suppressTrophyTiers;
 
-  /// True only when the requested MultiPV alternatives were all received at
-  /// the required depth with distinct legal root moves.
   final bool alternativeEvidenceComplete;
-
-  /// True only when candidate re-search evidence met its depth/MultiPV
-  /// contract and the tactical verifier approved the played line.
   final bool deepVerificationComplete;
+  final ClassificationUnavailableReason? unavailableReason;
+
+  MoveClassificationEvidence toEvidence() {
+    ClassificationScore? score(int? cp, int? mate) {
+      if (cp == null && mate == null) return null;
+      return ClassificationScore(whiteCp: cp, whiteMate: mate);
+    }
+
+    final tactical = tacticalVerdict;
+    return MoveClassificationEvidence(
+      mover: isWhiteMove
+          ? ClassificationMover.white
+          : ClassificationMover.black,
+      evaluationBefore: score(prevWhiteCp, prevWhiteMate),
+      playedMoveEvaluation: score(currWhiteCp, currWhiteMate),
+      bestMoveEvaluation: score(prevWhiteCp, prevWhiteMate),
+      playedMoveUci: playedMoveUci,
+      bestMoveUci: engineBestMoveUci,
+      candidates: candidateEvidence,
+      requestedMultiPv: requestedMultiPv,
+      receivedMultiPv: receivedMultiPv ?? candidateEvidence.length,
+      candidateSetComplete: alternativeEvidenceComplete,
+      candidateSetCoherent: candidateSetCoherent,
+      bestMovePv1Consistent: bestMovePv1Consistent,
+      searchQualityMet: searchQualityMet,
+      achievedDepthFloor: achievedDepthFloor,
+      legalMoveCount: legalMoveCount,
+      bookState: isBook
+          ? ClassificationBookState.verified
+          : ClassificationBookState.notBook,
+      verificationState: deepVerificationComplete && tactical.verified
+          ? ClassificationVerificationState.complete
+          : tactical.isCandidate
+          ? ClassificationVerificationState.incomplete
+          : ClassificationVerificationState.notRequested,
+      forcedState: forcedState,
+      isSacrifice: isSacrifice,
+      isCapture: isCapture,
+      isFreeCapture: isFreeCapture,
+      isRecapture: isRecapture,
+      isTrivialRecapture: isTrivialRecapture,
+      isFirstSacrificePly: isFirstSacrificePly,
+      tacticalBestOrNearBest: tactical.isBestOrNearBest,
+      tacticalHasForcingOutcome: tactical.hasForcingOutcome,
+      tacticalForcedMate: tactical.forcedMate,
+      unavailableReason: unavailableReason,
+    );
+  }
 }
 
+/// Retained for source compatibility. Policy v6 returns `unavailable` instead
+/// of throwing when classification evidence is absent or ambiguous.
 class IncompleteMoveEvidenceException implements Exception {
   const IncompleteMoveEvidenceException(this.message);
   final String message;
+
   @override
   String toString() => 'IncompleteMoveEvidenceException: $message';
 }
@@ -235,281 +211,558 @@ class MoveClassifier {
   final WinPercentCalculator _win;
   final MoverPerspective _persp;
 
-  // ── Spec thresholds (§ 3.3.2 / § 3.6) ────────────────────────────────
-  // Pulled out as static consts so tests can reference them by name
-  // and reviewers can audit a single place when the spec moves.
-
-  /// ΔW > this ⇒ Excellent / Best — within the noise band.
+  // General thresholds are intentionally preserved from policy v5.
   static const double dwExcellent = -2.0;
-
-  /// ΔW (−2..−5] ⇒ Good / Slightly worse.
   static const double dwGood = -5.0;
-
-  /// ΔW (−5..−10] ⇒ Inaccuracy.
   static const double dwInaccuracy = -10.0;
-
-  /// ΔW (−10..−20] ⇒ Mistake.
   static const double dwMistake = -20.0;
-  // ΔW < −20 ⇒ Blunder.
-
-  /// Mover-POV Win% above which a position counts as "winning" — used
-  /// by the Missed Win gate (§ 3.6.5).
   static const double winningCutoff = 70.0;
-
-  /// Mover-POV Win% below which a position counts as "equal/worse"
-  /// after a Missed Win.
   static const double equalCeiling = 60.0;
-
-  /// "Already crushing" cutoff used by the Brilliant guard
-  /// (§ 3.6.6.3). 90 pp matches the spec.
-  static const double crushingCutoff = 90.0;
-
-  /// "Trivially winning" Win% threshold for the alternative-line
-  /// guard (§ 3.6.6.2) — White ≥ 97 / Black ≤ 3.
-  static const double triviallyWinning = 97.0;
-
-  /// Brilliant cp-loss cap. The spec asks for "no significant Win%
-  /// loss"; in practice we bound the cp-loss too so a 200 cp swing
-  /// never reads as Brilliant even when ΔW happens to land in the
-  /// noise band.
   static const int brilliantCpLossCap = 40;
-
-  /// Forced-move tolerance: every non-mover MultiPV line must drop
-  /// at least this far below the best line (§ 3.6.2).
   static const double forcedDropPp = 20.0;
+  static const double greatCaptureGapPp = 15.0;
+  static const double equivalentBestTolerancePp = 2.0;
+  static const int bookCpLossOverride = 250;
 
-  /// Forced-move best-line tolerance: the mover's line must stay
-  /// within this much of the best line.
-  static const double forcedTolerancePp = 5.0;
+  MoveClassification classify(MoveClassificationInput input) =>
+      classifyEvidence(input.toEvidence());
 
-  /// Great gate: PV1 must beat PV2 by at least this much (§ 3.6.4).
-  static const double greatPv1MinusPv2Pp = 10.0;
-
-  /// Classify a single ply.
-  MoveClassification classify(MoveClassificationInput in_) {
-    if (!_validScore(in_.prevWhiteCp, in_.prevWhiteMate) ||
-        !_validScore(in_.currWhiteCp, in_.currWhiteMate)) {
-      throw const IncompleteMoveEvidenceException(
-        'Classification requires one unambiguous cp-or-mate score before and after the move.',
-      );
+  /// The one authoritative policy-v6 classification entry point.
+  MoveClassification classifyEvidence(MoveClassificationEvidence evidence) {
+    final unavailable = _coreUnavailableReason(evidence);
+    if (unavailable != null) {
+      return _unavailableDecision(evidence, unavailable);
     }
-    final whiteWinBefore = _win.forCp(
-      cp: in_.prevWhiteCp,
-      mate: in_.prevWhiteMate,
-    );
-    final whiteWinAfter = _win.forCp(
-      cp: in_.currWhiteCp,
-      mate: in_.currWhiteMate,
-    );
 
-    final deltaW = _persp.deltaW(
-      whiteWinBefore: whiteWinBefore,
-      whiteWinAfter: whiteWinAfter,
-      isWhiteMove: in_.isWhiteMove,
-    );
-
+    final before = evidence.evaluationBefore!;
+    final played = evidence.playedMoveEvaluation!;
+    final bestScore = evidence.bestMoveEvaluation!;
+    final isWhiteMove = evidence.mover == ClassificationMover.white;
+    final whiteWinBefore = _winFor(before);
+    final whiteWinAfter = _winFor(played);
+    final whiteWinBest = _winFor(bestScore);
     final moverWinBefore = _persp.moverWinPercent(
       whiteWinBefore,
-      isWhiteMove: in_.isWhiteMove,
+      isWhiteMove: isWhiteMove,
     );
     final moverWinAfter = _persp.moverWinPercent(
       whiteWinAfter,
-      isWhiteMove: in_.isWhiteMove,
+      isWhiteMove: isWhiteMove,
     );
-
-    final signedCpChange = _persp.cpLoss(
-      whiteCpBefore: in_.prevWhiteCp,
-      whiteCpAfter: in_.currWhiteCp,
-      mateBefore: in_.prevWhiteMate,
-      mateAfter: in_.currWhiteMate,
-      isWhiteMove: in_.isWhiteMove,
+    final bestMoverWin = _persp.moverWinPercent(
+      whiteWinBest,
+      isWhiteMove: isWhiteMove,
     );
-    final cpLossMover = signedCpChange == null
+    final deltaW = _persp.deltaW(
+      whiteWinBefore: whiteWinBefore,
+      whiteWinAfter: whiteWinAfter,
+      isWhiteMove: isWhiteMove,
+    );
+    final signedCpLoss = _persp.cpLoss(
+      whiteCpBefore: bestScore.whiteCp,
+      whiteCpAfter: played.whiteCp,
+      mateBefore: bestScore.whiteMate,
+      mateAfter: played.whiteMate,
+      isWhiteMove: isWhiteMove,
+    );
+    final cpLossMover = signedCpLoss == null
         ? null
-        : signedCpChange < 0
+        : signedCpLoss < 0
         ? 0
-        : signedCpChange;
+        : signedCpLoss;
 
-    final moverForcesMate = _persp.moverForcesMate(
-      in_.currWhiteMate,
-      isWhiteMove: in_.isWhiteMove,
+    final candidatesCoherent = evidence.hasStructurallyCoherentCandidates;
+    final candidatesComplete = evidence.hasCompleteCandidateSet;
+    final pv1 = candidatesCoherent ? evidence.candidates.first : null;
+    final bestMovePv1Consistent =
+        candidatesCoherent &&
+        evidence.bestMovePv1Consistent &&
+        _sameMove(evidence.bestMoveUci, pv1?.rootUci);
+    final playedCandidate = candidatesCoherent
+        ? evidence.candidates
+              .where(
+                (candidate) =>
+                    _sameMove(candidate.rootUci, evidence.playedMoveUci),
+              )
+              .firstOrNull
+        : null;
+    final playedEqualsPv1 = bestMovePv1Consistent && playedCandidate?.rank == 1;
+    final playedCandidateWin = playedCandidate == null
+        ? null
+        : _moverWinFor(playedCandidate.score, isWhiteMove: isWhiteMove);
+    final bestCandidateWin = pv1 == null
+        ? bestMoverWin
+        : _moverWinFor(pv1.score, isWhiteMove: isWhiteMove);
+    final playedEquivalentBest =
+        bestMovePv1Consistent &&
+        playedCandidateWin != null &&
+        (bestCandidateWin - playedCandidateWin).abs() <=
+            equivalentBestTolerancePp;
+    final qualifiesBest =
+        evidence.searchQualityMet &&
+        bestMovePv1Consistent &&
+        (playedEqualsPv1 || playedEquivalentBest);
+    final equivalentBestCount = candidatesCoherent
+        ? evidence.candidates
+              .where(
+                (candidate) =>
+                    (bestCandidateWin -
+                            _moverWinFor(
+                              candidate.score,
+                              isWhiteMove: isWhiteMove,
+                            ))
+                        .abs() <=
+                    equivalentBestTolerancePp,
+              )
+              .length
+        : 0;
+
+    final beforeMateState = _mateStateForMover(
+      before,
+      isWhiteMove: isWhiteMove,
     );
-    // Defensive guard against a `mate == 0` leaking through from the
-    // engine layer. Stockfish reports `mate 0` from side-to-move POV on
-    // a checkmate-on-the-board position; if the caller forgot to resolve
-    // that from dartchess it could arrive here ambiguous. Treat `0` as
-    // "mate has already been delivered" — neither mover-forces-mate nor
-    // opponent-forces-mate — so the classifier falls through to the
-    // normal Win% / cp-loss ladder instead of mis-firing Blunder on a
-    // mate-delivering ply. Analyzer pipelines should pre-synthesise a
-    // signed ±1 mate and never emit raw `0`; this guard is belt-and-
-    // braces.
-    final opponentForcesMate =
-        in_.currWhiteMate != null && in_.currWhiteMate != 0 && !moverForcesMate;
-
-    final wasEngineBestMove = _isEngineBest(
-      engine: in_.engineBestMoveUci,
-      played: in_.playedMoveUci,
+    final playedMateState = _mateStateForMover(
+      played,
+      isWhiteMove: isWhiteMove,
     );
-
-    MoveClassification finish(
-      MoveQuality q,
-      String message, {
-      required MoveQuality baseQuality,
-      required String reasonCode,
-    }) {
-      var finalQuality = q;
-      var finalMessage = message;
-      var finalReasonCode = reasonCode;
-
-      return MoveClassification(
-        quality: finalQuality,
-        baseQuality: baseQuality,
-        reasonCode: finalReasonCode,
-        playedEqualsPv1: wasEngineBestMove,
-        deltaW: deltaW,
-        winPercentBefore: whiteWinBefore,
-        winPercentAfter: whiteWinAfter,
-        moverCpLoss: cpLossMover,
-        message: finalMessage,
-        engineBestMoveUci: in_.engineBestMoveUci,
+    final bestMateState = _mateStateForMover(
+      bestScore,
+      isWhiteMove: isWhiteMove,
+    );
+    final enteringNewMateAgainst =
+        playedMateState == _MateState.againstMover &&
+        beforeMateState != _MateState.againstMover;
+    final remainedMateAgainst =
+        beforeMateState == _MateState.againstMover &&
+        playedMateState == _MateState.againstMover;
+    if (remainedMateAgainst && bestMateState != _MateState.againstMover) {
+      return _unavailableDecision(
+        evidence,
+        ClassificationUnavailableReason.contradictoryBestMove,
       );
     }
-
-    // ── Mate-against-mover short-circuit ──────────────────────────────
-    // Spec § 3.4: a move that yields a forced mate against the mover
-    // is a Blunder, regardless of cp. Done up-front so the Brilliant /
-    // Great / Missed Win gates below cannot mis-fire on it.
-    if (opponentForcesMate) {
-      return finish(
-        MoveQuality.blunder,
-        'Blunder - allows forced mate.',
-        baseQuality: MoveQuality.blunder,
-        reasonCode: 'allows_mate',
-      );
-    }
-
-    // ── Book / Theory ─────────────────────────────────────────────────
-    // Spec § 3.6.3: book moves stay tagged as Book unless the engine
-    // shows a severe drop (ΔW < −20 ⇒ Blunder). We let the severe
-    // drop fall through to the Win% ladder so the user sees the
-    // actual blunder verdict.
-    if (in_.isBook && deltaW > dwMistake) {
-      final headline = in_.ecoCode != null && in_.openingName != null
-          ? '${in_.ecoCode} • ${in_.openingName}'
-          : in_.openingName ?? 'Opening theory.';
-      return finish(
-        MoveQuality.book,
-        headline,
-        baseQuality: MoveQuality.book,
-        reasonCode: 'book_theory',
-      );
-    }
+    final brilliantMateException =
+        playedMateState == _MateState.forMover || evidence.tacticalForcedMate;
 
     final baseQuality = _baselineQuality(
       deltaW: deltaW,
       cpLossMover: cpLossMover,
       moverWinBefore: moverWinBefore,
       moverWinAfter: moverWinAfter,
-      wasEngineBestMove: wasEngineBestMove,
+      qualifiesBest: qualifiesBest,
     );
 
-    // ── Missed Win (§ 3.6.5) ──────────────────────────────────────────
-    final missedWin = in_.suppressTrophyTiers
-        ? null
-        : _classifyMissedWin(
-            bestMoverWinBefore: _bestMoverWinBeforeFromPv(
-              in_,
-              fallback: moverWinBefore,
-            ),
-            moverWinAfter: moverWinAfter,
-            deltaW: deltaW,
-            hasMultiPvEvidence:
-                in_.alternativeEvidenceComplete &&
-                (in_.multiPvWhiteWinPercents?.length ?? 0) >= 2,
-            wasEngineBestMove: wasEngineBestMove,
-            prevMoverMate: _persp.moverForcesMate(
-              in_.prevWhiteMate,
-              isWhiteMove: in_.isWhiteMove,
-            ),
-            currMoverMate: moverForcesMate,
-          );
+    final failedGates = _failedGates(
+      evidence: evidence,
+      candidatesCoherent: candidatesCoherent,
+      candidatesComplete: candidatesComplete,
+      bestMovePv1Consistent: bestMovePv1Consistent,
+      qualifiesBest: qualifiesBest,
+      equivalentBestCount: equivalentBestCount,
+      deltaW: deltaW,
+      cpLossMover: cpLossMover,
+      moverWinBefore: moverWinBefore,
+      moverWinAfter: moverWinAfter,
+      brilliantMateException: brilliantMateException,
+    );
+
+    MoveClassification finish(
+      MoveQuality quality,
+      MoveQuality base,
+      List<String> reasons,
+    ) {
+      final diagnostics = <String, Object?>{
+        'policyVersion': kApexClassifierVersion,
+        'selectedLabel': quality.name,
+        'baseLabel': base.name,
+        'reasonCodes': List<String>.unmodifiable(reasons),
+        'failedGates': List<String>.unmodifiable(failedGates),
+        'mover': evidence.mover.name,
+        'deltaW': deltaW,
+        'moverCpLoss': cpLossMover,
+        'moverWinBefore': moverWinBefore,
+        'moverWinAfter': moverWinAfter,
+        'bestMoverWin': bestMoverWin,
+        'scoreDomainBefore': before.domain.name,
+        'scoreDomainAfter': played.domain.name,
+        'candidateCount': evidence.candidates.length,
+        'requestedMultiPv': evidence.requestedMultiPv,
+        'receivedMultiPv': evidence.receivedMultiPv,
+        'candidateSetComplete': candidatesComplete,
+        'candidateSetCoherent': candidatesCoherent,
+        'bestMovePv1Consistent': bestMovePv1Consistent,
+        'bestEquivalentMoveCount': equivalentBestCount,
+        'playedCandidateRank': playedCandidate?.rank,
+        'searchQualityMet': evidence.searchQualityMet,
+        'achievedDepthFloor': evidence.achievedDepthFloor,
+        'bookState': evidence.bookState.name,
+        'verificationState': evidence.verificationState.name,
+        'forcedState': evidence.forcedState.name,
+        'legalMoveCount': evidence.legalMoveCount,
+      };
+      return MoveClassification(
+        quality: quality,
+        baseQuality: base,
+        reasonCodes: reasons,
+        failedGates: failedGates,
+        playedEqualsPv1: playedEqualsPv1,
+        deltaW: deltaW,
+        winPercentBefore: whiteWinBefore,
+        winPercentAfter: whiteWinAfter,
+        moverCpLoss: cpLossMover,
+        message: _messageFor(quality),
+        policyVersion: kApexClassifierVersion,
+        diagnosticJson: diagnostics,
+        engineBestMoveUci: evidence.bestMoveUci,
+      );
+    }
+
+    List<String> baselineReasons() => <String>[
+      if (baseQuality == MoveQuality.best)
+        playedEqualsPv1 ? 'pv1_best' : 'equivalent_best'
+      else
+        _baseReason(baseQuality, qualifiesBest),
+    ];
+
+    // A newly-entered forced mate against the mover dominates every badge.
+    if (enteringNewMateAgainst) {
+      return finish(MoveQuality.blunder, MoveQuality.blunder, const <String>[
+        'allows_forced_mate',
+      ]);
+    }
+
+    // Do not repeatedly label an already-forced mate as a fresh Blunder.
+    // Keep mate distance in its native domain and distinguish the best
+    // defense, preservation/delay, and a move that hastens mate.
+    if (remainedMateAgainst) {
+      if (qualifiesBest) {
+        return finish(MoveQuality.best, MoveQuality.best, <String>[
+          playedEqualsPv1 ? 'pv1_best' : 'equivalent_best',
+          'mate_against_best_defense',
+        ]);
+      }
+      final bestDistance = bestScore.whiteMate!.abs();
+      final playedDistance = played.whiteMate!.abs();
+      if (playedDistance < bestDistance) {
+        return finish(MoveQuality.mistake, baseQuality, const <String>[
+          'mate_against_hastened',
+        ]);
+      }
+      return finish(baseQuality, baseQuality, <String>[
+        playedDistance > bestDistance
+            ? 'mate_against_delayed'
+            : 'mate_against_preserved',
+      ]);
+    }
+
+    final missedWin = _missedWinDecision(
+      evidence: evidence,
+      candidatesComplete: candidatesComplete,
+      bestMovePv1Consistent: bestMovePv1Consistent,
+      qualifiesBest: qualifiesBest,
+      bestMateState: bestMateState,
+      playedMateState: playedMateState,
+      bestMoverWin: bestMoverWin,
+      moverWinAfter: moverWinAfter,
+      deltaW: deltaW,
+    );
     if (missedWin != null) {
-      return finish(
-        missedWin.quality,
-        missedWin.message,
-        baseQuality: baseQuality,
-        reasonCode: missedWin.reasonCode,
-      );
+      return finish(missedWin.$1, baseQuality, <String>[missedWin.$2]);
     }
 
-    if (!in_.suppressTrophyTiers) {
-      final forced = _classifyForced(
-        in_: in_,
-        deltaW: deltaW,
-        moverWinBefore: moverWinBefore,
-        wasEngineBestMove: wasEngineBestMove,
-      );
-      if (forced != null) {
-        return finish(
-          forced.quality,
-          forced.message,
-          baseQuality: baseQuality,
-          reasonCode: forced.reasonCode,
-        );
+    if (evidence.bookState == ClassificationBookState.verified) {
+      if (evidence.searchQualityMet &&
+          cpLossMover != null &&
+          cpLossMover > bookCpLossOverride) {
+        return finish(MoveQuality.blunder, baseQuality, const <String>[
+          'book_severe_cp_loss',
+        ]);
       }
-
-      final brilliant = _classifyBrilliant(
-        in_: in_,
-        deltaW: deltaW,
-        moverWinBefore: moverWinBefore,
-        moverWinAfter: moverWinAfter,
-        cpLossMover: cpLossMover,
-        moverForcesMate: moverForcesMate,
-        wasEngineBestMove: wasEngineBestMove,
-      );
-      if (brilliant != null) {
-        return finish(
-          brilliant.quality,
-          brilliant.message,
-          baseQuality: baseQuality,
-          reasonCode: brilliant.reasonCode,
-        );
+      final adverseMateTransition =
+          beforeMateState == _MateState.forMover &&
+          playedMateState != _MateState.forMover;
+      if (evidence.searchQualityMet &&
+          deltaW > dwMistake &&
+          !adverseMateTransition) {
+        return finish(MoveQuality.book, MoveQuality.book, const <String>[
+          'verified_book_safe',
+        ]);
       }
-
-      final great = _classifyGreat(
-        in_: in_,
-        deltaW: deltaW,
-        moverWinBefore: moverWinBefore,
-        moverWinAfter: moverWinAfter,
-        wasEngineBestMove: wasEngineBestMove,
-      );
-      if (great != null) {
-        return finish(
-          great.quality,
-          great.message,
-          baseQuality: baseQuality,
-          reasonCode: great.reasonCode,
-        );
-      }
+      // Verified opening provenance is never permission to fall through into
+      // a trophy/forced label. If Book is unsafe, keep the ordinary factual
+      // verdict selected above (Missed Win and mate loss already took
+      // precedence).
+      return finish(baseQuality, baseQuality, baselineReasons());
     }
 
-    return finish(
-      baseQuality,
-      _messageFor(baseQuality, deltaW, cpLossMover),
-      baseQuality: baseQuality,
-      reasonCode: _baseReason(baseQuality, wasEngineBestMove),
+    // Forced means exactly one legal move. MultiPV gaps never manufacture it.
+    if (evidence.legalMoveCount == 1) {
+      return finish(MoveQuality.forced, baseQuality, const <String>[
+        'only_legal_move',
+      ]);
+    }
+
+    final brilliant =
+        evidence.isSacrifice == true &&
+        evidence.isFirstSacrificePly == true &&
+        evidence.isRecapture != true &&
+        evidence.isTrivialRecapture != true &&
+        evidence.isFreeCapture != true &&
+        evidence.verificationState ==
+            ClassificationVerificationState.complete &&
+        evidence.tacticalBestOrNearBest &&
+        evidence.tacticalHasForcingOutcome &&
+        evidence.searchQualityMet &&
+        candidatesComplete &&
+        bestMovePv1Consistent &&
+        playedCandidate != null &&
+        equivalentBestCount == 1 &&
+        deltaW >= dwExcellent &&
+        (cpLossMover == null || cpLossMover <= brilliantCpLossCap) &&
+        (moverWinBefore < 90.0 || brilliantMateException) &&
+        (playedMateState == _MateState.forMover || moverWinAfter >= 50.0);
+    if (brilliant) {
+      return finish(MoveQuality.brilliant, baseQuality, const <String>[
+        'verified_sound_sacrifice',
+      ]);
+    }
+
+    final onlyMove = _isOnlyMove(
+      evidence: evidence,
+      candidatesComplete: candidatesComplete,
+      bestMovePv1Consistent: bestMovePv1Consistent,
+      playedEqualsPv1: playedEqualsPv1,
+      isWhiteMove: isWhiteMove,
+    );
+    if (onlyMove) {
+      return finish(MoveQuality.onlyMove, baseQuality, const <String>[
+        'only_outcome_preserving_move',
+      ]);
+    }
+
+    final soundForGreat =
+        deltaW >= dwExcellent &&
+        moverWinAfter >= 30.0 &&
+        (baseQuality == MoveQuality.best ||
+            baseQuality == MoveQuality.excellent);
+    final greatGap = candidatesComplete && evidence.candidates.length >= 3
+        ? bestCandidateWin -
+              _moverWinFor(
+                evidence.candidates[1].score,
+                isWhiteMove: isWhiteMove,
+              )
+        : 0.0;
+    final great =
+        evidence.searchQualityMet &&
+        candidatesComplete &&
+        bestMovePv1Consistent &&
+        playedCandidate != null &&
+        (playedEqualsPv1 || playedEquivalentBest) &&
+        equivalentBestCount == 1 &&
+        soundForGreat &&
+        evidence.isRecapture != true &&
+        evidence.isTrivialRecapture != true &&
+        evidence.isFreeCapture != true &&
+        evidence.isSacrifice != true &&
+        ((evidence.verificationState ==
+                    ClassificationVerificationState.complete &&
+                evidence.tacticalHasForcingOutcome) ||
+            (evidence.isCapture == true && greatGap >= greatCaptureGapPp));
+    if (great) {
+      return finish(MoveQuality.great, baseQuality, const <String>[
+        'verified_great_move',
+      ]);
+    }
+
+    return finish(baseQuality, baseQuality, baselineReasons());
+  }
+
+  ClassificationUnavailableReason? _coreUnavailableReason(
+    MoveClassificationEvidence evidence,
+  ) {
+    if (evidence.schemaVersion != 1) {
+      return ClassificationUnavailableReason.unsupportedSchema;
+    }
+    if (evidence.unavailableReason != null) return evidence.unavailableReason;
+    if (evidence.evaluationBefore == null) {
+      return ClassificationUnavailableReason.missingEvaluationBefore;
+    }
+    if (evidence.playedMoveEvaluation == null) {
+      return ClassificationUnavailableReason.missingPlayedMoveEvaluation;
+    }
+    if (evidence.bestMoveEvaluation == null) {
+      return ClassificationUnavailableReason.missingBestMoveEvaluation;
+    }
+    if (!evidence.evaluationBefore!.isValid ||
+        !evidence.playedMoveEvaluation!.isValid ||
+        !evidence.bestMoveEvaluation!.isValid) {
+      return ClassificationUnavailableReason.ambiguousScore;
+    }
+    if (!evidence.hasExactMoveIdentity) {
+      return ClassificationUnavailableReason.missingMoveIdentity;
+    }
+    return null;
+  }
+
+  MoveClassification _unavailableDecision(
+    MoveClassificationEvidence evidence,
+    ClassificationUnavailableReason reason,
+  ) {
+    final reasonCode = 'evidence_unavailable_${reason.name}';
+    final diagnostic = <String, Object?>{
+      'policyVersion': kApexClassifierVersion,
+      'selectedLabel': MoveQuality.unavailable.name,
+      'baseLabel': MoveQuality.unavailable.name,
+      'reasonCodes': <String>[reasonCode],
+      'failedGates': <String>['core.${reason.name}'],
+      'mover': evidence.mover.name,
+      'candidateCount': evidence.candidates.length,
+      'candidateSetComplete': evidence.hasCompleteCandidateSet,
+      'candidateSetCoherent': evidence.hasStructurallyCoherentCandidates,
+      'bookState': evidence.bookState.name,
+      'verificationState': evidence.verificationState.name,
+    };
+    return MoveClassification(
+      quality: MoveQuality.unavailable,
+      baseQuality: MoveQuality.unavailable,
+      reasonCodes: <String>[reasonCode],
+      failedGates: <String>['core.${reason.name}'],
+      playedEqualsPv1: false,
+      deltaW: double.nan,
+      winPercentBefore: double.nan,
+      winPercentAfter: double.nan,
+      moverCpLoss: null,
+      message: _messageFor(MoveQuality.unavailable),
+      policyVersion: kApexClassifierVersion,
+      diagnosticJson: diagnostic,
+      engineBestMoveUci: evidence.bestMoveUci,
     );
   }
 
-  // ─── Tier helpers ────────────────────────────────────────────────────
+  (MoveQuality, String)? _missedWinDecision({
+    required MoveClassificationEvidence evidence,
+    required bool candidatesComplete,
+    required bool bestMovePv1Consistent,
+    required bool qualifiesBest,
+    required _MateState bestMateState,
+    required _MateState playedMateState,
+    required double bestMoverWin,
+    required double moverWinAfter,
+    required double deltaW,
+  }) {
+    final hasRequiredEvidence =
+        evidence.searchQualityMet &&
+        candidatesComplete &&
+        evidence.candidates.length >= 2 &&
+        bestMovePv1Consistent &&
+        evidence.playedMoveUci != null &&
+        evidence.playedMoveUci!.length >= 4;
+    if (!hasRequiredEvidence || qualifiesBest) return null;
+
+    if (bestMateState == _MateState.forMover &&
+        playedMateState != _MateState.forMover) {
+      if (moverWinAfter < 50.0 && deltaW <= dwMistake) {
+        return (MoveQuality.blunder, 'missed_forced_mate_collapse');
+      }
+      return (MoveQuality.missedWin, 'missed_forced_mate');
+    }
+
+    if (bestMoverWin > winningCutoff &&
+        moverWinAfter < equalCeiling &&
+        deltaW <= dwInaccuracy) {
+      if (moverWinAfter < 50.0 && deltaW <= dwMistake) {
+        return (MoveQuality.blunder, 'missed_win_collapse');
+      }
+      return (MoveQuality.missedWin, 'missed_decisive_line');
+    }
+    return null;
+  }
+
+  bool _isOnlyMove({
+    required MoveClassificationEvidence evidence,
+    required bool candidatesComplete,
+    required bool bestMovePv1Consistent,
+    required bool playedEqualsPv1,
+    required bool isWhiteMove,
+  }) {
+    if (!candidatesComplete ||
+        !bestMovePv1Consistent ||
+        !evidence.searchQualityMet ||
+        evidence.candidates.length < 3 ||
+        evidence.requestedMultiPv < 3 ||
+        evidence.legalMoveCount == null ||
+        evidence.legalMoveCount! <= 1 ||
+        !playedEqualsPv1) {
+      return false;
+    }
+    final best = _moverWinFor(
+      evidence.candidates[0].score,
+      isWhiteMove: isWhiteMove,
+    );
+    final second = _moverWinFor(
+      evidence.candidates[1].score,
+      isWhiteMove: isWhiteMove,
+    );
+    final third = _moverWinFor(
+      evidence.candidates[2].score,
+      isWhiteMove: isWhiteMove,
+    );
+    if (best - second <= forcedDropPp || best - third <= forcedDropPp) {
+      return false;
+    }
+    final bestBand = _outcomeBand(
+      evidence.candidates[0].score,
+      best,
+      isWhiteMove: isWhiteMove,
+    );
+    final secondBand = _outcomeBand(
+      evidence.candidates[1].score,
+      second,
+      isWhiteMove: isWhiteMove,
+    );
+    return bestBand.index > secondBand.index;
+  }
+
+  List<String> _failedGates({
+    required MoveClassificationEvidence evidence,
+    required bool candidatesCoherent,
+    required bool candidatesComplete,
+    required bool bestMovePv1Consistent,
+    required bool qualifiesBest,
+    required int equivalentBestCount,
+    required double deltaW,
+    required int? cpLossMover,
+    required double moverWinBefore,
+    required double moverWinAfter,
+    required bool brilliantMateException,
+  }) => <String>[
+    if (!evidence.searchQualityMet) 'best.search_quality',
+    if (!candidatesCoherent) 'alternatives.coherent',
+    if (!candidatesComplete) 'alternatives.complete',
+    if (!bestMovePv1Consistent) 'best.bestmove_pv1_consistency',
+    if (!qualifiesBest) 'best.played_root',
+    if (evidence.legalMoveCount != 1) 'forced.only_legal_move',
+    if (evidence.legalMoveCount == null || evidence.legalMoveCount! <= 1)
+      'only_move.multiple_legal_moves',
+    if (evidence.verificationState != ClassificationVerificationState.complete)
+      'brilliant.deep_verification',
+    if (evidence.isSacrifice != true) 'brilliant.real_sacrifice',
+    if (evidence.isFirstSacrificePly != true) 'brilliant.first_sacrifice_ply',
+    if (deltaW < dwExcellent) 'special.sound_delta',
+    if (cpLossMover != null && cpLossMover > brilliantCpLossCap)
+      'brilliant.cp_loss',
+    if (moverWinBefore >= 90.0 && !brilliantMateException)
+      'brilliant.already_crushing',
+    if (moverWinAfter < 50.0) 'brilliant.outcome',
+    if (equivalentBestCount > 1) 'special.equivalent_alternatives',
+  ];
 
   MoveQuality _baselineQuality({
     required double deltaW,
     required int? cpLossMover,
     required double moverWinBefore,
     required double moverWinAfter,
-    required bool wasEngineBestMove,
+    required bool qualifiesBest,
   }) {
     var primary = _fromWinDelta(deltaW);
     primary = _safetyNet(primary, cpLossMover);
@@ -522,28 +775,8 @@ class MoveClassifier {
     if ((wasAlreadyLost || winningDrift) && primary == MoveQuality.blunder) {
       primary = MoveQuality.mistake;
     }
-
-    if (wasEngineBestMove && deltaW >= dwExcellent) {
-      return MoveQuality.best;
-    }
+    if (qualifiesBest && deltaW >= dwExcellent) return MoveQuality.best;
     return primary;
-  }
-
-  String _baseReason(MoveQuality q, bool wasEngineBestMove) {
-    if (q == MoveQuality.best && wasEngineBestMove) return 'pv1_best';
-    return switch (q) {
-      MoveQuality.excellent => 'baseline_excellent',
-      MoveQuality.good => 'baseline_solid',
-      MoveQuality.inaccuracy => 'baseline_inaccuracy',
-      MoveQuality.mistake => 'baseline_mistake',
-      MoveQuality.blunder => 'baseline_blunder',
-      MoveQuality.best => 'baseline_best',
-      MoveQuality.book => 'book_theory',
-      MoveQuality.brilliant => 'brilliant',
-      MoveQuality.great => 'great',
-      MoveQuality.forced => 'forced',
-      MoveQuality.missedWin => 'missed_win',
-    };
   }
 
   MoveQuality _fromWinDelta(double deltaW) {
@@ -556,10 +789,8 @@ class MoveClassifier {
 
   MoveQuality _safetyNet(MoveQuality picked, int? cpLossMover) {
     if (cpLossMover == null) return picked;
-    MoveQuality cap;
-    if (cpLossMover <= 30) {
-      cap = MoveQuality.excellent;
-    } else if (cpLossMover <= 60) {
+    final MoveQuality cap;
+    if (cpLossMover <= 60) {
       cap = MoveQuality.excellent;
     } else if (cpLossMover <= 120) {
       cap = MoveQuality.inaccuracy;
@@ -571,319 +802,100 @@ class MoveClassifier {
     return _severity(cap) < _severity(picked) ? cap : picked;
   }
 
-  int _severity(MoveQuality q) => switch (q) {
-    MoveQuality.brilliant => 0,
-    MoveQuality.great => 0,
-    MoveQuality.best => 0,
+  int _severity(MoveQuality quality) => switch (quality) {
+    MoveQuality.brilliant ||
+    MoveQuality.great ||
+    MoveQuality.onlyMove ||
+    MoveQuality.best ||
     MoveQuality.book => 0,
     MoveQuality.forced => 1,
     MoveQuality.excellent => 2,
     MoveQuality.good => 3,
-    MoveQuality.inaccuracy => 4,
-    MoveQuality.missedWin => 4,
+    MoveQuality.inaccuracy || MoveQuality.missedWin => 4,
     MoveQuality.mistake => 5,
     MoveQuality.blunder => 6,
+    MoveQuality.unavailable => 7,
   };
 
-  // ─── Brilliant gate — strict, all six conditions must hold ────────
-
-  _SpecialClassification? _classifyBrilliant({
-    required MoveClassificationInput in_,
-    required double deltaW,
-    required double moverWinBefore,
-    required double moverWinAfter,
-    required int? cpLossMover,
-    required bool moverForcesMate,
-    required bool wasEngineBestMove,
-  }) {
-    final tactical = in_.tacticalVerdict;
-    if (!in_.deepVerificationComplete || !tactical.verified) return null;
-    final verifiedNonObviousCommitment =
-        (tactical.matingNet || tactical.promotionNet) &&
-        tactical.lowDepthRejectedHighDepthApproved &&
-        tactical.isNonObvious;
-    final tacticalSacrifice =
-        tactical.verified &&
-        tactical.isBestOrNearBest &&
-        tactical.hasForcingOutcome &&
-        (tactical.hasSacrificeMotif || verifiedNonObviousCommitment) &&
-        (tactical.firstCommitmentPly != null ||
-            tactical.queenSacrifice ||
-            tactical.rookSacrifice);
-    if (!in_.isSacrifice && !tacticalSacrifice) return null;
-    if (in_.isTrivialRecapture) return null;
-    if (in_.isRecapture) return null;
-    if (in_.isFreeCapture && !tactical.hasSacrificeMotif) return null;
-    if (!in_.isFirstSacrificePly && !tacticalSacrifice) return null;
-    if (!tacticalSacrifice) return null;
-
-    // Soundness
-    if (deltaW < -2.0 && !tactical.forcedMate) return null;
-    if (!tactical.forcedMate &&
-        cpLossMover != null &&
-        cpLossMover > brilliantCpLossCap) {
-      return null;
-    }
-    if (!moverForcesMate && !tactical.forcedMate && moverWinAfter < 50.0) {
-      return null;
-    }
-
-    // Near-best (engine #1 OR favourable forced mate)
-    if (!wasEngineBestMove && !moverForcesMate && !tactical.isBestOrNearBest) {
-      return null;
-    }
-
-    // Already-crushing guard (Win% AND cp variants) — favourable
-    // forced mate overrides because mating from +6 is still a real
-    // tactical resource.
-    final moverCpBefore = in_.prevWhiteMate != null || in_.prevWhiteCp == null
-        ? null
-        : _persp.moverCp(in_.prevWhiteCp!, isWhiteMove: in_.isWhiteMove);
-    final wasAlreadyCrushing =
-        moverWinBefore >= crushingCutoff ||
-        (moverCpBefore != null && moverCpBefore >= 500);
-    if (wasAlreadyCrushing &&
-        moverWinBefore >= triviallyWinning &&
-        !moverForcesMate &&
-        !tactical.forcedMate) {
-      return null;
-    }
-
-    // Alternative-line guard: if a non-sacrificial line was already
-    // trivially winning, the sacrifice is "win more" — not Brilliant.
-    if (in_.altLineWhiteWinPercent != null) {
-      final altMover = _persp.moverWinPercent(
-        in_.altLineWhiteWinPercent!,
-        isWhiteMove: in_.isWhiteMove,
-      );
-      if (altMover >= triviallyWinning) return null;
-    }
-
-    return _SpecialClassification(
-      quality: MoveQuality.brilliant,
-      reasonCode: tactical.reasonCode,
-      message: tactical.humanExplanation.isNotEmpty
-          ? tactical.humanExplanation
-          : 'Brilliant sacrifice - the tactic works after the forcing line.',
-    );
-  }
-
-  // ─── Missed Win gate (§ 3.6.5) ────────────────────────────────────
-
-  _SpecialClassification? _classifyMissedWin({
-    required double bestMoverWinBefore,
-    required double moverWinAfter,
-    required double deltaW,
-    required bool hasMultiPvEvidence,
-    required bool wasEngineBestMove,
-    required bool prevMoverMate,
-    required bool currMoverMate,
-  }) {
-    if (wasEngineBestMove) return null;
-    // Mover was *forced-mate-up* before but no longer after ⇒
-    // Missed Win regardless of cp drift.
-    if (prevMoverMate && !currMoverMate) {
-      if (moverWinAfter >= 50.0) {
-        return const _SpecialClassification(
-          quality: MoveQuality.missedWin,
-          reasonCode: 'missed_forced_mate',
-          message: 'Missed win - a forced mate was available.',
-        );
-      }
-      return const _SpecialClassification(
-        quality: MoveQuality.blunder,
-        reasonCode: 'missed_win_collapse',
-        message: 'Blunder - missed a forced win and gave the opponent chances.',
-      );
-    }
-    // Mover was clearly winning before; played move drops the
-    // position to equal/worse — i.e. spec's "winning → equal/worse".
-    if (bestMoverWinBefore > winningCutoff &&
-        moverWinAfter < equalCeiling &&
-        deltaW <= dwInaccuracy) {
-      if (moverWinAfter >= 50.0) {
-        return const _SpecialClassification(
-          quality: MoveQuality.missedWin,
-          reasonCode: 'missed_decisive_line',
-          message: 'Missed win - a decisive line was available.',
-        );
-      }
-      if (deltaW <= dwMistake && hasMultiPvEvidence) {
-        return const _SpecialClassification(
-          quality: MoveQuality.blunder,
-          reasonCode: 'missed_win_collapse',
-          message: 'Blunder - missed a winning line and let the position turn.',
-        );
-      }
-    }
-    return null;
-  }
-
-  // ─── Forced gate (§ 3.6.2) ────────────────────────────────────────
-
-  _SpecialClassification? _classifyForced({
-    required MoveClassificationInput in_,
-    required double deltaW,
-    required double moverWinBefore,
-    required bool wasEngineBestMove,
-  }) {
-    final pvs = in_.multiPvWhiteWinPercents;
-    if (!in_.alternativeEvidenceComplete || pvs == null || pvs.length < 3) {
-      return null;
-    }
-    if (deltaW < dwGood) {
-      return null; // capped at "Okay"; severe drops aren't forced
-    }
-    if (!wasEngineBestMove) return null;
-    if (in_.isBook) return null;
-    if (in_.isSacrifice) return null;
-    if (in_.isFreeCapture || in_.isRecapture || in_.isTrivialRecapture) {
-      return null;
-    }
-
-    // Convert to mover-POV so the comparison is symmetric.
-    final movPvs = _moverPvWinPercents(in_);
-    if (movPvs == null || movPvs.length < 3) return null;
-    final best = movPvs.first;
-    final second = movPvs[1];
-    final third = movPvs[2];
-    final gap12 = best - second;
-    final gap13 = best - third;
-
-    if (gap12 <= forcedTolerancePp || gap13 <= forcedTolerancePp) return null;
-    if (gap12 <= forcedDropPp || gap13 <= forcedDropPp) return null;
-    if (moverWinBefore >= 85.0 || best >= 90.0) return null;
-
-    final alternativesCollapse =
-        second <= 20.0 || third <= 20.0 || second <= moverWinBefore - 15.0;
-    final defensiveOnlyMove = moverWinBefore <= 65.0 && alternativesCollapse;
-    if (defensiveOnlyMove) {
-      return const _SpecialClassification(
-        quality: MoveQuality.forced,
-        reasonCode: 'only_defense',
-        message:
-            'Only move - all alternatives allow the attack to break through.',
-      );
-    }
-    return null;
-  }
-
-  // ─── Great gate (§ 3.6.4) ─────────────────────────────────────────
-
-  _SpecialClassification? _classifyGreat({
-    required MoveClassificationInput in_,
-    required double deltaW,
-    required double moverWinBefore,
-    required double moverWinAfter,
-    required bool wasEngineBestMove,
-  }) {
-    final tactical = in_.tacticalVerdict;
-    if (!in_.alternativeEvidenceComplete) return null;
-    final tacticalGreat =
-        tactical.isCandidate &&
-        in_.deepVerificationComplete &&
-        tactical.verified &&
-        (wasEngineBestMove || tactical.isBestOrNearBest) &&
-        tactical.hasForcingOutcome;
-    if (tacticalGreat &&
-        !in_.isBook &&
-        !in_.isRecapture &&
-        !in_.isTrivialRecapture &&
-        (!in_.isFreeCapture || tactical.hasSacrificeMotif)) {
-      return _SpecialClassification(
-        quality: MoveQuality.great,
-        reasonCode: tactical.reasonCode == 'none'
-            ? 'deep_tactical_idea'
-            : tactical.reasonCode,
-        message: tactical.humanExplanation.isNotEmpty
-            ? tactical.humanExplanation
-            : 'Great find - deep review confirms the forcing idea.',
-      );
-    }
-
-    if (in_.isTrivialRecapture) return null;
-    if (in_.isRecapture) return null;
-    if (in_.isFreeCapture) return null;
-    if (in_.isSacrifice) return null;
-    if (!wasEngineBestMove) return null;
-    // Position after the move must not be clearly losing.
-    if (moverWinAfter < 30.0) return null;
-
-    final pvs = _moverPvWinPercents(in_);
-    if (pvs != null && pvs.length >= 3 && deltaW >= dwExcellent) {
-      final gap12 = pvs.first - pvs[1];
-      final gap13 = pvs.first - pvs[2];
-      final sharp = in_.hasTacticalMotif || in_.isCapture;
-      final practicalRange = moverWinBefore >= 25.0 && moverWinBefore <= 75.0;
-      if (sharp &&
-          practicalRange &&
-          gap12 >= greatPv1MinusPv2Pp + 5.0 &&
-          gap13 >= greatPv1MinusPv2Pp + 5.0) {
-        return const _SpecialClassification(
-          quality: MoveQuality.great,
-          reasonCode: 'tactical_breakthrough',
-          message: 'Great find - spots the tactic at the right moment.',
-        );
-      }
-    }
-
-    return null;
-  }
-
-  // ─── Misc helpers ─────────────────────────────────────────────────
-
-  bool _isEngineBest({String? engine, String? played}) {
-    if (engine == null || played == null) return false;
-    return normalizeCastlingUci(engine) == normalizeCastlingUci(played);
-  }
-
-  bool _validScore(int? cp, int? mate) =>
-      (cp != null) != (mate != null) && mate != 0;
-
-  double _bestMoverWinBeforeFromPv(
-    MoveClassificationInput in_, {
-    required double fallback,
-  }) {
-    final pvs = in_.multiPvWhiteWinPercents;
-    if (pvs == null || pvs.isEmpty) return fallback;
-    return _persp.moverWinPercent(pvs.first, isWhiteMove: in_.isWhiteMove);
-  }
-
-  List<double>? _moverPvWinPercents(MoveClassificationInput in_) {
-    final pvs = in_.multiPvWhiteWinPercents;
-    if (pvs == null) return null;
-    return pvs
-        .map((w) => _persp.moverWinPercent(w, isWhiteMove: in_.isWhiteMove))
-        .toList(growable: false);
-  }
-
-  String _messageFor(MoveQuality q, double deltaW, int? cpLoss) {
-    return switch (q) {
-      MoveQuality.blunder => 'Blunder - gives the opponent a decisive chance.',
-      MoveQuality.mistake => 'Mistake - a stronger continuation was available.',
-      MoveQuality.inaccuracy => 'Inaccuracy - a cleaner move was available.',
-      MoveQuality.good => 'Solid - keeps the position playable.',
-      MoveQuality.excellent => 'Excellent - strong, accurate move.',
-      MoveQuality.best => 'Best move - top engine choice.',
-      MoveQuality.brilliant =>
-        'Brilliant sacrifice - opens the attack and stays sound.',
-      MoveQuality.great => 'Great find - changes the course of the position.',
-      MoveQuality.book => 'Opening theory.',
-      MoveQuality.forced =>
-        'Only move - all alternatives allow the attack to break through.',
-      MoveQuality.missedWin => 'Missed win - a decisive line was available.',
+  String _baseReason(MoveQuality quality, bool qualifiesBest) {
+    if (quality == MoveQuality.best && qualifiesBest) return 'pv1_best';
+    return switch (quality) {
+      MoveQuality.excellent => 'baseline_excellent',
+      MoveQuality.good => 'baseline_solid',
+      MoveQuality.inaccuracy => 'baseline_inaccuracy',
+      MoveQuality.mistake => 'baseline_mistake',
+      MoveQuality.blunder => 'baseline_blunder',
+      MoveQuality.best => 'baseline_best',
+      MoveQuality.book => 'verified_book_safe',
+      MoveQuality.brilliant => 'verified_sound_sacrifice',
+      MoveQuality.great => 'verified_great_move',
+      MoveQuality.onlyMove => 'only_outcome_preserving_move',
+      MoveQuality.forced => 'only_legal_move',
+      MoveQuality.missedWin => 'missed_decisive_line',
+      MoveQuality.unavailable => 'classification_unavailable',
     };
+  }
+
+  String _messageFor(MoveQuality quality) => switch (quality) {
+    MoveQuality.blunder => 'Blunder - gives the opponent a decisive chance.',
+    MoveQuality.mistake => 'Mistake - a stronger continuation was available.',
+    MoveQuality.inaccuracy => 'Inaccuracy - a cleaner move was available.',
+    MoveQuality.good => 'Solid - keeps the position playable.',
+    MoveQuality.excellent => 'Excellent - strong, accurate move.',
+    MoveQuality.best => 'Best move - top engine choice.',
+    MoveQuality.brilliant => 'Brilliant - a verified sound sacrifice.',
+    MoveQuality.great => 'Great find - verified by complete alternatives.',
+    MoveQuality.onlyMove => 'Only move - the alternatives lose the outcome.',
+    MoveQuality.forced => 'Forced response - the only legal move.',
+    MoveQuality.book => 'Opening theory.',
+    MoveQuality.missedWin => 'Missed win - a decisive line was available.',
+    MoveQuality.unavailable => 'Move classification unavailable.',
+  };
+
+  double _winFor(ClassificationScore score) =>
+      _win.forCp(cp: score.whiteCp, mate: score.whiteMate);
+
+  double _moverWinFor(ClassificationScore score, {required bool isWhiteMove}) =>
+      _persp.moverWinPercent(_winFor(score), isWhiteMove: isWhiteMove);
+
+  _MateState _mateStateForMover(
+    ClassificationScore score, {
+    required bool isWhiteMove,
+  }) {
+    final mate = score.whiteMate;
+    if (mate == null) return _MateState.none;
+    return _persp.moverForcesMate(mate, isWhiteMove: isWhiteMove)
+        ? _MateState.forMover
+        : _MateState.againstMover;
+  }
+
+  _OutcomeBand _outcomeBand(
+    ClassificationScore score,
+    double moverWin, {
+    required bool isWhiteMove,
+  }) {
+    final mate = _mateStateForMover(score, isWhiteMove: isWhiteMove);
+    if (mate == _MateState.forMover) return _OutcomeBand.forcedWin;
+    if (mate == _MateState.againstMover) return _OutcomeBand.forcedLoss;
+    if (moverWin >= winningCutoff) return _OutcomeBand.winning;
+    if (moverWin <= 30.0) return _OutcomeBand.losing;
+    return _OutcomeBand.equal;
+  }
+
+  bool _sameMove(String? a, String? b) {
+    if (a == null || b == null) return false;
+    return normalizeCastlingUci(a.toLowerCase()) ==
+        normalizeCastlingUci(b.toLowerCase());
   }
 }
 
-class _SpecialClassification {
-  const _SpecialClassification({
-    required this.quality,
-    required this.reasonCode,
-    required this.message,
-  });
+enum _MateState { againstMover, none, forMover }
 
-  final MoveQuality quality;
-  final String reasonCode;
-  final String message;
+enum _OutcomeBand { forcedLoss, losing, equal, winning, forcedWin }
+
+extension _FirstOrNull<T> on Iterable<T> {
+  T? get firstOrNull {
+    final iterator = this.iterator;
+    return iterator.moveNext() ? iterator.current : null;
+  }
 }

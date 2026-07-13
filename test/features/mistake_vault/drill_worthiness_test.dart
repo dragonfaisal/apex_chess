@@ -16,24 +16,28 @@ void main() {
       expect(isDrillWorthy(MoveQuality.missedWin), isTrue);
     });
 
-    test('Best, Brilliant, Great, Excellent, Good, Inaccuracy, Forced, '
-        'Book ⇒ NOT drill', () {
-      for (final q in const [
-        MoveQuality.best,
-        MoveQuality.brilliant,
-        MoveQuality.great,
-        MoveQuality.excellent,
-        MoveQuality.good,
-        MoveQuality.inaccuracy,
-        MoveQuality.forced,
-        MoveQuality.book,
-      ]) {
-        expect(
-          isDrillWorthy(q),
-          isFalse,
-          reason: '$q should not generate a Mistake Vault drill',
-        );
-      }
-    });
+    test(
+      'positive, neutral, forced, book, and unavailable labels do not drill',
+      () {
+        for (final q in const [
+          MoveQuality.best,
+          MoveQuality.brilliant,
+          MoveQuality.great,
+          MoveQuality.onlyMove,
+          MoveQuality.excellent,
+          MoveQuality.good,
+          MoveQuality.inaccuracy,
+          MoveQuality.forced,
+          MoveQuality.book,
+          MoveQuality.unavailable,
+        ]) {
+          expect(
+            isDrillWorthy(q),
+            isFalse,
+            reason: '$q should not generate a Mistake Vault drill',
+          );
+        }
+      },
+    );
   });
 }

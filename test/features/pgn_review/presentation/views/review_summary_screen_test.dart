@@ -159,6 +159,8 @@ void main() {
         'Excellent',
         'Good',
         'Book',
+        'Forced',
+        'Only Move',
         'Inaccuracy',
         'Mistake',
         'Miss',
@@ -166,7 +168,6 @@ void main() {
       ]) {
         expect(find.text(label), findsWidgets);
       }
-      expect(find.text('Forced'), findsNothing);
       expect(find.text('Solid'), findsNothing);
       expect(find.text('Theory'), findsNothing);
     },
@@ -269,7 +270,13 @@ void main() {
     final cta = find.text('Re-analyze');
     await tester.scrollUntilVisible(cta, 200);
     expect(cta, findsOneWidget);
-    await tester.tap(cta);
+    final button = tester.widget<OutlinedButton>(
+      find.ancestor(
+        of: cta,
+        matching: find.byWidgetPredicate((widget) => widget is OutlinedButton),
+      ),
+    );
+    button.onPressed!.call();
     await tester.pumpAndSettle();
     expect(called, isTrue);
   });

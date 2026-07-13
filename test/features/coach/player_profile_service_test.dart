@@ -26,26 +26,25 @@ MoveAnalysis _ply({
   String? bestUci,
   String uci = 'e2e4',
   int? scoreAfter,
-}) =>
-    MoveAnalysis(
-      ply: ply,
-      san: 'X',
-      uci: uci,
-      fenBefore: 'r' * 8,
-      fenAfter: 'r' * 8,
-      targetSquare: 'e4',
-      winPercentBefore: 50,
-      winPercentAfter: 50 + deltaW,
-      deltaW: deltaW,
-      isWhiteMove: white,
-      classification: cls,
-      engineBestMoveSan: bestUci,
-      engineBestMoveUci: bestUci,
-      scoreCpAfter: scoreAfter,
-      mateInAfter: null,
-      inBook: cls == MoveQuality.book,
-      message: '',
-    );
+}) => MoveAnalysis(
+  ply: ply,
+  san: 'X',
+  uci: uci,
+  fenBefore: 'r' * 8,
+  fenAfter: 'r' * 8,
+  targetSquare: 'e4',
+  winPercentBefore: 50,
+  winPercentAfter: 50 + deltaW,
+  deltaW: deltaW,
+  isWhiteMove: white,
+  classification: cls,
+  engineBestMoveSan: bestUci,
+  engineBestMoveUci: bestUci,
+  scoreCpAfter: scoreAfter,
+  mateInAfter: null,
+  inBook: cls == MoveQuality.book,
+  message: '',
+);
 
 ArchivedGame _game({
   required String id,
@@ -53,21 +52,20 @@ ArchivedGame _game({
   required String black,
   required String result,
   required AnalysisTimeline timeline,
-}) =>
-    ArchivedGame(
-      id: id,
-      source: ArchiveSource.pgn,
-      white: white,
-      black: black,
-      result: result,
-      analyzedAt: DateTime.now(),
-      depth: 14,
-      pgn: '*',
-      qualityCounts: timeline.qualityCounts,
-      averageCpLoss: timeline.averageCpLoss,
-      totalPlies: timeline.totalPlies,
-      cachedTimeline: timeline,
-    );
+}) => ArchivedGame(
+  id: id,
+  source: ArchiveSource.pgn,
+  white: white,
+  black: black,
+  result: result,
+  analyzedAt: DateTime.now(),
+  depth: 14,
+  pgn: '*',
+  qualityCounts: timeline.qualityCounts,
+  averageCpLoss: timeline.averageCpLoss,
+  totalPlies: timeline.totalPlies,
+  cachedTimeline: timeline,
+);
 
 void main() {
   const service = PlayerProfileService();
@@ -107,17 +105,45 @@ void main() {
     // Suggestions: blunder + opening + missed-tactic / opening-mistake
     final suggestions = service.suggest(profile);
     expect(suggestions, isNotEmpty);
-    expect(
-        suggestions.any((s) => s.id == 'reduce-blunders'), isTrue);
+    expect(suggestions.any((s) => s.id == 'reduce-blunders'), isTrue);
+  });
+
+  test('unavailable plies do not alter accuracy or training signals', () {
+    final timeline = AnalysisTimeline(
+      startingFen: '',
+      headers: const {},
+      winPercentages: const [],
+      moves: [
+        _ply(ply: 0, white: true, cls: MoveQuality.unavailable, deltaW: -80),
+        _ply(ply: 2, white: true, cls: MoveQuality.good, deltaW: -10),
+      ],
+    );
+    final profile = service.build(
+      games: [
+        _game(
+          id: 'unavailable-evidence',
+          white: 'me',
+          black: 'opp',
+          result: '*',
+          timeline: timeline,
+        ),
+      ],
+      me: 'me',
+    );
+
+    expect(profile.averageAccuracy, 90);
+    expect(profile.blundersPerGame, 0);
+    expect(profile.mistakesPerGame, 0);
+    expect(profile.tacticalWeaknesses, isEmpty);
   });
 
   test('opening stats credit the player\'s colour win/total', () {
     AnalysisTimeline lineWith(String name, String eco) => AnalysisTimeline(
-          startingFen: '',
-          headers: {'Opening': name, 'ECO': eco},
-          winPercentages: const [],
-          moves: const [],
-        );
+      startingFen: '',
+      headers: {'Opening': name, 'ECO': eco},
+      winPercentages: const [],
+      moves: const [],
+    );
     final games = [
       ArchivedGame(
         id: '1',
@@ -160,23 +186,25 @@ void main() {
     expect(profile.openings.first.winRate, 50.0);
   });
 
-  test('weakest phase = the third with the largest deltaW magnitude',
-      () {
+  test('weakest phase = the third with the largest deltaW magnitude', () {
     // 90 plies — split into 3 phases of 30. Filtered to white-only
     // ⇒ ~45 plies of mine, well over the 30-ply minimum the service
     // requires before picking a weakest phase.
     final moves = <MoveAnalysis>[];
     for (int i = 0; i < 30; i++) {
-      moves.add(_ply(ply: i, white: i.isEven, cls: MoveQuality.good,
-          deltaW: -0.2));
+      moves.add(
+        _ply(ply: i, white: i.isEven, cls: MoveQuality.good, deltaW: -0.2),
+      );
     }
     for (int i = 30; i < 60; i++) {
-      moves.add(_ply(ply: i, white: i.isEven, cls: MoveQuality.mistake,
-          deltaW: -6.0));
+      moves.add(
+        _ply(ply: i, white: i.isEven, cls: MoveQuality.mistake, deltaW: -6.0),
+      );
     }
     for (int i = 60; i < 90; i++) {
-      moves.add(_ply(ply: i, white: i.isEven, cls: MoveQuality.good,
-          deltaW: -0.3));
+      moves.add(
+        _ply(ply: i, white: i.isEven, cls: MoveQuality.good, deltaW: -0.3),
+      );
     }
     final timeline = AnalysisTimeline(
       startingFen: '',
@@ -186,18 +214,18 @@ void main() {
     );
     final games = [
       _game(
-          id: '1',
-          white: 'me',
-          black: 'opp',
-          result: '0-1',
-          timeline: timeline),
+        id: '1',
+        white: 'me',
+        black: 'opp',
+        result: '0-1',
+        timeline: timeline,
+      ),
     ];
     final profile = service.build(games: games, me: 'me');
     expect(profile.weakestPhase, GamePhase.middlegame);
   });
 
-  test(
-      'MissedWin plies feed missedWinsPerGame AND keep contributing to '
+  test('MissedWin plies feed missedWinsPerGame AND keep contributing to '
       'the mistakes/missed-tactic stream (Phase A regression)', () {
     // Two MissedWin plies and one Mistake — all from "me" (white,
     // even ply). Pre-Phase-A these would have been three Mistakes

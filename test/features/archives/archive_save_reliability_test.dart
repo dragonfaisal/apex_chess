@@ -1,5 +1,7 @@
 import 'package:apex_chess/core/domain/entities/analysis_profile.dart';
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
+import 'package:apex_chess/core/domain/entities/classification_evidence.dart';
+import 'package:apex_chess/core/domain/entities/engine_line.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/features/archives/data/archive_save_hook.dart';
@@ -211,6 +213,36 @@ AnalysisTimeline _timeline({
   String analysisMode = 'quick',
   String analysisProfileId = 'fast_review',
 }) {
+  final evidence = MoveClassificationEvidence(
+    mover: ClassificationMover.white,
+    evaluationBefore: const ClassificationScore.cp(0),
+    playedMoveEvaluation: const ClassificationScore.cp(20),
+    bestMoveEvaluation: const ClassificationScore.cp(20),
+    playedMoveUci: 'e2e4',
+    bestMoveUci: 'e2e4',
+    candidates: const <ClassificationCandidateEvidence>[
+      ClassificationCandidateEvidence(
+        rootUci: 'e2e4',
+        rank: 1,
+        score: ClassificationScore.cp(20),
+        achievedDepth: 14,
+        isLegal: true,
+        pvComplete: true,
+      ),
+    ],
+    requestedMultiPv: 1,
+    receivedMultiPv: 1,
+    candidateSetComplete: true,
+    candidateSetCoherent: true,
+    bestMovePv1Consistent: true,
+    searchQualityMet: true,
+    achievedDepthFloor: 14,
+    legalMoveCount: 20,
+    bookState: ClassificationBookState.notBook,
+    verificationState: ClassificationVerificationState.notRequested,
+    forcedState: ClassificationForcedState.notForced,
+  );
+  final decision = const EvaluationAnalyzer().analyzeEvidence(evidence);
   return AnalysisTimeline(
     startingFen: _fen,
     moves: [
@@ -221,12 +253,40 @@ AnalysisTimeline _timeline({
         fenBefore: _fen,
         fenAfter: _afterE4,
         targetSquare: 'e4',
-        winPercentBefore: 50,
-        winPercentAfter: 52,
-        deltaW: 2,
+        winPercentBefore: decision.winPercentBefore,
+        winPercentAfter: decision.winPercentAfter,
+        deltaW: decision.deltaW,
         isWhiteMove: true,
-        classification: MoveQuality.best,
-        message: 'Best',
+        classification: decision.quality,
+        baseClassification: decision.baseQuality,
+        finalClassification: decision.quality,
+        reasonCode: decision.reasonCode,
+        classificationEvidence: evidence,
+        classificationReasonCodes: decision.reasonCodes,
+        classificationFailedGates: decision.failedGates,
+        playedEqualsPv1: decision.playedEqualsPv1,
+        moverCpLoss: decision.moverCpLoss,
+        requestedDepth: 14,
+        achievedDepthBefore: 14,
+        achievedDepthAfter: 14,
+        multiPvReceived: 1,
+        searchQualityMet: true,
+        engineBestMoveUci: 'e2e4',
+        scoreCpAfter: 20,
+        engineLines: <EngineLine>[
+          EngineLine(
+            rank: 1,
+            moveUci: 'e2e4',
+            moveSan: 'e4',
+            scoreCp: 20,
+            depth: 14,
+            whiteWinPercent: decision.winPercentAfter,
+            pvMoves: const <String>['e2e4'],
+          ),
+        ],
+        message: decision.message,
+        analysisMode: analysisMode,
+        engineVersion: 'local-test',
       ),
     ],
     headers: const {
@@ -236,7 +296,7 @@ AnalysisTimeline _timeline({
       'ECO': 'C20',
       'Opening': 'King Pawn',
     },
-    winPercentages: const [52],
+    winPercentages: <double>[decision.winPercentAfter],
     analysisMode: analysisMode,
     analysisProfileId: analysisProfileId,
     providerId: 'local_offline',

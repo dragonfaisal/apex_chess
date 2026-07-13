@@ -7,11 +7,10 @@
 ///
 /// ### Pipeline (per ply)
 ///
-/// 1. Check the embedded ECO opening book for the *before* position. If it
-///    is a known theoretical move, classify as [MoveQuality.book] and skip
-///    the engine call entirely — saving ~70 % of searches on most opening
-///    sequences.
-/// 2. Otherwise, request the engine eval for the *before* FEN (mover's
+/// 1. Check the embedded ECO opening book for provenance only. A confirmed
+///    theory hit still receives objective engine evidence so Book can never
+///    conceal a severe loss.
+/// 2. Request the engine eval for the *before* FEN (mover's
 ///    POV, normalised to White in the returned snapshot).
 /// 3. Request the engine eval for the *after* FEN — which is also the
 ///    *before* FEN of the next ply, so we cache and reuse it and each ply
@@ -27,6 +26,7 @@ library;
 import 'package:dartchess/dartchess.dart';
 
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
+import 'package:apex_chess/core/domain/entities/classification_evidence.dart';
 import 'package:apex_chess/core/domain/entities/engine_line.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
 import 'package:apex_chess/core/domain/entities/position_evaluation.dart';
@@ -123,12 +123,6 @@ class LocalGameAnalyzer {
     bool Function()? isCancelled,
   }) async {
     final searchDepth = depth ?? _depth;
-    // Quick scans cannot honestly verify Brilliant / Great / Forced
-    // (spec § 3.6.2/4/6 requires MultiPV + deeper search). Surface the
-    // fact to the classifier so those tiers are never emitted from a
-    // Quick scan — the Phase A audit flagged "D14 claims Brilliant on
-    // a 50 cp drift" as a real-device regression.
-    final suppressTrophyTiers = mode == AnalysisMode.quick;
     final analysisMultiPv = mode == AnalysisMode.deep ? 3 : 1;
     // Resolve the movetime budget *after* the caller's depth override is
     // applied — otherwise a depth-22 scan would silently inherit the
@@ -206,9 +200,10 @@ class LocalGameAnalyzer {
       final effectiveDepth = evalDepth ?? searchDepth;
       final effectiveMovetime = evalMovetime ?? searchMovetime;
       final effectiveMultiPv = evalMultiPv ?? analysisMultiPv;
-      final cacheKey =
+      String cacheKey() =>
           '$fen|engine=local-${_eval.engineVersion}|classifier=$kApexClassifierVersion|profile=$profile|depth=$effectiveDepth|movetime=${effectiveMovetime.inMilliseconds}|multipv=$effectiveMultiPv';
-      final hit = cache[cacheKey];
+      final requestCacheKey = cacheKey();
+      final hit = cache[requestCacheKey];
       if (hit != null) {
         engineCacheHitCount++;
         return hit;
@@ -220,6 +215,12 @@ class LocalGameAnalyzer {
         movetime: effectiveMovetime,
         multiPv: effectiveMultiPv,
       );
+      if (isCancelled?.call() == true || err == EvalError.cancelled) {
+        throw const LocalAnalysisException(
+          'Offline review cancelled.',
+          failure: LocalAnalysisFailure.cancelled,
+        );
+      }
       if (err != null || snap == null || !snap.isUsableFor(fen)) {
         if (requiredEvidence) {
           throw LocalAnalysisException(
@@ -228,22 +229,18 @@ class LocalGameAnalyzer {
         }
         return null;
       }
-      cache[cacheKey] = snap;
+      // The first evaluation may start Stockfish and replace its provisional
+      // `unknown` identity with the UCI-resolved bridge identity. Re-key the
+      // successful result after that handshake so the immediately following
+      // ply-0 lookup reuses the starting-FEN search.
+      cache[cacheKey()] = snap;
       return snap;
     }
 
-    // Seed the starting-position Win% from the engine's opening eval (if
-    // not a book position) or from neutral 50 % (book positions).
-    EvalSnapshot? startEval;
-    if (book == null || !book.contains(startingFen)) {
-      startEval = await evalCached(startingFen);
-    }
-    double prevWinPct = startEval != null
-        ? EvaluationAnalyzer.calculateWinPercentage(
-            cp: startEval.scoreCp,
-            mate: startEval.mateIn,
-          )
-        : 50.0;
+    // Book membership is provenance, never a substitute for evaluation.
+    // The starting position therefore always receives the same trustworthy
+    // score contract as every later position.
+    await evalCached(startingFen);
 
     final moves = <MoveAnalysis>[];
 
@@ -257,54 +254,9 @@ class LocalGameAnalyzer {
       }
       final entry = parsed[ply];
 
-      // ── Book cutoff: if the move is a known theoretical reply, trust
-      // the book and skip the engine entirely. Saves ~70 % of searches in
-      // the opening phase and lets batteries live to see move 20. ──
+      // Book is an explicit evidence state. It may win precedence only after
+      // the same before/after engine comparison used by every other move.
       final bookHit = book?.lookup(entry.fenAfter);
-      if (bookHit != null) {
-        moves.add(
-          MoveAnalysis(
-            ply: ply,
-            san: entry.san,
-            uci: entry.uci,
-            fenBefore: entry.fenBefore,
-            fenAfter: entry.fenAfter,
-            targetSquare: entry.targetSquare,
-            winPercentBefore: prevWinPct,
-            winPercentAfter: prevWinPct,
-            deltaW: 0,
-            classification: MoveQuality.book,
-            baseClassification: MoveQuality.book,
-            finalClassification: MoveQuality.book,
-            reasonCode: 'book_theory',
-            playedEqualsPv1: false,
-            engineEvaluationAvailable: false,
-            requestedDepth: searchDepth,
-            multiPvReceived: 0,
-            searchQualityMet: false,
-            isWhiteMove: entry.isWhiteMove,
-            engineBestMoveSan: null,
-            engineBestMoveUci: null,
-            scoreCpAfter: null,
-            mateInAfter: null,
-            inBook: true,
-            openingStatus: OpeningStatus.bookTheory,
-            openingName: bookHit.name,
-            ecoCode: bookHit.eco,
-            engineLines: const <EngineLine>[],
-            isCapture: entry.isCapture,
-            isRecapture: _isRecapture(parsed, ply),
-            message: '${bookHit.eco} • ${bookHit.name}',
-            coachExplanation: 'This is opening theory.',
-            analysisMode: mode.wire,
-            classifierVersion: kApexClassifierVersion,
-            engineVersion: _eval.engineVersion,
-            debugMetadata: const {'classifierProfile': kApexClassifierProfile},
-          ),
-        );
-        onProgress?.call(ply + 1, totalPlies);
-        continue;
-      }
 
       final before = await evalCached(entry.fenBefore);
       // Terminal positions (checkmate / stalemate / insufficient material)
@@ -314,10 +266,7 @@ class LocalGameAnalyzer {
       // mate-delivering ply as a Blunder.
       final after = _terminalEvalFor(entry) ?? await evalCached(entry.fenAfter);
 
-      // Derive the *real* pre-move Win% from the engine — `prevWinPct`
-      // may be stale if the previous plies came from the book (book moves
-      // preserve the prior Win% unchanged, so the book→engine transition
-      // would otherwise show an artificial jump on the first real eval).
+      // Derive the pre-move Win% from the exact engine snapshot.
       final winPctBefore = EvaluationAnalyzer.calculateWinPercentage(
         cp: before!.scoreCp,
         mate: before.mateIn,
@@ -335,29 +284,10 @@ class LocalGameAnalyzer {
       final sac = trajectory[ply];
       final isRecapture = _isRecapture(parsed, ply);
       final isFreeCapture = _isFreeCapture(parsed, ply);
-      final hasTacticalMotif =
-          entry.san.contains('+') ||
-          entry.san.contains('#') ||
-          entry.san.contains('=') ||
-          sac.isSacrifice ||
-          (entry.isCapture && !isFreeCapture);
       final beforeLines = before.engineLines;
-      final multiPvWhiteWinPercents = beforeLines.length >= 2
-          ? beforeLines.map((l) => l.whiteWinPercent).toList(growable: false)
-          : null;
-      final secondBestWhiteWinPercent = beforeLines.length >= 2
-          ? beforeLines[1].whiteWinPercent
-          : null;
-      final altLineWhiteWinPercent = _bestNonSacAlternativeWhiteWinPercent(
-        entry,
-        beforeLines,
-        sac,
-      );
-      final openingStatus = _openingStatusFor(
-        book: book,
-        entry: entry,
-        ply: ply,
-      );
+      final openingStatus = bookHit != null
+          ? OpeningStatus.bookTheory
+          : _openingStatusFor(book: book, entry: entry, ply: ply);
       final actualContinuation = _actualContinuation(parsed, ply);
       var tacticalVerdict = _tacticalVerifier.verify(
         DeepTacticalInput(
@@ -423,54 +353,87 @@ class LocalGameAnalyzer {
         );
       }
 
-      final classificationLines =
-          highCandidateEval?.engineLines.isNotEmpty == true
-          ? highCandidateEval!.engineLines
-          : beforeLines;
-      final engineBestMoveUci = classificationLines.isNotEmpty
-          ? classificationLines.first.moveUci
-          : before.bestMoveUci;
-      final classificationWinPercents = classificationLines.length >= 2
-          ? classificationLines
-                .map((l) => l.whiteWinPercent)
-                .toList(growable: false)
-          : multiPvWhiteWinPercents;
-      final classificationSecondBest = classificationLines.length >= 2
-          ? classificationLines[1].whiteWinPercent
-          : secondBestWhiteWinPercent;
-
-      final result = _analyzer.analyze(
-        prevCp: before.scoreCp,
-        prevMate: before.mateIn,
-        currCp: after.scoreCp,
-        currMate: after.mateIn,
-        isWhiteMove: entry.isWhiteMove,
-        engineBestMoveUci: engineBestMoveUci,
+      // Candidate verification may become authoritative only when its own
+      // exact frame is complete. A partial higher search can never borrow the
+      // main search's completeness flags.
+      final highCandidateComplete =
+          highCandidateEval?.targetDepthReached == true &&
+          highCandidateEval?.multiPvComplete == true;
+      final classificationSnapshot = highCandidateComplete
+          ? highCandidateEval!
+          : before;
+      final classificationLines = classificationSnapshot.engineLines;
+      final engineBestMoveUci = classificationSnapshot.bestMoveUci;
+      final candidateEvidence = _candidateEvidence(
+        entry.fenBefore,
+        classificationLines,
+      );
+      final legalMoveCount = _legalMoveCount(entry.fenBefore);
+      final bestMovePv1Consistent =
+          engineBestMoveUci != null &&
+          classificationLines.isNotEmpty &&
+          normalizeCastlingUci(engineBestMoveUci) ==
+              normalizeCastlingUci(classificationLines.first.moveUci ?? '');
+      final classificationSearchQualityMet =
+          classificationSnapshot.targetDepthReached &&
+          (after.status == PositionEvaluationStatus.terminal ||
+              after.targetDepthReached);
+      final evidence = MoveClassificationEvidence(
+        mover: entry.isWhiteMove
+            ? ClassificationMover.white
+            : ClassificationMover.black,
+        evaluationBefore: _classificationScoreForSnapshot(
+          classificationSnapshot,
+        ),
+        playedMoveEvaluation: _classificationScoreForSnapshot(after),
+        bestMoveEvaluation: classificationLines.isNotEmpty
+            ? _classificationScoreForLine(classificationLines.first)
+            : _classificationScoreForSnapshot(classificationSnapshot),
         playedMoveUci: entry.uci,
+        bestMoveUci: engineBestMoveUci,
+        candidates: candidateEvidence,
+        requestedMultiPv: classificationSnapshot.requestedMultiPv,
+        receivedMultiPv: classificationSnapshot.receivedMultiPv,
+        candidateSetComplete: classificationSnapshot.multiPvComplete,
+        candidateSetCoherent:
+            candidateEvidence.isNotEmpty &&
+            candidateEvidence.length == classificationLines.length,
+        bestMovePv1Consistent: bestMovePv1Consistent,
+        searchQualityMet: classificationSearchQualityMet,
+        achievedDepthFloor: _minimumDepth(
+          classificationSnapshot,
+          after.status == PositionEvaluationStatus.terminal ? null : after,
+        ),
+        legalMoveCount: legalMoveCount,
+        bookState: bookHit != null
+            ? ClassificationBookState.verified
+            : book == null
+            ? ClassificationBookState.unavailable
+            : ClassificationBookState.notBook,
+        verificationState: shouldVerifyCandidate
+            ? highCandidateComplete && tacticalVerdict.verified
+                  ? ClassificationVerificationState.complete
+                  : ClassificationVerificationState.incomplete
+            : ClassificationVerificationState.notRequested,
+        forcedState: legalMoveCount == 1
+            ? ClassificationForcedState.onlyLegalMove
+            : ClassificationForcedState.notForced,
         isSacrifice: sac.isSacrifice,
         isCapture: entry.isCapture,
         isFreeCapture: isFreeCapture,
         isRecapture: isRecapture,
-        hasTacticalMotif: hasTacticalMotif,
-        tacticalVerdict: tacticalVerdict,
         isTrivialRecapture: sac.isTrivialRecapture,
         isFirstSacrificePly: sac.isFirstSacrificePly,
-        secondBestWhiteWinPercent: classificationSecondBest,
-        multiPvWhiteWinPercents: classificationWinPercents,
-        altLineWhiteWinPercent: altLineWhiteWinPercent,
-        // Only flag `isBook` when the position actually matched our
-        // ECO book (handled on the `bookHit != null` branch above —
-        // we don't reach here when it did). The classifier no longer
-        // forces Book just because we're early in the game.
-        isBook: false,
-        suppressTrophyTiers: suppressTrophyTiers,
-        alternativeEvidenceComplete:
-            before.targetDepthReached && before.multiPvComplete,
-        deepVerificationComplete:
-            highCandidateEval?.targetDepthReached == true &&
-            highCandidateEval?.multiPvComplete == true &&
-            tacticalVerdict.verified,
+        tacticalBestOrNearBest: tacticalVerdict.isBestOrNearBest,
+        tacticalHasForcingOutcome: tacticalVerdict.hasForcingOutcome,
+        tacticalForcedMate: tacticalVerdict.forcedMate,
       );
+      final result = _analyzer.analyzeEvidence(evidence);
+      if (result.quality == MoveQuality.unavailable) {
+        throw const LocalAnalysisException(
+          'Offline review stopped: classification evidence was incomplete.',
+        );
+      }
 
       String? engineBestSan;
       if (classificationLines.isNotEmpty &&
@@ -488,8 +451,8 @@ class LocalGameAnalyzer {
           fenBefore: entry.fenBefore,
           fenAfter: entry.fenAfter,
           targetSquare: entry.targetSquare,
-          winPercentBefore: winPctBefore,
-          winPercentAfter: winPctAfter,
+          winPercentBefore: result.winPercentBefore,
+          winPercentAfter: result.winPercentAfter,
           deltaW: result.deltaW,
           classification: result.quality,
           isWhiteMove: entry.isWhiteMove,
@@ -497,32 +460,36 @@ class LocalGameAnalyzer {
           engineBestMoveUci: engineBestMoveUci,
           scoreCpAfter: after.scoreCp,
           mateInAfter: after.mateIn,
-          inBook: false,
+          inBook: bookHit != null,
           openingStatus: openingStatus,
+          openingName: bookHit?.name,
+          ecoCode: bookHit?.eco,
           engineLines: classificationLines,
           baseClassification: result.baseQuality,
           finalClassification: result.quality,
           reasonCode: result.reasonCode,
+          classificationEvidence: evidence,
+          classificationReasonCodes: result.reasonCodes,
+          classificationFailedGates: result.failedGates,
           playedEqualsPv1: result.playedEqualsPv1,
           moverCpLoss: result.moverCpLoss,
           engineEvaluationAvailable: true,
           requestedDepth: searchDepth,
-          achievedDepthBefore: before.depth,
+          achievedDepthBefore: classificationSnapshot.depth,
           achievedDepthAfter: after.status == PositionEvaluationStatus.terminal
               ? null
               : after.depth,
-          multiPvReceived: before.receivedMultiPv,
-          searchQualityMet:
-              before.targetDepthReached &&
-              (after.status == PositionEvaluationStatus.terminal ||
-                  after.targetDepthReached),
+          multiPvReceived: classificationSnapshot.receivedMultiPv,
+          searchQualityMet: classificationSearchQualityMet,
           isCapture: entry.isCapture,
           isFreeCapture: isFreeCapture,
           isRecapture: isRecapture,
           isSacrifice: sac.isSacrifice,
           isFirstSacrificePly: sac.isFirstSacrificePly,
           tacticalVerdict: tacticalVerdict,
-          message: result.message,
+          message: result.quality == MoveQuality.book && bookHit != null
+              ? '${bookHit.eco} • ${bookHit.name}'
+              : result.message,
           coachExplanation: tacticalVerdict.humanExplanation.isNotEmpty
               ? tacticalVerdict.humanExplanation
               : result.message,
@@ -534,11 +501,14 @@ class LocalGameAnalyzer {
             'candidateVerified': tacticalVerdict.candidateVerified,
             'verificationDepth': tacticalVerdict.verificationDepth,
             'verificationMultiPV': tacticalVerdict.verificationMultiPV,
+            'classificationSource': highCandidateComplete
+                ? 'candidateHigh'
+                : 'main',
+            'classificationDiagnostics': result.diagnosticJson,
           },
         ),
       );
 
-      prevWinPct = winPctAfter;
       onProgress?.call(ply + 1, totalPlies);
     }
 
@@ -581,6 +551,63 @@ class LocalGameAnalyzer {
     // release.
     AnalysisDebugExport.dump(timeline, tag: 'local');
     return timeline;
+  }
+
+  List<ClassificationCandidateEvidence> _candidateEvidence(
+    String fen,
+    List<EngineLine> lines,
+  ) => <ClassificationCandidateEvidence>[
+    for (final line in lines)
+      ClassificationCandidateEvidence(
+        rootUci: line.moveUci ?? '',
+        rank: line.rank,
+        score: _classificationScoreForLine(line) ?? const ClassificationScore(),
+        achievedDepth: line.depth,
+        isLegal: _tryUciToSan(fen, line.moveUci ?? '') != null,
+        pvComplete: line.pvMoves.isNotEmpty,
+      ),
+  ];
+
+  ClassificationScore? _classificationScoreForSnapshot(EvalSnapshot snapshot) {
+    if ((snapshot.scoreCp == null) == (snapshot.mateIn == null) ||
+        snapshot.mateIn == 0) {
+      return null;
+    }
+    return ClassificationScore(
+      whiteCp: snapshot.scoreCp,
+      whiteMate: snapshot.mateIn,
+    );
+  }
+
+  ClassificationScore? _classificationScoreForLine(EngineLine line) {
+    if ((line.scoreCp == null) == (line.mateIn == null) || line.mateIn == 0) {
+      return null;
+    }
+    return ClassificationScore(whiteCp: line.scoreCp, whiteMate: line.mateIn);
+  }
+
+  int? _minimumDepth(EvalSnapshot before, EvalSnapshot? after) {
+    if (after == null) return before.depth;
+    return before.depth < after.depth ? before.depth : after.depth;
+  }
+
+  int? _legalMoveCount(String fen) {
+    try {
+      final position = Chess.fromSetup(Setup.parseFen(fen));
+      var count = 0;
+      position.legalMoves.forEach((from, destinations) {
+        final piece = position.board.pieceAt(from);
+        for (final square in destinations.squares) {
+          final promotion =
+              piece?.role == Role.pawn &&
+              (square.rank == 0 || square.rank == 7);
+          count += promotion ? 4 : 1;
+        }
+      });
+      return count;
+    } on Object {
+      return null;
+    }
   }
 
   bool _isRecapture(List<ValidatedPgnMove> parsed, int ply) {
@@ -630,63 +657,6 @@ class LocalGameAnalyzer {
       return OpeningStatus.bookDeviation;
     }
     return OpeningStatus.openingPhaseUnknown;
-  }
-
-  double? _bestNonSacAlternativeWhiteWinPercent(
-    ValidatedPgnMove entry,
-    List<EngineLine> lines,
-    SacrificeContext sac,
-  ) {
-    if (!sac.isSacrifice || lines.length < 2) return null;
-    for (final line in lines) {
-      final moveUci = line.moveUci;
-      if (moveUci == null || moveUci.isEmpty) continue;
-      if (normalizeCastlingUci(moveUci) == normalizeCastlingUci(entry.uci)) {
-        continue;
-      }
-      if (_lineLooksSacrificial(entry, moveUci)) continue;
-      return line.whiteWinPercent;
-    }
-    return null;
-  }
-
-  bool _lineLooksSacrificial(ValidatedPgnMove entry, String moveUci) {
-    final afterFen = _tryFenAfterUci(entry.fenBefore, moveUci);
-    if (afterFen == null) return false;
-    final ctx = SacrificeTrajectory.analyze([
-      TrajectoryPly(
-        fenBefore: entry.fenBefore,
-        fenAfter: afterFen,
-        isWhiteMove: entry.isWhiteMove,
-        targetSquare: moveUci.length >= 4 ? moveUci.substring(2, 4) : '',
-      ),
-    ]);
-    return ctx.isNotEmpty && ctx.first.isSacrifice;
-  }
-
-  String? _tryFenAfterUci(String fen, String uci) {
-    try {
-      if (uci.length < 4) return null;
-      final pos = Chess.fromSetup(Setup.parseFen(fen));
-      final from = _parseSquare(uci.substring(0, 2));
-      final to = _parseSquare(uci.substring(2, 4));
-      if (from == null || to == null) return null;
-      Role? promotion;
-      if (uci.length == 5) {
-        promotion = switch (uci[4]) {
-          'q' => Role.queen,
-          'r' => Role.rook,
-          'b' => Role.bishop,
-          'n' => Role.knight,
-          _ => null,
-        };
-      }
-      final move = NormalMove(from: from, to: to, promotion: promotion);
-      if (!pos.isLegal(move)) return null;
-      return pos.play(move).fen;
-    } catch (_) {
-      return null;
-    }
   }
 
   String? _tryUciToSan(String fen, String uci) {

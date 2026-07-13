@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:apex_chess/core/domain/entities/analysis_profile.dart';
+import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/features/pgn_review/domain/analysis_contract.dart';
 import 'package:apex_chess/features/pgn_review/domain/http_online_review_provider.dart';
 import 'package:apex_chess/features/pgn_review/domain/online_review_api_contract.dart';
@@ -140,6 +141,31 @@ void main() {
     );
     expect(response.result!.payload.modeUsed, AnalysisReviewMode.onlineFast);
   });
+
+  test(
+    'HTTP quality parser preserves Only Move and fails unknown closed',
+    () async {
+      final completed = _completed(
+        mode: 'onlineFast',
+        gameKey: 'game-v1-quality-labels',
+      );
+      final analysis = completed['analysis'] as Map<String, dynamic>;
+      final timeline = analysis['timeline'] as List<dynamic>;
+      (timeline[0] as Map<String, dynamic>)['quality'] = 'only_move';
+      (timeline[1] as Map<String, dynamic>)['quality'] = 'future_unknown_label';
+      final provider = _provider(
+        mode: AnalysisReviewMode.onlineFast,
+        client: MockClient((_) async => _jsonResponse(completed)),
+      );
+
+      final response = await provider.submitReview(_submitRequest());
+      final moves = response.result!.payload.timeline!.moves;
+
+      expect(moves[0].classification, MoveQuality.onlyMove);
+      expect(moves[1].classification, MoveQuality.unavailable);
+      expect(response.result!.payload.timeline!.isComplete, isTrue);
+    },
+  );
 
   test('failed backend response maps to safe failure', () async {
     var polls = 0;

@@ -18,10 +18,10 @@ enum LeitnerBox {
   final Duration cooldown;
 
   LeitnerBox get next => switch (this) {
-        LeitnerBox.fresh => LeitnerBox.reinforce,
-        LeitnerBox.reinforce => LeitnerBox.mastered,
-        LeitnerBox.mastered => LeitnerBox.mastered,
-      };
+    LeitnerBox.fresh => LeitnerBox.reinforce,
+    LeitnerBox.reinforce => LeitnerBox.mastered,
+    LeitnerBox.mastered => LeitnerBox.mastered,
+  };
 }
 
 class MistakeDrill {
@@ -100,32 +100,37 @@ class MistakeDrill {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'fenBefore': fenBefore,
-        'isWhiteToMove': isWhiteToMove,
-        'userMoveUci': userMoveUci,
-        'userMoveSan': userMoveSan,
-        'bestMoveUci': bestMoveUci,
-        'bestMoveSan': bestMoveSan,
-        'classification': classification.name,
-        'sourceGameId': sourceGameId,
-        'sourcePly': sourcePly,
-        'createdAt': createdAt.toIso8601String(),
-        'nextDueAt': nextDueAt.toIso8601String(),
-        'lastReviewedAt': lastReviewedAt?.toIso8601String(),
-        'leitnerBox': leitnerBox.name,
-        'reviewsCorrect': reviewsCorrect,
-        'reviewsWrong': reviewsWrong,
-        'openingName': openingName,
-        'ecoCode': ecoCode,
-      };
+    'id': id,
+    'fenBefore': fenBefore,
+    'isWhiteToMove': isWhiteToMove,
+    'userMoveUci': userMoveUci,
+    'userMoveSan': userMoveSan,
+    'bestMoveUci': bestMoveUci,
+    'bestMoveSan': bestMoveSan,
+    'classification': classification.name,
+    'sourceGameId': sourceGameId,
+    'sourcePly': sourcePly,
+    'createdAt': createdAt.toIso8601String(),
+    'nextDueAt': nextDueAt.toIso8601String(),
+    'lastReviewedAt': lastReviewedAt?.toIso8601String(),
+    'leitnerBox': leitnerBox.name,
+    'reviewsCorrect': reviewsCorrect,
+    'reviewsWrong': reviewsWrong,
+    'openingName': openingName,
+    'ecoCode': ecoCode,
+  };
 
   factory MistakeDrill.fromJson(Map<dynamic, dynamic> j) {
     final classRaw = j['classification'] as String;
     final classification = MoveQuality.values.firstWhere(
       (q) => q.name == classRaw,
-      orElse: () => MoveQuality.mistake,
+      orElse: () => MoveQuality.unavailable,
     );
+    if (classification == MoveQuality.unavailable) {
+      throw const FormatException(
+        'Unavailable move evidence cannot create a training drill.',
+      );
+    }
     final boxRaw = j['leitnerBox'] as String? ?? 'fresh';
     final box = LeitnerBox.values.firstWhere(
       (b) => b.name == boxRaw,

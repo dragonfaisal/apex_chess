@@ -5,7 +5,11 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
+import 'package:apex_chess/core/domain/entities/classification_evidence.dart';
+import 'package:apex_chess/core/domain/entities/move_analysis.dart';
+import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
+import 'package:apex_chess/core/domain/services/move_classifier.dart';
 import 'package:apex_chess/features/archives/domain/review_identity.dart';
 
 const int kReviewDocumentSchemaVersion = 1;
@@ -111,7 +115,11 @@ class ReviewDocument {
   Map<MoveQuality, int> get classificationCounts => timeline.qualityCounts;
   int get bookCount => timeline.moves.where((move) => move.inBook).length;
   int get unavailableCount => timeline.moves
-      .where((move) => !move.engineEvaluationAvailable && !move.inBook)
+      .where(
+        (move) =>
+            move.classification == MoveQuality.unavailable ||
+            (!move.engineEvaluationAvailable && !move.inBook),
+      )
       .length;
 
   /// A rerun may replace the exact same variant only when every persisted
@@ -353,6 +361,9 @@ class ReviewDocument {
           'Broken FEN continuity at ply $index.',
         );
       }
+      if (timeline.analysisSchemaVersion >= 4) {
+        _validateClassificationEvidence(analyzed, timeline: timeline);
+      }
     }
     if (timeline.classifierVersion != compatibility.classifierVersion ||
         timeline.tacticalVerifierVersion !=
@@ -387,6 +398,68 @@ class ReviewDocument {
         run.engineCacheHitCount != timeline.engineCacheHitCount) {
       throw const ReviewDocumentValidationException(
         'Analysis run provenance does not match the timeline.',
+      );
+    }
+  }
+
+  void _validateClassificationEvidence(
+    MoveAnalysis move, {
+    required AnalysisTimeline timeline,
+  }) {
+    final evidence = move.classificationEvidence;
+    if (evidence is! MoveClassificationEvidence ||
+        !move.engineEvaluationAvailable ||
+        move.classification != move.finalClassification ||
+        move.classifierVersion != timeline.classifierVersion ||
+        move.engineVersion != timeline.engineVersion ||
+        move.classificationReasonCodes.isEmpty ||
+        move.reasonCode != move.classificationReasonCodes.first ||
+        evidence.playedMoveUci != move.uci ||
+        evidence.mover.name != (move.isWhiteMove ? 'white' : 'black') ||
+        evidence.receivedMultiPv != move.multiPvReceived ||
+        evidence.searchQualityMet != move.searchQualityMet ||
+        evidence.candidates.length != move.engineLines.length) {
+      throw ReviewDocumentValidationException(
+        'Classification evidence mismatch at ply ${move.ply}.',
+      );
+    }
+    final after = evidence.playedMoveEvaluation;
+    if (after == null ||
+        after.whiteCp != move.scoreCpAfter ||
+        after.whiteMate != move.mateInAfter) {
+      throw ReviewDocumentValidationException(
+        'Played-move score mismatch at ply ${move.ply}.',
+      );
+    }
+    for (var index = 0; index < evidence.candidates.length; index++) {
+      final candidate = evidence.candidates[index];
+      final line = move.engineLines[index];
+      if (candidate.rank != line.rank ||
+          candidate.rootUci != line.moveUci ||
+          candidate.score.whiteCp != line.scoreCp ||
+          candidate.score.whiteMate != line.mateIn ||
+          candidate.achievedDepth != line.depth) {
+        throw ReviewDocumentValidationException(
+          'Candidate evidence mismatch at ply ${move.ply}, rank ${index + 1}.',
+        );
+      }
+    }
+
+    // Historic policy decisions remain immutable. Re-run only when this app
+    // still owns the exact stored policy implementation.
+    if (timeline.classifierVersion != kApexClassifierVersion) return;
+    final decision = const MoveClassifier().classifyEvidence(evidence);
+    if (decision.policyVersion != timeline.classifierVersion ||
+        decision.quality != move.classification ||
+        decision.baseQuality != move.baseClassification ||
+        !_sameStrings(decision.reasonCodes, move.classificationReasonCodes) ||
+        !_sameStrings(decision.failedGates, move.classificationFailedGates) ||
+        decision.moverCpLoss != move.moverCpLoss ||
+        !_near(decision.deltaW, move.deltaW) ||
+        !_near(decision.winPercentBefore, move.winPercentBefore) ||
+        !_near(decision.winPercentAfter, move.winPercentAfter)) {
+      throw ReviewDocumentValidationException(
+        'Stored classification cannot be reproduced at ply ${move.ply}.',
       );
     }
   }
@@ -441,6 +514,17 @@ class ReviewDocument {
 }
 
 int _min(int a, int b) => a < b ? a : b;
+
+bool _sameStrings(List<String> left, List<String> right) {
+  if (left.length != right.length) return false;
+  for (var index = 0; index < left.length; index++) {
+    if (left[index] != right[index]) return false;
+  }
+  return true;
+}
+
+bool _near(double left, double right) =>
+    left.isFinite && right.isFinite && (left - right).abs() <= 1e-9;
 
 T _enumByName<T extends Enum>(List<T> values, Object? raw, T fallback) {
   for (final value in values) {

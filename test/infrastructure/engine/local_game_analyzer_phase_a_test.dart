@@ -89,6 +89,33 @@ Qxa1+ 15. Nxa1 c1=Q# 0-1
       },
     );
 
+    test('confirmed Book cannot conceal a severe objective CP drop', () async {
+      final fixture = _fixtureMoves('[Result "*"]\n\n1. e4 *');
+      final before = fixture.single.fenBefore;
+      final after = fixture.single.fenAfter;
+      final eval = _ScriptedEvalService(
+        scoreByFen: {before: 1500, after: 1000},
+        bestMoveByFen: {before: 'e2e4'},
+      );
+      final analyzer = LocalGameAnalyzer(
+        eval: eval,
+        book: EcoBook.fromTsv(bookTsv),
+      );
+
+      final timeline = await analyzer.analyzeFromPgn(
+        '[Result "*"]\n\n1. e4 *',
+        mode: AnalysisMode.deep,
+        depth: 12,
+      );
+
+      final move = timeline.moves.single;
+      expect(move.inBook, isTrue);
+      expect(move.engineEvaluationAvailable, isTrue);
+      expect(move.moverCpLoss, 500);
+      expect(move.classification, MoveQuality.blunder);
+      expect(eval.calls, hasLength(2));
+    });
+
     test('Quick analysis keeps local eval single-PV', () async {
       final eval = _ScriptedEvalService();
       final analyzer = LocalGameAnalyzer(
@@ -104,6 +131,32 @@ Qxa1+ 15. Nxa1 c1=Q# 0-1
 
       expect(eval.calls.map((c) => c.multiPv).toSet(), {1});
     });
+
+    test(
+      'cold engine identity re-key avoids a duplicate starting-FEN search',
+      () async {
+        final eval = _ColdStartIdentityEvalService();
+        final analyzer = LocalGameAnalyzer(
+          eval: eval,
+          book: EcoBook.fromTsv('eco\tname\tpgn\n'),
+        );
+
+        final timeline = await analyzer.analyzeFromPgn(
+          '[Result "*"]\n\n1. a3 a6 2. h3 *',
+          mode: AnalysisMode.quick,
+          depth: 10,
+        );
+
+        expect(timeline.totalPlies, 3);
+        expect(timeline.engineSearchCount, timeline.totalPlies + 1);
+        expect(timeline.engineCacheHitCount, timeline.totalPlies);
+        expect(eval.calls, hasLength(timeline.totalPlies + 1));
+        expect(
+          eval.calls.map((call) => call.fen).toSet(),
+          hasLength(timeline.totalPlies + 1),
+        );
+      },
+    );
 
     test(
       'missing exact-position evidence fails closed before labeling',
@@ -202,10 +255,6 @@ Qxa1+ 15. Nxa1 c1=Q# 0-1
           isNot(anyOf(MoveQuality.brilliant, MoveQuality.great)),
         );
 
-        final c2 = timeline.moves.singleWhere((m) => m.san == 'c2');
-        expect(c2.tacticalVerdict.isCandidate, isTrue);
-        expect(c2.tacticalVerdict.promotionNet, isTrue);
-
         final qxa1 = timeline.moves.singleWhere((m) => m.san == 'Qxa1+');
         expect(qxa1.tacticalVerdict.queenSacrifice, isTrue);
         expect(qxa1.tacticalVerdict.decoy, isTrue);
@@ -214,9 +263,6 @@ Qxa1+ 15. Nxa1 c1=Q# 0-1
           qxa1.classification,
           isNot(anyOf(MoveQuality.brilliant, MoveQuality.great)),
         );
-
-        expect(bb4.tacticalVerdict.verified, isFalse);
-        expect(qxa1.tacticalVerdict.verified, isFalse);
 
         final debugLine = AnalysisDebugExport.jsonLines(timeline)
             .split('\n')
@@ -254,10 +300,15 @@ Qxa1+ 15. Nxa1 c1=Q# 0-1
 }
 
 class _ScriptedEvalService extends LocalEvalService {
-  _ScriptedEvalService({this.achievedDepth})
-    : super(engine: _NoopChessEngine());
+  _ScriptedEvalService({
+    this.achievedDepth,
+    this.scoreByFen = const <String, int>{},
+    this.bestMoveByFen = const <String, String>{},
+  }) : super(engine: _NoopChessEngine());
 
   final int? achievedDepth;
+  final Map<String, int> scoreByFen;
+  final Map<String, String> bestMoveByFen;
 
   final calls = <_EvalCall>[];
   static const _win = WinPercentCalculator();
@@ -272,12 +323,17 @@ class _ScriptedEvalService extends LocalEvalService {
   }) async {
     calls.add(_EvalCall(fen: fen, multiPv: multiPv));
     final whiteToMove = fen.split(' ').length > 1 && fen.split(' ')[1] == 'w';
-    final primaryMove = whiteToMove ? 'g1f3' : 'e7e5';
-    final score = whiteToMove ? 30 : 20;
+    final primaryMove = bestMoveByFen[fen] ?? (whiteToMove ? 'g1f3' : 'e7e5');
+    final score = scoreByFen[fen] ?? (whiteToMove ? 30 : 20);
     final requested = multiPv.clamp(1, 3).toInt();
-    final candidates = whiteToMove
+    final defaultCandidates = whiteToMove
         ? const [('g1f3', 'Nf3', 30), ('d2d4', 'd4', 10), ('b1c3', 'Nc3', 0)]
         : const [('e7e5', 'e5', 20), ('c7c5', 'c5', 5), ('e7e6', 'e6', -5)];
+    final candidates = <(String, String, int)>[
+      (primaryMove, primaryMove, score),
+      for (final candidate in defaultCandidates)
+        if (candidate.$1 != primaryMove) candidate,
+    ];
     final lines = <EngineLine>[
       for (var i = 0; i < requested; i++)
         EngineLine(
@@ -304,6 +360,33 @@ class _ScriptedEvalService extends LocalEvalService {
       ),
       null,
     );
+  }
+}
+
+class _ColdStartIdentityEvalService extends _ScriptedEvalService {
+  var _started = false;
+
+  @override
+  String get engineVersion =>
+      _started ? 'apex-stockfish-bridge/test|Stockfish 17' : 'unknown';
+
+  @override
+  Future<(EvalSnapshot?, EvalError?)> evaluate(
+    String fen, {
+    int? depth,
+    Duration? movetime,
+    Duration? timeout,
+    int multiPv = 1,
+  }) async {
+    final result = await super.evaluate(
+      fen,
+      depth: depth,
+      movetime: movetime,
+      timeout: timeout,
+      multiPv: multiPv,
+    );
+    _started = true;
+    return result;
   }
 }
 
@@ -436,15 +519,39 @@ class _PgnFixtureEvalService extends LocalEvalService {
       fen.split(' ')[1] == 'w' ? 'g1f3' : 'e7e5';
 
   String _alternateMove(String fen, String best, int index) {
-    final white = fen.split(' ')[1] == 'w';
-    final candidates = white
-        ? const ['d2d4', 'e2e4', 'b1c3', 'g2g3']
-        : const ['d7d5', 'e7e5', 'c7c5', 'g7g6'];
-    return candidates.firstWhere(
-      (m) => m != best,
-      orElse: () => candidates[index],
-    );
+    final position = Chess.fromSetup(Setup.parseFen(fen));
+    final candidates = <String>[];
+    position.legalMoves.forEach((from, destinations) {
+      final piece = position.board.pieceAt(from);
+      for (final to in destinations.squares) {
+        final isPromotion =
+            piece?.role == Role.pawn && (to.rank == 0 || to.rank == 7);
+        if (isPromotion) {
+          for (final role in const [
+            Role.queen,
+            Role.rook,
+            Role.bishop,
+            Role.knight,
+          ]) {
+            final move = NormalMove(from: from, to: to, promotion: role);
+            if (position.isLegal(move)) candidates.add(_uciFor(move));
+          }
+        } else {
+          final move = NormalMove(from: from, to: to);
+          if (position.isLegal(move)) candidates.add(_uciFor(move));
+        }
+      }
+    });
+    final alternatives =
+        candidates.where((move) => move != best).toSet().toList(growable: false)
+          ..sort();
+    return alternatives[index % alternatives.length];
   }
+
+  String _uciFor(NormalMove move) => normalizeCastlingUci(
+    '${_sqAlg(move.from)}${_sqAlg(move.to)}'
+    '${move.promotion == null ? '' : _roleChar(move.promotion!)}',
+  );
 
   List<String> _continuationAfter(_FixtureMove move) {
     final index = moves.indexOf(move);

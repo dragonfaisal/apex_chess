@@ -40,7 +40,9 @@ class ReviewCounts {
     required this.missedWin,
     required this.brilliant,
     required this.great,
+    required this.onlyMove,
     required this.forced,
+    required this.unavailable,
     this.displayCounts = const <ReviewMoveLabel, int>{},
     this.whiteDisplayCounts = const <ReviewMoveLabel, int>{},
     this.blackDisplayCounts = const <ReviewMoveLabel, int>{},
@@ -58,7 +60,9 @@ class ReviewCounts {
   final int missedWin;
   final int brilliant;
   final int great;
+  final int onlyMove;
   final int forced;
+  final int unavailable;
   final Map<ReviewMoveLabel, int> displayCounts;
   final Map<ReviewMoveLabel, int> whiteDisplayCounts;
   final Map<ReviewMoveLabel, int> blackDisplayCounts;
@@ -81,7 +85,9 @@ class ReviewCounts {
       missedWin +
       brilliant +
       great +
-      forced;
+      onlyMove +
+      forced +
+      unavailable;
 }
 
 /// Per-tier classification counts for a single side. Used by the
@@ -100,7 +106,9 @@ class ReviewCountsByTier {
     required this.missedWin,
     required this.brilliant,
     required this.great,
+    required this.onlyMove,
     required this.forced,
+    required this.unavailable,
     this.displayCounts = const <ReviewMoveLabel, int>{},
   });
 
@@ -116,6 +124,8 @@ class ReviewCountsByTier {
       brilliant = 0,
       great = 0,
       forced = 0,
+      onlyMove = 0,
+      unavailable = 0,
       displayCounts = const <ReviewMoveLabel, int>{};
 
   final int best;
@@ -128,7 +138,9 @@ class ReviewCountsByTier {
   final int missedWin;
   final int brilliant;
   final int great;
+  final int onlyMove;
   final int forced;
+  final int unavailable;
   final Map<ReviewMoveLabel, int> displayCounts;
 
   int forTier(MoveQuality q) {
@@ -153,8 +165,12 @@ class ReviewCountsByTier {
         return brilliant;
       case MoveQuality.great:
         return great;
+      case MoveQuality.onlyMove:
+        return onlyMove;
       case MoveQuality.forced:
         return forced;
+      case MoveQuality.unavailable:
+        return unavailable;
     }
   }
 
@@ -171,7 +187,9 @@ class ReviewCountsByTier {
       missedWin +
       brilliant +
       great +
-      forced;
+      onlyMove +
+      forced +
+      unavailable;
 }
 
 /// Per-phase accuracy + cp-loss split. Used by the summary screen's
@@ -368,7 +386,9 @@ class ReviewSummaryService {
       missedWin: tot.missedWin,
       brilliant: tot.brilliant,
       great: tot.great,
+      onlyMove: tot.onlyMove,
       forced: tot.forced,
+      unavailable: tot.unavailable,
       displayCounts: tot.displayCounts,
       whiteDisplayCounts: white.displayCounts,
       blackDisplayCounts: black.displayCounts,
@@ -527,7 +547,9 @@ class _MutableTier {
   int missedWin = 0;
   int brilliant = 0;
   int great = 0;
+  int onlyMove = 0;
   int forced = 0;
+  int unavailable = 0;
   final Map<ReviewMoveLabel, int> _displayCounts = <ReviewMoveLabel, int>{};
 
   Map<ReviewMoveLabel, int> get displayCounts =>
@@ -561,8 +583,12 @@ class _MutableTier {
         brilliant++;
       case MoveQuality.great:
         great++;
+      case MoveQuality.onlyMove:
+        onlyMove++;
       case MoveQuality.forced:
         forced++;
+      case MoveQuality.unavailable:
+        unavailable++;
     }
   }
 
@@ -577,7 +603,9 @@ class _MutableTier {
     missedWin: missedWin,
     brilliant: brilliant,
     great: great,
+    onlyMove: onlyMove,
     forced: forced,
+    unavailable: unavailable,
     displayCounts: displayCounts,
   );
 }

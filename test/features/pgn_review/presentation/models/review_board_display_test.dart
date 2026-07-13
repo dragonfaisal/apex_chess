@@ -181,6 +181,8 @@ void main() {
     final expected = {
       ReviewMoveLabel.brilliant: '!!',
       ReviewMoveLabel.great: '!',
+      ReviewMoveLabel.onlyMove: 'Only',
+      ReviewMoveLabel.forced: 'Forced',
       ReviewMoveLabel.best: '*',
       ReviewMoveLabel.excellent: '+',
       ReviewMoveLabel.good: '',
@@ -189,6 +191,7 @@ void main() {
       ReviewMoveLabel.mistake: '?',
       ReviewMoveLabel.miss: '?',
       ReviewMoveLabel.blunder: '??',
+      ReviewMoveLabel.unavailable: '—',
     };
 
     for (final entry in expected.entries) {
@@ -411,7 +414,9 @@ void main() {
         MoveQuality.brilliant,
         MoveQuality.great,
         MoveQuality.book,
+        MoveQuality.onlyMove,
         MoveQuality.forced,
+        MoveQuality.unavailable,
       ]) {
         final display = ReviewBoardDisplayModel.fromTimeline(
           AnalysisTimeline(
