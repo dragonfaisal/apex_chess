@@ -4,6 +4,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
+import 'package:apex_chess/core/domain/entities/opening_evidence.dart';
 import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/features/archives/domain/review_identity.dart';
 
@@ -147,6 +148,120 @@ void main() {
   });
 
   group('AnalysisVariantId', () {
+    test('historic opening-v1 material and SHA-256 remain frozen', () {
+      final game = const CanonicalGameIdentityService().fromPgn(
+        pgn: _basePgn,
+        sourceProvider: 'pgn',
+      );
+      final compatibility = AnalysisCompatibility.fromTimeline(
+        gameId: game.gameId,
+        timeline: _timeline().copyWith(openingBookVersion: 1),
+      );
+
+      expect(
+        compatibility.canonicalMaterial,
+        'apex-analysis-variant\n'
+        'algorithm=1\n'
+        'game=1:456bfe070d82a301c43ab94d482c1f07131b77f6abfd53d719cf0372368f2b31\n'
+        'profile=11:fast_review\n'
+        'profile-version=1\n'
+        'provider=13:local_offline\n'
+        'engine-declared=40:apex-stockfish-bridge/0.3.0|Stockfish 17\n'
+        'engine-name=9:Stockfish\n'
+        'engine-version=2:17\n'
+        'bridge=27:apex-stockfish-bridge/0.3.0\n'
+        'nnue=20:nn-37f18f62d772.nnue\n'
+        'nnue-verification=configuredOnly\n'
+        'depth=14\n'
+        'movetime-ms=900\n'
+        'nodes=unknown\n'
+        'multipv=1\n'
+        'candidate-verification=false\n'
+        'analysis-schema=4\n'
+        'classifier=6\n'
+        'tactical=3\n'
+        'opening=1\n'
+        'score-perspective=1\n',
+      );
+      expect(
+        AnalysisVariantId.fromCompatibility(compatibility).value,
+        '709dfdbc459374152ec22fae5d22c65a06a3d43f31593317f7d3dfe66293654e',
+      );
+    });
+
+    test('opening-v2 binds semantic artifact but not execution state', () {
+      final game = const CanonicalGameIdentityService().fromPgn(
+        pgn: _basePgn,
+        sourceProvider: 'pgn',
+      );
+      String id(AnalysisTimeline timeline) =>
+          AnalysisVariantId.fromCompatibility(
+            AnalysisCompatibility.fromTimeline(
+              gameId: game.gameId,
+              timeline: timeline,
+            ),
+          ).value;
+      final verified = _timeline().copyWith(
+        openingBookVersion: 2,
+        openingArtifact: _artifact,
+        openingArtifactVerification: OpeningArtifactVerification.verified,
+      );
+      final unavailable = verified.copyWith(
+        openingArtifactVerification: OpeningArtifactVerification.unavailable,
+      );
+      final provenanceOnly = verified.copyWith(
+        openingArtifact: const OpeningArtifactIdentity(
+          datasetName: 'apex-eco',
+          sourceRevision: '2026-07-17',
+          sourceSha256:
+              'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+          contentSha256:
+              'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+          licenseSpdx: 'MIT-0',
+          provenanceReference: 'different-audit-path',
+        ),
+      );
+      final changedContent = verified.copyWith(
+        openingArtifact: const OpeningArtifactIdentity(
+          datasetName: 'apex-eco',
+          sourceRevision: '2026-07-17',
+          sourceSha256:
+              'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          contentSha256:
+              'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+          licenseSpdx: 'MIT',
+          provenanceReference: 'assets/openings/PROVENANCE.md',
+        ),
+      );
+
+      expect(id(unavailable), id(verified));
+      expect(id(provenanceOnly), id(verified));
+      expect(id(changedContent), isNot(id(verified)));
+      expect(
+        AnalysisCompatibility.fromTimeline(
+          gameId: game.gameId,
+          timeline: verified,
+        ).canonicalMaterial,
+        contains('opening-artifact=${_artifact.semanticId}'),
+      );
+    });
+
+    test('opening-v2 without a valid artifact fails closed', () {
+      final game = const CanonicalGameIdentityService().fromPgn(
+        pgn: _basePgn,
+        sourceProvider: 'pgn',
+      );
+      final compatibility = AnalysisCompatibility.fromTimeline(
+        gameId: game.gameId,
+        timeline: _timeline().copyWith(openingBookVersion: 2),
+      );
+
+      expect(
+        () => AnalysisVariantId.fromCompatibility(compatibility),
+        throwsStateError,
+      );
+    });
+
     test(
       'semantic compatibility changes identity, transient run time does not',
       () {
@@ -229,3 +344,14 @@ const _basePgn = '''
 
 1. e4 e5 2. Nf3 *
 ''';
+
+const _artifact = OpeningArtifactIdentity(
+  datasetName: 'apex-eco',
+  sourceRevision: '2026-07-17',
+  sourceSha256:
+      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  contentSha256:
+      'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+  licenseSpdx: 'MIT',
+  provenanceReference: 'assets/openings/PROVENANCE.md',
+);

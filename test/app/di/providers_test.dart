@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:apex_chess/app/di/providers.dart';
+import 'package:apex_chess/core/domain/entities/opening_evidence.dart';
 import 'package:apex_chess/core/network/apex_http_client.dart';
 import 'package:apex_chess/features/pgn_review/application/online_review_product_use_case.dart';
 import 'package:apex_chess/features/pgn_review/application/online_review_runtime_gate.dart';
@@ -8,10 +9,13 @@ import 'package:apex_chess/features/pgn_review/domain/online_review_product_adap
 import 'package:apex_chess/features/pgn_review/domain/online_review_product_domain.dart';
 import 'package:apex_chess/features/pgn_review/domain/online_review_product_repository.dart';
 import 'package:apex_chess/features/pgn_review/infrastructure/online_review_product_repository_factory.dart';
+import 'package:apex_chess/infrastructure/openings/opening_index.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   const request = ApexOnlineReviewRequest(
     pgn: '1. e4 *',
     mode: ApexOnlineReviewMode.onlineFast,
@@ -283,6 +287,62 @@ void main() {
   });
 
   group('Provider registration boundaries', () {
+    test(
+      'bundled opening provider loads the verified production artifact',
+      () async {
+        final container = ProviderContainer();
+        addTearDown(container.dispose);
+
+        final index = await container.read(openingIndexProvider.future);
+
+        expect(index.isAvailable, isTrue);
+        expect(index.verification, OpeningArtifactVerification.verified);
+        expect(
+          index.identity.semanticId,
+          kApexOpeningArtifactIdentity.semanticId,
+        );
+        expect(index.metrics.sourceRows, 3690);
+        expect(index.metrics.indexedPositions, 7602);
+        expect(index.metrics.indexedTransitions, 7789);
+      },
+    );
+
+    test(
+      'opening provider shares one cold build across concurrent and warm reads',
+      () async {
+        final container = ProviderContainer();
+        addTearDown(container.dispose);
+        final rssBefore = ProcessInfo.currentRss;
+        final coldWatch = Stopwatch()..start();
+
+        final concurrent = await Future.wait([
+          container.read(openingIndexProvider.future),
+          container.read(openingIndexProvider.future),
+          container.read(openingIndexProvider.future),
+        ]);
+        coldWatch.stop();
+        final rssAfter = ProcessInfo.currentRss;
+        final first = concurrent.first;
+
+        expect(concurrent.every((index) => identical(index, first)), isTrue);
+        final warmWatch = Stopwatch()..start();
+        final warm = await container.read(openingIndexProvider.future);
+        warmWatch.stop();
+        expect(identical(warm, first), isTrue);
+        expect(first.verification, OpeningArtifactVerification.verified);
+        expect(first.lookupCount, 0);
+        // ignore: avoid_print
+        print(
+          'CHAPTER5_PROVIDER_PERF '
+          'coldUs=${coldWatch.elapsedMicroseconds} '
+          'warmUs=${warmWatch.elapsedMicroseconds} '
+          'concurrentReaders=${concurrent.length} '
+          'sharedInstance=true '
+          'rssDeltaBytes=${rssAfter - rssBefore}',
+        );
+      },
+    );
+
     test('DI file stays UI-free, backend-path free, and domain-facing', () {
       final source = File('lib/app/di/providers.dart').readAsStringSync();
 

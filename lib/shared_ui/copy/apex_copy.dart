@@ -89,6 +89,8 @@ class ApexCopy {
   static const String pgnPlayerHint = 'Player name';
   static const String switchSide = 'Switch side';
   static const String chooseSide = 'Choose your side';
+  static const String openingDataLoading = 'Loading opening data…';
+  static const String openingDataUnavailable = 'Opening data unavailable';
   static const String openingNotDetected = 'Opening not detected';
 
   static String youPlayed(bool userIsWhite) =>

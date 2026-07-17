@@ -339,6 +339,27 @@ void main() {
       expect(cls.subline.toLowerCase(), contains('in theory'));
       expect(cls.betterMoveSan, isNull);
     });
+
+    test('theory provenance cannot hide an objective Blunder verdict', () {
+      final cls = svc.explain(
+        CoachExplanationInput(
+          move: _m(
+            ply: 4,
+            san: 'h5',
+            uci: 'h7h5',
+            classification: MoveQuality.blunder,
+            inBook: true,
+            ecoCode: 'B00',
+            openingName: 'Known transition',
+            deltaW: -30,
+          ),
+          mode: AnalysisMode.deep,
+        ),
+      );
+
+      expect(cls.headline, isNot('Book move.'));
+      expect(cls.headline, contains('Blunder'));
+    });
   });
 
   group('Rule 6 — "Better: <same SAN>" must never appear', () {

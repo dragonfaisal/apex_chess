@@ -36,6 +36,7 @@ String archiveIdForAnalysis({
   int? classifierVersion,
   int? tacticalVerifierVersion,
   int? openingBookVersion,
+  String? openingArtifactSemanticId,
 }) {
   return buildAnalysisCacheKey(
     pgnHash: pgnHash ?? stablePgnHash(pgn),
@@ -45,7 +46,8 @@ String archiveIdForAnalysis({
     classifierVersion: classifierVersion ?? kApexClassifierVersion,
     tacticalVerifierVersion:
         tacticalVerifierVersion ?? kApexTacticalVerifierVersion,
-    openingBookVersion: openingBookVersion ?? kApexOpeningBookVersion,
+    openingBookVersion: openingBookVersion ?? kApexLegacyOpeningBookVersion,
+    openingArtifactSemanticId: openingArtifactSemanticId,
   );
 }
 

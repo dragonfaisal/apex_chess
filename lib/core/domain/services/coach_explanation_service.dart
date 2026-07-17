@@ -161,9 +161,9 @@ class CoachExplanationService {
     }
 
     // ── Rule 2: Book / Theory — surface ECO + opening name, no
-    // severity judgement. Classifier sets `classification == book`
-    // and `inBook == true` for recognised theory.
-    if (m.classification == MoveQuality.book || m.inBook) {
+    // severity judgement. Opening provenance alone is insufficient: a
+    // verified transition can still carry an objective Mistake / Blunder.
+    if (m.classification == MoveQuality.book) {
       final eco = m.ecoCode;
       final name = m.openingName;
       final label = (eco != null && name != null)

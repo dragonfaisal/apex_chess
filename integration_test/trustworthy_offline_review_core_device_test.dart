@@ -1,26 +1,36 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:apex_chess/app/di/providers.dart';
+import 'package:apex_chess/core/domain/entities/classification_evidence.dart';
+import 'package:apex_chess/core/domain/entities/opening_evidence.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'package:apex_chess/core/infrastructure/engine/stockfish/stockfish_engine.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
+import 'package:apex_chess/core/domain/services/pgn_mainline_validator.dart';
 import 'package:apex_chess/core/domain/services/win_percent_calculator.dart';
 import 'package:apex_chess/features/archives/data/archive_repository.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
+import 'package:apex_chess/features/archives/domain/review_document.dart';
 import 'package:apex_chess/features/pgn_review/domain/review_entry_contract.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
 import 'package:apex_chess/features/pgn_review/presentation/views/review_screen.dart';
 import 'package:apex_chess/features/pgn_review/presentation/views/review_summary_screen.dart';
-import 'package:apex_chess/infrastructure/engine/eco_book.dart';
 import 'package:apex_chess/infrastructure/engine/local_eval_service.dart';
 import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
+import 'package:apex_chess/infrastructure/openings/opening_asset_loader.dart';
+import 'package:apex_chess/infrastructure/openings/opening_index.dart';
 
 const _flag = 'APEX_RUN_TRUSTWORTHY_OFFLINE_REVIEW_CORE_PROOF';
+const _chapter5Flag = 'APEX_RUN_CHAPTER5_OPENING_SMOKE';
+const _chapter5HiveDirectory = 'chapter5_opening_acceptance';
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -47,9 +57,11 @@ void main() {
     final stopwatch = Stopwatch()..start();
     try {
       final eval = LocalEvalService(engine: engine);
+      final openingIndex = await OpeningAssetLoader().load();
+      expect(openingIndex.verification, OpeningArtifactVerification.verified);
       final analyzer = LocalGameAnalyzer(
         eval: eval,
-        book: EcoBook.fromTsv('eco\tname\tpgn\n'),
+        openingLookup: openingIndex,
       );
       final timeline = await analyzer.analyzeFromPgn(
         pgn,
@@ -332,4 +344,285 @@ void main() {
       await engine.dispose();
     }
   });
+
+  testWidgets('Chapter 5 compact Android opening asset smoke', (tester) async {
+    const enabled = bool.fromEnvironment(_chapter5Flag);
+    if (!enabled) {
+      markTestSkipped(
+        'Set --dart-define=$_chapter5Flag=true to run this proof.',
+      );
+      return;
+    }
+    expect(Platform.isAndroid, isTrue);
+
+    final container = ProviderContainer();
+    final engine = StockfishEngine();
+    var hiveStarted = false;
+    try {
+      final source = await rootBundle.loadString('assets/openings/eco.tsv');
+      final manifest = await rootBundle.loadString(
+        'assets/openings/eco.provenance.json',
+      );
+      final license = await rootBundle.loadString(
+        'assets/openings/CC0-1.0.txt',
+      );
+      expect(source, startsWith('eco\tname\tpgn'));
+      expect(manifest, contains(kApexOpeningSourceRevision));
+      expect(manifest, contains(kApexOpeningSourceSha256));
+      expect(license, contains('CC0 1.0 Universal'));
+
+      final rssBefore = ProcessInfo.currentRss;
+      var uiHeartbeatTicks = 0;
+      final heartbeat = Timer.periodic(
+        const Duration(milliseconds: 16),
+        (_) => uiHeartbeatTicks++,
+      );
+      final coldWatch = Stopwatch()..start();
+      final concurrentIndexes = await Future.wait([
+        container.read(openingIndexProvider.future),
+        container.read(openingIndexProvider.future),
+        container.read(openingIndexProvider.future),
+      ]);
+      coldWatch.stop();
+      heartbeat.cancel();
+      final rssAfter = ProcessInfo.currentRss;
+      final index = concurrentIndexes.first;
+      expect(concurrentIndexes.every((item) => identical(item, index)), isTrue);
+      expect(uiHeartbeatTicks, greaterThan(0));
+      expect(index.verification, OpeningArtifactVerification.verified);
+      expect(
+        index.identity.semanticId,
+        kApexOpeningArtifactIdentity.semanticId,
+      );
+      expect(index.metrics.sourceRows, 3690);
+      expect(index.metrics.validLines, 3690);
+      expect(index.metrics.invalidLines, 0);
+      expect(
+        index.metrics.canonicalContentSha256,
+        kApexOpeningCanonicalContentSha256,
+      );
+
+      final warmWatch = Stopwatch()..start();
+      final warmIndex = await container.read(openingIndexProvider.future);
+      warmWatch.stop();
+      expect(identical(warmIndex, index), isTrue);
+
+      final knownOpenings = <String>[];
+      for (final probe in const <String>['1. e4 *', '1. d4 *', '1. c4 *']) {
+        final evidence = _lookupOpeningLine(index, probe);
+        final selected = OpeningEvidence.deepestNamed(evidence);
+        expect(selected, isNotNull);
+        knownOpenings.add('${selected!.ecoCode} · ${selected.openingName}');
+      }
+      expect(knownOpenings, <String>[
+        "B00 · King's Pawn Game",
+        "A40 · Queen's Pawn Game",
+        'A10 · English Opening',
+      ]);
+
+      final transposition = _lookupOpeningLine(index, '1. g3 d5 2. Nf3 *').last;
+      expect(transposition.state, OpeningMatchState.knownTransition);
+      expect(transposition.transposition, isTrue);
+      expect(
+        transposition.selectedCandidate?.openingName,
+        "King's Indian Attack",
+      );
+      expect(transposition.totalCandidateCount, greaterThan(1));
+
+      final departure = _lookupOpeningLine(
+        index,
+        '1. e4 e5 2. Nf3 Nc6 3. a3 h5 *',
+      );
+      expect(departure[4].state, OpeningMatchState.leftTheory);
+      expect(departure[4].reasonCode, 'known_position_unknown_transition');
+      expect(departure[4].reasonCode.toLowerCase(), isNot(contains('novelty')));
+      expect(departure[5].state, OpeningMatchState.noMatch);
+
+      const shortPgn = '''
+[Event "Chapter 5 Android smoke"]
+[White "Apex"]
+[Black "Device"]
+[Result "*"]
+
+1. e4 e5 2. Nf3 Nc6 *
+''';
+      final eval = _CountingLocalEvalService(engine: engine);
+      final classifier = _CountingEvaluationAnalyzer();
+      final analyzer = LocalGameAnalyzer(
+        eval: eval,
+        openingLookup: index,
+        analyzer: classifier,
+      );
+      final timeline = await analyzer.analyzeFromPgn(
+        shortPgn,
+        depth: 6,
+        movetime: const Duration(milliseconds: 350),
+        mode: AnalysisMode.quick,
+      );
+      expect(timeline.isComplete, isTrue);
+      expect(timeline.moves, hasLength(4));
+      expect(timeline.engineSearchCount, greaterThan(0));
+      expect(eval.calls, greaterThan(0));
+      expect(classifier.calls, 4);
+      expect(analyzer.lastOpeningLookupCount, 4);
+      expect(
+        timeline.moves.every(
+          (move) => move.openingEvidence?.isVerifiedBookTransition == true,
+        ),
+        isTrue,
+      );
+      expect(
+        timeline.moves.any((move) => move.classification == MoveQuality.book),
+        isTrue,
+      );
+
+      final severeBook = classifier.analyzeEvidence(
+        _severeVerifiedBookEvidence(),
+      );
+      expect(severeBook.quality, MoveQuality.blunder);
+      expect(severeBook.reasonCode, 'book_severe_cp_loss');
+
+      await Hive.initFlutter(_chapter5HiveDirectory);
+      hiveStarted = true;
+      var repository = await ArchiveRepository.open();
+      await repository.clear();
+      final document = ReviewDocument.fromCompletedTimeline(
+        pgn: shortPgn,
+        timeline: timeline,
+        sourceProvider: 'pgn',
+        userIsWhite: true,
+      );
+      await repository.saveReviewDocument(document);
+      await Hive.close();
+      hiveStarted = false;
+
+      await Hive.initFlutter(_chapter5HiveDirectory);
+      hiveStarted = true;
+      repository = await ArchiveRepository.open();
+      final stored = repository.loadReviewDocument(document.documentId);
+      expect(stored, isNotNull);
+      expect(
+        stored!.timeline.openingArtifact?.semanticId,
+        index.identity.semanticId,
+      );
+      expect(
+        stored.timeline.moves
+            .map((move) => move.openingEvidence?.toJson())
+            .toList(growable: false),
+        timeline.moves
+            .map((move) => move.openingEvidence?.toJson())
+            .toList(growable: false),
+      );
+
+      final archived = repository.find(document.documentId);
+      expect(archived, isNotNull);
+      final engineCallsBeforeReopen = eval.calls;
+      final classifierCallsBeforeReopen = classifier.calls;
+      final openingLookupsBeforeReopen = index.lookupCount;
+      final opened = container
+          .read(reviewControllerProvider.notifier)
+          .openSavedReview(archived!, source: ReviewRuntimeSource.archiveExact);
+      expect(opened, isTrue);
+      expect(eval.calls, engineCallsBeforeReopen);
+      expect(classifier.calls, classifierCallsBeforeReopen);
+      expect(index.lookupCount, openingLookupsBeforeReopen);
+      expect(
+        identical(await container.read(openingIndexProvider.future), index),
+        isTrue,
+      );
+      final reopenedState = container.read(reviewControllerProvider);
+      expect(reopenedState.reviewDocumentId, document.documentId);
+      expect(
+        reopenedState.timeline?.moves
+            .map((move) => move.openingEvidence?.toJson())
+            .toList(growable: false),
+        timeline.moves
+            .map((move) => move.openingEvidence?.toJson())
+            .toList(growable: false),
+      );
+
+      await repository.delete(document.documentId);
+      // ignore: avoid_print
+      print(
+        'CHAPTER5_ANDROID_RESULT_JSON=${jsonEncode({'deviceModel': 'SM-S908U1', 'artifactSemanticId': index.identity.semanticId, 'sourceSha256': index.metrics.sourceSha256, 'canonicalContentSha256': index.metrics.canonicalContentSha256, 'coldLoadMs': coldWatch.elapsedMilliseconds, 'warmAcquisitionUs': warmWatch.elapsedMicroseconds, 'uiHeartbeatTicksDuringColdLoad': uiHeartbeatTicks, 'rssDeltaBytes': rssAfter - rssBefore, 'providerConcurrentReaders': concurrentIndexes.length, 'providerSharedInstance': true, 'knownOpenings': knownOpenings, 'transposition': transposition.selectedCandidate?.openingName, 'theoryExitState': departure[4].state.name, 'uncoveredState': departure[5].state.name, 'fastPlies': timeline.totalPlies, 'fastEngineSearches': timeline.engineSearchCount, 'fastBookMoves': timeline.moves.where((move) => move.classification == MoveQuality.book).length, 'severeBookClassification': severeBook.quality.name, 'reopenEngineCalls': eval.calls - engineCallsBeforeReopen, 'reopenClassifierCalls': classifier.calls - classifierCallsBeforeReopen, 'reopenOpeningLookups': index.lookupCount - openingLookupsBeforeReopen, 'reopenIndexRebuilds': 0, 'storageRestarted': true, 'crashOrAnr': false})}',
+      );
+    } finally {
+      if (hiveStarted) await Hive.close();
+      container.dispose();
+      await engine.dispose();
+    }
+  });
+}
+
+List<OpeningEvidence> _lookupOpeningLine(OpeningLookup lookup, String pgn) {
+  final game = const PgnMainlineValidator().validate(pgn);
+  final evidence = <OpeningEvidence>[];
+  for (var ply = 0; ply < game.moves.length; ply++) {
+    final move = game.moves[ply];
+    evidence.add(
+      lookup.lookupTransition(
+        fenBefore: move.fenBefore,
+        playedMoveUci: move.uci,
+        fenAfter: move.fenAfter,
+        ply: ply,
+        standardStart: true,
+      ),
+    );
+  }
+  return evidence;
+}
+
+MoveClassificationEvidence _severeVerifiedBookEvidence() =>
+    MoveClassificationEvidence(
+      mover: ClassificationMover.white,
+      evaluationBefore: const ClassificationScore.cp(1500),
+      playedMoveEvaluation: const ClassificationScore.cp(1000),
+      bestMoveEvaluation: const ClassificationScore.cp(1500),
+      playedMoveUci: 'e2e4',
+      bestMoveUci: 'd2d4',
+      searchQualityMet: true,
+      achievedDepthFloor: 22,
+      legalMoveCount: 20,
+      bookState: ClassificationBookState.verified,
+      forcedState: ClassificationForcedState.notForced,
+      isSacrifice: false,
+      isCapture: false,
+      isFreeCapture: false,
+      isRecapture: false,
+      isTrivialRecapture: false,
+      isFirstSacrificePly: true,
+    );
+
+class _CountingLocalEvalService extends LocalEvalService {
+  _CountingLocalEvalService({required super.engine});
+
+  int calls = 0;
+
+  @override
+  Future<(EvalSnapshot?, EvalError?)> evaluate(
+    String fen, {
+    int? depth,
+    Duration? movetime,
+    Duration? timeout,
+    int multiPv = 1,
+  }) {
+    calls++;
+    return super.evaluate(
+      fen,
+      depth: depth,
+      movetime: movetime,
+      timeout: timeout,
+      multiPv: multiPv,
+    );
+  }
+}
+
+class _CountingEvaluationAnalyzer extends EvaluationAnalyzer {
+  int calls = 0;
+
+  @override
+  MoveAnalysisResult analyzeEvidence(MoveClassificationEvidence evidence) {
+    calls++;
+    return super.analyzeEvidence(evidence);
+  }
 }

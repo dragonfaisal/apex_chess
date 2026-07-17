@@ -10,6 +10,7 @@ library;
 
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
+import 'package:apex_chess/core/domain/entities/opening_evidence.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/core/domain/services/move_quality_display.dart';
 
@@ -408,7 +409,6 @@ class ReviewSummaryService {
     for (final m in moves) {
       if (userIsWhite != null && m.isWhiteMove != userIsWhite) continue;
       if (!m.engineEvaluationAvailable ||
-          m.inBook ||
           m.classification == MoveQuality.book ||
           m.moverCpLoss == null) {
         continue;
@@ -520,6 +520,48 @@ class ReviewSummaryService {
   // ── Opening label ───────────────────────────────────────────────
 
   static String? _openingLabel(AnalysisTimeline timeline) {
+    final evidence = timeline.moves
+        .map((move) => move.openingEvidence)
+        .whereType<OpeningEvidence>()
+        .toList(growable: false);
+    if (evidence.isNotEmpty) {
+      final selected = OpeningEvidence.deepestNamed(evidence);
+      final selectedIsTransposition =
+          selected != null &&
+          evidence.any(
+            (item) =>
+                item.transposition &&
+                item.selectedSourceLineId == selected.sourceLineId,
+          );
+      final opening = selected == null
+          ? null
+          : '${selected.ecoCode} · ${selected.openingName}'
+                '${selectedIsTransposition ? ' · Transposition' : ''}';
+      final leavingTheoryPly = evidence
+          .where((item) => item.state == OpeningMatchState.leftTheory)
+          .map((item) => item.leavingTheoryPly ?? item.matchedPly)
+          .fold<int?>(
+            null,
+            (earliest, ply) =>
+                earliest == null || ply < earliest ? ply : earliest,
+          );
+      final leavingTheory = leavingTheoryPly == null
+          ? null
+          : 'Left known theory on move '
+                '${_moveLabelForOneBasedPly(leavingTheoryPly)}';
+      if (opening != null && leavingTheory != null) {
+        return '$opening · $leavingTheory';
+      }
+      if (opening != null || leavingTheory != null) {
+        return opening ?? leavingTheory;
+      }
+      return evidence.any((item) => item.state == OpeningMatchState.unavailable)
+          ? 'Opening data unavailable'
+          : 'Opening not detected';
+    }
+
+    // Historic opening-v1 timelines have no structured evidence. Preserve
+    // their stored display values without rewriting or re-running lookup.
     String? eco;
     String? name;
     for (final m in timeline.moves) {
@@ -531,6 +573,11 @@ class ReviewSummaryService {
     name ??= timeline.headers['Opening'];
     if (eco != null && name != null) return '$eco · $name';
     return name ?? eco;
+  }
+
+  static String _moveLabelForOneBasedPly(int ply) {
+    final moveNumber = ((ply - 1) ~/ 2) + 1;
+    return '$moveNumber${ply.isOdd ? '.' : '...'}';
   }
 }
 

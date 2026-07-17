@@ -8,6 +8,7 @@ library;
 
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/core/domain/services/analysis_versions.dart';
+import 'opening_evidence.dart';
 import 'move_analysis.dart';
 
 enum AnalysisCompletionStatus { complete, incomplete }
@@ -34,6 +35,14 @@ class AnalysisTimeline {
   final String providerId;
   final int tacticalVerifierVersion;
   final int openingBookVersion;
+
+  /// Exact semantic opening artifact expected by this run. Historic
+  /// opening-v1 timelines omit both this and [openingArtifactVerification].
+  final OpeningArtifactIdentity? openingArtifact;
+
+  /// Runtime verification of the bytes used by this execution. This is
+  /// deliberately excluded from AnalysisVariantId material.
+  final OpeningArtifactVerification? openingArtifactVerification;
   final int analysisSchemaVersion;
   final int? depth;
   final int? requestedDepth;
@@ -60,7 +69,9 @@ class AnalysisTimeline {
     String? analysisProfileId,
     this.providerId = 'local_offline',
     this.tacticalVerifierVersion = kApexTacticalVerifierVersion,
-    this.openingBookVersion = kApexOpeningBookVersion,
+    this.openingBookVersion = kApexLegacyOpeningBookVersion,
+    this.openingArtifact,
+    this.openingArtifactVerification,
     this.analysisSchemaVersion = kApexAnalysisSchemaVersion,
     this.depth,
     this.requestedDepth,
@@ -168,7 +179,6 @@ class AnalysisTimeline {
         (move) =>
             move.isWhiteMove == isWhite &&
             move.engineEvaluationAvailable &&
-            !move.inBook &&
             move.classification != MoveQuality.book &&
             move.moverCpLoss != null,
       )
@@ -192,6 +202,9 @@ class AnalysisTimeline {
     'providerId': providerId,
     'tacticalVerifierVersion': tacticalVerifierVersion,
     'openingBookVersion': openingBookVersion,
+    if (openingArtifact != null) 'openingArtifact': openingArtifact!.toJson(),
+    if (openingArtifactVerification != null)
+      'openingArtifactVerification': openingArtifactVerification!.name,
     'analysisSchemaVersion': analysisSchemaVersion,
     'depth': depth,
     'requestedDepth': requestedDepth,
@@ -221,6 +234,8 @@ class AnalysisTimeline {
     String? providerId,
     int? tacticalVerifierVersion,
     int? openingBookVersion,
+    OpeningArtifactIdentity? openingArtifact,
+    OpeningArtifactVerification? openingArtifactVerification,
     int? analysisSchemaVersion,
     int? depth,
     int? requestedDepth,
@@ -249,6 +264,9 @@ class AnalysisTimeline {
       tacticalVerifierVersion:
           tacticalVerifierVersion ?? this.tacticalVerifierVersion,
       openingBookVersion: openingBookVersion ?? this.openingBookVersion,
+      openingArtifact: openingArtifact ?? this.openingArtifact,
+      openingArtifactVerification:
+          openingArtifactVerification ?? this.openingArtifactVerification,
       analysisSchemaVersion:
           analysisSchemaVersion ?? this.analysisSchemaVersion,
       depth: depth ?? this.depth,
@@ -286,7 +304,15 @@ class AnalysisTimeline {
       providerId: j['providerId'] as String? ?? 'local_offline',
       tacticalVerifierVersion:
           (j['tacticalVerifierVersion'] as num?)?.toInt() ?? 1,
-      openingBookVersion: (j['openingBookVersion'] as num?)?.toInt() ?? 1,
+      openingBookVersion:
+          (j['openingBookVersion'] as num?)?.toInt() ??
+          kApexLegacyOpeningBookVersion,
+      openingArtifact: j['openingArtifact'] is Map
+          ? OpeningArtifactIdentity.fromJson(j['openingArtifact'] as Map)
+          : null,
+      openingArtifactVerification: _openingVerificationByName(
+        j['openingArtifactVerification'],
+      ),
       analysisSchemaVersion: (j['analysisSchemaVersion'] as num?)?.toInt() ?? 1,
       depth: (j['depth'] as num?)?.toInt(),
       requestedDepth: (j['requestedDepth'] as num?)?.toInt(),
@@ -310,4 +336,11 @@ class AnalysisTimeline {
       moves: [for (final m in movesRaw) MoveAnalysis.fromJson(m as Map)],
     );
   }
+}
+
+OpeningArtifactVerification? _openingVerificationByName(Object? raw) {
+  for (final value in OpeningArtifactVerification.values) {
+    if (value.name == raw) return value;
+  }
+  return null;
 }

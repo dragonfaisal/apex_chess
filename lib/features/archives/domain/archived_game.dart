@@ -9,6 +9,7 @@ library;
 
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/analysis_profile.dart';
+import 'package:apex_chess/core/domain/entities/opening_evidence.dart';
 import 'package:apex_chess/core/domain/services/analysis_cache_key.dart';
 import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
@@ -176,7 +177,7 @@ class ArchivedGame {
     this.pgnHash,
     this.cacheKey,
     this.tacticalVerifierVersion = kApexTacticalVerifierVersion,
-    this.openingBookVersion = kApexOpeningBookVersion,
+    this.openingBookVersion = kApexLegacyOpeningBookVersion,
     this.analysisSchemaVersion = kApexAnalysisSchemaVersion,
     this.timeControl,
     this.analysisMovetimeMs,
@@ -205,6 +206,20 @@ class ArchivedGame {
       cachedTimeline!.classifierVersion == kClassifierVersion &&
       cachedTimeline!.tacticalVerifierVersion == kApexTacticalVerifierVersion &&
       cachedTimeline!.openingBookVersion == kApexOpeningBookVersion &&
+      cachedTimeline!.openingArtifact?.isStructurallyValid == true &&
+      cachedTimeline!.openingArtifact?.openingPolicyVersion ==
+          kApexOpeningBookVersion &&
+      cachedTimeline!.openingArtifactVerification ==
+          OpeningArtifactVerification.verified &&
+      cachedTimeline!.moves.every(
+        (move) =>
+            move.openingEvidence?.hasValidIntegrity == true &&
+            move.openingEvidence?.artifact.semanticId ==
+                cachedTimeline!.openingArtifact!.semanticId &&
+            move.openingEvidence?.artifactVerification ==
+                OpeningArtifactVerification.verified &&
+            move.openingEvidence?.state != OpeningMatchState.unavailable,
+      ) &&
       cachedTimeline!.analysisSchemaVersion == kApexAnalysisSchemaVersion &&
       cachedTimeline!.isComplete &&
       (cacheKey == null || cachedTimeline!.cacheKey == cacheKey);
@@ -591,7 +606,9 @@ class ArchivedGame {
       cacheKey: j['cacheKey'] as String?,
       tacticalVerifierVersion:
           (j['tacticalVerifierVersion'] as num?)?.toInt() ?? 1,
-      openingBookVersion: (j['openingBookVersion'] as num?)?.toInt() ?? 1,
+      openingBookVersion:
+          (j['openingBookVersion'] as num?)?.toInt() ??
+          kApexLegacyOpeningBookVersion,
       analysisSchemaVersion: (j['analysisSchemaVersion'] as num?)?.toInt() ?? 1,
       timeControl: j['timeControl'] as String?,
       analysisMovetimeMs: (j['analysisMovetimeMs'] as num?)?.toInt(),
@@ -624,6 +641,14 @@ class ArchivedGame {
     String? timeControl,
   }) {
     final h = timeline.headers;
+    final currentOpening = timeline.openingBookVersion >= 2
+        ? OpeningEvidence.deepestNamed(
+            timeline.moves
+                .map((move) => move.openingEvidence)
+                .whereType<OpeningEvidence>(),
+          )
+        : null;
+    final useStoredOpeningEvidence = timeline.openingBookVersion >= 2;
     return ArchivedGame(
       id: id,
       source: source,
@@ -640,8 +665,10 @@ class ArchivedGame {
       averageCpLoss: timeline.averageCpLoss,
       cpLossSampleCount: timeline.cpLossEligibleCount,
       totalPlies: timeline.totalPlies,
-      openingName: h['Opening'],
-      ecoCode: h['ECO'],
+      openingName: useStoredOpeningEvidence
+          ? currentOpening?.openingName
+          : h['Opening'],
+      ecoCode: useStoredOpeningEvidence ? currentOpening?.ecoCode : h['ECO'],
       cachedTimeline: timeline,
       classifierVersion: timeline.classifierVersion,
       analysisMode: analysisMode,

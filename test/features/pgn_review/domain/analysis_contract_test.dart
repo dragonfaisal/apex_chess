@@ -1,6 +1,7 @@
 import 'package:apex_chess/core/domain/entities/analysis_profile.dart';
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
+import 'package:apex_chess/core/domain/entities/opening_evidence.dart';
 import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/features/archives/data/archive_save_hook.dart';
@@ -220,6 +221,23 @@ void main() {
     expect(display.subtitle, 'Metrics unavailable · Fast · 1 moves');
   });
 
+  test(
+    'current payload derives opening from stored evidence, not PGN headers',
+    () {
+      final timeline = _openingTimeline();
+      final payload = CanonicalAnalysisPayload.fromTimeline(
+        timeline: timeline,
+        pgn: _pgn,
+        source: AnalysisGameSource.pgn,
+        modeUsed: AnalysisReviewMode.offlineLocal,
+        providerKind: AnalysisProviderKind.offlineLocal,
+      );
+
+      expect(payload.openingName, 'Evidence Opening');
+      expect(payload.ecoCode, 'C42');
+    },
+  );
+
   test('canonical key is stable across modes and distinct across games', () {
     final fast = AnalysisReviewRequest.fromPgn(
       pgn: _pgn,
@@ -294,7 +312,7 @@ class _FakeProvider extends ReviewAnalysisProvider {
 }
 
 ArchivedGame _savedGame({required AnalysisMode analysisMode}) {
-  final timeline = _timeline(
+  final timeline = _openingTimeline().copyWith(
     analysisProfileId: analysisMode == AnalysisMode.quick
         ? 'fast_review'
         : 'deep_review',
@@ -320,6 +338,7 @@ ArchivedGame _savedGame({required AnalysisMode analysisMode}) {
     analysisMode: analysisMode,
     pgnHash: archiveIdForPgn(_pgn),
     cachedTimeline: timeline,
+    openingBookVersion: timeline.openingBookVersion,
   );
 }
 
@@ -371,13 +390,69 @@ AnalysisTimeline _timeline({String analysisProfileId = 'fast_review'}) {
     engineVersion: 'fake-engine',
     classifierVersion: kApexClassifierVersion,
     tacticalVerifierVersion: kApexTacticalVerifierVersion,
-    openingBookVersion: kApexOpeningBookVersion,
+    openingBookVersion: kApexLegacyOpeningBookVersion,
     analysisSchemaVersion: kApexAnalysisSchemaVersion,
     pgnHash: archiveIdForPgn(_pgn),
     completionStatus: AnalysisCompletionStatus.complete,
     expectedPlies: 2,
   );
 }
+
+AnalysisTimeline _openingTimeline() {
+  final legacy = _timeline();
+  final currentMoves = <MoveAnalysis>[];
+  for (final (index, move) in legacy.moves.indexed) {
+    final matchedPly = index + 1;
+    final evidence = OpeningEvidence(
+      artifact: _openingArtifact,
+      artifactVerification: OpeningArtifactVerification.verified,
+      state: OpeningMatchState.knownTransition,
+      beforePositionKey: OpeningPositionKey.fromFen(move.fenBefore).value,
+      afterPositionKey: OpeningPositionKey.fromFen(move.fenAfter).value,
+      playedUci: move.uci,
+      transitionVerified: true,
+      selectedCandidate: OpeningCandidate(
+        ecoCode: 'C42',
+        openingName: 'Evidence Opening',
+        sourceLineId: index.isEven
+            ? 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'
+            : 'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+        sourceTerminalPly: matchedPly,
+        matchedPly: matchedPly,
+        exactPositionName: true,
+      ),
+      totalCandidateCount: 1,
+      matchedPly: matchedPly,
+      reasonCode: 'known_transition',
+    );
+    currentMoves.add(
+      MoveAnalysis.fromJson(<String, dynamic>{
+        ...move.toJson(),
+        'openingEvidence': evidence.toJson(),
+        'openingName': 'Evidence Opening',
+        'ecoCode': 'C42',
+        'openingStatus': OpeningStatus.bookTheory.name,
+      }),
+    );
+  }
+  return legacy.copyWith(
+    moves: currentMoves,
+    openingBookVersion: kApexOpeningBookVersion,
+    openingArtifact: _openingArtifact,
+    openingArtifactVerification: OpeningArtifactVerification.verified,
+  );
+}
+
+const _openingArtifact = OpeningArtifactIdentity(
+  datasetName: 'apex-eco',
+  sourceRevision: '2026-07-17',
+  sourceSha256:
+      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  contentSha256:
+      'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+  licenseSpdx: 'MIT',
+  provenanceReference: 'assets/openings/PROVENANCE.md',
+);
 
 const _pgn = '''
 [Site "https://www.chess.com/game/live/123"]

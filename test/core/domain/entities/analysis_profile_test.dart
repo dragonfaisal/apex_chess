@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:apex_chess/core/domain/entities/analysis_profile.dart';
 import 'package:apex_chess/core/domain/services/analysis_cache_key.dart';
+import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 
 void main() {
   test(
@@ -58,4 +59,34 @@ void main() {
       expect(deepKey, contains('deep_review'));
     },
   );
+
+  test('opening-v2 cache identity is artifact-bound and fail-closed', () {
+    String keyFor(String artifactId) => buildAnalysisCacheKey(
+      pgnHash: 'game',
+      analysisProfileId: AnalysisProfileId.offlineReview,
+      providerId: 'local_offline',
+      engineVersion: 'local-test',
+      openingBookVersion: kApexOpeningBookVersion,
+      openingArtifactSemanticId: artifactId,
+    );
+
+    const artifactA =
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const artifactB =
+        'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+    final first = keyFor(artifactA);
+    final second = keyFor(artifactB);
+    expect(first, isNot(second));
+    expect(first, contains('opening-artifact=$artifactA'));
+    expect(
+      () => buildAnalysisCacheKey(
+        pgnHash: 'game',
+        analysisProfileId: AnalysisProfileId.offlineReview,
+        providerId: 'local_offline',
+        engineVersion: 'local-test',
+        openingBookVersion: kApexOpeningBookVersion,
+      ),
+      throwsArgumentError,
+    );
+  });
 }

@@ -15,6 +15,7 @@ import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/pgn_review/domain/analysis_contract.dart';
 import 'package:apex_chess/features/pgn_review/domain/review_summary.dart';
 import 'package:apex_chess/infrastructure/engine/composite_game_analyzer.dart';
+import 'package:apex_chess/infrastructure/openings/opening_index.dart';
 
 typedef ReviewProgress = void Function(int completed, int total);
 typedef ReviewCancellationProbe = bool Function();
@@ -144,6 +145,11 @@ abstract class ReviewAnalysisProvider {
   String get engineVersion;
   bool get isConfigured;
 
+  /// Online/stub providers remain on the historic opening contract until
+  /// their payload contains the exact Chapter 5 artifact and move evidence.
+  int get openingContractVersion => kApexLegacyOpeningBookVersion;
+  String? get openingArtifactSemanticId => null;
+
   Future<GameReviewResult> analyzeGame(GameReviewRequest request);
 
   /// Providers without physical cancellation keep the safe default: callers
@@ -164,6 +170,8 @@ abstract class ReviewAnalysisProvider {
       analysisProfileId: profile.id,
       providerId: providerId,
       engineVersion: engineVersion,
+      openingBookVersion: openingContractVersion,
+      openingArtifactSemanticId: openingArtifactSemanticId,
     );
     return AnalysisRunMetadata(
       analysisProfileId: profile.id.wire,
@@ -171,7 +179,7 @@ abstract class ReviewAnalysisProvider {
       engineVersion: engineVersion,
       classifierVersion: kApexClassifierVersion,
       tacticalVerifierVersion: kApexTacticalVerifierVersion,
-      openingBookVersion: kApexOpeningBookVersion,
+      openingBookVersion: openingContractVersion,
       depth: profile.localDepth,
       movetimeMs: profile.localMovetimeMs,
       multipv: profile.localMultiPv,
@@ -250,7 +258,8 @@ class ReviewModeAvailability {
   bool get canPreviewExistingReview {
     final timeline = savedReview?.cachedTimeline;
     return savedReview != null &&
-        savedReview!.isCacheCurrent &&
+        (savedReview!.isCacheCurrent ||
+            savedReview!.isExactStoredVariantReopenable) &&
         timeline != null &&
         timeline.moves.isNotEmpty;
   }
@@ -429,6 +438,13 @@ class LocalOfflineReviewProvider extends ReviewAnalysisProvider {
   bool get isConfigured => true;
 
   @override
+  int get openingContractVersion => kApexOpeningBookVersion;
+
+  @override
+  String get openingArtifactSemanticId =>
+      kApexOpeningArtifactIdentity.semanticId;
+
+  @override
   void cancelActiveAnalysis() => _analyzer.cancelActiveAnalysis();
 
   @override
@@ -463,6 +479,8 @@ class LocalOfflineReviewProvider extends ReviewAnalysisProvider {
         analysisProfileId: request.profile.id,
         providerId: timeline.providerId,
         engineVersion: timeline.engineVersion,
+        openingBookVersion: timeline.openingBookVersion,
+        openingArtifactSemanticId: timeline.openingArtifact?.semanticId,
       ),
     );
     final enriched = timeline.copyWith(

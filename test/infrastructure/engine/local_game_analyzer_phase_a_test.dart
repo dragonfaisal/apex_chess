@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:dartchess/dartchess.dart';
 import 'package:apex_chess/core/domain/entities/engine_line.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
+import 'package:apex_chess/core/domain/entities/opening_evidence.dart';
 import 'package:apex_chess/core/domain/services/analysis_debug_export.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/core/domain/services/win_percent_calculator.dart';
@@ -11,9 +12,9 @@ import 'package:apex_chess/core/infrastructure/engine/chess_engine.dart';
 import 'package:apex_chess/core/infrastructure/engine/uci/uci_command.dart';
 import 'package:apex_chess/core/infrastructure/engine/uci/uci_event.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
-import 'package:apex_chess/infrastructure/engine/eco_book.dart';
 import 'package:apex_chess/infrastructure/engine/local_eval_service.dart';
 import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
+import 'package:apex_chess/infrastructure/openings/opening_index.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -36,12 +37,12 @@ Qxa1+ 15. Nxa1 c1=Q# 0-1
 
   group('LocalGameAnalyzer Phase A', () {
     test(
-      'confirmed book is theory; unknown early move is opening phase',
+      'unknown first move is an explicit departure from known theory',
       () async {
         final eval = _ScriptedEvalService();
         final analyzer = LocalGameAnalyzer(
           eval: eval,
-          book: EcoBook.fromTsv(bookTsv),
+          openingLookup: _verifiedOpeningIndex(bookTsv),
         );
 
         final timeline = await analyzer.analyzeFromPgn(
@@ -52,11 +53,13 @@ Qxa1+ 15. Nxa1 c1=Q# 0-1
 
         expect(timeline.moves, hasLength(1));
         expect(timeline.moves.first.inBook, isFalse);
+        expect(timeline.moves.first.openingStatus, OpeningStatus.bookDeviation);
         expect(
-          timeline.moves.first.openingStatus,
-          OpeningStatus.openingPhaseUnknown,
+          timeline.moves.first.openingEvidence?.state,
+          OpeningMatchState.leftTheory,
         );
         expect(timeline.moves.first.classification, isNot(MoveQuality.book));
+        expect(analyzer.lastOpeningLookupCount, 1);
         expect(eval.calls.map((c) => c.multiPv).toSet(), {3});
       },
     );
@@ -67,7 +70,7 @@ Qxa1+ 15. Nxa1 c1=Q# 0-1
         final eval = _ScriptedEvalService();
         final analyzer = LocalGameAnalyzer(
           eval: eval,
-          book: EcoBook.fromTsv(bookTsv),
+          openingLookup: _verifiedOpeningIndex(bookTsv),
         );
 
         final timeline = await analyzer.analyzeFromPgn(
@@ -80,11 +83,21 @@ Qxa1+ 15. Nxa1 c1=Q# 0-1
         expect(timeline.moves[0].classification, MoveQuality.book);
         expect(timeline.moves[0].openingStatus, OpeningStatus.bookTheory);
         expect(timeline.moves[0].inBook, isTrue);
+        expect(
+          timeline.moves[0].openingEvidence?.state,
+          OpeningMatchState.knownTransition,
+        );
 
         expect(timeline.moves[1].classification, isNot(MoveQuality.book));
         expect(timeline.moves[1].openingStatus, OpeningStatus.bookDeviation);
         expect(timeline.moves[1].inBook, isFalse);
+        expect(
+          timeline.moves[1].openingEvidence?.state,
+          OpeningMatchState.leftTheory,
+        );
+        expect(timeline.moves[1].openingEvidence?.leavingTheoryPly, 2);
         expect(timeline.moves[1].engineLines, hasLength(3));
+        expect(analyzer.lastOpeningLookupCount, 2);
         expect(eval.calls.map((c) => c.multiPv).toSet(), {3});
       },
     );
@@ -99,7 +112,7 @@ Qxa1+ 15. Nxa1 c1=Q# 0-1
       );
       final analyzer = LocalGameAnalyzer(
         eval: eval,
-        book: EcoBook.fromTsv(bookTsv),
+        openingLookup: _verifiedOpeningIndex(bookTsv),
       );
 
       final timeline = await analyzer.analyzeFromPgn(
@@ -109,18 +122,83 @@ Qxa1+ 15. Nxa1 c1=Q# 0-1
       );
 
       final move = timeline.moves.single;
-      expect(move.inBook, isTrue);
+      expect(move.inBook, isFalse);
+      expect(move.openingEvidence?.state, OpeningMatchState.knownTransition);
       expect(move.engineEvaluationAvailable, isTrue);
       expect(move.moverCpLoss, 500);
       expect(move.classification, MoveQuality.blunder);
+      expect(analyzer.lastOpeningLookupCount, 1);
       expect(eval.calls, hasLength(2));
+    });
+
+    test(
+      'unavailable artifact remains explicit and never becomes Book',
+      () async {
+        final analyzer = LocalGameAnalyzer(
+          eval: _ScriptedEvalService(),
+          openingLookup: OpeningIndex.unavailable(
+            reasonCode: 'test_opening_artifact_unavailable',
+          ),
+        );
+
+        final timeline = await analyzer.analyzeFromPgn(
+          '[Result "*"]\n\n1. e4 *',
+          mode: AnalysisMode.deep,
+          depth: 12,
+        );
+
+        final move = timeline.moves.single;
+        expect(move.openingEvidence?.state, OpeningMatchState.unavailable);
+        expect(
+          move.openingEvidence?.artifactVerification,
+          OpeningArtifactVerification.unavailable,
+        );
+        expect(
+          move.openingEvidence?.reasonCode,
+          'test_opening_artifact_unavailable',
+        );
+        expect(move.classification, isNot(MoveQuality.book));
+        expect(move.inBook, isFalse);
+        expect(analyzer.lastOpeningLookupCount, 1);
+        expect(
+          timeline.openingArtifact?.semanticId,
+          kApexOpeningArtifactIdentity.semanticId,
+        );
+      },
+    );
+
+    test('case-insensitive Setup/FEN guard blocks standard theory', () async {
+      const pgn = '''
+[sEtUp "1"]
+[fEn "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"]
+[Result "*"]
+
+1. e4 *
+''';
+      final analyzer = LocalGameAnalyzer(
+        eval: _ScriptedEvalService(),
+        openingLookup: _verifiedOpeningIndex(bookTsv),
+      );
+
+      final timeline = await analyzer.analyzeFromPgn(
+        pgn,
+        mode: AnalysisMode.deep,
+        depth: 12,
+      );
+
+      final move = timeline.moves.single;
+      expect(move.openingEvidence?.state, OpeningMatchState.noMatch);
+      expect(move.openingEvidence?.reasonCode, 'unsupported_start_position');
+      expect(move.classification, isNot(MoveQuality.book));
+      expect(move.inBook, isFalse);
+      expect(analyzer.lastOpeningLookupCount, 1);
     });
 
     test('Quick analysis keeps local eval single-PV', () async {
       final eval = _ScriptedEvalService();
       final analyzer = LocalGameAnalyzer(
         eval: eval,
-        book: EcoBook.fromTsv(bookTsv),
+        openingLookup: _verifiedOpeningIndex(bookTsv),
       );
 
       await analyzer.analyzeFromPgn(
@@ -138,7 +216,7 @@ Qxa1+ 15. Nxa1 c1=Q# 0-1
         final eval = _ColdStartIdentityEvalService();
         final analyzer = LocalGameAnalyzer(
           eval: eval,
-          book: EcoBook.fromTsv('eco\tname\tpgn\n'),
+          openingLookup: _verifiedOpeningIndex('eco\tname\tpgn\n'),
         );
 
         final timeline = await analyzer.analyzeFromPgn(
@@ -218,7 +296,7 @@ Qxa1+ 15. Nxa1 c1=Q# 0-1
         final eval = _PgnFixtureEvalService(fixture);
         final analyzer = LocalGameAnalyzer(
           eval: eval,
-          book: EcoBook.fromTsv('eco\tname\tpgn\n'),
+          openingLookup: _verifiedOpeningIndex('eco\tname\tpgn\n'),
         );
 
         final timeline = await analyzer.analyzeFromPgn(
@@ -275,6 +353,9 @@ Qxa1+ 15. Nxa1 c1=Q# 0-1
         expect(debugLine['pv2'], isNotNull);
         expect(debugLine['pv3'], isNotNull);
         expect(debugLine['isFreeCapture'], isTrue);
+        expect(debugLine['openingEvidence'], isNotNull);
+        expect(debugLine['openingArtifactId'], isNotNull);
+        expect(debugLine['openingMatchState'], OpeningMatchState.noMatch.name);
 
         final criticalDebug = AnalysisDebugExport.jsonLines(timeline)
             .split('\n')
@@ -563,6 +644,21 @@ class _PgnFixtureEvalService extends LocalEvalService {
         .where((uci) => uci.length >= 4)
         .toList(growable: false);
   }
+}
+
+OpeningIndex _verifiedOpeningIndex(String body) {
+  final probe = OpeningIndex.fromTsv(body);
+  final identity = OpeningArtifactIdentity(
+    datasetName: 'apex-test-openings',
+    sourceRevision: 'fixture-v1',
+    sourceSha256: probe.metrics.sourceSha256,
+    contentSha256: probe.metrics.canonicalContentSha256,
+    licenseSpdx: 'CC0-1.0',
+    provenanceReference: 'test-fixture',
+  );
+  final index = OpeningIndex.fromTsv(body, identity: identity);
+  expect(index.verification, OpeningArtifactVerification.verified);
+  return index;
 }
 
 List<_FixtureMove> _fixtureMoves(String pgn) {

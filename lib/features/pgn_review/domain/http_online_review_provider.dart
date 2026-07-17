@@ -508,7 +508,9 @@ class HttpOnlineReviewProvider extends OnlineReviewProvider {
       engineVersion: metadata.engineVersion ?? config.engineVersion,
       classifierVersion: kApexClassifierVersion,
       tacticalVerifierVersion: kApexTacticalVerifierVersion,
-      openingBookVersion: kApexOpeningBookVersion,
+      // The backend payload does not yet carry Chapter 5 artifact/evidence.
+      // Keep it on the historic contract instead of claiming local v2 proof.
+      openingBookVersion: kApexLegacyOpeningBookVersion,
       analysisSchemaVersion: kApexAnalysisSchemaVersion,
       depth: metadata.depth,
       movetimeMs: metadata.movetimeMs,
@@ -539,7 +541,7 @@ class HttpOnlineReviewProvider extends OnlineReviewProvider {
       engineVersion: analysisVersion ?? config.engineVersion,
       classifierVersion: kApexClassifierVersion,
       tacticalVerifierVersion: kApexTacticalVerifierVersion,
-      openingBookVersion: kApexOpeningBookVersion,
+      openingBookVersion: kApexLegacyOpeningBookVersion,
       depth: (json['depth'] as num?)?.toInt(),
       movetimeMs: 0,
       multipv: mode == AnalysisReviewMode.onlineFast ? 1 : 3,

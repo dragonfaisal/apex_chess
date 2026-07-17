@@ -14,6 +14,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:apex_chess/app/di/providers.dart';
 import 'package:apex_chess/core/domain/entities/analysis_profile.dart';
+import 'package:apex_chess/core/domain/entities/opening_evidence.dart';
 import 'package:apex_chess/core/domain/services/game_identity_service.dart';
 import 'package:apex_chess/features/account/domain/apex_account.dart';
 import 'package:apex_chess/features/account/presentation/controllers/account_controller.dart';
@@ -37,7 +38,6 @@ import 'package:apex_chess/features/pgn_review/presentation/widgets/offline_revi
 import 'package:apex_chess/features/profile/presentation/views/profile_screen.dart';
 import 'package:apex_chess/features/profile_scanner/presentation/controllers/profile_scanner_controller.dart';
 import 'package:apex_chess/features/profile_scanner/presentation/views/profile_scanner_screen.dart';
-import 'package:apex_chess/infrastructure/engine/eco_book.dart';
 import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
@@ -628,7 +628,7 @@ class _PgnPasteDialogState extends ConsumerState<_PgnPasteDialog> {
     final viewInsets = MediaQuery.viewInsetsOf(context);
     final screen = MediaQuery.sizeOf(context);
     final preview = _currentPreview;
-    final ecoBook = ref.watch(ecoBookProvider).valueOrNull;
+    final openingLookup = ref.watch(openingIndexProvider).valueOrNull;
     final selectedSide = _effectiveUserIsWhite;
     return AnimatedPadding(
       duration: ApexMotion.normal,
@@ -715,7 +715,7 @@ class _PgnPasteDialogState extends ConsumerState<_PgnPasteDialog> {
                   _PgnPreview(
                     identity: preview,
                     pgn: _pgnController.text,
-                    ecoBook: ecoBook,
+                    openingLookup: openingLookup,
                     detected: _hasDetectedGame,
                     userIsWhite: selectedSide,
                   ),
@@ -780,14 +780,14 @@ class _PgnPreview extends StatelessWidget {
   const _PgnPreview({
     required this.identity,
     required this.pgn,
-    required this.ecoBook,
+    required this.openingLookup,
     required this.detected,
     required this.userIsWhite,
   });
 
   final PgnGameIdentity identity;
   final String pgn;
-  final EcoBook? ecoBook;
+  final OpeningLookup? openingLookup;
   final bool detected;
   final bool userIsWhite;
 
@@ -796,7 +796,7 @@ class _PgnPreview extends StatelessWidget {
     final opening = PgnPasteDisplayState.openingLabel(
       pgn: pgn,
       identity: identity,
-      ecoBook: ecoBook,
+      openingLookup: openingLookup,
     );
     final result = const GameIdentityService().resultLabel(
       identity.result,

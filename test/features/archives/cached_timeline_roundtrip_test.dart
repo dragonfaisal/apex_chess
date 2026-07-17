@@ -8,9 +8,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/engine_line.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
+import 'package:apex_chess/core/domain/entities/opening_evidence.dart';
+import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/core/domain/services/move_quality_display.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
+
+const _fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+const _afterE4 = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
 
 void main() {
   test('cachedTimeline round-trips through fromJson/toJson', () {
@@ -141,28 +146,29 @@ void main() {
   });
 
   test('current-version record with cached timeline reports cache current', () {
-    final timeline = AnalysisTimeline(
-      startingFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
-      moves: const [
-        MoveAnalysis(
-          ply: 0,
-          san: 'e4',
-          uci: 'e2e4',
-          fenBefore: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
-          fenAfter:
-              'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
-          winPercentBefore: 50,
-          winPercentAfter: 50,
-          deltaW: 0,
-          isWhiteMove: true,
-          classification: MoveQuality.best,
-          message: '',
-        ),
-      ],
-      winPercentages: const [50],
-      headers: const {'White': 'A', 'Black': 'B', 'Result': '*'},
-      completionStatus: AnalysisCompletionStatus.complete,
-      expectedPlies: 1,
+    final timeline = _withCurrentOpeningEvidence(
+      AnalysisTimeline(
+        startingFen: _fen,
+        moves: const [
+          MoveAnalysis(
+            ply: 0,
+            san: 'e4',
+            uci: 'e2e4',
+            fenBefore: _fen,
+            fenAfter: _afterE4,
+            winPercentBefore: 50,
+            winPercentAfter: 50,
+            deltaW: 0,
+            isWhiteMove: true,
+            classification: MoveQuality.best,
+            message: '',
+          ),
+        ],
+        winPercentages: const [50],
+        headers: const {'White': 'A', 'Black': 'B', 'Result': '*'},
+        completionStatus: AnalysisCompletionStatus.complete,
+        expectedPlies: 1,
+      ),
     );
     final game = ArchivedGame.fromTimeline(
       timeline: timeline,
@@ -173,6 +179,50 @@ void main() {
     );
     expect(game.classifierVersion, kClassifierVersion);
     expect(game.isCacheCurrent, isTrue);
+  });
+
+  test('opening-v2 compatibility record ignores untrusted PGN headers', () {
+    final timeline = _withCurrentOpeningEvidence(
+      AnalysisTimeline(
+        startingFen: _fen,
+        moves: const [
+          MoveAnalysis(
+            ply: 0,
+            san: 'e4',
+            uci: 'e2e4',
+            fenBefore: _fen,
+            fenAfter: _afterE4,
+            winPercentBefore: 50,
+            winPercentAfter: 50,
+            deltaW: 0,
+            isWhiteMove: true,
+            classification: MoveQuality.best,
+            message: '',
+          ),
+        ],
+        winPercentages: const [50],
+        headers: const {
+          'White': 'A',
+          'Black': 'B',
+          'Result': '*',
+          'ECO': 'B20',
+          'Opening': 'Spoofed Header Opening',
+        },
+        completionStatus: AnalysisCompletionStatus.complete,
+        expectedPlies: 1,
+      ),
+    );
+
+    final game = ArchivedGame.fromTimeline(
+      timeline: timeline,
+      id: 'opening-v2-header-proof',
+      source: ArchiveSource.pgn,
+      depth: 14,
+      pgn: '1. e4 *',
+    );
+
+    expect(game.openingName, isNull);
+    expect(game.ecoCode, isNull);
   });
 
   test('cache invalidates when tactical verifier version is stale', () {
@@ -209,35 +259,35 @@ void main() {
       // makes [qualityCountsLive] trust the timeline so the archive UI
       // never advertises Brilliants that the timeline doesn't actually
       // hold.
-      final timeline = AnalysisTimeline(
-        startingFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
-        moves: [
-          MoveAnalysis(
-            ply: 0,
-            san: 'e4',
-            uci: 'e2e4',
-            fenBefore:
-                'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
-            fenAfter:
-                'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
-            targetSquare: 'e4',
-            winPercentBefore: 50.0,
-            winPercentAfter: 52.0,
-            deltaW: 2.0,
-            isWhiteMove: true,
-            classification: MoveQuality.best,
-            engineBestMoveSan: null,
-            engineBestMoveUci: null,
-            scoreCpAfter: null,
-            mateInAfter: null,
-            inBook: false,
-            message: '',
-          ),
-        ],
-        winPercentages: const [52.0],
-        headers: const {'White': 'A', 'Black': 'B', 'Result': '*'},
-        completionStatus: AnalysisCompletionStatus.complete,
-        expectedPlies: 1,
+      final timeline = _withCurrentOpeningEvidence(
+        AnalysisTimeline(
+          startingFen: _fen,
+          moves: [
+            MoveAnalysis(
+              ply: 0,
+              san: 'e4',
+              uci: 'e2e4',
+              fenBefore: _fen,
+              fenAfter: _afterE4,
+              targetSquare: 'e4',
+              winPercentBefore: 50.0,
+              winPercentAfter: 52.0,
+              deltaW: 2.0,
+              isWhiteMove: true,
+              classification: MoveQuality.best,
+              engineBestMoveSan: null,
+              engineBestMoveUci: null,
+              scoreCpAfter: null,
+              mateInAfter: null,
+              inBook: false,
+              message: '',
+            ),
+          ],
+          winPercentages: const [52.0],
+          headers: const {'White': 'A', 'Black': 'B', 'Result': '*'},
+          completionStatus: AnalysisCompletionStatus.complete,
+          expectedPlies: 1,
+        ),
       );
       final game = ArchivedGame(
         id: 'divergent',
@@ -254,6 +304,7 @@ void main() {
         averageCpLoss: 0,
         totalPlies: 1,
         cachedTimeline: timeline,
+        openingBookVersion: kApexOpeningBookVersion,
       );
       expect(
         game.brilliantCount,
@@ -265,55 +316,57 @@ void main() {
   );
 
   test('archive display counts use clean public buckets', () {
-    final timeline = AnalysisTimeline(
-      startingFen: 'start',
-      moves: [
-        MoveAnalysis(
-          ply: 0,
-          san: 'Nf3',
-          uci: 'g1f3',
-          fenBefore: 'start',
-          fenAfter: 'after',
-          winPercentBefore: 50,
-          winPercentAfter: 50,
-          deltaW: 0,
-          isWhiteMove: true,
-          classification: MoveQuality.forced,
-          reasonCode: 'ordinary_pv1',
-          message: '',
-        ),
-        MoveAnalysis(
-          ply: 1,
-          san: 'Qh4#',
-          uci: 'd8h4',
-          fenBefore: 'start',
-          fenAfter: 'mate',
-          winPercentBefore: 50,
-          winPercentAfter: 0,
-          deltaW: 0,
-          isWhiteMove: false,
-          classification: MoveQuality.best,
-          mateInAfter: -1,
-          message: '',
-        ),
-        MoveAnalysis(
-          ply: 2,
-          san: 'Re1',
-          uci: 'e1e2',
-          fenBefore: 'start',
-          fenAfter: 'after',
-          winPercentBefore: 80,
-          winPercentAfter: 75,
-          deltaW: -5,
-          isWhiteMove: true,
-          classification: MoveQuality.missedWin,
-          message: '',
-        ),
-      ],
-      winPercentages: const [50, 0, 75],
-      headers: const {'White': 'A', 'Black': 'B', 'Result': '0-1'},
-      completionStatus: AnalysisCompletionStatus.complete,
-      expectedPlies: 3,
+    final timeline = _withCurrentOpeningEvidence(
+      AnalysisTimeline(
+        startingFen: _fen,
+        moves: [
+          MoveAnalysis(
+            ply: 0,
+            san: 'Nf3',
+            uci: 'g1f3',
+            fenBefore: _fen,
+            fenAfter: _afterE4,
+            winPercentBefore: 50,
+            winPercentAfter: 50,
+            deltaW: 0,
+            isWhiteMove: true,
+            classification: MoveQuality.forced,
+            reasonCode: 'ordinary_pv1',
+            message: '',
+          ),
+          MoveAnalysis(
+            ply: 1,
+            san: 'Qh4#',
+            uci: 'd8h4',
+            fenBefore: _fen,
+            fenAfter: _afterE4,
+            winPercentBefore: 50,
+            winPercentAfter: 0,
+            deltaW: 0,
+            isWhiteMove: false,
+            classification: MoveQuality.best,
+            mateInAfter: -1,
+            message: '',
+          ),
+          MoveAnalysis(
+            ply: 2,
+            san: 'Re1',
+            uci: 'e1e2',
+            fenBefore: _fen,
+            fenAfter: _afterE4,
+            winPercentBefore: 80,
+            winPercentAfter: 75,
+            deltaW: -5,
+            isWhiteMove: true,
+            classification: MoveQuality.missedWin,
+            message: '',
+          ),
+        ],
+        winPercentages: const [50, 0, 75],
+        headers: const {'White': 'A', 'Black': 'B', 'Result': '0-1'},
+        completionStatus: AnalysisCompletionStatus.complete,
+        expectedPlies: 3,
+      ),
     );
     final game = ArchivedGame.fromTimeline(
       timeline: timeline,
@@ -328,3 +381,42 @@ void main() {
     expect(game.displayCount(ReviewMoveLabel.great), 0);
   });
 }
+
+AnalysisTimeline _withCurrentOpeningEvidence(AnalysisTimeline timeline) {
+  final moves = timeline.moves
+      .map(
+        (move) => MoveAnalysis.fromJson(<String, dynamic>{
+          ...move.toJson(),
+          'openingEvidence': OpeningEvidence(
+            artifact: _openingArtifact,
+            artifactVerification: OpeningArtifactVerification.verified,
+            state: OpeningMatchState.noMatch,
+            beforePositionKey: OpeningPositionKey.fromFen(move.fenBefore).value,
+            afterPositionKey: OpeningPositionKey.fromFen(move.fenAfter).value,
+            playedUci: move.uci,
+            transitionVerified: false,
+            totalCandidateCount: 0,
+            matchedPly: move.ply + 1,
+            reasonCode: 'no_match',
+          ).toJson(),
+        }),
+      )
+      .toList(growable: false);
+  return timeline.copyWith(
+    moves: moves,
+    openingBookVersion: kApexOpeningBookVersion,
+    openingArtifact: _openingArtifact,
+    openingArtifactVerification: OpeningArtifactVerification.verified,
+  );
+}
+
+const _openingArtifact = OpeningArtifactIdentity(
+  datasetName: 'apex-eco',
+  sourceRevision: '2026-07-17',
+  sourceSha256:
+      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  contentSha256:
+      'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+  licenseSpdx: 'MIT',
+  provenanceReference: 'assets/openings/PROVENANCE.md',
+);

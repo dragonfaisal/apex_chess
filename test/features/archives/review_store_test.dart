@@ -11,6 +11,8 @@ import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/classification_evidence.dart';
 import 'package:apex_chess/core/domain/entities/engine_line.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
+import 'package:apex_chess/core/domain/entities/opening_evidence.dart';
+import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/core/domain/services/move_classifier.dart';
 import 'package:apex_chess/core/domain/services/win_percent_calculator.dart';
@@ -75,6 +77,21 @@ void main() {
           .engineVersion,
       '18',
     );
+  });
+
+  test('compact index derives current opening from stored evidence', () async {
+    final document = _document(
+      engine: 'Stockfish 17',
+      openingVerification: OpeningArtifactVerification.verified,
+      openingName: 'Evidence Opening',
+    );
+
+    await repository.saveReviewDocument(document);
+    final compact = repository.loadAll().single;
+
+    expect(compact.cachedTimeline, isNull);
+    expect(compact.openingName, 'Evidence Opening');
+    expect(compact.ecoCode, 'C20');
   });
 
   test(
@@ -188,6 +205,76 @@ void main() {
               .engine
               .identityVerification,
           ProvenanceVerification.runtimeVerified,
+        );
+      },
+    );
+
+    test(
+      'unavailable opening run cannot replace verified, verified may replace unavailable',
+      () async {
+        final verified = _document(
+          engine: 'Stockfish 17',
+          openingVerification: OpeningArtifactVerification.verified,
+        );
+        final unavailableLater = _document(
+          engine: 'Stockfish 17',
+          openingVerification: OpeningArtifactVerification.unavailable,
+          completedAt: DateTime.utc(2026, 8, 1),
+        );
+        expect(verified.variantId.value, unavailableLater.variantId.value);
+
+        await repository.saveReviewDocument(verified);
+        await repository.saveReviewDocument(unavailableLater);
+        expect(
+          repository
+              .loadReviewDocument(verified.documentId)!
+              .timeline
+              .openingArtifactVerification,
+          OpeningArtifactVerification.verified,
+        );
+
+        await repository.clear();
+        await repository.saveReviewDocument(unavailableLater);
+        await repository.saveReviewDocument(verified);
+        expect(
+          repository
+              .loadReviewDocument(verified.documentId)!
+              .timeline
+              .openingArtifactVerification,
+          OpeningArtifactVerification.verified,
+        );
+      },
+    );
+
+    test(
+      'conflicting equally verified opening evidence cannot replace',
+      () async {
+        final first = _document(
+          engine: 'Stockfish 17',
+          openingVerification: OpeningArtifactVerification.verified,
+          openingName: 'King Pawn',
+        );
+        final conflict = _document(
+          engine: 'Stockfish 17',
+          openingVerification: OpeningArtifactVerification.verified,
+          openingName: 'Conflicting Name',
+          completedAt: DateTime.utc(2026, 8, 1),
+        );
+        expect(first.variantId.value, conflict.variantId.value);
+
+        await repository.saveReviewDocument(first);
+        await repository.saveReviewDocument(conflict);
+
+        expect(
+          repository
+              .loadReviewDocument(first.documentId)!
+              .timeline
+              .moves
+              .first
+              .openingEvidence
+              ?.selectedCandidate
+              ?.openingName,
+          'King Pawn',
         );
       },
     );
@@ -572,6 +659,8 @@ ReviewDocument _document({
   int? multiPv,
   int? multiPvReceived,
   bool completeAlternatives = true,
+  OpeningArtifactVerification? openingVerification,
+  String openingName = 'King Pawn',
 }) {
   final game = const CanonicalGameIdentityService().fromPgn(
     pgn: pgn,
@@ -582,6 +671,7 @@ ReviewDocument _document({
   final requestedMultiPv = multiPv ?? (profile == 'deep_review' ? 3 : 1);
   final received = multiPvReceived ?? requestedMultiPv;
   final analyzedMoves = <MoveAnalysis>[];
+  final openingV2 = openingVerification != null;
   for (final (index, move) in game.moves.indexed) {
     final isWhite = index.isEven;
     final score = isWhite ? 10 : -10;
@@ -603,6 +693,43 @@ ReviewDocument _document({
           pvMoves: [root],
         ),
     ];
+    final openingEvidence = !openingV2
+        ? null
+        : openingVerification == OpeningArtifactVerification.verified
+        ? OpeningEvidence(
+            artifact: _openingArtifact,
+            artifactVerification: openingVerification,
+            state: OpeningMatchState.knownTransition,
+            beforePositionKey: OpeningPositionKey.fromFen(move.fenBefore).value,
+            afterPositionKey: OpeningPositionKey.fromFen(move.fenAfter).value,
+            playedUci: move.uci,
+            transitionVerified: true,
+            selectedCandidate: OpeningCandidate(
+              ecoCode: 'C20',
+              openingName: openingName,
+              sourceLineId: index.isEven
+                  ? 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'
+                  : 'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+              sourceTerminalPly: index + 1,
+              matchedPly: index + 1,
+              exactPositionName: true,
+            ),
+            totalCandidateCount: 1,
+            matchedPly: index + 1,
+            reasonCode: 'known_transition',
+          )
+        : OpeningEvidence(
+            artifact: _openingArtifact,
+            artifactVerification: openingVerification,
+            state: OpeningMatchState.unavailable,
+            beforePositionKey: OpeningPositionKey.fromFen(move.fenBefore).value,
+            afterPositionKey: OpeningPositionKey.fromFen(move.fenAfter).value,
+            playedUci: move.uci,
+            transitionVerified: false,
+            totalCandidateCount: 0,
+            matchedPly: index + 1,
+            reasonCode: 'artifact_unavailable',
+          );
     final evidence = MoveClassificationEvidence(
       mover: isWhite ? ClassificationMover.white : ClassificationMover.black,
       evaluationBefore: ClassificationScore.cp(score),
@@ -632,7 +759,11 @@ ReviewDocument _document({
       searchQualityMet: achieved >= requested,
       achievedDepthFloor: achieved,
       legalMoveCount: _legalMoveCount(move.fenBefore),
-      bookState: ClassificationBookState.notBook,
+      bookState: !openingV2
+          ? ClassificationBookState.notBook
+          : openingVerification == OpeningArtifactVerification.verified
+          ? ClassificationBookState.verified
+          : ClassificationBookState.unavailable,
       verificationState: profile == 'deep_review'
           ? ClassificationVerificationState.complete
           : ClassificationVerificationState.notRequested,
@@ -664,6 +795,7 @@ ReviewDocument _document({
         classificationEvidence: evidence,
         classificationReasonCodes: decision.reasonCodes,
         classificationFailedGates: decision.failedGates,
+        openingEvidence: openingEvidence,
         playedEqualsPv1: decision.playedEqualsPv1,
         moverCpLoss: decision.moverCpLoss,
         scoreCpAfter: score,
@@ -674,6 +806,13 @@ ReviewDocument _document({
         searchQualityMet: achieved >= requested,
         engineBestMoveUci: move.uci,
         engineLines: lines,
+        inBook: decision.quality == MoveQuality.book,
+        openingStatus:
+            openingVerification == OpeningArtifactVerification.verified
+            ? OpeningStatus.bookTheory
+            : OpeningStatus.notOpening,
+        openingName: openingEvidence?.selectedCandidate?.openingName,
+        ecoCode: openingEvidence?.selectedCandidate?.ecoCode,
         message: decision.message,
         engineVersion: 'apex-stockfish-bridge/0.3.0|$engine',
       ),
@@ -693,6 +832,11 @@ ReviewDocument _document({
     movetimeMs: profile == 'deep_review' ? 6000 : 900,
     multipv: requestedMultiPv,
     candidateVerificationEnabled: profile == 'deep_review',
+    openingBookVersion: openingV2
+        ? kApexOpeningBookVersion
+        : kApexLegacyOpeningBookVersion,
+    openingArtifact: openingV2 ? _openingArtifact : null,
+    openingArtifactVerification: openingVerification,
     completedAt: completedAt ?? DateTime.utc(2026, 7, 11),
     completionStatus: AnalysisCompletionStatus.complete,
     expectedPlies: game.moves.length,
@@ -706,6 +850,17 @@ ReviewDocument _document({
     userIsWhite: false,
   );
 }
+
+const _openingArtifact = OpeningArtifactIdentity(
+  datasetName: 'apex-eco',
+  sourceRevision: '2026-07-17',
+  sourceSha256:
+      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  contentSha256:
+      'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+  licenseSpdx: 'MIT',
+  provenanceReference: 'assets/openings/PROVENANCE.md',
+);
 
 List<String> _legalRoots(
   String fen, {

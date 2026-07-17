@@ -4,6 +4,7 @@ library;
 
 import 'package:apex_chess/core/domain/entities/analysis_profile.dart';
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
+import 'package:apex_chess/core/domain/entities/opening_evidence.dart';
 import 'package:apex_chess/core/domain/services/analysis_cache_key.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/core/domain/services/game_identity_service.dart';
@@ -486,6 +487,14 @@ class CanonicalAnalysisPayload {
   }) {
     final headers = timeline.headers;
     final pgnHash = timeline.pgnHash ?? stablePgnHash(pgn);
+    final opening = timeline.openingBookVersion >= 2
+        ? OpeningEvidence.deepestNamed(
+            timeline.moves
+                .map((move) => move.openingEvidence)
+                .whereType<OpeningEvidence>(),
+          )
+        : null;
+    final useStoredOpeningEvidence = timeline.openingBookVersion >= 2;
     final sourceId = _cleanOptional(headers['Site']);
     final metadata =
         providerMetadata ??
@@ -517,8 +526,12 @@ class CanonicalAnalysisPayload {
       userIsWhite: userIsWhite,
       result: headers['Result'] ?? '*',
       playedAt: playedAt,
-      openingName: _cleanOptional(headers['Opening']),
-      ecoCode: _cleanOptional(headers['ECO']),
+      openingName: useStoredOpeningEvidence
+          ? _cleanOptional(opening?.openingName)
+          : _cleanOptional(headers['Opening']),
+      ecoCode: useStoredOpeningEvidence
+          ? _cleanOptional(opening?.ecoCode)
+          : _cleanOptional(headers['ECO']),
       averageCpLoss: timeline.averageCpLoss,
       averageCpLossWhite: timeline.averageCpLossWhite,
       averageCpLossBlack: timeline.averageCpLossBlack,

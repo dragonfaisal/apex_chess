@@ -15,6 +15,7 @@ library;
 
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
+import 'package:apex_chess/core/domain/entities/opening_evidence.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/features/pgn_review/domain/review_summary.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -27,6 +28,8 @@ MoveAnalysis _m({
   String san = 'Nf3',
   String? eco,
   String? openingName,
+  bool? inBook,
+  OpeningEvidence? openingEvidence,
   String message = '',
 }) => MoveAnalysis(
   ply: ply,
@@ -40,11 +43,12 @@ MoveAnalysis _m({
   isWhiteMove: isWhite,
   classification: cls,
   moverCpLoss: deltaW < 0 ? (-deltaW).round() : 0,
-  inBook: cls == MoveQuality.book,
+  inBook: inBook ?? cls == MoveQuality.book,
   engineEvaluationAvailable:
       cls != MoveQuality.book && cls != MoveQuality.unavailable,
   ecoCode: eco,
   openingName: openingName,
+  openingEvidence: openingEvidence,
   message: message,
 );
 
@@ -212,6 +216,25 @@ void main() {
   });
 
   group('Phase boundaries', () {
+    test('known-theory objective error remains metric eligible', () {
+      final t = _timeline([
+        _m(
+          ply: 4,
+          isWhite: true,
+          cls: MoveQuality.blunder,
+          deltaW: -30,
+          inBook: true,
+        ),
+      ]);
+
+      final s = svc.compute(timeline: t, userIsWhite: true);
+      final opening = s.phases.firstWhere((p) => p.phase == GamePhase.opening);
+      expect(opening.plies, 1);
+      expect(opening.averageCpLoss, 30);
+      expect(s.counts.blunder, 1);
+      expect(s.counts.book, 0);
+    });
+
     test('Opening / middlegame / endgame plies are bucketed correctly', () {
       final t = _timeline([
         // Opening: plies 0, 2 (user = White, even plies)
@@ -305,6 +328,114 @@ void main() {
   });
 
   group('Opening label', () {
+    test('selects deepest deterministic opening evidence', () {
+      final t = _timeline([
+        _m(
+          ply: 0,
+          isWhite: true,
+          cls: MoveQuality.book,
+          openingEvidence: _openingEvidence(
+            ply: 1,
+            eco: 'B00',
+            name: "King's Pawn Opening",
+          ),
+        ),
+        _m(
+          ply: 7,
+          isWhite: false,
+          cls: MoveQuality.book,
+          openingEvidence: _openingEvidence(
+            ply: 8,
+            eco: 'C60',
+            name: 'Ruy Lopez',
+          ),
+        ),
+      ]);
+
+      final s = svc.compute(timeline: t, userIsWhite: true);
+      expect(s.openingLabel, 'C60 · Ruy Lopez');
+    });
+
+    test('adds the first stored left-theory move as a compact fact', () {
+      final t = _timeline([
+        _m(
+          ply: 5,
+          isWhite: false,
+          cls: MoveQuality.good,
+          openingEvidence: _openingEvidence(
+            ply: 6,
+            eco: 'C50',
+            name: 'Italian Game',
+            state: OpeningMatchState.leftTheory,
+            leavingTheoryPly: 6,
+          ),
+        ),
+      ]);
+
+      final s = svc.compute(timeline: t, userIsWhite: true);
+      expect(
+        s.openingLabel,
+        'C50 · Italian Game · Left known theory on move 3...',
+      );
+    });
+
+    test(
+      'surfaces a stored transposition fact without candidate internals',
+      () {
+        final t = _timeline([
+          _m(
+            ply: 5,
+            isWhite: false,
+            cls: MoveQuality.book,
+            openingEvidence: _openingEvidence(
+              ply: 6,
+              eco: 'A04',
+              name: 'Reti Opening',
+              transposition: true,
+            ),
+          ),
+        ]);
+
+        final s = svc.compute(timeline: t, userIsWhite: true);
+        expect(s.openingLabel, 'A04 · Reti Opening · Transposition');
+      },
+    );
+
+    test('distinguishes unavailable opening data from a verified no-match', () {
+      final unavailable = _timeline([
+        _m(
+          ply: 0,
+          isWhite: true,
+          cls: MoveQuality.best,
+          openingEvidence: _openingEvidence(
+            ply: 1,
+            state: OpeningMatchState.unavailable,
+            verification: OpeningArtifactVerification.unavailable,
+          ),
+        ),
+      ]);
+      final noMatch = _timeline([
+        _m(
+          ply: 0,
+          isWhite: true,
+          cls: MoveQuality.best,
+          openingEvidence: _openingEvidence(
+            ply: 1,
+            state: OpeningMatchState.noMatch,
+          ),
+        ),
+      ]);
+
+      expect(
+        svc.compute(timeline: unavailable, userIsWhite: true).openingLabel,
+        'Opening data unavailable',
+      );
+      expect(
+        svc.compute(timeline: noMatch, userIsWhite: true).openingLabel,
+        'Opening not detected',
+      );
+    });
+
     test('Composes ECO + name from first annotated ply', () {
       final t = _timeline([
         _m(
@@ -346,4 +477,54 @@ void main() {
       expect(s.result, '1-0');
     });
   });
+}
+
+const _openingArtifact = OpeningArtifactIdentity(
+  datasetName: 'test-openings',
+  sourceRevision: 'test-v1',
+  sourceSha256:
+      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  contentSha256:
+      'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+  licenseSpdx: 'MIT',
+  provenanceReference: 'test',
+);
+
+OpeningEvidence _openingEvidence({
+  required int ply,
+  String? eco,
+  String? name,
+  OpeningMatchState state = OpeningMatchState.knownTransition,
+  OpeningArtifactVerification verification =
+      OpeningArtifactVerification.verified,
+  int? leavingTheoryPly,
+  bool transposition = false,
+}) {
+  final candidate = eco == null || name == null
+      ? null
+      : OpeningCandidate(
+          ecoCode: eco,
+          openingName: name,
+          sourceLineId:
+              '${eco.codeUnits.fold<int>(0, (sum, value) => sum + value)}'
+                  .padLeft(64, '0'),
+          sourceTerminalPly: ply,
+          matchedPly: ply,
+          exactPositionName: true,
+        );
+  return OpeningEvidence(
+    artifact: _openingArtifact,
+    artifactVerification: verification,
+    state: state,
+    beforePositionKey: 'before-$ply',
+    afterPositionKey: 'after-$ply',
+    playedUci: 'e2e4',
+    transitionVerified: state == OpeningMatchState.knownTransition,
+    selectedCandidate: candidate,
+    totalCandidateCount: candidate == null ? 0 : 1,
+    matchedPly: ply,
+    transposition: transposition,
+    leavingTheoryPly: leavingTheoryPly,
+    reasonCode: state.name,
+  );
 }

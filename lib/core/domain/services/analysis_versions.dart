@@ -20,5 +20,12 @@ const int kApexTacticalVerifierVersion = 3;
 /// Bump when the persisted analysis result/cache schema changes.
 const int kApexAnalysisSchemaVersion = 4;
 
-/// Embedded ECO/opening-book data contract version.
-const int kApexOpeningBookVersion = 1;
+/// Embedded opening-intelligence policy and persisted evidence contract.
+///
+/// Version 2 binds analysis compatibility to the expected opening artifact
+/// content while keeping the classifier policy and analysis schema unchanged.
+const int kApexOpeningBookVersion = 2;
+
+/// Compatibility value for historic, transport, and synthetic timelines that
+/// do not carry the Chapter 5 artifact/evidence contract.
+const int kApexLegacyOpeningBookVersion = 1;

@@ -7,6 +7,9 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
+import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
+import 'package:apex_chess/core/domain/entities/opening_evidence.dart';
+import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/archives/domain/review_document.dart';
@@ -334,7 +337,9 @@ class ArchiveRepository {
       }
 
       final timeline = legacy.cachedTimeline;
-      if (!legacy.isCacheCurrent || timeline == null || !timeline.isComplete) {
+      if (timeline == null ||
+          !timeline.isComplete ||
+          !_canMigrateLegacyTimeline(legacy, timeline)) {
         await _writeMigrationState(
           _MigrationState.legacyUntrusted(
             sourceKey: sourceKey,
@@ -384,6 +389,22 @@ class ArchiveRepository {
     }
 
     _refreshDiagnostics(repairedIndexes: repaired, orphanedIndexes: orphaned);
+  }
+
+  bool _canMigrateLegacyTimeline(
+    ArchivedGame legacy,
+    AnalysisTimeline timeline,
+  ) {
+    if (legacy.isCacheCurrent) return true;
+    return legacy.openingBookVersion == kApexLegacyOpeningBookVersion &&
+        timeline.openingBookVersion == kApexLegacyOpeningBookVersion &&
+        legacy.classifierVersion == kApexClassifierVersion &&
+        timeline.classifierVersion == kApexClassifierVersion &&
+        legacy.tacticalVerifierVersion == kApexTacticalVerifierVersion &&
+        timeline.tacticalVerifierVersion == kApexTacticalVerifierVersion &&
+        legacy.analysisSchemaVersion == kApexAnalysisSchemaVersion &&
+        timeline.analysisSchemaVersion == kApexAnalysisSchemaVersion &&
+        (legacy.cacheKey == null || timeline.cacheKey == legacy.cacheKey);
   }
 
   _ReviewIndexEntry? _readIndex(String documentId) {
@@ -543,6 +564,15 @@ class _ReviewIndexEntry {
 
   factory _ReviewIndexEntry.fromDocument(ReviewDocument document) {
     final headers = document.game.headers;
+    final opening = document.compatibility.openingBookVersion >= 2
+        ? OpeningEvidence.deepestNamed(
+            document.timeline.moves
+                .map((move) => move.openingEvidence)
+                .whereType<OpeningEvidence>(),
+          )
+        : null;
+    final useStoredOpeningEvidence =
+        document.compatibility.openingBookVersion >= 2;
     return _ReviewIndexEntry(
       schemaVersion: kReviewIndexSchemaVersion,
       aggregateCacheVersion: kReviewAggregateCacheVersion,
@@ -571,8 +601,10 @@ class _ReviewIndexEntry {
       verifiedAcpl: document.verifiedAcpl,
       cpLossSampleCount: document.cpLossEligibleCount,
       totalPlies: document.timeline.totalPlies,
-      openingName: headers['Opening'],
-      ecoCode: headers['ECO'],
+      openingName: useStoredOpeningEvidence
+          ? opening?.openingName
+          : headers['Opening'],
+      ecoCode: useStoredOpeningEvidence ? opening?.ecoCode : headers['ECO'],
       timeControl: headers['TimeControl'],
       userIsWhite: document.userIsWhite,
       classifierVersion: document.compatibility.classifierVersion,

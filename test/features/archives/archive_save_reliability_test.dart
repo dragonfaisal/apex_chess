@@ -3,6 +3,8 @@ import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/classification_evidence.dart';
 import 'package:apex_chess/core/domain/entities/engine_line.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
+import 'package:apex_chess/core/domain/entities/opening_evidence.dart';
+import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/features/archives/data/archive_save_hook.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
@@ -243,6 +245,18 @@ AnalysisTimeline _timeline({
     forcedState: ClassificationForcedState.notForced,
   );
   final decision = const EvaluationAnalyzer().analyzeEvidence(evidence);
+  final openingEvidence = OpeningEvidence(
+    artifact: _openingArtifact,
+    artifactVerification: OpeningArtifactVerification.verified,
+    state: OpeningMatchState.noMatch,
+    beforePositionKey: OpeningPositionKey.fromFen(_fen).value,
+    afterPositionKey: OpeningPositionKey.fromFen(_afterE4).value,
+    playedUci: 'e2e4',
+    transitionVerified: false,
+    totalCandidateCount: 0,
+    matchedPly: 1,
+    reasonCode: 'no_match',
+  );
   return AnalysisTimeline(
     startingFen: _fen,
     moves: [
@@ -264,6 +278,7 @@ AnalysisTimeline _timeline({
         classificationEvidence: evidence,
         classificationReasonCodes: decision.reasonCodes,
         classificationFailedGates: decision.failedGates,
+        openingEvidence: openingEvidence,
         playedEqualsPv1: decision.playedEqualsPv1,
         moverCpLoss: decision.moverCpLoss,
         requestedDepth: 14,
@@ -301,11 +316,25 @@ AnalysisTimeline _timeline({
     analysisProfileId: analysisProfileId,
     providerId: 'local_offline',
     engineVersion: 'local-test',
+    openingBookVersion: kApexOpeningBookVersion,
+    openingArtifact: _openingArtifact,
+    openingArtifactVerification: OpeningArtifactVerification.verified,
     pgnHash: archiveIdForPgn(_pgn),
     completionStatus: AnalysisCompletionStatus.complete,
     expectedPlies: 1,
   );
 }
+
+const _openingArtifact = OpeningArtifactIdentity(
+  datasetName: 'apex-eco',
+  sourceRevision: '2026-07-17',
+  sourceSha256:
+      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  contentSha256:
+      'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+  licenseSpdx: 'MIT',
+  provenanceReference: 'assets/openings/PROVENANCE.md',
+);
 
 class _FakeArchiveController extends ArchiveController {
   _FakeArchiveController(this.saved);

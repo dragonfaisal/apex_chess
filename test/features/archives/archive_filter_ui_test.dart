@@ -1,6 +1,8 @@
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
+import 'package:apex_chess/core/domain/entities/opening_evidence.dart';
+import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/archives/presentation/controllers/archive_controller.dart';
 import 'package:apex_chess/features/archives/presentation/views/archive_screen.dart';
@@ -8,6 +10,9 @@ import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+const _fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+const _afterNf3 = 'rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 1 1';
 
 void main() {
   testWidgets('Archive selected filter gets active state', (tester) async {
@@ -474,20 +479,33 @@ ArchivedGame _game({
   var ply = 0;
   for (final entry in qualities.entries) {
     for (var count = 0; count < entry.value; count++) {
+      final currentPly = ply++;
       moves.add(
         MoveAnalysis(
-          ply: ply++,
+          ply: currentPly,
           san: 'Nf3',
           uci: 'g1f3',
-          fenBefore: 'before-$ply',
-          fenAfter: 'after-$ply',
+          fenBefore: _fen,
+          fenAfter: _afterNf3,
           winPercentBefore: 50,
           winPercentAfter: 50,
           deltaW: 0,
-          isWhiteMove: ply.isOdd,
+          isWhiteMove: currentPly.isEven,
           classification: entry.key,
           moverCpLoss: metricAvailable ? averageCpLoss.round() : null,
           engineEvaluationAvailable: metricAvailable,
+          openingEvidence: OpeningEvidence(
+            artifact: _openingArtifact,
+            artifactVerification: OpeningArtifactVerification.verified,
+            state: OpeningMatchState.noMatch,
+            beforePositionKey: OpeningPositionKey.fromFen(_fen).value,
+            afterPositionKey: OpeningPositionKey.fromFen(_afterNf3).value,
+            playedUci: 'g1f3',
+            transitionVerified: false,
+            totalCandidateCount: 0,
+            matchedPly: currentPly + 1,
+            reasonCode: 'no_match',
+          ),
           message: '',
         ),
       );
@@ -500,6 +518,9 @@ ArchivedGame _game({
     winPercentages: [for (final move in moves) move.winPercentAfter],
     analysisMode: analysisMode.wire,
     analysisProfileId: analysisProfileId,
+    openingBookVersion: kApexOpeningBookVersion,
+    openingArtifact: _openingArtifact,
+    openingArtifactVerification: OpeningArtifactVerification.verified,
     completionStatus: AnalysisCompletionStatus.complete,
     expectedPlies: moves.length,
   );
@@ -528,6 +549,7 @@ ArchivedGame _game({
     ecoCode: eco,
     analysisMode: analysisMode,
     analysisProfileId: analysisProfileId,
+    openingBookVersion: kApexOpeningBookVersion,
     cachedTimeline: moves.isEmpty ? null : timeline,
     recordKind: recordKind,
     canonicalGameId: canonicalGameId,
@@ -539,6 +561,17 @@ ArchivedGame _game({
     candidateVerificationEnabled: candidateVerificationEnabled,
   );
 }
+
+const _openingArtifact = OpeningArtifactIdentity(
+  datasetName: 'apex-eco',
+  sourceRevision: '2026-07-17',
+  sourceSha256:
+      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  contentSha256:
+      'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+  licenseSpdx: 'MIT',
+  provenanceReference: 'assets/openings/PROVENANCE.md',
+);
 
 class _FakeArchiveController extends ArchiveController {
   _FakeArchiveController(this.initial);

@@ -8,6 +8,7 @@ library;
 import 'package:apex_chess/core/domain/entities/engine_line.dart';
 import 'package:apex_chess/core/domain/entities/deep_tactical_verdict.dart';
 import 'package:apex_chess/core/domain/entities/classification_evidence.dart';
+import 'package:apex_chess/core/domain/entities/opening_evidence.dart';
 import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 
@@ -71,6 +72,10 @@ class MoveAnalysis {
   /// Historic records written before analysis schema v4 leave this null;
   /// absence is unavailable evidence, never a neutral evaluation.
   final MoveClassificationEvidence? classificationEvidence;
+
+  /// Versioned opening facts used to derive Book provenance. Historic
+  /// records written before opening policy v2 leave this null.
+  final OpeningEvidence? openingEvidence;
 
   /// Structured decision diagnostics. These are machine facts only and are
   /// not rendered as explanation prose.
@@ -159,6 +164,7 @@ class MoveAnalysis {
     MoveQuality? finalClassification,
     this.reasonCode = 'legacy',
     this.classificationEvidence,
+    this.openingEvidence,
     this.classificationReasonCodes = const <String>[],
     this.classificationFailedGates = const <String>[],
     this.playedEqualsPv1 = false,
@@ -223,6 +229,7 @@ class MoveAnalysis {
     'finalClassification': finalClassification.name,
     'reasonCode': reasonCode,
     'classificationEvidence': classificationEvidence?.toJson(),
+    'openingEvidence': openingEvidence?.toJson(),
     'classificationReasonCodes': classificationReasonCodes,
     'classificationFailedGates': classificationFailedGates,
     'playedEqualsPv1': playedEqualsPv1,
@@ -308,6 +315,9 @@ class MoveAnalysis {
           ? MoveClassificationEvidence.fromJson(
               j['classificationEvidence'] as Map,
             )
+          : null,
+      openingEvidence: j['openingEvidence'] is Map
+          ? OpeningEvidence.fromJson(j['openingEvidence'] as Map)
           : null,
       classificationReasonCodes:
           (j['classificationReasonCodes'] as List<dynamic>?)

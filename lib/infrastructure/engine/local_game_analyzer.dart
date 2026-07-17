@@ -7,7 +7,7 @@
 ///
 /// ### Pipeline (per ply)
 ///
-/// 1. Check the embedded ECO opening book for provenance only. A confirmed
+/// 1. Check the verified opening index for provenance only. A confirmed
 ///    theory hit still receives objective engine evidence so Book can never
 ///    conceal a severe loss.
 /// 2. Request the engine eval for the *before* FEN (mover's
@@ -29,6 +29,7 @@ import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/classification_evidence.dart';
 import 'package:apex_chess/core/domain/entities/engine_line.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
+import 'package:apex_chess/core/domain/entities/opening_evidence.dart';
 import 'package:apex_chess/core/domain/entities/position_evaluation.dart';
 import 'package:apex_chess/core/domain/services/analysis_debug_export.dart';
 import 'package:apex_chess/core/domain/services/analysis_versions.dart';
@@ -39,8 +40,9 @@ import 'package:apex_chess/core/domain/services/pgn_mainline_validator.dart';
 import 'package:apex_chess/core/domain/services/sacrifice_trajectory.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart'
     show AnalysisMode;
-import 'package:apex_chess/infrastructure/engine/eco_book.dart';
 import 'package:apex_chess/infrastructure/engine/local_eval_service.dart';
+import 'package:apex_chess/infrastructure/openings/opening_index.dart'
+    show kApexOpeningArtifactIdentity;
 
 /// Exception used to surface user-facing errors to the home / review UI.
 enum LocalAnalysisFailure { invalidPgn, incompleteEvaluation, cancelled }
@@ -63,8 +65,8 @@ class LocalAnalysisException implements Exception {
 class LocalGameAnalyzer {
   LocalGameAnalyzer({
     required LocalEvalService eval,
-    EcoBook? book,
-    Future<EcoBook>? bookFuture,
+    OpeningLookup? openingLookup,
+    Future<OpeningLookup>? openingLookupFuture,
     EvaluationAnalyzer analyzer = const EvaluationAnalyzer(),
     DeepTacticalVerifier tacticalVerifier = const DeepTacticalVerifier(),
     PgnMainlineValidator pgnValidator = const PgnMainlineValidator(),
@@ -76,8 +78,8 @@ class LocalGameAnalyzer {
     // target depth.
     Duration? movetime,
   }) : _eval = eval,
-       _book = book,
-       _bookFuture = bookFuture,
+       _openingLookup = openingLookup,
+       _openingLookupFuture = openingLookupFuture,
        _analyzer = analyzer,
        _tacticalVerifier = tacticalVerifier,
        _pgnValidator = pgnValidator,
@@ -96,12 +98,12 @@ class LocalGameAnalyzer {
   }
 
   final LocalEvalService _eval;
-  // Book state is materialised on first `analyzeFromPgn` call. A caller
-  // that already has the book ready passes it via `book:`; callers that
-  // are racing an async load should pass `bookFuture:` so we await the
-  // asset once instead of falling back to engine-only classification.
-  EcoBook? _book;
-  final Future<EcoBook>? _bookFuture;
+  // Opening state is materialised on first `analyzeFromPgn` call. Passing
+  // the future prevents the first game from racing the asset load.
+  OpeningLookup? _openingLookup;
+  final Future<OpeningLookup>? _openingLookupFuture;
+  String _openingUnavailableReason = 'opening_lookup_not_configured';
+  int _lastOpeningLookupCount = 0;
   final EvaluationAnalyzer _analyzer;
   final DeepTacticalVerifier _tacticalVerifier;
   final PgnMainlineValidator _pgnValidator;
@@ -109,6 +111,10 @@ class LocalGameAnalyzer {
   final Duration? _movetimeOverride;
 
   String get engineVersion => _eval.engineVersion;
+
+  /// Number of opening-transition lookups made by the most recent run.
+  /// Exact saved reopen never enters this analyzer and therefore stays zero.
+  int get lastOpeningLookupCount => _lastOpeningLookupCount;
 
   /// Requests an immediate UCI stop for the active search. The runtime also
   /// invalidates the execution generation, so a racing result cannot commit.
@@ -130,19 +136,17 @@ class LocalGameAnalyzer {
     // the premium scan mode entirely.
     final searchMovetime =
         movetime ?? _movetimeOverride ?? defaultMovetimeForDepth(searchDepth);
-    // Resolve the book eagerly so book classifications aren't silently
-    // skipped when the first analysis runs faster than the asset load.
-    if (_book == null && _bookFuture != null) {
+    _lastOpeningLookupCount = 0;
+    // Resolve the transition-aware index eagerly. A load failure remains an
+    // explicit unavailable evidence state; it is never downgraded to noMatch.
+    if (_openingLookup == null && _openingLookupFuture != null) {
       try {
-        _book = await _bookFuture;
+        _openingLookup = await _openingLookupFuture;
       } catch (_) {
-        // Asset missing / corrupt — fall back to engine-only classification.
-        _book = null;
+        _openingUnavailableReason = 'opening_lookup_load_failed';
       }
     }
-    // Capture into a local so Dart's flow analysis can promote it past
-    // the subsequent `await` boundaries inside this method.
-    final book = _book;
+    final openingLookup = _openingLookup;
     final ValidatedPgnGame validated;
     try {
       validated = _pgnValidator.validate(pgn);
@@ -155,6 +159,10 @@ class LocalGameAnalyzer {
     final headers = validated.headers;
     final startingFen = validated.startingFen;
     final parsed = validated.moves;
+    final standardOpeningStart = _isStandardOpeningStart(
+      headers: headers,
+      startingFen: startingFen,
+    );
 
     final totalPlies = parsed.length;
     onProgress?.call(0, totalPlies);
@@ -254,9 +262,14 @@ class LocalGameAnalyzer {
       }
       final entry = parsed[ply];
 
-      // Book is an explicit evidence state. It may win precedence only after
-      // the same before/after engine comparison used by every other move.
-      final bookHit = book?.lookup(entry.fenAfter);
+      // Opening provenance is an exact transition fact. A known resulting
+      // position or early ply can never manufacture Book.
+      final openingEvidence = _openingEvidenceFor(
+        lookup: openingLookup,
+        entry: entry,
+        ply: ply,
+        standardStart: standardOpeningStart,
+      );
 
       final before = await evalCached(entry.fenBefore);
       // Terminal positions (checkmate / stalemate / insufficient material)
@@ -285,9 +298,8 @@ class LocalGameAnalyzer {
       final isRecapture = _isRecapture(parsed, ply);
       final isFreeCapture = _isFreeCapture(parsed, ply);
       final beforeLines = before.engineLines;
-      final openingStatus = bookHit != null
-          ? OpeningStatus.bookTheory
-          : _openingStatusFor(book: book, entry: entry, ply: ply);
+      final openingStatus = _openingStatusFor(openingEvidence, ply: ply);
+      final openingCandidate = openingEvidence.selectedCandidate;
       final actualContinuation = _actualContinuation(parsed, ply);
       var tacticalVerdict = _tacticalVerifier.verify(
         DeepTacticalInput(
@@ -405,9 +417,11 @@ class LocalGameAnalyzer {
           after.status == PositionEvaluationStatus.terminal ? null : after,
         ),
         legalMoveCount: legalMoveCount,
-        bookState: bookHit != null
+        bookState:
+            standardOpeningStart && openingEvidence.isVerifiedBookTransition
             ? ClassificationBookState.verified
-            : book == null
+            : openingEvidence.state == OpeningMatchState.unavailable ||
+                  !openingEvidence.isArtifactVerified
             ? ClassificationBookState.unavailable
             : ClassificationBookState.notBook,
         verificationState: shouldVerifyCandidate
@@ -460,10 +474,13 @@ class LocalGameAnalyzer {
           engineBestMoveUci: engineBestMoveUci,
           scoreCpAfter: after.scoreCp,
           mateInAfter: after.mateIn,
-          inBook: bookHit != null,
+          // Compatibility mirror only. Opening provenance lives in the
+          // immutable evidence and cannot hide an objective error label.
+          inBook: result.quality == MoveQuality.book,
           openingStatus: openingStatus,
-          openingName: bookHit?.name,
-          ecoCode: bookHit?.eco,
+          openingName: openingCandidate?.openingName,
+          ecoCode: openingCandidate?.ecoCode,
+          openingEvidence: openingEvidence,
           engineLines: classificationLines,
           baseClassification: result.baseQuality,
           finalClassification: result.quality,
@@ -487,8 +504,10 @@ class LocalGameAnalyzer {
           isSacrifice: sac.isSacrifice,
           isFirstSacrificePly: sac.isFirstSacrificePly,
           tacticalVerdict: tacticalVerdict,
-          message: result.quality == MoveQuality.book && bookHit != null
-              ? '${bookHit.eco} • ${bookHit.name}'
+          message:
+              result.quality == MoveQuality.book && openingCandidate != null
+              ? '${openingCandidate.ecoCode} • '
+                    '${openingCandidate.openingName}'
               : result.message,
           coachExplanation: tacticalVerdict.humanExplanation.isNotEmpty
               ? tacticalVerdict.humanExplanation
@@ -505,6 +524,9 @@ class LocalGameAnalyzer {
                 ? 'candidateHigh'
                 : 'main',
             'classificationDiagnostics': result.diagnosticJson,
+            'openingEvidenceState': openingEvidence.state.name,
+            'openingEvidenceReason': openingEvidence.reasonCode,
+            'openingArtifactId': openingEvidence.artifact.semanticId,
           },
         ),
       );
@@ -524,6 +546,10 @@ class LocalGameAnalyzer {
       providerId: 'local_offline',
       tacticalVerifierVersion: kApexTacticalVerifierVersion,
       openingBookVersion: kApexOpeningBookVersion,
+      openingArtifact: openingLookup?.identity ?? kApexOpeningArtifactIdentity,
+      openingArtifactVerification:
+          openingLookup?.verification ??
+          OpeningArtifactVerification.unavailable,
       analysisSchemaVersion: kApexAnalysisSchemaVersion,
       depth: moves
           .expand(
@@ -647,16 +673,70 @@ class LocalGameAnalyzer {
 
   static const int _openingPhaseMaxPly = 20;
 
-  OpeningStatus _openingStatusFor({
-    required EcoBook? book,
+  OpeningEvidence _openingEvidenceFor({
+    required OpeningLookup? lookup,
     required ValidatedPgnMove entry,
     required int ply,
+    required bool standardStart,
   }) {
-    if (ply >= _openingPhaseMaxPly) return OpeningStatus.notOpening;
-    if (book != null && book.contains(entry.fenBefore)) {
-      return OpeningStatus.bookDeviation;
+    if (lookup != null) {
+      try {
+        _lastOpeningLookupCount++;
+        return lookup.lookupTransition(
+          fenBefore: entry.fenBefore,
+          playedMoveUci: entry.uci,
+          fenAfter: entry.fenAfter,
+          ply: ply,
+          standardStart: standardStart,
+        );
+      } catch (_) {
+        _openingUnavailableReason = 'opening_lookup_runtime_failed';
+      }
     }
-    return OpeningStatus.openingPhaseUnknown;
+    return OpeningEvidence(
+      artifact: lookup?.identity ?? kApexOpeningArtifactIdentity,
+      artifactVerification:
+          lookup?.verification ?? OpeningArtifactVerification.unavailable,
+      state: OpeningMatchState.unavailable,
+      beforePositionKey: OpeningPositionKey.fromFen(entry.fenBefore).value,
+      afterPositionKey: OpeningPositionKey.fromFen(entry.fenAfter).value,
+      playedUci: entry.uci,
+      transitionVerified: false,
+      selectedCandidate: null,
+      totalCandidateCount: 0,
+      matchedPly: ply + 1,
+      reasonCode: _openingUnavailableReason,
+    );
+  }
+
+  OpeningStatus _openingStatusFor(
+    OpeningEvidence evidence, {
+    required int ply,
+  }) => switch (evidence.state) {
+    OpeningMatchState.knownTransition => OpeningStatus.bookTheory,
+    OpeningMatchState.leftTheory => OpeningStatus.bookDeviation,
+    OpeningMatchState.unavailable ||
+    OpeningMatchState.noMatch ||
+    OpeningMatchState.knownPosition ||
+    OpeningMatchState.ambiguousCandidates =>
+      ply < _openingPhaseMaxPly
+          ? OpeningStatus.openingPhaseUnknown
+          : OpeningStatus.notOpening,
+  };
+
+  bool _isStandardOpeningStart({
+    required Map<String, String> headers,
+    required String startingFen,
+  }) {
+    final normalizedHeaders = <String, String>{
+      for (final entry in headers.entries)
+        entry.key.trim().toLowerCase(): entry.value.trim(),
+    };
+    if (normalizedHeaders['setup'] == '1' ||
+        normalizedHeaders.containsKey('fen')) {
+      return false;
+    }
+    return OpeningPositionKey.isStandardInitialFen(startingFen);
   }
 
   String? _tryUciToSan(String fen, String uci) {

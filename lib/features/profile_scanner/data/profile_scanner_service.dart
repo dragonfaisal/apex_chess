@@ -356,7 +356,9 @@ class ProfileScannerService {
     int engineMatches = 0;
     for (final m in timeline.moves) {
       if (m.isWhiteMove != userIsWhite) continue;
-      if (m.inBook) continue; // don't count book theory toward accuracy
+      if (m.classification == MoveQuality.book) {
+        continue; // Only a final Book verdict is metric-exempt.
+      }
       if (m.classification == MoveQuality.unavailable) continue;
       plies++;
       final loss = m.deltaW < 0 ? m.deltaW.abs() : 0.0;

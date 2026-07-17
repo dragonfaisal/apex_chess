@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/classification_evidence.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
+import 'package:apex_chess/core/domain/entities/opening_evidence.dart';
 import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/core/domain/services/move_classifier.dart';
@@ -113,12 +114,15 @@ class ReviewDocument {
   double? get verifiedAcpl =>
       timeline.hasVerifiedCpLoss ? timeline.averageCpLoss : null;
   Map<MoveQuality, int> get classificationCounts => timeline.qualityCounts;
-  int get bookCount => timeline.moves.where((move) => move.inBook).length;
+  int get bookCount => timeline.moves
+      .where((move) => move.classification == MoveQuality.book)
+      .length;
   int get unavailableCount => timeline.moves
       .where(
         (move) =>
             move.classification == MoveQuality.unavailable ||
-            (!move.engineEvaluationAvailable && !move.inBook),
+            (!move.engineEvaluationAvailable &&
+                move.classification != MoveQuality.book),
       )
       .length;
 
@@ -133,6 +137,14 @@ class ReviewDocument {
         !existing.isTrustedComplete) {
       return false;
     }
+    final openingTrust = _openingEvidenceTrustRank;
+    final existingOpeningTrust = existing._openingEvidenceTrustRank;
+    if (openingTrust < existingOpeningTrust) return false;
+    if (openingTrust == existingOpeningTrust &&
+        openingTrust == _verifiedOpeningEvidenceRank &&
+        _openingEvidenceFingerprint != existing._openingEvidenceFingerprint) {
+      return false;
+    }
     final candidate = _evidenceDimensions;
     final current = existing._evidenceDimensions;
     for (var index = 0; index < candidate.length; index++) {
@@ -143,7 +155,7 @@ class ReviewDocument {
 
   List<int> get _evidenceDimensions {
     final evaluated = timeline.moves
-        .where((move) => move.engineEvaluationAvailable && !move.inBook)
+        .where((move) => move.engineEvaluationAvailable)
         .toList(growable: false);
     final requestedMultiPv = compatibility.searchPolicy.multiPv ?? 1;
     var multiPvCompletePlies = 0;
@@ -194,6 +206,40 @@ class ReviewDocument {
       scoredPlies,
       cpLossPlies,
     ];
+  }
+
+  int get _openingEvidenceTrustRank {
+    if (compatibility.openingBookVersion < 2) return 0;
+    final artifact = timeline.openingArtifact;
+    final verification = timeline.openingArtifactVerification;
+    if (artifact == null ||
+        !artifact.isStructurallyValid ||
+        verification == null ||
+        timeline.moves.any((move) => move.openingEvidence == null)) {
+      return 0;
+    }
+    final fullyVerified =
+        verification == OpeningArtifactVerification.verified &&
+        timeline.moves.every((move) {
+          final evidence = move.openingEvidence!;
+          return evidence.hasValidIntegrity &&
+              evidence.artifactVerification ==
+                  OpeningArtifactVerification.verified &&
+              evidence.state != OpeningMatchState.unavailable &&
+              _sameOpeningArtifacts(evidence.artifact, artifact);
+        });
+    return fullyVerified ? _verifiedOpeningEvidenceRank : 1;
+  }
+
+  String get _openingEvidenceFingerprint {
+    final material = <String>[
+      'apex-review-opening-evidence',
+      'game=${game.gameId.value}',
+      'variant=${variantId.value}',
+      for (final move in timeline.moves)
+        '${move.ply}:${move.openingEvidence?.integrityDigest ?? 'missing'}',
+    ].join('\n');
+    return sha256.convert(utf8.encode('$material\n')).toString();
   }
 
   factory ReviewDocument.fromCompletedTimeline({
@@ -343,6 +389,7 @@ class ReviewDocument {
         'Timeline does not match canonical game length or starting FEN.',
       );
     }
+    _validateOpeningContract();
     for (var index = 0; index < game.moves.length; index++) {
       final canonical = game.moves[index];
       final analyzed = timeline.moves[index];
@@ -364,11 +411,18 @@ class ReviewDocument {
       if (timeline.analysisSchemaVersion >= 4) {
         _validateClassificationEvidence(analyzed, timeline: timeline);
       }
+      if (timeline.openingBookVersion >= 2) {
+        _validateOpeningEvidence(analyzed, timeline: timeline);
+      }
     }
     if (timeline.classifierVersion != compatibility.classifierVersion ||
         timeline.tacticalVerifierVersion !=
             compatibility.tacticalVerifierVersion ||
         timeline.openingBookVersion != compatibility.openingBookVersion ||
+        !_sameOpeningArtifacts(
+          timeline.openingArtifact,
+          compatibility.openingArtifact,
+        ) ||
         timeline.analysisSchemaVersion != compatibility.analysisSchemaVersion ||
         timeline.analysisProfileId != compatibility.profileId ||
         timeline.providerId != compatibility.providerId ||
@@ -398,6 +452,90 @@ class ReviewDocument {
         run.engineCacheHitCount != timeline.engineCacheHitCount) {
       throw const ReviewDocumentValidationException(
         'Analysis run provenance does not match the timeline.',
+      );
+    }
+  }
+
+  void _validateOpeningContract() {
+    if (timeline.openingBookVersion < 2) return;
+    final timelineArtifact = timeline.openingArtifact;
+    final compatibilityArtifact = compatibility.openingArtifact;
+    if (timeline.analysisSchemaVersion != kApexAnalysisSchemaVersion ||
+        compatibility.openingBookVersion != timeline.openingBookVersion ||
+        timelineArtifact == null ||
+        compatibilityArtifact == null ||
+        timeline.openingArtifactVerification == null ||
+        !timelineArtifact.isStructurallyValid ||
+        timelineArtifact.openingPolicyVersion != timeline.openingBookVersion ||
+        !_sameOpeningArtifacts(timelineArtifact, compatibilityArtifact)) {
+      throw const ReviewDocumentValidationException(
+        'Opening artifact provenance does not match the current contract.',
+      );
+    }
+  }
+
+  void _validateOpeningEvidence(
+    MoveAnalysis move, {
+    required AnalysisTimeline timeline,
+  }) {
+    final evidence = move.openingEvidence;
+    final timelineArtifact = timeline.openingArtifact;
+    final verification = timeline.openingArtifactVerification;
+    if (evidence == null ||
+        timelineArtifact == null ||
+        verification == null ||
+        !evidence.hasValidIntegrity ||
+        !_sameOpeningArtifacts(evidence.artifact, timelineArtifact) ||
+        evidence.artifactVerification != verification ||
+        evidence.playedUci != move.uci.toLowerCase() ||
+        evidence.matchedPly != move.ply + 1) {
+      throw ReviewDocumentValidationException(
+        'Opening evidence mismatch at ply ${move.ply}.',
+      );
+    }
+
+    final expectedBefore = OpeningPositionKey.tryFromFen(move.fenBefore);
+    final expectedAfter = OpeningPositionKey.tryFromFen(move.fenAfter);
+    if (expectedBefore == null ||
+        expectedAfter == null ||
+        evidence.beforePositionKey != expectedBefore.value ||
+        evidence.afterPositionKey != expectedAfter.value) {
+      throw ReviewDocumentValidationException(
+        'Opening position identity mismatch at ply ${move.ply}.',
+      );
+    }
+
+    final artifactVerified =
+        verification == OpeningArtifactVerification.verified;
+    if ((!artifactVerified &&
+            evidence.state != OpeningMatchState.unavailable) ||
+        (!artifactVerified && evidence.transitionVerified)) {
+      throw ReviewDocumentValidationException(
+        'Opening availability contradiction at ply ${move.ply}.',
+      );
+    }
+
+    final selected = evidence.selectedCandidate;
+    final verifiedTransition = evidence.isVerifiedBookTransition;
+    final expectedBookState = verifiedTransition
+        ? ClassificationBookState.verified
+        : evidence.state == OpeningMatchState.unavailable
+        ? ClassificationBookState.unavailable
+        : ClassificationBookState.notBook;
+    final classificationEvidence = move.classificationEvidence;
+    if (classificationEvidence == null ||
+        classificationEvidence.bookState != expectedBookState ||
+        move.inBook != (move.classification == MoveQuality.book) ||
+        move.openingName != selected?.openingName ||
+        move.ecoCode != selected?.ecoCode ||
+        (verifiedTransition &&
+            move.openingStatus != OpeningStatus.bookTheory) ||
+        (!verifiedTransition &&
+            move.openingStatus == OpeningStatus.bookTheory) ||
+        (evidence.state == OpeningMatchState.leftTheory &&
+            move.openingStatus != OpeningStatus.bookDeviation)) {
+      throw ReviewDocumentValidationException(
+        'Opening presentation or Book-state mismatch at ply ${move.ply}.',
       );
     }
   }
@@ -514,6 +652,23 @@ class ReviewDocument {
 }
 
 int _min(int a, int b) => a < b ? a : b;
+
+const int _verifiedOpeningEvidenceRank = 2;
+
+bool _sameOpeningArtifacts(
+  OpeningArtifactIdentity? left,
+  OpeningArtifactIdentity? right,
+) {
+  if (left == null || right == null) return left == null && right == null;
+  return left.schemaVersion == right.schemaVersion &&
+      left.openingPolicyVersion == right.openingPolicyVersion &&
+      left.datasetName == right.datasetName &&
+      left.sourceRevision == right.sourceRevision &&
+      left.sourceSha256.toLowerCase() == right.sourceSha256.toLowerCase() &&
+      left.contentSha256.toLowerCase() == right.contentSha256.toLowerCase() &&
+      left.licenseSpdx == right.licenseSpdx &&
+      left.provenanceReference == right.provenanceReference;
+}
 
 bool _sameStrings(List<String> left, List<String> right) {
   if (left.length != right.length) return false;

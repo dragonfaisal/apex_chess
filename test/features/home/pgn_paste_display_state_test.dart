@@ -1,8 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:apex_chess/core/domain/entities/opening_evidence.dart';
 import 'package:apex_chess/core/domain/services/game_identity_service.dart';
 import 'package:apex_chess/features/home/presentation/pgn_paste_display_state.dart';
-import 'package:apex_chess/infrastructure/engine/eco_book.dart';
+import 'package:apex_chess/infrastructure/openings/opening_index.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 
 void main() {
@@ -50,7 +51,7 @@ void main() {
 1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 *
 ''';
     final preview = identity.parsePgn(pgn);
-    final book = EcoBook.fromTsv(
+    final index = _verifiedOpeningIndex(
       'eco\tname\tpgn\nC60\tRuy Lopez\t1. e4 e5 2. Nf3 Nc6 3. Bb5\n',
     );
 
@@ -58,34 +59,117 @@ void main() {
       PgnPasteDisplayState.openingLabel(
         pgn: pgn,
         identity: preview,
-        ecoBook: book,
+        openingLookup: index,
       ),
       'C60 · Ruy Lopez',
     );
+    expect(index.lookupCount, 6);
   });
 
-  test('PGN opening fallback detects a common opening instantly', () {
+  test('PGN preview does not invent a common opening without evidence', () {
     const pgn = '1. e4 c5 2. Nf3 d6 *';
+    final preview = identity.parsePgn(pgn);
+    final index = _verifiedOpeningIndex('eco\tname\tpgn\n');
+
+    expect(
+      PgnPasteDisplayState.openingLabel(
+        pgn: pgn,
+        identity: preview,
+        openingLookup: index,
+      ),
+      ApexCopy.openingNotDetected,
+    );
+  });
+
+  test('PGN headers cannot override authoritative no-match evidence', () {
+    const pgn = '''
+[ECO "B20"]
+[Opening "Sicilian Defense"]
+
+1. h4 h5 *
+''';
+    final preview = identity.parsePgn(pgn);
+    final index = _verifiedOpeningIndex('eco\tname\tpgn\n');
+
+    expect(
+      PgnPasteDisplayState.openingLabel(
+        pgn: pgn,
+        identity: preview,
+        openingLookup: index,
+      ),
+      ApexCopy.openingNotDetected,
+    );
+  });
+
+  test('loading and unavailable opening data remain visibly distinct', () {
+    const pgn = '1. e4 *';
     final preview = identity.parsePgn(pgn);
 
     expect(
       PgnPasteDisplayState.openingLabel(pgn: pgn, identity: preview),
-      'B20 · Sicilian Defense',
+      ApexCopy.openingDataLoading,
+    );
+    expect(
+      PgnPasteDisplayState.openingLabel(
+        pgn: pgn,
+        identity: preview,
+        openingLookup: OpeningIndex.unavailable(),
+      ),
+      ApexCopy.openingDataUnavailable,
     );
   });
 
   test('PGN unknown opening returns fallback copy', () {
     const pgn = '1. h4 h5 2. Rh3 Rh6 *';
     final preview = identity.parsePgn(pgn);
-    final book = EcoBook.fromTsv('eco\tname\tpgn\n');
+    final index = _verifiedOpeningIndex('eco\tname\tpgn\n');
 
     expect(
       PgnPasteDisplayState.openingLabel(
         pgn: pgn,
         identity: preview,
-        ecoBook: book,
+        openingLookup: index,
       ),
       ApexCopy.openingNotDetected,
     );
   });
+
+  test('Setup/FEN games cannot inherit standard-start opening names', () {
+    const pgn = '''
+[Setup "1"]
+[FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"]
+[Result "*"]
+
+1. e4 *
+''';
+    final preview = identity.parsePgn(pgn);
+    final index = _verifiedOpeningIndex(
+      'eco\tname\tpgn\nB00\tKing\'s Pawn Opening\t1. e4\n',
+    );
+
+    expect(
+      PgnPasteDisplayState.openingLabel(
+        pgn: pgn,
+        identity: preview,
+        openingLookup: index,
+      ),
+      ApexCopy.openingNotDetected,
+    );
+    expect(index.lookupCount, 1);
+  });
+}
+
+OpeningIndex _verifiedOpeningIndex(String body) {
+  final probe = OpeningIndex.fromTsv(body);
+  final identity = OpeningArtifactIdentity(
+    datasetName: 'apex-test-openings',
+    sourceRevision: 'fixture-v1',
+    sourceSha256: probe.metrics.sourceSha256,
+    contentSha256: probe.metrics.canonicalContentSha256,
+    licenseSpdx: 'CC0-1.0',
+    provenanceReference: 'test-fixture',
+  );
+  final index = OpeningIndex.fromTsv(body, identity: identity);
+  expect(index.verification, OpeningArtifactVerification.verified);
+  return index;
 }

@@ -33,8 +33,21 @@ String buildAnalysisCacheKey({
   required String engineVersion,
   int classifierVersion = kApexClassifierVersion,
   int tacticalVerifierVersion = kApexTacticalVerifierVersion,
-  int openingBookVersion = kApexOpeningBookVersion,
+  int openingBookVersion = kApexLegacyOpeningBookVersion,
+  String? openingArtifactSemanticId,
 }) {
+  final artifactId = openingArtifactSemanticId?.trim();
+  if (openingBookVersion >= kApexOpeningBookVersion &&
+      (artifactId == null || !_sha256Pattern.hasMatch(artifactId))) {
+    throw ArgumentError(
+      'Opening contract v$openingBookVersion requires an artifact identity.',
+    );
+  }
+  if (openingBookVersion < kApexOpeningBookVersion && artifactId != null) {
+    throw ArgumentError(
+      'Historic opening contracts cannot claim a Chapter 5 artifact.',
+    );
+  }
   return [
     pgnHash,
     analysisProfileId.wire,
@@ -43,5 +56,8 @@ String buildAnalysisCacheKey({
     'classifier=$classifierVersion',
     'tactical=$tacticalVerifierVersion',
     'opening=$openingBookVersion',
+    if (artifactId != null) 'opening-artifact=${artifactId.toLowerCase()}',
   ].join('|');
 }
+
+final RegExp _sha256Pattern = RegExp(r'^[0-9a-fA-F]{64}$');

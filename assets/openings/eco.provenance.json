@@ -1,0 +1,23 @@
+{
+  "manifestSchemaVersion": 1,
+  "artifactSchemaVersion": 1,
+  "openingPolicyVersion": 2,
+  "datasetName": "lichess-org/chess-openings",
+  "sourceRevision": "a470acc9d1cdcb26018affa90459a6ec8689af79",
+  "sourceUrl": "https://github.com/lichess-org/chess-openings/tree/a470acc9d1cdcb26018affa90459a6ec8689af79",
+  "sourceComposition": "Row-for-row concatenation of a.tsv through e.tsv with one shared header",
+  "sourceSha256": "3db0ec6eed68209f215da6279b5bf79ea28bd8e227cad9a7d9f753c0709b448c",
+  "canonicalIndexContentSha256": "ac74534c1a01fa8a010fa56f0f12fc33ec59adbf6fac20b15702d37df115ff97",
+  "buildTimestamp": "2026-07-17T13:43:04Z",
+  "buildTimestampIsIdentity": false,
+  "sourceRowCount": 3690,
+  "indexedPositionCount": 7602,
+  "indexedTransitionCount": 7789,
+  "maximumIndexedPly": 36,
+  "license": {
+    "spdx": "CC0-1.0",
+    "licenseFile": "assets/openings/CC0-1.0.txt",
+    "upstreamLicenseUrl": "https://github.com/lichess-org/chess-openings/blob/a470acc9d1cdcb26018affa90459a6ec8689af79/COPYING.txt",
+    "copyrightStatementUrl": "https://github.com/lichess-org/chess-openings/tree/a470acc9d1cdcb26018affa90459a6ec8689af79#copyright"
+  }
+}

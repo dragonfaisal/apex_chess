@@ -6,6 +6,8 @@ import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/classification_evidence.dart';
 import 'package:apex_chess/core/domain/entities/engine_line.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
+import 'package:apex_chess/core/domain/entities/opening_evidence.dart';
+import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/core/domain/services/move_classifier.dart';
 import 'package:apex_chess/features/archives/domain/review_document.dart';
@@ -91,6 +93,103 @@ void main() {
       final before = evidence['evaluationBefore'] as Map<String, dynamic>;
       before['whiteCp'] = 300;
     });
+  });
+
+  test('opening-v2 evidence and exact artifact round-trip', () {
+    final document = _v4Document(openingV2: true);
+    final roundTrip = ReviewDocument.decodeAndValidate(document.encode());
+    final move = roundTrip.timeline.moves.single;
+
+    expect(roundTrip.compatibility.openingBookVersion, 2);
+    expect(
+      roundTrip.compatibility.openingArtifact?.semanticId,
+      _artifact.semanticId,
+    );
+    expect(
+      roundTrip.timeline.openingArtifactVerification,
+      OpeningArtifactVerification.verified,
+    );
+    expect(move.openingEvidence?.state, OpeningMatchState.knownTransition);
+    expect(move.openingEvidence?.selectedCandidate?.openingName, 'King Pawn');
+    expect(move.classification, MoveQuality.book);
+  });
+
+  test('opening-v2 rejects evidence, mirror, and verification tampering', () {
+    final document = _v4Document(openingV2: true);
+
+    void expectTamperRejected(void Function(Map<String, dynamic> json) tamper) {
+      final json = jsonDecode(document.encode()) as Map<String, dynamic>;
+      tamper(json);
+      expect(
+        () => ReviewDocument.decodeAndValidate(_encode(json)),
+        throwsA(isA<Object>()),
+      );
+    }
+
+    expectTamperRejected((json) {
+      final timeline = json['timeline'] as Map<String, dynamic>;
+      final move =
+          (timeline['moves'] as List<dynamic>).single as Map<String, dynamic>;
+      move['openingName'] = 'Tampered Opening';
+    });
+    expectTamperRejected((json) {
+      final timeline = json['timeline'] as Map<String, dynamic>;
+      timeline['openingArtifactVerification'] = 'unavailable';
+    });
+    expectTamperRejected((json) {
+      final timeline = json['timeline'] as Map<String, dynamic>;
+      final move =
+          (timeline['moves'] as List<dynamic>).single as Map<String, dynamic>;
+      final evidence = move['openingEvidence'] as Map<String, dynamic>;
+      evidence['reasonCode'] = 'tampered_reason';
+    });
+  });
+
+  test('severe verified transition remains Blunder and ACPL-eligible', () {
+    final document = _v4Document(openingV2: true, playedCp: -400);
+    final roundTrip = ReviewDocument.decodeAndValidate(document.encode());
+    final move = roundTrip.timeline.moves.single;
+
+    expect(move.openingEvidence?.isVerifiedBookTransition, isTrue);
+    expect(
+      move.classificationEvidence?.bookState,
+      ClassificationBookState.verified,
+    );
+    expect(move.classification, MoveQuality.blunder);
+    expect(move.inBook, isFalse);
+    expect(move.openingStatus, OpeningStatus.bookTheory);
+    expect(roundTrip.cpLossEligibleCount, 1);
+    expect(roundTrip.timeline.cpLossEligibleCountWhite, 1);
+    expect(roundTrip.bookCount, 0);
+    expect(roundTrip.unavailableCount, 0);
+  });
+
+  test('verified artifact may persist a weak per-move lookup failure', () {
+    final lookupFailed = _v4Document(openingV2: true, lookupUnavailable: true);
+    final roundTrip = ReviewDocument.decodeAndValidate(lookupFailed.encode());
+    final move = roundTrip.timeline.moves.single;
+
+    expect(
+      roundTrip.timeline.openingArtifactVerification,
+      OpeningArtifactVerification.verified,
+    );
+    expect(
+      move.openingEvidence?.artifactVerification,
+      OpeningArtifactVerification.verified,
+    );
+    expect(move.openingEvidence?.state, OpeningMatchState.unavailable);
+    expect(
+      move.classificationEvidence?.bookState,
+      ClassificationBookState.unavailable,
+    );
+    expect(move.openingEvidence?.transitionVerified, isFalse);
+
+    final completeLookup = _v4Document(openingV2: true);
+    expect(
+      lookupFailed.hasEqualOrStrongerEvidenceThan(completeLookup),
+      isFalse,
+    );
+    expect(completeLookup.hasEqualOrStrongerEvidenceThan(lookupFailed), isTrue);
   });
 
   test('invalid FEN continuity and invalid variant identity are rejected', () {
@@ -199,17 +298,54 @@ ReviewDocument _document({bool? userIsWhite}) {
   );
 }
 
-ReviewDocument _v4Document() {
+ReviewDocument _v4Document({
+  bool openingV2 = false,
+  bool lookupUnavailable = false,
+  int playedCp = 0,
+}) {
   const pgn = '[White "Alpha"]\n[Black "Beta"]\n[Result "*"]\n\n1. e4 *';
   final game = const CanonicalGameIdentityService().fromPgn(
     pgn: pgn,
     sourceProvider: 'pgn',
   );
   final canonical = game.moves.single;
+  final openingEvidence = openingV2
+      ? OpeningEvidence(
+          artifact: _artifact,
+          artifactVerification: OpeningArtifactVerification.verified,
+          state: lookupUnavailable
+              ? OpeningMatchState.unavailable
+              : OpeningMatchState.knownTransition,
+          beforePositionKey: OpeningPositionKey.fromFen(
+            canonical.fenBefore,
+          ).value,
+          afterPositionKey: OpeningPositionKey.fromFen(
+            canonical.fenAfter,
+          ).value,
+          playedUci: canonical.uci,
+          transitionVerified: !lookupUnavailable,
+          selectedCandidate: lookupUnavailable
+              ? null
+              : const OpeningCandidate(
+                  ecoCode: 'C20',
+                  openingName: 'King Pawn',
+                  sourceLineId:
+                      'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+                  sourceTerminalPly: 1,
+                  matchedPly: 1,
+                  exactPositionName: true,
+                ),
+          totalCandidateCount: lookupUnavailable ? 0 : 1,
+          matchedPly: 1,
+          reasonCode: lookupUnavailable
+              ? 'lookup_exception'
+              : 'known_transition',
+        )
+      : null;
   final evidence = MoveClassificationEvidence(
     mover: ClassificationMover.white,
     evaluationBefore: const ClassificationScore.cp(0),
-    playedMoveEvaluation: const ClassificationScore.cp(0),
+    playedMoveEvaluation: ClassificationScore.cp(playedCp),
     bestMoveEvaluation: const ClassificationScore.cp(0),
     playedMoveUci: canonical.uci,
     bestMoveUci: canonical.uci,
@@ -231,7 +367,11 @@ ReviewDocument _v4Document() {
     searchQualityMet: true,
     achievedDepthFloor: 14,
     legalMoveCount: 20,
-    bookState: ClassificationBookState.notBook,
+    bookState: !openingV2
+        ? ClassificationBookState.notBook
+        : lookupUnavailable
+        ? ClassificationBookState.unavailable
+        : ClassificationBookState.verified,
     verificationState: ClassificationVerificationState.notRequested,
     forcedState: ClassificationForcedState.notForced,
     isSacrifice: false,
@@ -260,6 +400,7 @@ ReviewDocument _v4Document() {
     classificationEvidence: evidence,
     classificationReasonCodes: decision.reasonCodes,
     classificationFailedGates: decision.failedGates,
+    openingEvidence: openingEvidence,
     playedEqualsPv1: decision.playedEqualsPv1,
     moverCpLoss: decision.moverCpLoss,
     requestedDepth: 14,
@@ -278,7 +419,13 @@ ReviewDocument _v4Document() {
         pvMoves: [canonical.uci],
       ),
     ],
-    scoreCpAfter: 0,
+    scoreCpAfter: playedCp,
+    inBook: decision.quality == MoveQuality.book,
+    openingStatus: openingV2 && !lookupUnavailable
+        ? OpeningStatus.bookTheory
+        : OpeningStatus.notOpening,
+    openingName: openingEvidence?.selectedCandidate?.openingName,
+    ecoCode: openingEvidence?.selectedCandidate?.ecoCode,
     message: decision.message,
     analysisMode: 'quick',
     engineVersion: 'apex-stockfish-bridge/0.3.0|Stockfish 17',
@@ -296,6 +443,11 @@ ReviewDocument _v4Document() {
     depth: 14,
     movetimeMs: 900,
     multipv: 1,
+    openingBookVersion: openingV2 ? 2 : kApexLegacyOpeningBookVersion,
+    openingArtifact: openingV2 ? _artifact : null,
+    openingArtifactVerification: openingV2
+        ? OpeningArtifactVerification.verified
+        : null,
     completedAt: DateTime.utc(2026, 7, 12),
     completionStatus: AnalysisCompletionStatus.complete,
     expectedPlies: 1,
@@ -307,6 +459,17 @@ ReviewDocument _v4Document() {
     sourceProvider: 'pgn',
   );
 }
+
+const _artifact = OpeningArtifactIdentity(
+  datasetName: 'apex-eco',
+  sourceRevision: '2026-07-17',
+  sourceSha256:
+      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  contentSha256:
+      'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+  licenseSpdx: 'MIT',
+  provenanceReference: 'assets/openings/PROVENANCE.md',
+);
 
 const _pgn = '''
 [White "Alpha"]

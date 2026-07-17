@@ -1,6 +1,8 @@
 import 'package:apex_chess/core/domain/entities/analysis_profile.dart';
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
+import 'package:apex_chess/core/domain/entities/opening_evidence.dart';
+import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/pgn_review/domain/review_entry_contract.dart';
@@ -112,6 +114,18 @@ void main() {
 }
 
 ArchivedGame _gameWithTimeline() {
+  final openingEvidence = OpeningEvidence(
+    artifact: _openingArtifact,
+    artifactVerification: OpeningArtifactVerification.verified,
+    state: OpeningMatchState.noMatch,
+    beforePositionKey: OpeningPositionKey.fromFen(_fen).value,
+    afterPositionKey: OpeningPositionKey.fromFen(_afterE4).value,
+    playedUci: 'e2e4',
+    transitionVerified: false,
+    totalCandidateCount: 0,
+    matchedPly: 1,
+    reasonCode: 'no_match',
+  );
   final timeline = AnalysisTimeline(
     startingFen: _fen,
     moves: [
@@ -128,12 +142,16 @@ ArchivedGame _gameWithTimeline() {
         isWhiteMove: true,
         classification: MoveQuality.best,
         message: 'Best',
+        openingEvidence: openingEvidence,
       ),
     ],
     headers: const {'White': 'White', 'Black': 'Black', 'Result': '1-0'},
     winPercentages: const [52],
     completionStatus: AnalysisCompletionStatus.complete,
     expectedPlies: 1,
+    openingBookVersion: kApexOpeningBookVersion,
+    openingArtifact: _openingArtifact,
+    openingArtifactVerification: OpeningArtifactVerification.verified,
   );
   return ArchivedGame(
     id: 'saved',
@@ -149,5 +167,17 @@ ArchivedGame _gameWithTimeline() {
     totalPlies: timeline.totalPlies,
     ecoCode: 'C50',
     cachedTimeline: timeline,
+    openingBookVersion: kApexOpeningBookVersion,
   );
 }
+
+const _openingArtifact = OpeningArtifactIdentity(
+  datasetName: 'apex-eco',
+  sourceRevision: '2026-07-17',
+  sourceSha256:
+      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  contentSha256:
+      'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+  licenseSpdx: 'MIT',
+  provenanceReference: 'assets/openings/PROVENANCE.md',
+);

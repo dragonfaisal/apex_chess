@@ -36,9 +36,10 @@ import 'package:apex_chess/infrastructure/api/lichess_cloud_eval_client.dart';
 import 'package:apex_chess/infrastructure/api/lichess_opening_client.dart';
 import 'package:apex_chess/infrastructure/api/opening_service.dart';
 import 'package:apex_chess/infrastructure/engine/composite_game_analyzer.dart';
-import 'package:apex_chess/infrastructure/engine/eco_book.dart';
 import 'package:apex_chess/infrastructure/engine/local_eval_service.dart';
 import 'package:apex_chess/infrastructure/engine/local_game_analyzer.dart';
+import 'package:apex_chess/infrastructure/openings/opening_asset_loader.dart';
+import 'package:apex_chess/infrastructure/openings/opening_index.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Local engine (Stockfish via FFI + Isolate)
@@ -103,25 +104,26 @@ final openingServiceProvider = Provider<OpeningService>((ref) {
 // Full-game analysers
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Local ECO opening book — loaded once from the bundled TSV.
-///
-/// Evaluated lazily on first analyser invocation; failures degrade to an
-/// empty book (no book-based classification, but the engine pipeline is
-/// unaffected).
-final ecoBookProvider = FutureProvider<EcoBook>((ref) async {
-  return EcoBook.load();
+/// One transition-aware opening authority, loaded once from the verified
+/// bundled artifact. Building its prefix index runs off the UI isolate.
+/// Missing, corrupt, or hash-mismatched data remains an explicit unavailable
+/// state and can never be confused with a legitimate no-match result.
+final openingIndexProvider = FutureProvider<OpeningIndex>((ref) async {
+  return OpeningAssetLoader().load();
 });
 
 /// Local-only Apex AI Grandmaster.
 final localGameAnalyzerProvider = Provider<LocalGameAnalyzer>((ref) {
   final eval = ref.watch(liveEvalServiceProvider);
-  // Hand the analyzer the book *future* directly: on the first
+  // Hand the analyzer the index *future* directly: on the first
   // `analyzeFromPgn` call it awaits the asset load before classifying
-  // the opening plies. A synchronous `.asData?.value` read would race
-  // the load and silently disable book classification for the first
-  // game scanned.
-  final bookFuture = ref.watch(ecoBookProvider.future);
-  return LocalGameAnalyzer(eval: eval, bookFuture: bookFuture);
+  // the opening plies. A synchronous `.asData?.value` read would race the
+  // load and silently lose opening evidence for the first game scanned.
+  final openingLookupFuture = ref.watch(openingIndexProvider.future);
+  return LocalGameAnalyzer(
+    eval: eval,
+    openingLookupFuture: openingLookupFuture,
+  );
 });
 
 /// Local-first PGN analyser — primary entry point for the Review pipeline.

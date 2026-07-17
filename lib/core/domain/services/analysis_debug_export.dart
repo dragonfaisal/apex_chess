@@ -110,6 +110,16 @@ class AnalysisDebugExport {
     'isFirstSacrificePly': m.isFirstSacrificePly,
     'openingStatus': m.openingStatus.name,
     'isBook': m.inBook,
+    'openingEvidence': m.openingEvidence?.toJson(),
+    'openingArtifactId': m.openingEvidence?.artifact.semanticId,
+    'openingArtifactVerification': m.openingEvidence?.artifactVerification.name,
+    'openingMatchState': m.openingEvidence?.state.name,
+    'openingReasonCode': m.openingEvidence?.reasonCode,
+    'openingMatchedPly': m.openingEvidence?.matchedPly,
+    'openingTransposition': m.openingEvidence?.transposition,
+    'openingAlternateCandidateCount':
+        m.openingEvidence?.alternateCandidateCount,
+    'openingLeavingTheoryPly': m.openingEvidence?.leavingTheoryPly,
     'mateInfo': {
       'mateInAfter': m.mateInAfter,
       'moverDeliveredMate':

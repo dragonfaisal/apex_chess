@@ -250,7 +250,7 @@ void main() {
     },
   );
 
-  test('saved preview contract wins without starting online job', () {
+  test('exact saved variant wins without starting online job', () {
     final mock = MockOnlineReviewProvider(mode: AnalysisReviewMode.onlineFast);
     final saved = _savedGame();
 
@@ -425,6 +425,11 @@ ArchivedGame _savedGame() {
     analysisMode: AnalysisMode.quick,
     pgnHash: archiveIdForPgn(_pgn),
     cachedTimeline: timeline,
+    openingBookVersion: kApexOpeningBookVersion,
+    recordKind: ArchivedRecordKind.canonicalDocument,
+    canonicalGameId: 'game-sha256',
+    analysisVariantId: 'variant-sha256',
+    canonicalIndexVerified: true,
   );
 }
 

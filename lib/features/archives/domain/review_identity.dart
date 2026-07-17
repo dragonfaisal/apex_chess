@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
+import 'package:apex_chess/core/domain/entities/opening_evidence.dart';
 import 'package:apex_chess/core/domain/services/pgn_mainline_validator.dart';
 
 const int kGameIdAlgorithmVersion = 1;
@@ -322,6 +323,7 @@ class AnalysisCompatibility {
     required this.classifierVersion,
     required this.tacticalVerifierVersion,
     required this.openingBookVersion,
+    this.openingArtifact,
     required this.scorePerspectiveContractVersion,
   });
 
@@ -335,6 +337,7 @@ class AnalysisCompatibility {
   final int classifierVersion;
   final int tacticalVerifierVersion;
   final int openingBookVersion;
+  final OpeningArtifactIdentity? openingArtifact;
   final int scorePerspectiveContractVersion;
 
   factory AnalysisCompatibility.fromTimeline({
@@ -356,10 +359,20 @@ class AnalysisCompatibility {
     classifierVersion: timeline.classifierVersion,
     tacticalVerifierVersion: timeline.tacticalVerifierVersion,
     openingBookVersion: timeline.openingBookVersion,
+    openingArtifact: timeline.openingArtifact,
     scorePerspectiveContractVersion: kScorePerspectiveContractVersion,
   );
 
   String get canonicalMaterial {
+    final artifact = openingArtifact;
+    if (openingBookVersion >= 2 &&
+        (artifact == null ||
+            !artifact.isStructurallyValid ||
+            artifact.openingPolicyVersion != openingBookVersion)) {
+      throw StateError(
+        'Opening contract v$openingBookVersion requires its exact artifact.',
+      );
+    }
     final sortedOptions = searchPolicy.engineOptions.entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
     final fields = <String>[
@@ -386,6 +399,7 @@ class AnalysisCompatibility {
       'classifier=$classifierVersion',
       'tactical=$tacticalVerifierVersion',
       'opening=$openingBookVersion',
+      if (openingBookVersion >= 2) 'opening-artifact=${artifact!.semanticId}',
       'score-perspective=$scorePerspectiveContractVersion',
     ];
     return '${fields.join('\n')}\n';
@@ -402,6 +416,7 @@ class AnalysisCompatibility {
     'classifierVersion': classifierVersion,
     'tacticalVerifierVersion': tacticalVerifierVersion,
     'openingBookVersion': openingBookVersion,
+    if (openingArtifact != null) 'openingArtifact': openingArtifact!.toJson(),
     'scorePerspectiveContractVersion': scorePerspectiveContractVersion,
   };
 
@@ -418,6 +433,9 @@ class AnalysisCompatibility {
     classifierVersion: (json['classifierVersion'] as num).toInt(),
     tacticalVerifierVersion: (json['tacticalVerifierVersion'] as num).toInt(),
     openingBookVersion: (json['openingBookVersion'] as num).toInt(),
+    openingArtifact: json['openingArtifact'] is Map
+        ? OpeningArtifactIdentity.fromJson(json['openingArtifact'] as Map)
+        : null,
     scorePerspectiveContractVersion:
         (json['scorePerspectiveContractVersion'] as num).toInt(),
   );

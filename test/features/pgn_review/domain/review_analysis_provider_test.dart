@@ -111,7 +111,7 @@ void main() {
     expect(offline.calls, 1);
   });
 
-  test('saved review plan prefers preview when cached timeline exists', () {
+  test('saved review plan previews an exact stored canonical variant', () {
     final saved = _savedReview();
     final plan = ReviewModeRoutingPlan.build(
       isOnline: true,
@@ -250,5 +250,10 @@ ArchivedGame _savedReview() {
     averageCpLoss: 12,
     totalPlies: 1,
     cachedTimeline: _singleMoveTimeline,
+    openingBookVersion: kApexOpeningBookVersion,
+    recordKind: ArchivedRecordKind.canonicalDocument,
+    canonicalGameId: 'game-sha256',
+    analysisVariantId: 'variant-sha256',
+    canonicalIndexVerified: true,
   );
 }
