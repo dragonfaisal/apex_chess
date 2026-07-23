@@ -402,8 +402,8 @@ class ArchiveRepository {
         timeline.classifierVersion == kApexClassifierVersion &&
         legacy.tacticalVerifierVersion == kApexTacticalVerifierVersion &&
         timeline.tacticalVerifierVersion == kApexTacticalVerifierVersion &&
-        legacy.analysisSchemaVersion == kApexAnalysisSchemaVersion &&
-        timeline.analysisSchemaVersion == kApexAnalysisSchemaVersion &&
+        legacy.analysisSchemaVersion == kApexLegacyAnalysisSchemaVersion &&
+        timeline.analysisSchemaVersion == kApexLegacyAnalysisSchemaVersion &&
         (legacy.cacheKey == null || timeline.cacheKey == legacy.cacheKey);
   }
 

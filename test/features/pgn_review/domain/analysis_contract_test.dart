@@ -1,6 +1,7 @@
 import 'package:apex_chess/core/domain/entities/analysis_profile.dart';
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
+import 'package:apex_chess/core/domain/entities/move_insight.dart';
 import 'package:apex_chess/core/domain/entities/opening_evidence.dart';
 import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
@@ -428,11 +429,16 @@ AnalysisTimeline _openingTimeline() {
     currentMoves.add(
       MoveAnalysis.fromJson(<String, dynamic>{
         ...move.toJson(),
+        'coachExplanation': '',
         'openingEvidence': evidence.toJson(),
         'openingName': 'Evidence Opening',
         'ecoCode': 'C42',
         'openingStatus': OpeningStatus.bookTheory.name,
-      }),
+        'insight': MoveInsight.create(
+          state: MoveInsightState.suppressed,
+          suppressionReason: 'fixture_no_high_signal_claim',
+        ).toJson(),
+      }).sealAnalysisIntegrity(),
     );
   }
   return legacy.copyWith(
@@ -440,6 +446,10 @@ AnalysisTimeline _openingTimeline() {
     openingBookVersion: kApexOpeningBookVersion,
     openingArtifact: _openingArtifact,
     openingArtifactVerification: OpeningArtifactVerification.verified,
+    explanationPolicyVersion: kApexExplanationPolicyVersion,
+    explanationClaimSchemaVersion: kApexExplanationClaimSchemaVersion,
+    explanationRendererVersion: kApexExplanationRendererVersion,
+    analysisSchemaVersion: kApexAnalysisSchemaVersion,
   );
 }
 

@@ -1,6 +1,7 @@
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
+import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/core/domain/services/move_quality_display.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/archives/presentation/controllers/archive_controller.dart';
@@ -505,6 +506,16 @@ ArchivedGame _game({
       );
     }
   }
+  final gamePgn =
+      pgn ??
+      '''
+[Event "$id"]
+[White "$white"]
+[Black "$black"]
+[Result "$result"]
+
+1. e4 *
+''';
   final timeline = AnalysisTimeline(
     moves: moves,
     startingFen: 'fixture',
@@ -512,6 +523,7 @@ ArchivedGame _game({
     winPercentages: [for (final move in moves) move.winPercentAfter],
     analysisMode: analysisMode.wire,
     analysisProfileId: analysisProfileId,
+    analysisSchemaVersion: kApexAnalysisSchemaVersion,
     completionStatus: AnalysisCompletionStatus.complete,
     expectedPlies: moves.length,
   );
@@ -523,16 +535,7 @@ ArchivedGame _game({
     result: result,
     analyzedAt: analyzedAt ?? DateTime(2026, 5, 1),
     depth: 18,
-    pgn:
-        pgn ??
-        '''
-[Event "$id"]
-[White "$white"]
-[Black "$black"]
-[Result "$result"]
-
-1. e4 *
-''',
+    pgn: gamePgn,
     qualityCounts: qualities,
     averageCpLoss: acpl,
     totalPlies: 40,
@@ -541,6 +544,15 @@ ArchivedGame _game({
     analysisMode: analysisMode,
     analysisProfileId: analysisProfileId,
     cachedTimeline: moves.isEmpty ? null : timeline,
+    recordKind: ArchivedRecordKind.canonicalDocument,
+    canonicalGameId: ArchivedGame.canonicalKeyFor(
+      pgn: gamePgn,
+      white: white,
+      black: black,
+      result: result,
+    ),
+    analysisVariantId: 'variant-$id',
+    canonicalIndexVerified: true,
     cpLossSampleCount: moves.length,
   );
 }

@@ -35,6 +35,9 @@ class AnalysisTimeline {
   final String providerId;
   final int tacticalVerifierVersion;
   final int openingBookVersion;
+  final int explanationPolicyVersion;
+  final int explanationClaimSchemaVersion;
+  final int explanationRendererVersion;
 
   /// Exact semantic opening artifact expected by this run. Historic
   /// opening-v1 timelines omit both this and [openingArtifactVerification].
@@ -70,9 +73,12 @@ class AnalysisTimeline {
     this.providerId = 'local_offline',
     this.tacticalVerifierVersion = kApexTacticalVerifierVersion,
     this.openingBookVersion = kApexLegacyOpeningBookVersion,
+    this.explanationPolicyVersion = 0,
+    this.explanationClaimSchemaVersion = 0,
+    this.explanationRendererVersion = 0,
     this.openingArtifact,
     this.openingArtifactVerification,
-    this.analysisSchemaVersion = kApexAnalysisSchemaVersion,
+    this.analysisSchemaVersion = kApexLegacyAnalysisSchemaVersion,
     this.depth,
     this.requestedDepth,
     this.movetimeMs,
@@ -98,6 +104,19 @@ class AnalysisTimeline {
       expectedPlies != null &&
       expectedPlies == moves.length &&
       moves.isNotEmpty;
+
+  bool get hasCurrentExplanationContract =>
+      analysisSchemaVersion >= kApexAnalysisSchemaVersion &&
+      explanationPolicyVersion == kApexExplanationPolicyVersion &&
+      explanationClaimSchemaVersion == kApexExplanationClaimSchemaVersion &&
+      explanationRendererVersion == kApexExplanationRendererVersion;
+
+  bool get hasSupportedExplanationContract =>
+      analysisSchemaVersion >= kApexAnalysisSchemaVersion &&
+      explanationPolicyVersion == kApexExplanationPolicyVersion &&
+      explanationClaimSchemaVersion == kApexExplanationClaimSchemaVersion &&
+      (explanationRendererVersion == kApexLegacyExplanationRendererVersion ||
+          explanationRendererVersion == kApexExplanationRendererVersion);
 
   /// O(1) access to a specific ply's analysis.
   MoveAnalysis? operator [](int ply) {
@@ -202,6 +221,12 @@ class AnalysisTimeline {
     'providerId': providerId,
     'tacticalVerifierVersion': tacticalVerifierVersion,
     'openingBookVersion': openingBookVersion,
+    if (explanationPolicyVersion > 0)
+      'explanationPolicyVersion': explanationPolicyVersion,
+    if (explanationClaimSchemaVersion > 0)
+      'explanationClaimSchemaVersion': explanationClaimSchemaVersion,
+    if (explanationRendererVersion > 0)
+      'explanationRendererVersion': explanationRendererVersion,
     if (openingArtifact != null) 'openingArtifact': openingArtifact!.toJson(),
     if (openingArtifactVerification != null)
       'openingArtifactVerification': openingArtifactVerification!.name,
@@ -234,6 +259,9 @@ class AnalysisTimeline {
     String? providerId,
     int? tacticalVerifierVersion,
     int? openingBookVersion,
+    int? explanationPolicyVersion,
+    int? explanationClaimSchemaVersion,
+    int? explanationRendererVersion,
     OpeningArtifactIdentity? openingArtifact,
     OpeningArtifactVerification? openingArtifactVerification,
     int? analysisSchemaVersion,
@@ -264,6 +292,12 @@ class AnalysisTimeline {
       tacticalVerifierVersion:
           tacticalVerifierVersion ?? this.tacticalVerifierVersion,
       openingBookVersion: openingBookVersion ?? this.openingBookVersion,
+      explanationPolicyVersion:
+          explanationPolicyVersion ?? this.explanationPolicyVersion,
+      explanationClaimSchemaVersion:
+          explanationClaimSchemaVersion ?? this.explanationClaimSchemaVersion,
+      explanationRendererVersion:
+          explanationRendererVersion ?? this.explanationRendererVersion,
       openingArtifact: openingArtifact ?? this.openingArtifact,
       openingArtifactVerification:
           openingArtifactVerification ?? this.openingArtifactVerification,
@@ -307,6 +341,12 @@ class AnalysisTimeline {
       openingBookVersion:
           (j['openingBookVersion'] as num?)?.toInt() ??
           kApexLegacyOpeningBookVersion,
+      explanationPolicyVersion:
+          (j['explanationPolicyVersion'] as num?)?.toInt() ?? 0,
+      explanationClaimSchemaVersion:
+          (j['explanationClaimSchemaVersion'] as num?)?.toInt() ?? 0,
+      explanationRendererVersion:
+          (j['explanationRendererVersion'] as num?)?.toInt() ?? 0,
       openingArtifact: j['openingArtifact'] is Map
           ? OpeningArtifactIdentity.fromJson(j['openingArtifact'] as Map)
           : null,

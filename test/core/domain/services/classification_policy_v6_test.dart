@@ -621,7 +621,12 @@ void main() {
   test('policy and schema versions are explicit', () {
     expect(kApexClassifierVersion, 6);
     expect(kApexClassifierProfile, 'apex_trustworthy_offline_v6');
-    expect(kApexAnalysisSchemaVersion, 4);
+    expect(kApexAnalysisSchemaVersion, 5);
+    expect(kApexLegacyAnalysisSchemaVersion, 4);
+    expect(kApexExplanationPolicyVersion, 1);
+    expect(kApexExplanationClaimSchemaVersion, 1);
+    expect(kApexLegacyExplanationRendererVersion, 1);
+    expect(kApexExplanationRendererVersion, 2);
   });
 }
 

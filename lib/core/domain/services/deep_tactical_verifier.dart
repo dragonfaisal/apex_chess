@@ -176,7 +176,10 @@ class DeepTacticalVerifier {
       matingNet: matingNet,
       promotionNet: promotionNet,
       reasonCode: reason,
-      humanExplanation: _humanExplanation(reason),
+      // Legacy persisted field only. Chapter 6 never turns these broad motif
+      // heuristics into product prose; the MoveInsightEngine replays trusted
+      // engine lines and creates its own structured facts.
+      humanExplanation: '',
       lowDepthRank: lowRank,
       highDepthRank: highRank,
       lowDepthScore: _scoreForRank(input.lowDepthLines, lowRank ?? 1),
@@ -426,28 +429,6 @@ class DeepTacticalVerifier {
     if (onlyMove) return 'only_move';
     return verified ? 'verified_tactical_candidate' : 'needs_deep_review';
   }
-
-  String _humanExplanation(String reason) => switch (reason) {
-    'queen_sacrifice_mating_net' =>
-      'The queen can be captured, but the pawn promotes with checkmate.',
-    'queen_sacrifice_promotion_net' =>
-      'The queen sacrifice pulls a defender away and makes promotion unstoppable.',
-    'rook_sacrifice_mating_net' =>
-      'The rook can be taken, but the attack ends in mate.',
-    'delayed_sacrifice_mating_net' => 'This starts a forcing mating net.',
-    'deflection_promotion_net' =>
-      'This pulls the defender away and makes promotion unstoppable.',
-    'decoy_mating_net' =>
-      'This decoy pulls a piece onto the wrong square and mate follows.',
-    'forcing_mating_net' => 'This starts a forcing mating net.',
-    'promotion_net' => 'This makes promotion unstoppable.',
-    'decisive_material_tactic' =>
-      'This tactic wins decisive material without giving the attack away.',
-    'only_move' => 'This is the only move that keeps the position together.',
-    'verified_tactical_candidate' =>
-      'Deep review confirms this tactical idea works.',
-    _ => 'Deep review is recommended to verify this tactical idea.',
-  };
 
   int? _rankOf(String played, List<EngineLine> lines) {
     for (final line in lines) {

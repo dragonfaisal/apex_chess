@@ -2067,18 +2067,17 @@ class _RecentRow extends ConsumerWidget {
   }
 
   void _openRecentScan(BuildContext context, WidgetRef ref) {
-    final cached = game.cachedTimeline;
     final userIsBlack = game.userIsBlackFor(perspective);
     final userIsWhite = userIsBlack == null ? null : !userIsBlack;
     if (ReviewEntryContract.canOpenCachedReview(game)) {
-      ref
+      final opened = ref
           .read(reviewControllerProvider.notifier)
-          .loadTimeline(
-            cached!,
-            userIsBlack: userIsBlack ?? false,
-            mode: game.analysisMode,
-            userIsWhite: userIsWhite,
+          .openSavedReview(
+            game,
+            source: ReviewRuntimeSource.archiveExact,
+            legacyUserIsWhite: userIsWhite,
           );
+      if (!opened) return;
       Navigator.of(
         context,
       ).push(MaterialPageRoute<void>(builder: (_) => const ReviewScreen()));

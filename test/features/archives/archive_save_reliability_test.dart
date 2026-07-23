@@ -347,7 +347,7 @@ class _FakeArchiveController extends ArchiveController {
   @override
   Future<String> saveReviewDocument(ReviewDocument document) async {
     final profile = document.compatibility.profileId;
-    final game = ArchivedGame.fromTimeline(
+    final snapshot = ArchivedGame.fromTimeline(
       timeline: document.timeline,
       id: document.documentId,
       source: ArchiveSource.fromWire(document.game.sourceProvider),
@@ -358,6 +358,15 @@ class _FakeArchiveController extends ArchiveController {
           ? AnalysisMode.quick
           : AnalysisMode.deep,
       timeControl: document.game.headers['TimeControl'],
+    );
+    final game = ArchivedGame.fromJson(
+      snapshot.toJson()
+        ..['recordKind'] = ArchivedRecordKind.canonicalDocument.name
+        ..['canonicalGameId'] = document.game.gameId.value
+        ..['analysisVariantId'] = document.variantId.value
+        ..['analyzedUserIsWhite'] = document.userIsWhite
+        ..['engineIdentity'] = document.compatibility.engine.declaredIdentity
+        ..['canonicalIndexVerified'] = true,
     );
     saved[game.id] = game;
     state = ArchiveState(games: saved.values.toList());

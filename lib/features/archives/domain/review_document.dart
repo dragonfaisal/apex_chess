@@ -11,6 +11,7 @@ import 'package:apex_chess/core/domain/entities/opening_evidence.dart';
 import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/core/domain/services/move_classifier.dart';
+import 'package:apex_chess/core/domain/services/move_insight_engine.dart';
 import 'package:apex_chess/features/archives/domain/review_identity.dart';
 
 const int kReviewDocumentSchemaVersion = 1;
@@ -145,10 +146,40 @@ class ReviewDocument {
         _openingEvidenceFingerprint != existing._openingEvidenceFingerprint) {
       return false;
     }
+    if (!_hasEqualOrStrongerExplanationEvidence(existing)) return false;
     final candidate = _evidenceDimensions;
     final current = existing._evidenceDimensions;
     for (var index = 0; index < candidate.length; index++) {
       if (candidate[index] < current[index]) return false;
+    }
+    return true;
+  }
+
+  bool _hasEqualOrStrongerExplanationEvidence(ReviewDocument existing) {
+    final candidateCurrent = compatibility.hasExplanationContract;
+    final existingCurrent = existing.compatibility.hasExplanationContract;
+    if (!existingCurrent) return true;
+    if (!candidateCurrent ||
+        timeline.moves.length != existing.timeline.moves.length) {
+      return false;
+    }
+    for (var index = 0; index < timeline.moves.length; index++) {
+      final candidate = timeline.moves[index].insight;
+      final current = existing.timeline.moves[index].insight;
+      if (candidate == null ||
+          current == null ||
+          candidate.trustRank < current.trustRank) {
+        return false;
+      }
+      if (candidate.trustRank == current.trustRank &&
+          candidate.semanticFingerprint != current.semanticFingerprint) {
+        return false;
+      }
+      if (candidate.trustRank > current.trustRank &&
+          current.primaryClaim != null &&
+          candidate.primaryClaim?.type != current.primaryClaim?.type) {
+        return false;
+      }
     }
     return true;
   }
@@ -314,7 +345,7 @@ class ReviewDocument {
     return document;
   }
 
-  void validate() {
+  void validate({bool validateRenderedCopy = true}) {
     if (schemaVersion != kReviewDocumentSchemaVersion) {
       throw ReviewDocumentValidationException(
         'Unsupported review document schema $schemaVersion.',
@@ -326,7 +357,8 @@ class ReviewDocument {
       );
     }
     if (game.gameId.algorithmVersion != kGameIdAlgorithmVersion ||
-        variantId.algorithmVersion != kAnalysisVariantAlgorithmVersion) {
+        (variantId.algorithmVersion != kLegacyAnalysisVariantAlgorithmVersion &&
+            variantId.algorithmVersion != kAnalysisVariantAlgorithmVersion)) {
       throw const ReviewDocumentValidationException(
         'Unsupported identity algorithm version.',
       );
@@ -368,7 +400,10 @@ class ReviewDocument {
         'Variant compatibility references a different game.',
       );
     }
-    final expectedVariant = AnalysisVariantId.fromCompatibility(compatibility);
+    final expectedVariant = AnalysisVariantId.fromCompatibility(
+      compatibility,
+      algorithmVersion: variantId.algorithmVersion,
+    );
     if (variantId.value != expectedVariant.value) {
       throw const ReviewDocumentValidationException(
         'Invalid AnalysisVariantId.',
@@ -390,6 +425,18 @@ class ReviewDocument {
       );
     }
     _validateOpeningContract();
+    if (timeline.analysisSchemaVersion < kApexAnalysisSchemaVersion &&
+        (compatibility.hasExplanationContract ||
+            timeline.explanationPolicyVersion != 0 ||
+            timeline.explanationClaimSchemaVersion != 0 ||
+            timeline.explanationRendererVersion != 0 ||
+            variantId.algorithmVersion !=
+                kLegacyAnalysisVariantAlgorithmVersion ||
+            timeline.moves.any((move) => move.insight != null))) {
+      throw const ReviewDocumentValidationException(
+        'Historic analysis cannot claim a structured explanation contract.',
+      );
+    }
     for (var index = 0; index < game.moves.length; index++) {
       final canonical = game.moves[index];
       final analyzed = timeline.moves[index];
@@ -411,6 +458,13 @@ class ReviewDocument {
       if (timeline.analysisSchemaVersion >= 4) {
         _validateClassificationEvidence(analyzed, timeline: timeline);
       }
+      if (timeline.analysisSchemaVersion >= kApexAnalysisSchemaVersion) {
+        _validateMoveInsight(
+          analyzed,
+          timeline: timeline,
+          validateRenderedCopy: validateRenderedCopy,
+        );
+      }
       if (timeline.openingBookVersion >= 2) {
         _validateOpeningEvidence(analyzed, timeline: timeline);
       }
@@ -419,6 +473,12 @@ class ReviewDocument {
         timeline.tacticalVerifierVersion !=
             compatibility.tacticalVerifierVersion ||
         timeline.openingBookVersion != compatibility.openingBookVersion ||
+        timeline.explanationPolicyVersion !=
+            compatibility.explanationPolicyVersion ||
+        timeline.explanationClaimSchemaVersion !=
+            compatibility.explanationClaimSchemaVersion ||
+        timeline.explanationRendererVersion !=
+            compatibility.explanationRendererVersion ||
         !_sameOpeningArtifacts(
           timeline.openingArtifact,
           compatibility.openingArtifact,
@@ -460,7 +520,7 @@ class ReviewDocument {
     if (timeline.openingBookVersion < 2) return;
     final timelineArtifact = timeline.openingArtifact;
     final compatibilityArtifact = compatibility.openingArtifact;
-    if (timeline.analysisSchemaVersion != kApexAnalysisSchemaVersion ||
+    if (timeline.analysisSchemaVersion < kApexLegacyAnalysisSchemaVersion ||
         compatibility.openingBookVersion != timeline.openingBookVersion ||
         timelineArtifact == null ||
         compatibilityArtifact == null ||
@@ -470,6 +530,44 @@ class ReviewDocument {
         !_sameOpeningArtifacts(timelineArtifact, compatibilityArtifact)) {
       throw const ReviewDocumentValidationException(
         'Opening artifact provenance does not match the current contract.',
+      );
+    }
+  }
+
+  void _validateMoveInsight(
+    MoveAnalysis move, {
+    required AnalysisTimeline timeline,
+    required bool validateRenderedCopy,
+  }) {
+    final insight = move.insight;
+    const renderer = MoveInsightRenderer();
+    if (!timeline.hasSupportedExplanationContract ||
+        variantId.algorithmVersion != kAnalysisVariantAlgorithmVersion ||
+        compatibility.explanationPolicyVersion !=
+            kApexExplanationPolicyVersion ||
+        compatibility.explanationClaimSchemaVersion !=
+            kApexExplanationClaimSchemaVersion ||
+        !renderer.supportsVersion(compatibility.explanationRendererVersion) ||
+        insight == null ||
+        insight.policyVersion != timeline.explanationPolicyVersion ||
+        insight.claimSchemaVersion != timeline.explanationClaimSchemaVersion ||
+        insight.rendererVersion != timeline.explanationRendererVersion ||
+        !insight.hasValidStructure ||
+        (validateRenderedCopy && !renderer.matchesPersisted(insight)) ||
+        !const MoveInsightPersistenceValidator().validate(
+          insight: insight,
+          fenBefore: move.fenBefore,
+          fenAfter: move.fenAfter,
+          playedMoveUci: move.uci,
+          isWhiteMove: move.isWhiteMove,
+          classificationEvidence: move.classificationEvidence!,
+          openingEvidence: move.openingEvidence!,
+          preMoveLines: move.engineLines,
+        ) ||
+        move.coachExplanation.isNotEmpty ||
+        !move.hasValidAnalysisIntegrity) {
+      throw ReviewDocumentValidationException(
+        'Move insight contract mismatch at ply ${move.ply}.',
       );
     }
   }
@@ -583,6 +681,18 @@ class ReviewDocument {
       }
     }
 
+    // Current documents carry a sealed per-ply digest and are reopened without
+    // classifier execution. Historic schema-v4 documents retain their frozen
+    // validation behavior and never receive Chapter 6 insights.
+    if (timeline.analysisSchemaVersion >= kApexAnalysisSchemaVersion) {
+      if (!move.hasValidAnalysisIntegrity) {
+        throw ReviewDocumentValidationException(
+          'Stored move integrity mismatch at ply ${move.ply}.',
+        );
+      }
+      return;
+    }
+
     // Historic policy decisions remain immutable. Re-run only when this app
     // still owns the exact stored policy implementation.
     if (timeline.classifierVersion != kApexClassifierVersion) return;
@@ -646,7 +756,10 @@ class ReviewDocument {
       );
     }
     final document = ReviewDocument.fromJson(decoded);
-    document.validate();
+    // Current moves are sealed over every persisted field. Reopen validates
+    // those seals and semantic fact references without rerendering product
+    // copy; renderer execution belongs only to creation/save validation.
+    document.validate(validateRenderedCopy: false);
     return document;
   }
 }

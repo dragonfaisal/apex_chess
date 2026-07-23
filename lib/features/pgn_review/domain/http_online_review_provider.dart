@@ -511,7 +511,7 @@ class HttpOnlineReviewProvider extends OnlineReviewProvider {
       // The backend payload does not yet carry Chapter 5 artifact/evidence.
       // Keep it on the historic contract instead of claiming local v2 proof.
       openingBookVersion: kApexLegacyOpeningBookVersion,
-      analysisSchemaVersion: kApexAnalysisSchemaVersion,
+      analysisSchemaVersion: kApexLegacyAnalysisSchemaVersion,
       depth: metadata.depth,
       movetimeMs: metadata.movetimeMs,
       multipv: metadata.multipv,

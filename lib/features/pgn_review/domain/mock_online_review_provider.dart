@@ -308,7 +308,7 @@ CanonicalAnalysisPayload _mockPayloadForRequest({
     classifierVersion: kApexClassifierVersion,
     tacticalVerifierVersion: kApexTacticalVerifierVersion,
     openingBookVersion: kApexLegacyOpeningBookVersion,
-    analysisSchemaVersion: kApexAnalysisSchemaVersion,
+    analysisSchemaVersion: kApexLegacyAnalysisSchemaVersion,
     depth: providerMetadata.depth,
     movetimeMs: providerMetadata.movetimeMs,
     multipv: providerMetadata.multipv,

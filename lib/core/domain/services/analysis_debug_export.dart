@@ -120,6 +120,9 @@ class AnalysisDebugExport {
     'openingAlternateCandidateCount':
         m.openingEvidence?.alternateCandidateCount,
     'openingLeavingTheoryPly': m.openingEvidence?.leavingTheoryPly,
+    'moveInsight': m.insight?.toJson(),
+    'moveInsightIntegrityValid': m.insight?.hasValidIntegrity,
+    'analysisIntegrityValid': m.hasValidAnalysisIntegrity,
     'mateInfo': {
       'mateInAfter': m.mateInAfter,
       'moverDeliveredMate':

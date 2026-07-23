@@ -148,7 +148,11 @@ class ReviewScreen extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 7),
-                    _CoachInsightPanel(display: display),
+                    if (display.insight.hasDetails)
+                      _CoachInsightPanel(
+                        display: display,
+                        onTap: () => _showCoachExplain(context),
+                      ),
                   ],
                 ),
               );
@@ -547,18 +551,21 @@ class _EvalPercentPill extends StatelessWidget {
 }
 
 class _CoachInsightPanel extends StatelessWidget {
-  const _CoachInsightPanel({required this.display});
+  const _CoachInsightPanel({required this.display, required this.onTap});
 
   final ReviewBoardDisplayModel display;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final insight = display.insight;
-    return ClipRRect(
+    return Material(
       key: const ValueKey('review-coach-insight'),
+      color: ApexColors.cardSurface.withValues(alpha: 0.62),
       borderRadius: BorderRadius.circular(14),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
         child: AnimatedContainer(
           duration: ApexMotion.normal,
           curve: ApexMotion.standard,
@@ -574,7 +581,9 @@ class _CoachInsightPanel extends StatelessWidget {
           child: AnimatedSwitcher(
             duration: ApexMotion.fast,
             child: Column(
-              key: ValueKey('insight-${display.currentPly}'),
+              key: ValueKey(
+                'insight-${display.executionKey}-${display.currentPly}',
+              ),
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -593,6 +602,12 @@ class _CoachInsightPanel extends StatelessWidget {
                         ),
                       ),
                     ),
+                    const SizedBox(width: 4),
+                    const Icon(
+                      Icons.expand_more_rounded,
+                      size: 17,
+                      color: ApexColors.textTertiary,
+                    ),
                   ],
                 ),
                 if (insight.explanation != null) ...[
@@ -605,33 +620,6 @@ class _CoachInsightPanel extends StatelessWidget {
                       color: ApexColors.textSecondary,
                       fontSize: 11,
                     ),
-                  ),
-                ],
-                if (insight.betterMove != null) ...[
-                  const SizedBox(height: 6),
-                  _BetterMoveHint(
-                    key: const ValueKey('review-coach-better-move'),
-                    move: insight.betterMove!,
-                    reason: insight.betterMoveReason,
-                  ),
-                ],
-                if (insight.engineLinePreview != null) ...[
-                  const SizedBox(height: 5),
-                  _InlineHint(
-                    key: const ValueKey('review-coach-line-detail'),
-                    icon: Icons.timeline_rounded,
-                    label: 'Line',
-                    value: insight.engineLinePreview!,
-                    color: ApexColors.textTertiary,
-                  ),
-                ],
-                if (insight.needsDeepScan) ...[
-                  const SizedBox(height: 5),
-                  _InlineHint(
-                    icon: Icons.radar_rounded,
-                    label: 'Deep',
-                    value: 'Review suggested',
-                    color: ApexColors.inaccuracy,
                   ),
                 ],
               ],
@@ -651,6 +639,9 @@ class _QualityChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.sizeOf(context).width * 0.38,
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
       decoration: BoxDecoration(
         color: display.color.withValues(alpha: 0.12),
@@ -661,6 +652,8 @@ class _QualityChip extends StatelessWidget {
         display.marker.isEmpty
             ? display.label
             : '${display.label} ${display.marker}',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: ApexTypography.labelLarge.copyWith(
           color: display.color,
           fontSize: 10,
@@ -672,7 +665,6 @@ class _QualityChip extends StatelessWidget {
 
 class _InlineHint extends StatelessWidget {
   const _InlineHint({
-    super.key,
     required this.icon,
     required this.label,
     required this.value,
@@ -715,7 +707,7 @@ class _InlineHint extends StatelessWidget {
 }
 
 class _BetterMoveHint extends StatelessWidget {
-  const _BetterMoveHint({super.key, required this.move, this.reason});
+  const _BetterMoveHint({required this.move, this.reason});
 
   final String move;
   final String? reason;
@@ -833,8 +825,10 @@ class _MoveTimelineScrubberState extends State<_MoveTimelineScrubber> {
   @override
   Widget build(BuildContext context) {
     if (widget.items.isEmpty) return const SizedBox.shrink();
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final scaleDelta = (textScale - 1).clamp(0.0, 1.0);
     return SizedBox(
-      height: 54,
+      height: 54 + (28 * scaleDelta),
       child: ListView.separated(
         controller: _controller,
         scrollDirection: Axis.horizontal,
@@ -845,6 +839,7 @@ class _MoveTimelineScrubberState extends State<_MoveTimelineScrubber> {
           final item = widget.items[index];
           return _TimelinePill(
             item: item,
+            isActive: item.ply == widget.activePly,
             onTap: () => widget.onTapPly(item.ply),
           );
         },
@@ -854,13 +849,20 @@ class _MoveTimelineScrubberState extends State<_MoveTimelineScrubber> {
 }
 
 class _TimelinePill extends StatelessWidget {
-  const _TimelinePill({required this.item, required this.onTap});
+  const _TimelinePill({
+    required this.item,
+    required this.isActive,
+    required this.onTap,
+  });
 
   final ReviewTimelinePlyDisplay item;
+  final bool isActive;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final scaleDelta = (textScale - 1).clamp(0.0, 1.0);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -868,15 +870,15 @@ class _TimelinePill extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         child: AnimatedContainer(
           duration: ApexMotion.fast,
-          width: 72,
+          width: 72 + (24 * scaleDelta),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
           decoration: BoxDecoration(
-            color: item.isActive
+            color: isActive
                 ? item.color.withValues(alpha: 0.18)
                 : ApexColors.nebula.withValues(alpha: 0.62),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: item.isActive
+              color: isActive
                   ? item.color.withValues(alpha: 0.65)
                   : ApexColors.subtleBorder.withValues(alpha: 0.62),
               width: 0.7,
@@ -891,7 +893,7 @@ class _TimelinePill extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: ApexTypography.bodyMedium.copyWith(
-                  color: item.isActive ? item.color : ApexColors.textSecondary,
+                  color: isActive ? item.color : ApexColors.textSecondary,
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                 ),
@@ -1489,6 +1491,14 @@ class _CoachExplainSheet extends ConsumerWidget {
                 ),
               ),
             ],
+            if (insight.consequenceDetail != null) ...[
+              const SizedBox(height: 10),
+              _SheetLinePreview(
+                label: 'Immediate consequence',
+                value: insight.consequenceDetail!,
+                color: insight.quality.color,
+              ),
+            ],
             if (insight.betterMove != null) ...[
               const SizedBox(height: 12),
               _BetterMoveHint(
@@ -1566,6 +1576,7 @@ class _MoveListSheet extends ConsumerWidget {
                   final item = display!.timeline[index];
                   return _MoveListRow(
                     item: item,
+                    isActive: item.ply == display.currentPly,
                     onTap: () => onTapPly(item.ply),
                   );
                 },
@@ -1603,6 +1614,20 @@ class _SheetLinePreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.3;
+    final labelText = Text(
+      label,
+      style: ApexTypography.labelLarge.copyWith(color: color, fontSize: 11),
+    );
+    final valueText = Text(
+      value,
+      maxLines: largeText ? 2 : 1,
+      overflow: TextOverflow.ellipsis,
+      style: ApexTypography.bodyMedium.copyWith(
+        color: ApexColors.textSecondary,
+        fontSize: 12,
+      ),
+    );
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
@@ -1612,37 +1637,32 @@ class _SheetLinePreview extends StatelessWidget {
           color: ApexColors.subtleBorder.withValues(alpha: 0.5),
         ),
       ),
-      child: Row(
-        children: [
-          Text(
-            label,
-            style: ApexTypography.labelLarge.copyWith(
-              color: color,
-              fontSize: 11,
+      child: largeText
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [labelText, const SizedBox(height: 4), valueText],
+            )
+          : Row(
+              children: [
+                labelText,
+                const SizedBox(width: 8),
+                Expanded(child: valueText),
+              ],
             ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: ApexTypography.bodyMedium.copyWith(
-                color: ApexColors.textSecondary,
-                fontSize: 12,
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
 
 class _MoveListRow extends StatelessWidget {
-  const _MoveListRow({required this.item, required this.onTap});
+  const _MoveListRow({
+    required this.item,
+    required this.isActive,
+    required this.onTap,
+  });
 
   final ReviewTimelinePlyDisplay item;
+  final bool isActive;
   final VoidCallback onTap;
 
   @override
@@ -1653,17 +1673,17 @@ class _MoveListRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         onTap: onTap,
         child: Container(
-          key: item.isActive
+          key: isActive
               ? ValueKey('review-move-row-active-${item.ply}')
               : ValueKey('review-move-row-${item.ply}'),
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
           decoration: BoxDecoration(
-            color: item.isActive
+            color: isActive
                 ? item.color.withValues(alpha: 0.16)
                 : ApexColors.nebula.withValues(alpha: 0.55),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: item.isActive
+              color: isActive
                   ? item.color.withValues(alpha: 0.55)
                   : ApexColors.subtleBorder.withValues(alpha: 0.5),
             ),

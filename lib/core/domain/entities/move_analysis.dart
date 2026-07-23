@@ -5,9 +5,14 @@
 /// All Win% values are from White's perspective (0–100).
 library;
 
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
+
 import 'package:apex_chess/core/domain/entities/engine_line.dart';
 import 'package:apex_chess/core/domain/entities/deep_tactical_verdict.dart';
 import 'package:apex_chess/core/domain/entities/classification_evidence.dart';
+import 'package:apex_chess/core/domain/entities/move_insight.dart';
 import 'package:apex_chess/core/domain/entities/opening_evidence.dart';
 import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
@@ -139,8 +144,17 @@ class MoveAnalysis {
   final String message;
 
   /// Shared coach explanation seed written by the analysis brain. UI copy
-  /// services may adapt this, but should not re-run classification rules.
+  /// services may adapt this only for historic schemas. Current offline
+  /// analysis writes an explicit [insight] and leaves this empty.
   final String coachExplanation;
+
+  /// Canonical Chapter 6 explanation. A non-null suppressed/unavailable state
+  /// is intentional and prevents any fallback prose from becoming authority.
+  final MoveInsight? insight;
+
+  /// Digest over every persisted per-ply field except this digest. Current
+  /// documents validate it without rerunning classifier or explanation policy.
+  final String? analysisIntegrityDigest;
 
   /// Analysis/cache provenance for archive invalidation and debug export.
   final String analysisMode;
@@ -192,6 +206,8 @@ class MoveAnalysis {
     this.engineLines = const <EngineLine>[],
     required this.message,
     String? coachExplanation,
+    this.insight,
+    this.analysisIntegrityDigest,
     this.analysisMode = 'deep',
     this.classifierVersion = kApexClassifierVersion,
     this.engineVersion = 'unknown',
@@ -257,6 +273,9 @@ class MoveAnalysis {
     'engineLines': engineLines.map((l) => l.toJson()).toList(),
     'message': message,
     'coachExplanation': coachExplanation,
+    if (insight != null) 'insight': insight!.toJson(),
+    if (analysisIntegrityDigest != null)
+      'analysisIntegrityDigest': analysisIntegrityDigest,
     'analysisMode': analysisMode,
     'classifierVersion': classifierVersion,
     'engineVersion': engineVersion,
@@ -363,6 +382,10 @@ class MoveAnalysis {
           const <EngineLine>[],
       message: j['message'] as String? ?? '',
       coachExplanation: j['coachExplanation'] as String?,
+      insight: j['insight'] is Map
+          ? MoveInsight.fromJson(j['insight'] as Map)
+          : null,
+      analysisIntegrityDigest: j['analysisIntegrityDigest'] as String?,
       analysisMode: j['analysisMode'] as String? ?? 'deep',
       classifierVersion: (j['classifierVersion'] as num?)?.toInt() ?? 1,
       engineVersion: j['engineVersion'] as String? ?? 'unknown',
@@ -372,5 +395,27 @@ class MoveAnalysis {
           ) ??
           const <String, dynamic>{},
     );
+  }
+
+  String get computedAnalysisIntegrityDigest {
+    final json = Map<String, dynamic>.from(toJson())
+      ..remove('analysisIntegrityDigest');
+    return sha256.convert(utf8.encode(jsonEncode(json))).toString();
+  }
+
+  bool get hasValidAnalysisIntegrity =>
+      analysisIntegrityDigest != null &&
+      RegExp(r'^[0-9a-f]{64}$').hasMatch(analysisIntegrityDigest!) &&
+      analysisIntegrityDigest == computedAnalysisIntegrityDigest;
+
+  /// Seals a newly generated move after all classifier/opening/insight fields
+  /// are final. Historic/synthetic callers can keep using the const constructor.
+  MoveAnalysis sealAnalysisIntegrity() {
+    final json = Map<String, dynamic>.from(toJson())
+      ..remove('analysisIntegrityDigest');
+    json['analysisIntegrityDigest'] = sha256
+        .convert(utf8.encode(jsonEncode(json)))
+        .toString();
+    return MoveAnalysis.fromJson(json);
   }
 }

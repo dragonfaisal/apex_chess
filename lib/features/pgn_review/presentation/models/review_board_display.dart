@@ -274,28 +274,28 @@ class ReviewCoachInsightDisplay {
     required this.san,
     this.explanation,
     this.coachDetail,
+    this.consequenceDetail,
     required this.quality,
     this.betterMove,
     this.betterMoveReason,
     this.engineLinePreview,
     this.needsDeepScan = false,
+    this.artifactDigest,
   });
 
   final String moveLabel;
   final String san;
   final String? explanation;
   final String? coachDetail;
+  final String? consequenceDetail;
   final ReviewMoveQualityChipDisplay quality;
   final String? betterMove;
   final String? betterMoveReason;
   final String? engineLinePreview;
   final bool needsDeepScan;
+  final String? artifactDigest;
 
-  bool get hasDetails =>
-      explanation != null ||
-      coachDetail != null ||
-      betterMove != null ||
-      engineLinePreview != null;
+  bool get hasDetails => explanation != null;
 
   factory ReviewCoachInsightDisplay.empty() {
     return const ReviewCoachInsightDisplay(
@@ -318,20 +318,35 @@ class ReviewCoachInsightDisplay {
     if (move == null) return ReviewCoachInsightDisplay.empty();
     final quality = ReviewMoveQualityChipDisplay.fromMove(move);
     final betterMove = _betterMoveLabel(move);
-    final authoritativeInsight = _authoritativeInsight(move);
+    final persisted = timeline?.hasSupportedExplanationContract == true
+        ? move.insight
+        : null;
+    final authoritativeInsight = persisted?.isDisplayable == true
+        ? persisted!.conciseText
+        : null;
     return ReviewCoachInsightDisplay(
       moveLabel: _moveNumberLabel(move.ply),
       san: move.san.isEmpty ? 'Move' : move.san,
       explanation: authoritativeInsight,
-      coachDetail: authoritativeInsight,
+      coachDetail: authoritativeInsight == null ? null : persisted!.causeText,
+      consequenceDetail: authoritativeInsight == null
+          ? null
+          : persisted!.consequenceText,
       quality: quality,
       betterMove: betterMove,
-      betterMoveReason: betterMove == null ? null : null,
-      engineLinePreview: _linePreview(move),
+      betterMoveReason: authoritativeInsight == null
+          ? null
+          : persisted!.betterMoveText,
+      engineLinePreview: authoritativeInsight == null
+          ? null
+          : persisted!.continuationText,
       needsDeepScan:
           mode == AnalysisMode.quick &&
           move.classification != MoveQuality.book &&
           move.multiPvReceived < 3,
+      artifactDigest: authoritativeInsight == null
+          ? null
+          : persisted!.integrityDigest,
     );
   }
 
@@ -346,47 +361,11 @@ class ReviewCoachInsightDisplay {
     return uci.trim();
   }
 
-  static String? _linePreview(MoveAnalysis move) {
-    if (move.engineLines.isEmpty) return null;
-    final firstLine = move.engineLines.first;
-    final san = firstLine.moveSan ?? firstLine.pvMoves.take(3).join(' ');
-    final trimmed = san.trim();
-    return trimmed.isEmpty ? null : trimmed;
-  }
-
   static String? _lineFirstMove(MoveAnalysis move) {
-    final line = _linePreview(move);
-    if (line == null) return null;
+    final line = move.engineLines.firstOrNull?.moveSan?.trim();
+    if (line == null || line.isEmpty) return null;
     final first = line.split(RegExp(r'\s+')).first.trim();
     return first.isEmpty ? null : first;
-  }
-
-  static String? _authoritativeInsight(MoveAnalysis move) {
-    final raw = move.coachExplanation.trim();
-    if (raw.isEmpty || raw == 'legacy' || _isGenericFiller(raw)) return null;
-    var text = raw.trim();
-    if (_containsDebugTerm(text)) return null;
-    final firstSentence = text.split(RegExp(r'(?<=[.!?])\s+')).first.trim();
-    if (firstSentence.isNotEmpty) text = firstSentence;
-    text = text.replaceAll(RegExp(r'\s+'), ' ');
-    if (text.length <= 86) return text;
-    return '${text.substring(0, 83).trimRight()}...';
-  }
-
-  static bool _isGenericFiller(String text) {
-    final normalized = text.trim().toLowerCase();
-    return normalized == 'this is a good move.' ||
-        normalized == 'this improves your position.' ||
-        normalized == 'the engine prefers another move.' ||
-        normalized == 'good move.' ||
-        normalized == 'best move.';
-  }
-
-  static bool _containsDebugTerm(String text) {
-    return RegExp(
-      r'\b(stockfish|pv|centipawns?|debug|uci)\b',
-      caseSensitive: false,
-    ).hasMatch(text);
   }
 
   static String _moveNumberLabel(int ply) =>
@@ -399,19 +378,14 @@ class ReviewTimelinePlyDisplay {
     required this.label,
     required this.marker,
     required this.color,
-    required this.isActive,
   });
 
   final int ply;
   final String label;
   final String marker;
   final Color color;
-  final bool isActive;
 
-  factory ReviewTimelinePlyDisplay.fromMove(
-    MoveAnalysis move, {
-    required int activePly,
-  }) {
+  factory ReviewTimelinePlyDisplay.fromMove(MoveAnalysis move) {
     final label = move.isWhiteMove
         ? '${(move.ply ~/ 2) + 1}. ${move.san}'
         : '${(move.ply ~/ 2) + 1}... ${move.san}';
@@ -421,18 +395,20 @@ class ReviewTimelinePlyDisplay {
       label: label,
       marker: quality.marker,
       color: quality.color,
-      isActive: move.ply == activePly,
     );
   }
 
   static List<ReviewTimelinePlyDisplay> fromTimeline(
-    AnalysisTimeline timeline, {
-    required int activePly,
-  }) {
-    return [
+    AnalysisTimeline timeline,
+  ) {
+    final cached = _timelineRows[timeline];
+    if (cached != null) return cached;
+    final rows = List<ReviewTimelinePlyDisplay>.unmodifiable([
       for (final move in timeline.moves)
-        ReviewTimelinePlyDisplay.fromMove(move, activePly: activePly),
-    ];
+        ReviewTimelinePlyDisplay.fromMove(move),
+    ]);
+    _timelineRows[timeline] = rows;
+    return rows;
   }
 }
 
@@ -448,6 +424,7 @@ class ReviewBoardDisplayModel {
     required this.eval,
     required this.insight,
     required this.timeline,
+    required this.executionKey,
     this.lastMove,
     this.selectedSquare,
     this.bestMoveArrow,
@@ -463,6 +440,7 @@ class ReviewBoardDisplayModel {
   final ReviewEvalDisplay eval;
   final ReviewCoachInsightDisplay insight;
   final List<ReviewTimelinePlyDisplay> timeline;
+  final String executionKey;
   final (String, String)? lastMove;
   final String? selectedSquare;
   final (String, String)? bestMoveArrow;
@@ -507,10 +485,11 @@ class ReviewBoardDisplayModel {
       ),
       eval: ReviewEvalDisplay.fromMove(move),
       insight: insight,
-      timeline: ReviewTimelinePlyDisplay.fromTimeline(
-        timeline,
-        activePly: safePly,
-      ),
+      timeline: ReviewTimelinePlyDisplay.fromTimeline(timeline),
+      executionKey:
+          '${timeline.cacheKey ?? 'uncached'}|'
+          '${timeline.completedAt?.toUtc().toIso8601String() ?? 'undated'}|'
+          '${insight.artifactDigest ?? 'no-insight'}',
       lastMove: lastMove,
       selectedSquare: move?.targetSquare.isNotEmpty == true
           ? move!.targetSquare
@@ -563,3 +542,6 @@ class ReviewBoardDisplayModel {
     return normalizeCastlingUci(best) == normalizeCastlingUci(played);
   }
 }
+
+final Expando<List<ReviewTimelinePlyDisplay>> _timelineRows =
+    Expando<List<ReviewTimelinePlyDisplay>>('reviewTimelineRows');

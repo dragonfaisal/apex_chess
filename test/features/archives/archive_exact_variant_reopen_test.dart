@@ -39,6 +39,7 @@ void main() {
         analysisVariantId: loaded.analysisVariantId,
         analyzedUserIsWhite: false,
         engineIdentity: loaded.engineIdentity,
+        analysisSchemaVersion: loaded.analysisSchemaVersion,
         canonicalIndexVerified: true,
       );
       final fakeArchive = _FakeArchiveController(summary, loaded);
@@ -139,6 +140,7 @@ ArchivedGame _loadedReview() {
     analysisVariantId: 'variant-exact',
     analyzedUserIsWhite: false,
     engineIdentity: timeline.engineVersion,
+    analysisSchemaVersion: timeline.analysisSchemaVersion,
     canonicalIndexVerified: true,
   );
 }

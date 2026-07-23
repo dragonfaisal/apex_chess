@@ -211,6 +211,7 @@ class ArchivedGame {
           kApexOpeningBookVersion &&
       cachedTimeline!.openingArtifactVerification ==
           OpeningArtifactVerification.verified &&
+      cachedTimeline!.hasCurrentExplanationContract &&
       cachedTimeline!.moves.every(
         (move) =>
             move.openingEvidence?.hasValidIntegrity == true &&
@@ -218,7 +219,10 @@ class ArchivedGame {
                 cachedTimeline!.openingArtifact!.semanticId &&
             move.openingEvidence?.artifactVerification ==
                 OpeningArtifactVerification.verified &&
-            move.openingEvidence?.state != OpeningMatchState.unavailable,
+            move.openingEvidence?.state != OpeningMatchState.unavailable &&
+            move.coachExplanation.isEmpty &&
+            move.insight?.hasValidStructure == true &&
+            move.hasValidAnalysisIntegrity,
       ) &&
       cachedTimeline!.analysisSchemaVersion == kApexAnalysisSchemaVersion &&
       cachedTimeline!.isComplete &&

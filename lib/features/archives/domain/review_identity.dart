@@ -9,7 +9,8 @@ import 'package:apex_chess/core/domain/entities/opening_evidence.dart';
 import 'package:apex_chess/core/domain/services/pgn_mainline_validator.dart';
 
 const int kGameIdAlgorithmVersion = 1;
-const int kAnalysisVariantAlgorithmVersion = 1;
+const int kLegacyAnalysisVariantAlgorithmVersion = 1;
+const int kAnalysisVariantAlgorithmVersion = 2;
 const int kAnalysisProfileContractVersion = 1;
 const int kScorePerspectiveContractVersion = 1;
 
@@ -324,6 +325,9 @@ class AnalysisCompatibility {
     required this.tacticalVerifierVersion,
     required this.openingBookVersion,
     this.openingArtifact,
+    this.explanationPolicyVersion = 0,
+    this.explanationClaimSchemaVersion = 0,
+    this.explanationRendererVersion = 0,
     required this.scorePerspectiveContractVersion,
   });
 
@@ -338,6 +342,9 @@ class AnalysisCompatibility {
   final int tacticalVerifierVersion;
   final int openingBookVersion;
   final OpeningArtifactIdentity? openingArtifact;
+  final int explanationPolicyVersion;
+  final int explanationClaimSchemaVersion;
+  final int explanationRendererVersion;
   final int scorePerspectiveContractVersion;
 
   factory AnalysisCompatibility.fromTimeline({
@@ -360,10 +367,25 @@ class AnalysisCompatibility {
     tacticalVerifierVersion: timeline.tacticalVerifierVersion,
     openingBookVersion: timeline.openingBookVersion,
     openingArtifact: timeline.openingArtifact,
+    explanationPolicyVersion: timeline.explanationPolicyVersion,
+    explanationClaimSchemaVersion: timeline.explanationClaimSchemaVersion,
+    explanationRendererVersion: timeline.explanationRendererVersion,
     scorePerspectiveContractVersion: kScorePerspectiveContractVersion,
   );
 
-  String get canonicalMaterial {
+  bool get hasExplanationContract =>
+      explanationPolicyVersion > 0 ||
+      explanationClaimSchemaVersion > 0 ||
+      explanationRendererVersion > 0;
+
+  int get recommendedVariantAlgorithmVersion => hasExplanationContract
+      ? kAnalysisVariantAlgorithmVersion
+      : kLegacyAnalysisVariantAlgorithmVersion;
+
+  String get canonicalMaterial =>
+      canonicalMaterialForAlgorithm(recommendedVariantAlgorithmVersion);
+
+  String canonicalMaterialForAlgorithm(int algorithmVersion) {
     final artifact = openingArtifact;
     if (openingBookVersion >= 2 &&
         (artifact == null ||
@@ -373,11 +395,29 @@ class AnalysisCompatibility {
         'Opening contract v$openingBookVersion requires its exact artifact.',
       );
     }
+    if (algorithmVersion == kLegacyAnalysisVariantAlgorithmVersion &&
+        hasExplanationContract) {
+      throw StateError(
+        'Historic variant identity cannot claim an explanation contract.',
+      );
+    }
+    if (algorithmVersion == kAnalysisVariantAlgorithmVersion &&
+        (explanationPolicyVersion <= 0 ||
+            explanationClaimSchemaVersion <= 0 ||
+            explanationRendererVersion <= 0)) {
+      throw StateError(
+        'Variant v2 requires policy, claim, and renderer identities.',
+      );
+    }
+    if (algorithmVersion != kLegacyAnalysisVariantAlgorithmVersion &&
+        algorithmVersion != kAnalysisVariantAlgorithmVersion) {
+      throw StateError('Unsupported analysis variant algorithm.');
+    }
     final sortedOptions = searchPolicy.engineOptions.entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
     final fields = <String>[
       'apex-analysis-variant',
-      'algorithm=$kAnalysisVariantAlgorithmVersion',
+      'algorithm=$algorithmVersion',
       'game=${gameId.algorithmVersion}:${gameId.value}',
       _lengthPrefixed('profile', profileId),
       'profile-version=$profileVersion',
@@ -400,6 +440,11 @@ class AnalysisCompatibility {
       'tactical=$tacticalVerifierVersion',
       'opening=$openingBookVersion',
       if (openingBookVersion >= 2) 'opening-artifact=${artifact!.semanticId}',
+      if (algorithmVersion >= kAnalysisVariantAlgorithmVersion) ...<String>[
+        'explanation-policy=$explanationPolicyVersion',
+        'explanation-claim-schema=$explanationClaimSchemaVersion',
+        'explanation-renderer=$explanationRendererVersion',
+      ],
       'score-perspective=$scorePerspectiveContractVersion',
     ];
     return '${fields.join('\n')}\n';
@@ -417,6 +462,12 @@ class AnalysisCompatibility {
     'tacticalVerifierVersion': tacticalVerifierVersion,
     'openingBookVersion': openingBookVersion,
     if (openingArtifact != null) 'openingArtifact': openingArtifact!.toJson(),
+    if (explanationPolicyVersion > 0)
+      'explanationPolicyVersion': explanationPolicyVersion,
+    if (explanationClaimSchemaVersion > 0)
+      'explanationClaimSchemaVersion': explanationClaimSchemaVersion,
+    if (explanationRendererVersion > 0)
+      'explanationRendererVersion': explanationRendererVersion,
     'scorePerspectiveContractVersion': scorePerspectiveContractVersion,
   };
 
@@ -436,6 +487,12 @@ class AnalysisCompatibility {
     openingArtifact: json['openingArtifact'] is Map
         ? OpeningArtifactIdentity.fromJson(json['openingArtifact'] as Map)
         : null,
+    explanationPolicyVersion:
+        (json['explanationPolicyVersion'] as num?)?.toInt() ?? 0,
+    explanationClaimSchemaVersion:
+        (json['explanationClaimSchemaVersion'] as num?)?.toInt() ?? 0,
+    explanationRendererVersion:
+        (json['explanationRendererVersion'] as num?)?.toInt() ?? 0,
     scorePerspectiveContractVersion:
         (json['scorePerspectiveContractVersion'] as num).toInt(),
   );
@@ -451,9 +508,21 @@ class AnalysisVariantId {
   final int algorithmVersion;
 
   factory AnalysisVariantId.fromCompatibility(
-    AnalysisCompatibility compatibility,
-  ) => AnalysisVariantId(
-    sha256.convert(utf8.encode(compatibility.canonicalMaterial)).toString(),
+    AnalysisCompatibility compatibility, {
+    int? algorithmVersion,
+  }) => AnalysisVariantId(
+    sha256
+        .convert(
+          utf8.encode(
+            compatibility.canonicalMaterialForAlgorithm(
+              algorithmVersion ??
+                  compatibility.recommendedVariantAlgorithmVersion,
+            ),
+          ),
+        )
+        .toString(),
+    algorithmVersion:
+        algorithmVersion ?? compatibility.recommendedVariantAlgorithmVersion,
   );
 
   Map<String, dynamic> toJson() => {

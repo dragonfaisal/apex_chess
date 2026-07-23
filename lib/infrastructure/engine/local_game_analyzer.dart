@@ -35,6 +35,7 @@ import 'package:apex_chess/core/domain/services/analysis_debug_export.dart';
 import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/core/domain/services/deep_tactical_verifier.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
+import 'package:apex_chess/core/domain/services/move_insight_engine.dart';
 import 'package:apex_chess/core/domain/services/position_heuristics.dart';
 import 'package:apex_chess/core/domain/services/pgn_mainline_validator.dart';
 import 'package:apex_chess/core/domain/services/sacrifice_trajectory.dart';
@@ -70,6 +71,7 @@ class LocalGameAnalyzer {
     EvaluationAnalyzer analyzer = const EvaluationAnalyzer(),
     DeepTacticalVerifier tacticalVerifier = const DeepTacticalVerifier(),
     PgnMainlineValidator pgnValidator = const PgnMainlineValidator(),
+    MoveInsightGenerator insightGenerator = const MoveInsightEngine(),
     int depth = 14,
     // Optional wall-clock cap per position. When null, the analyzer
     // picks a sensible budget for the effective search depth via
@@ -83,6 +85,7 @@ class LocalGameAnalyzer {
        _analyzer = analyzer,
        _tacticalVerifier = tacticalVerifier,
        _pgnValidator = pgnValidator,
+       _insightGenerator = insightGenerator,
        _depth = depth,
        _movetimeOverride = movetime;
 
@@ -107,6 +110,7 @@ class LocalGameAnalyzer {
   final EvaluationAnalyzer _analyzer;
   final DeepTacticalVerifier _tacticalVerifier;
   final PgnMainlineValidator _pgnValidator;
+  final MoveInsightGenerator _insightGenerator;
   final int _depth;
   final Duration? _movetimeOverride;
 
@@ -457,6 +461,25 @@ class LocalGameAnalyzer {
         engineBestSan = _tryUciToSan(entry.fenBefore, engineBestMoveUci);
       }
 
+      final insight = _insightGenerator.generate(
+        MoveInsightInput(
+          fenBefore: entry.fenBefore,
+          fenAfter: entry.fenAfter,
+          playedMoveUci: entry.uci,
+          playedMoveSan: entry.san,
+          isWhiteMove: entry.isWhiteMove,
+          classification: result.quality,
+          classificationEvidence: evidence,
+          preMoveLines: classificationLines,
+          postMoveLines: after.engineLines,
+          postMoveSearchQualityMet:
+              after.status == PositionEvaluationStatus.terminal ||
+              after.targetDepthReached,
+          engineBestMoveSan: engineBestSan,
+          openingEvidence: openingEvidence,
+        ),
+      );
+
       moves.add(
         MoveAnalysis(
           ply: ply,
@@ -509,9 +532,8 @@ class LocalGameAnalyzer {
               ? '${openingCandidate.ecoCode} • '
                     '${openingCandidate.openingName}'
               : result.message,
-          coachExplanation: tacticalVerdict.humanExplanation.isNotEmpty
-              ? tacticalVerdict.humanExplanation
-              : result.message,
+          coachExplanation: '',
+          insight: insight,
           analysisMode: mode.wire,
           classifierVersion: kApexClassifierVersion,
           engineVersion: _eval.engineVersion,
@@ -527,8 +549,9 @@ class LocalGameAnalyzer {
             'openingEvidenceState': openingEvidence.state.name,
             'openingEvidenceReason': openingEvidence.reasonCode,
             'openingArtifactId': openingEvidence.artifact.semanticId,
+            'moveInsightState': insight.state.name,
           },
-        ),
+        ).sealAnalysisIntegrity(),
       );
 
       onProgress?.call(ply + 1, totalPlies);
@@ -546,6 +569,9 @@ class LocalGameAnalyzer {
       providerId: 'local_offline',
       tacticalVerifierVersion: kApexTacticalVerifierVersion,
       openingBookVersion: kApexOpeningBookVersion,
+      explanationPolicyVersion: kApexExplanationPolicyVersion,
+      explanationClaimSchemaVersion: kApexExplanationClaimSchemaVersion,
+      explanationRendererVersion: kApexExplanationRendererVersion,
       openingArtifact: openingLookup?.identity ?? kApexOpeningArtifactIdentity,
       openingArtifactVerification:
           openingLookup?.verification ??

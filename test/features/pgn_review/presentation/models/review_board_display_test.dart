@@ -1,6 +1,8 @@
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/engine_line.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
+import 'package:apex_chess/core/domain/entities/move_insight.dart';
+import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/core/domain/services/move_quality_display.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
@@ -9,6 +11,8 @@ import 'package:apex_chess/features/pgn_review/presentation/models/review_board_
 import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../../../support/move_insight_test_fixtures.dart';
 
 const _startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
@@ -26,6 +30,7 @@ MoveAnalysis _move({
   String? bestSan,
   List<EngineLine> engineLines = const <EngineLine>[],
   bool playedEqualsPv1 = false,
+  MoveInsight? insight,
 }) {
   return MoveAnalysis(
     ply: ply,
@@ -47,6 +52,7 @@ MoveAnalysis _move({
     engineBestMoveSan: bestSan,
     engineLines: engineLines,
     playedEqualsPv1: playedEqualsPv1,
+    insight: insight,
   );
 }
 
@@ -95,6 +101,10 @@ AnalysisTimeline _timeline({
       'Result': '1-0',
     },
     winPercentages: const [54, 58, 31],
+    explanationPolicyVersion: kApexExplanationPolicyVersion,
+    explanationClaimSchemaVersion: kApexExplanationClaimSchemaVersion,
+    explanationRendererVersion: kApexExplanationRendererVersion,
+    analysisSchemaVersion: kApexAnalysisSchemaVersion,
   );
 }
 
@@ -224,7 +234,7 @@ void main() {
     expect(insight.betterMoveReason, isNull);
   });
 
-  test('authoritative concise insight appears without a Better Move', () {
+  test('structured authoritative insight appears without legacy prose', () {
     final insight = ReviewCoachInsightDisplay.fromMove(
       _move(
         ply: 0,
@@ -234,16 +244,41 @@ void main() {
         quality: MoveQuality.best,
         bestUci: 'e2e4',
         bestSan: 'e4',
-        coachExplanation: 'Controls the center and opens both bishops.',
+        coachExplanation: 'Spoofed legacy explanation.',
+        insight: testBookInsight(),
       ),
       timeline: _timeline(),
       mode: AnalysisMode.deep,
       userIsWhite: true,
     );
 
-    expect(insight.explanation, 'Controls the center and opens both bishops.');
+    expect(insight.explanation, "This follows B00 · King's Pawn Game theory.");
     expect(insight.betterMove, isNull);
     expect(insight.betterMoveReason, isNull);
+  });
+
+  test('schema-v4 timeline cannot surface a structured schema-v5 insight', () {
+    final insight = ReviewCoachInsightDisplay.fromMove(
+      _move(
+        ply: 0,
+        isWhite: true,
+        san: 'e4',
+        uci: 'e2e4',
+        quality: MoveQuality.best,
+        insight: testBookInsight(),
+      ),
+      timeline: _timeline().copyWith(
+        analysisSchemaVersion: kApexLegacyAnalysisSchemaVersion,
+        explanationPolicyVersion: 0,
+        explanationClaimSchemaVersion: 0,
+        explanationRendererVersion: 0,
+      ),
+      mode: AnalysisMode.deep,
+      userIsWhite: true,
+    );
+
+    expect(insight.explanation, isNull);
+    expect(insight.coachDetail, isNull);
   });
 
   test('generic and debug-like explanation text is suppressed', () {
@@ -271,16 +306,15 @@ void main() {
     }
   });
 
-  test('timeline active move mapping uses compact ply labels', () {
-    final items = ReviewTimelinePlyDisplay.fromTimeline(
-      _timeline(),
-      activePly: 1,
-    );
+  test('timeline move mapping is compact and cached by timeline', () {
+    final timeline = _timeline();
+    final items = ReviewTimelinePlyDisplay.fromTimeline(timeline);
+    final warm = ReviewTimelinePlyDisplay.fromTimeline(timeline);
 
     expect(items[0].label, '1. e4');
     expect(items[1].label, '1... e5');
-    expect(items[1].isActive, isTrue);
     expect(items[1].marker, '?!');
+    expect(identical(items, warm), isTrue);
   });
 
   test('better move arrow hides without data and updates by active ply', () {
@@ -370,7 +404,7 @@ void main() {
     }
   });
 
-  test('line first move surfaces as Better when SAN is missing', () {
+  test('root SAN can suggest Better without exposing an unverified line', () {
     final display = ReviewBoardDisplayModel.fromTimeline(
       AnalysisTimeline(
         moves: [
@@ -402,7 +436,7 @@ void main() {
     );
 
     expect(display.insight.betterMove, 'c5');
-    expect(display.insight.engineLinePreview, 'c5 Nf3');
+    expect(display.insight.engineLinePreview, isNull);
     expect(display.bestMoveArrow, ('c7', 'c5'));
   });
 

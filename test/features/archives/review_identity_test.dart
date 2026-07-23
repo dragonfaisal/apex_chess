@@ -246,6 +246,49 @@ void main() {
       );
     });
 
+    test('explanation contract uses variant v2 and changes compatibility', () {
+      final game = const CanonicalGameIdentityService().fromPgn(
+        pgn: _basePgn,
+        sourceProvider: 'pgn',
+      );
+      final current = _timeline().copyWith(
+        analysisSchemaVersion: kApexAnalysisSchemaVersion,
+        openingBookVersion: kApexOpeningBookVersion,
+        openingArtifact: _artifact,
+        openingArtifactVerification: OpeningArtifactVerification.verified,
+        explanationPolicyVersion: kApexExplanationPolicyVersion,
+        explanationClaimSchemaVersion: kApexExplanationClaimSchemaVersion,
+        explanationRendererVersion: kApexExplanationRendererVersion,
+      );
+      AnalysisVariantId idFor(AnalysisTimeline timeline) =>
+          AnalysisVariantId.fromCompatibility(
+            AnalysisCompatibility.fromTimeline(
+              gameId: game.gameId,
+              timeline: timeline,
+            ),
+          );
+
+      final currentId = idFor(current);
+      final rendererChanged = idFor(
+        current.copyWith(explanationRendererVersion: 3),
+      );
+      final historicId = idFor(
+        current.copyWith(
+          analysisSchemaVersion: kApexLegacyAnalysisSchemaVersion,
+          explanationPolicyVersion: 0,
+          explanationClaimSchemaVersion: 0,
+          explanationRendererVersion: 0,
+        ),
+      );
+
+      expect(currentId.algorithmVersion, kAnalysisVariantAlgorithmVersion);
+      expect(rendererChanged.value, isNot(currentId.value));
+      expect(
+        historicId.algorithmVersion,
+        kLegacyAnalysisVariantAlgorithmVersion,
+      );
+    });
+
     test('opening-v2 without a valid artifact fails closed', () {
       final game = const CanonicalGameIdentityService().fromPgn(
         pgn: _basePgn,

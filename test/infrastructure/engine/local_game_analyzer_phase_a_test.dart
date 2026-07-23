@@ -6,6 +6,7 @@ import 'package:apex_chess/core/domain/entities/engine_line.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
 import 'package:apex_chess/core/domain/entities/opening_evidence.dart';
 import 'package:apex_chess/core/domain/services/analysis_debug_export.dart';
+import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/core/domain/services/win_percent_calculator.dart';
 import 'package:apex_chess/core/infrastructure/engine/chess_engine.dart';
@@ -83,6 +84,14 @@ Qxa1+ 15. Nxa1 c1=Q# 0-1
         expect(timeline.moves[0].classification, MoveQuality.book);
         expect(timeline.moves[0].openingStatus, OpeningStatus.bookTheory);
         expect(timeline.moves[0].inBook, isTrue);
+        expect(timeline.analysisSchemaVersion, kApexAnalysisSchemaVersion);
+        expect(
+          timeline.explanationPolicyVersion,
+          kApexExplanationPolicyVersion,
+        );
+        expect(timeline.moves[0].coachExplanation, isEmpty);
+        expect(timeline.moves[0].insight?.isDisplayable, isTrue);
+        expect(timeline.moves[0].hasValidAnalysisIntegrity, isTrue);
         expect(
           timeline.moves[0].openingEvidence?.state,
           OpeningMatchState.knownTransition,
@@ -91,6 +100,9 @@ Qxa1+ 15. Nxa1 c1=Q# 0-1
         expect(timeline.moves[1].classification, isNot(MoveQuality.book));
         expect(timeline.moves[1].openingStatus, OpeningStatus.bookDeviation);
         expect(timeline.moves[1].inBook, isFalse);
+        expect(timeline.moves[1].coachExplanation, isEmpty);
+        expect(timeline.moves[1].insight, isNotNull);
+        expect(timeline.moves[1].hasValidAnalysisIntegrity, isTrue);
         expect(
           timeline.moves[1].openingEvidence?.state,
           OpeningMatchState.leftTheory,
@@ -356,6 +368,9 @@ Qxa1+ 15. Nxa1 c1=Q# 0-1
         expect(debugLine['openingEvidence'], isNotNull);
         expect(debugLine['openingArtifactId'], isNotNull);
         expect(debugLine['openingMatchState'], OpeningMatchState.noMatch.name);
+        expect(debugLine['moveInsight'], isNotNull);
+        expect(debugLine['moveInsightIntegrityValid'], isTrue);
+        expect(debugLine['analysisIntegrityValid'], isTrue);
 
         final criticalDebug = AnalysisDebugExport.jsonLines(timeline)
             .split('\n')

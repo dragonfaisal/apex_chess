@@ -87,8 +87,11 @@ void main() {
     expect(verdict.matingNet, isTrue);
     expect(verdict.promotionNet, isTrue);
     expect(verdict.reasonCode, 'queen_sacrifice_mating_net');
-    expect(verdict.humanExplanation.toLowerCase(), contains('queen'));
-    expect(verdict.humanExplanation.toLowerCase(), contains('checkmate'));
+    expect(
+      verdict.humanExplanation,
+      isEmpty,
+      reason: 'Broad tactical heuristics are no longer product prose.',
+    );
   });
 
   test('first commitment move in mating net is detected as deflection', () {

@@ -1,6 +1,8 @@
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/engine_line.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
+import 'package:apex_chess/core/domain/entities/move_insight.dart';
+import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
 import 'package:apex_chess/features/pgn_review/presentation/views/review_screen.dart';
@@ -8,6 +10,8 @@ import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../../../support/move_insight_test_fixtures.dart';
 
 const _startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
@@ -22,6 +26,7 @@ MoveAnalysis _move({
   String? bestSan,
   List<EngineLine> engineLines = const <EngineLine>[],
   String coachExplanation = '',
+  MoveInsight? insight,
 }) {
   return MoveAnalysis(
     ply: ply,
@@ -41,6 +46,7 @@ MoveAnalysis _move({
     engineBestMoveSan: bestSan,
     engineLines: engineLines,
     coachExplanation: coachExplanation,
+    insight: insight,
   );
 }
 
@@ -48,6 +54,8 @@ AnalysisTimeline _timeline({
   String white = 'ALFAISALproWithVeryLongTournamentHandle',
   String black = 'magnoliachickenhatdogWithVeryLongSuffix',
   String thirdSan = 'Qh5??',
+  bool includeFirstInsight = true,
+  String firstOpeningName = "King's Pawn Game",
 }) {
   return AnalysisTimeline(
     moves: [
@@ -58,7 +66,10 @@ AnalysisTimeline _timeline({
         uci: 'e2e4',
         quality: MoveQuality.best,
         scoreCpAfter: 24,
-        coachExplanation: 'Controls the center and opens both bishops.',
+        coachExplanation: 'Spoofed legacy explanation.',
+        insight: includeFirstInsight
+            ? testBookInsight(name: firstOpeningName)
+            : null,
       ),
       _move(
         ply: 1,
@@ -69,7 +80,12 @@ AnalysisTimeline _timeline({
         scoreCpAfter: 45,
         bestUci: 'c7c5',
         bestSan: 'c5',
-        coachExplanation: 'The c5 break was the more active continuation.',
+        coachExplanation: 'Spoofed legacy explanation.',
+        insight: testMaterialDropInsight(
+          reply: 'Nc6',
+          betterMove: 'c5',
+          pieceRole: 'pawn',
+        ),
         engineLines: const [
           EngineLine(
             rank: 1,
@@ -88,7 +104,12 @@ AnalysisTimeline _timeline({
         scoreCpAfter: -180,
         bestUci: 'g1f3',
         bestSan: 'Nf3',
-        coachExplanation: 'The early queen move concedes the initiative.',
+        coachExplanation: 'Spoofed legacy explanation.',
+        insight: testMaterialDropInsight(
+          reply: 'Nf6',
+          betterMove: 'Nf3',
+          pieceRole: 'queen',
+        ),
       ),
     ],
     startingFen: _startFen,
@@ -100,13 +121,30 @@ AnalysisTimeline _timeline({
       'Result': '1-0',
     },
     winPercentages: const [50, 54, 31],
+    explanationPolicyVersion: kApexExplanationPolicyVersion,
+    explanationClaimSchemaVersion: kApexExplanationClaimSchemaVersion,
+    explanationRendererVersion: kApexExplanationRendererVersion,
+    analysisSchemaVersion: kApexAnalysisSchemaVersion,
   );
 }
 
-Widget _host(ProviderContainer container) {
+Widget _host(
+  ProviderContainer container, {
+  double textScale = 1,
+  TextDirection direction = TextDirection.ltr,
+}) {
   return UncontrolledProviderScope(
     container: container,
-    child: MaterialApp(theme: ApexTheme.dark, home: const ReviewScreen()),
+    child: MaterialApp(
+      theme: ApexTheme.dark,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(
+          context,
+        ).copyWith(textScaler: TextScaler.linear(textScale)),
+        child: Directionality(textDirection: direction, child: child!),
+      ),
+      home: const ReviewScreen(),
+    ),
   );
 }
 
@@ -270,7 +308,9 @@ void main() {
       expect(
         find.descendant(
           of: sheet,
-          matching: find.text('The c5 break was the more active continuation.'),
+          matching: find.text(
+            'The opponent’s best reply prevents recovery of the material.',
+          ),
         ),
         findsOneWidget,
       );
@@ -290,7 +330,7 @@ void main() {
         findsNothing,
       );
       expect(
-        find.descendant(of: sheet, matching: find.text('c5 Nf3')),
+        find.descendant(of: sheet, matching: find.text('Nc6 Kf1 Qxa2')),
         findsOneWidget,
       );
 
@@ -304,7 +344,9 @@ void main() {
       expect(
         find.descendant(
           of: sheet,
-          matching: find.text('The early queen move concedes the initiative.'),
+          matching: find.text(
+            'The opponent’s best reply prevents recovery of the material.',
+          ),
         ),
         findsOneWidget,
       );
@@ -322,7 +364,7 @@ void main() {
     },
   );
 
-  testWidgets('Better Move and line detail update with active ply', (
+  testWidgets('collapsed insight stays concise while details remain expanded', (
     tester,
   ) async {
     final container = ProviderContainer();
@@ -339,7 +381,7 @@ void main() {
       findsNothing,
     );
     expect(
-      find.text('Controls the center and opens both bishops.'),
+      find.text("This follows B00 · King's Pawn Game theory."),
       findsOneWidget,
     );
     expect(find.textContaining('Better:'), findsNothing);
@@ -349,24 +391,22 @@ void main() {
 
     expect(
       find.byKey(const ValueKey('review-coach-better-move')),
-      findsOneWidget,
+      findsNothing,
     );
-    expect(
-      find.text('The c5 break was the more active continuation.'),
-      findsOneWidget,
-    );
-    expect(find.text('Better: c5'), findsOneWidget);
+    expect(find.text('After Nc6, the pawn is lost.'), findsOneWidget);
+    expect(find.text('Better: c5'), findsNothing);
     expect(find.text('Stronger continuation.'), findsNothing);
     expect(
       find.byKey(const ValueKey('review-coach-line-detail')),
-      findsOneWidget,
+      findsNothing,
     );
-    expect(find.text('c5 Nf3'), findsOneWidget);
+    expect(find.text('Nc6 Kf1 Qxa2'), findsNothing);
 
     container.read(reviewControllerProvider.notifier).jumpTo(2);
     await _pumpReview(tester);
 
-    expect(find.text('Better: Nf3'), findsOneWidget);
+    expect(find.text('After Nf6, the queen is lost.'), findsOneWidget);
+    expect(find.text('Better: Nf3'), findsNothing);
     expect(find.text('Avoids the worst of the danger.'), findsNothing);
     expect(find.text('Better: c5'), findsNothing);
 
@@ -493,7 +533,7 @@ void main() {
     expect(evalLabel.data, isNotEmpty);
     expect(evalLabel.data, contains('%'));
     expect(
-      find.text('Controls the center and opens both bishops.'),
+      find.text("This follows B00 · King's Pawn Game theory."),
       findsOneWidget,
     );
 
@@ -501,7 +541,7 @@ void main() {
     await _pumpReview(tester);
     expect(
       find.byKey(const ValueKey('review-coach-better-move')),
-      findsOneWidget,
+      findsNothing,
     );
 
     container.read(reviewControllerProvider.notifier).toggleFlip();
@@ -544,5 +584,89 @@ void main() {
     expect(boardFrameSize.width, greaterThanOrEqualTo(276));
     expect(boardFrameSize.height, greaterThanOrEqualTo(276));
     expect(evalBarSize.width, lessThanOrEqualTo(18));
+  });
+
+  testWidgets('missing persisted insight omits the card and explain action', (
+    tester,
+  ) async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    container
+        .read(reviewControllerProvider.notifier)
+        .loadTimeline(_timeline(includeFirstInsight: false), userIsWhite: true);
+
+    await tester.pumpWidget(_host(container));
+    await _pumpReview(tester);
+
+    expect(find.byKey(const ValueKey('review-coach-insight')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('review-coach-orb')));
+    await _pumpReview(tester);
+    expect(find.byKey(const ValueKey('review-command-explain')), findsNothing);
+  });
+
+  testWidgets('same-ply replacement cannot retain a stale insight artifact', (
+    tester,
+  ) async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final notifier = container.read(reviewControllerProvider.notifier);
+    notifier.loadTimeline(_timeline(), userIsWhite: true);
+
+    await tester.pumpWidget(_host(container));
+    await _pumpReview(tester);
+    expect(
+      find.text("This follows B00 · King's Pawn Game theory."),
+      findsOneWidget,
+    );
+
+    notifier.loadTimeline(
+      _timeline(firstOpeningName: 'Apex Replacement Line'),
+      userIsWhite: true,
+    );
+    await _pumpReview(tester);
+
+    expect(
+      find.text("This follows B00 · King's Pawn Game theory."),
+      findsNothing,
+    );
+    expect(
+      find.text('This follows B00 · Apex Replacement Line theory.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('large text and RTL keep collapsed and expanded insight stable', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    container
+        .read(reviewControllerProvider.notifier)
+        .loadTimeline(_timeline(), userIsWhite: false);
+
+    await tester.pumpWidget(
+      _host(container, textScale: 1.8, direction: TextDirection.rtl),
+    );
+    await _pumpReview(tester);
+    container.read(reviewControllerProvider.notifier).jumpTo(1);
+    await _pumpReview(tester);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byKey(const ValueKey('review-coach-orb')));
+    await _pumpReview(tester);
+    await tester.tap(find.byKey(const ValueKey('review-command-explain')));
+    await _pumpReview(tester);
+
+    expect(
+      find.byKey(const ValueKey('review-coach-explain-sheet')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
   });
 }
