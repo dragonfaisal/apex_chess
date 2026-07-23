@@ -5,6 +5,8 @@
 /// human intention.
 library;
 
+import 'dart:convert';
+
 import 'package:dartchess/dartchess.dart';
 
 import 'package:apex_chess/core/domain/entities/classification_evidence.dart';
@@ -107,7 +109,11 @@ class MoveInsightEngine implements MoveInsightGenerator {
 }
 
 class MoveInsightFeatureExtractor {
-  const MoveInsightFeatureExtractor();
+  const MoveInsightFeatureExtractor({
+    this.causalityAnalyzer = const MoveInsightCausalityAnalyzer(),
+  });
+
+  final MoveInsightCausalityAnalyzer causalityAnalyzer;
 
   MoveInsightFeatures extract(MoveInsightInput input) {
     Position before;
@@ -264,6 +270,13 @@ class MoveInsightFeatureExtractor {
           linePly: 0,
         ),
       );
+      facts.add(
+        MoveInsightFact(
+          id: 'f_best_material',
+          type: MoveInsightFactType.materialDelta,
+          intValue: bestTrace.materialDelta,
+        ),
+      );
     }
     if (input.classificationEvidence.legalMoveCount != null) {
       facts.add(
@@ -271,6 +284,24 @@ class MoveInsightFeatureExtractor {
           id: 'f_legal_moves',
           type: MoveInsightFactType.legalMoveCount,
           intValue: input.classificationEvidence.legalMoveCount,
+        ),
+      );
+    }
+    final alternativeIndexes = _onlyMoveMateAlternativeIndexes(
+      evidence: input.classificationEvidence,
+      playedMoveUci: input.playedMoveUci,
+      isWhiteMove: input.isWhiteMove,
+      traces: preLines,
+      moverSide: moverSide,
+    );
+    if (input.classification == MoveQuality.onlyMove &&
+        alternativeIndexes != null) {
+      facts.add(
+        MoveInsightFact(
+          id: 'f_alternative_outcome',
+          type: MoveInsightFactType.alternativeOutcome,
+          intValue: alternativeIndexes.length,
+          relationType: MoveInsightRelationType.alternativeAllowsMate,
         ),
       );
     }
@@ -286,6 +317,17 @@ class MoveInsightFeatureExtractor {
         ),
       );
     }
+    final causalProofs = causalityAnalyzer.analyze(
+      input: input,
+      before: before,
+      after: calculatedAfter,
+      playedMove: played,
+      moverSide: moverSide,
+      movingRole: movingPiece.role.name,
+      playedTrace: playedTrace,
+      bestTrace: bestTrace,
+    );
+    facts.addAll(causalProofs.map((proof) => proof.toFact(moverSide)));
     return MoveInsightFeatures(
       facts: facts,
       before: before,
@@ -299,6 +341,7 @@ class MoveInsightFeatureExtractor {
       postLines: postLines,
       playedTrace: playedTrace,
       bestTrace: bestTrace,
+      causalProofs: causalProofs,
     );
   }
 
@@ -326,6 +369,524 @@ class MoveInsightFeatureExtractor {
   }
 }
 
+/// Pure board-relationship analysis over the already accepted legal move and
+/// stored engine continuations. Geometry only nominates a mechanism; every
+/// returned proof also contains a concrete mate or material consequence.
+class MoveInsightCausalityAnalyzer {
+  const MoveInsightCausalityAnalyzer();
+
+  static const _proofFactory = _MoveInsightCausalProofFactory();
+
+  List<MoveInsightCausalProof> analyze({
+    required MoveInsightInput input,
+    required Position before,
+    required Position after,
+    required NormalMove playedMove,
+    required Side moverSide,
+    required String movingRole,
+    required MoveInsightLineTrace? playedTrace,
+    required MoveInsightLineTrace? bestTrace,
+  }) {
+    final evidence = input.classificationEvidence;
+    final playedScore = evidence.playedMoveEvaluation;
+    final materialGain =
+        playedTrace != null &&
+        playedTrace.steps.length >= 4 &&
+        playedTrace.materialDelta >= 3 &&
+        _moverScoreIsSound(playedScore, input.isWhiteMove);
+    final proofs = <MoveInsightCausalProof>[];
+
+    if (materialGain) {
+      final fork = _proofFactory._forkProof(
+        before: before,
+        after: after,
+        playedMove: playedMove,
+        moverSide: moverSide,
+        movingRole: movingRole,
+        trace: playedTrace,
+      );
+      if (fork != null) proofs.add(fork);
+
+      final pin = _proofFactory._pinProof(
+        after: after,
+        playedMove: playedMove,
+        moverSide: moverSide,
+        movingRole: movingRole,
+        trace: playedTrace,
+      );
+      if (pin != null) proofs.add(pin);
+
+      final skewer = _proofFactory._skewerProof(
+        after: after,
+        playedMove: playedMove,
+        moverSide: moverSide,
+        movingRole: movingRole,
+        trace: playedTrace,
+      );
+      if (skewer != null) proofs.add(skewer);
+
+      final discovery = _proofFactory._discoveredAttackProof(
+        before: before,
+        after: after,
+        playedMove: playedMove,
+        moverSide: moverSide,
+        movingRole: movingRole,
+        trace: playedTrace,
+      );
+      if (discovery != null) proofs.add(discovery);
+
+      final removedDefender = _proofFactory._removedDefenderProof(
+        before: before,
+        after: after,
+        playedMove: playedMove,
+        moverSide: moverSide,
+        movingRole: movingRole,
+        trace: playedTrace,
+      );
+      if (removedDefender != null) proofs.add(removedDefender);
+    }
+
+    final sacrifice = _proofFactory._sacrificeProof(
+      input: input,
+      playedMove: playedMove,
+      moverSide: moverSide,
+      movingRole: movingRole,
+      playedTrace: playedTrace,
+      bestTrace: bestTrace,
+    );
+    if (sacrifice != null) proofs.add(sacrifice);
+
+    proofs.sort((a, b) {
+      final priority = b.priority.compareTo(a.priority);
+      return priority != 0
+          ? priority
+          : a.mechanism.name.compareTo(b.mechanism.name);
+    });
+    return List<MoveInsightCausalProof>.unmodifiable(proofs);
+  }
+}
+
+class _MoveInsightCausalProofFactory {
+  const _MoveInsightCausalProofFactory();
+
+  MoveInsightCausalProof? _sacrificeProof({
+    required MoveInsightInput input,
+    required NormalMove playedMove,
+    required Side moverSide,
+    required String movingRole,
+    required MoveInsightLineTrace? playedTrace,
+    required MoveInsightLineTrace? bestTrace,
+  }) {
+    final evidence = input.classificationEvidence;
+    final movedPieceLost = playedTrace == null
+        ? null
+        : _trackedTargetCapture(
+            playedTrace.steps,
+            initialSquare: _squareName(playedMove.to),
+            owner: moverSide,
+            role: movingRole,
+          );
+    final isRealInvestment =
+        movedPieceLost != null &&
+        movedPieceLost.capturerSide == _opposite(moverSide) &&
+        evidence.isSacrifice == true &&
+        evidence.isFirstSacrificePly == true &&
+        evidence.isRecapture != true &&
+        evidence.isTrivialRecapture != true &&
+        evidence.isFreeCapture != true &&
+        _roleValue(movingRole) >= 3;
+    if (!isRealInvestment) return null;
+
+    final playedScore = evidence.playedMoveEvaluation;
+    final materialGain =
+        playedTrace!.steps.length >= 4 &&
+        playedTrace.materialDelta >= 3 &&
+        _moverScoreIsSound(playedScore, input.isWhiteMove);
+    final materialLoss =
+        bestTrace != null &&
+        playedTrace.steps.length >= 3 &&
+        playedTrace.materialDelta <= -3 &&
+        bestTrace.materialDelta - playedTrace.materialDelta >= 3 &&
+        _isAdverseClassification(input.classification);
+    final mateForMover =
+        playedTrace.terminalWinner == moverSide &&
+        _mateForMover(playedScore, input.isWhiteMove);
+    final isSound =
+        evidence.searchQualityMet &&
+        evidence.hasCompleteCandidateSet &&
+        evidence.bestMovePv1Consistent &&
+        evidence.tacticalBestOrNearBest &&
+        evidence.tacticalHasForcingOutcome &&
+        (mateForMover || materialGain);
+    if (isSound) {
+      return MoveInsightCausalProof(
+        mechanism: MoveInsightMechanismType.soundSacrifice,
+        consequence: mateForMover
+            ? MoveInsightConsequenceType.checkmate
+            : MoveInsightConsequenceType.materialGain,
+        relationType: MoveInsightRelationType.investsMaterial,
+        reasonCode: mateForMover
+            ? 'material_investment_forces_mate'
+            : 'material_investment_wins_material',
+        priority: mateForMover ? 99 : 94,
+        initiatorRole: movingRole,
+        initiatorSquare: _squareName(playedMove.to),
+        targetRole: movedPieceLost.capturedRole,
+        targetSquare: movedPieceLost.capturedSquare,
+      );
+    }
+    if (!materialLoss) return null;
+    return MoveInsightCausalProof(
+      mechanism: MoveInsightMechanismType.unsoundSacrifice,
+      consequence: MoveInsightConsequenceType.materialLoss,
+      relationType: MoveInsightRelationType.investsMaterial,
+      reasonCode: 'material_investment_has_no_compensation',
+      priority: 94,
+      initiatorRole: movingRole,
+      initiatorSquare: _squareName(playedMove.to),
+      targetRole: movedPieceLost.capturedRole,
+      targetSquare: movedPieceLost.capturedSquare,
+    );
+  }
+
+  MoveInsightCausalProof? _forkProof({
+    required Position before,
+    required Position after,
+    required NormalMove playedMove,
+    required Side moverSide,
+    required String movingRole,
+    required MoveInsightLineTrace trace,
+  }) {
+    final opponent = _opposite(moverSide);
+    final targets = _attackedTargets(after, playedMove.to, opponent)
+        .where(
+          (target) => _roleValue(target.role) >= 3 || target.role == 'king',
+        )
+        .where(
+          (target) => _attackerCount(before, target.square, moverSide) == 0,
+        )
+        .toList(growable: false);
+    if (targets.length < 2) return null;
+    if (targets.any(
+      (target) =>
+          after.isLegal(NormalMove(from: target.square, to: playedMove.to)),
+    )) {
+      return null;
+    }
+    for (final target in targets) {
+      final capture = _trackedTargetCapture(
+        trace.steps,
+        initialSquare: _squareName(target.square),
+        owner: opponent,
+        role: target.role,
+      );
+      if (capture?.capturerSide != moverSide ||
+          capture?.capturerInitialSquare != _squareName(playedMove.to) ||
+          target.role == 'king') {
+        continue;
+      }
+      final other = targets
+          .where((candidate) => candidate.square != target.square)
+          .reduce((a, b) => _roleValue(a.role) >= _roleValue(b.role) ? a : b);
+      final mechanism = other.role == 'king'
+          ? MoveInsightMechanismType.fork
+          : MoveInsightMechanismType.doubleAttack;
+      return MoveInsightCausalProof(
+        mechanism: mechanism,
+        consequence: MoveInsightConsequenceType.materialGain,
+        relationType: MoveInsightRelationType.attacks,
+        reasonCode: mechanism == MoveInsightMechanismType.fork
+            ? 'new_fork_survives_best_response'
+            : 'new_double_attack_survives_best_response',
+        priority: other.role == 'king' ? 88 : 84,
+        initiatorRole: movingRole,
+        initiatorSquare: _squareName(playedMove.to),
+        attackerRole: movingRole,
+        attackerSquare: _squareName(playedMove.to),
+        targetRole: target.role,
+        targetSquare: _squareName(target.square),
+        secondaryTargetRole: other.role,
+        secondaryTargetSquare: _squareName(other.square),
+      );
+    }
+    return null;
+  }
+
+  MoveInsightCausalProof? _pinProof({
+    required Position after,
+    required NormalMove playedMove,
+    required Side moverSide,
+    required String movingRole,
+    required MoveInsightLineTrace trace,
+  }) {
+    if (!_isSlider(movingRole)) return null;
+    final opponent = _opposite(moverSide);
+    for (final ray in _occupiedRays(after, playedMove.to, movingRole)) {
+      if (ray.pieces.length < 2) continue;
+      final pinned = ray.pieces[0];
+      final king = ray.pieces[1];
+      if (pinned.side != opponent ||
+          king.side != opponent ||
+          pinned.role == 'king' ||
+          king.role != 'king' ||
+          _roleValue(pinned.role) < 3) {
+        continue;
+      }
+      if (after.isLegal(NormalMove(from: pinned.square, to: playedMove.to))) {
+        continue;
+      }
+      final capture = _trackedTargetCapture(
+        trace.steps,
+        initialSquare: _squareName(pinned.square),
+        owner: opponent,
+        role: pinned.role,
+      );
+      if (capture?.capturerSide != moverSide ||
+          capture?.capturerInitialSquare != _squareName(playedMove.to)) {
+        continue;
+      }
+      return MoveInsightCausalProof(
+        mechanism: MoveInsightMechanismType.absolutePin,
+        consequence: MoveInsightConsequenceType.materialGain,
+        relationType: MoveInsightRelationType.pinsToKing,
+        reasonCode: 'absolute_pin_is_exploited_in_best_response',
+        priority: 86,
+        attackerRole: movingRole,
+        attackerSquare: _squareName(playedMove.to),
+        targetRole: pinned.role,
+        targetSquare: _squareName(pinned.square),
+        secondaryTargetRole: king.role,
+        secondaryTargetSquare: _squareName(king.square),
+        lineType: ray.lineType,
+        lineSquares: ray.squares,
+      );
+    }
+    return null;
+  }
+
+  MoveInsightCausalProof? _skewerProof({
+    required Position after,
+    required NormalMove playedMove,
+    required Side moverSide,
+    required String movingRole,
+    required MoveInsightLineTrace trace,
+  }) {
+    if (!_isSlider(movingRole) || trace.steps.length < 3) return null;
+    final opponent = _opposite(moverSide);
+    for (final ray in _occupiedRays(after, playedMove.to, movingRole)) {
+      if (ray.pieces.length < 2) continue;
+      final front = ray.pieces[0];
+      final rear = ray.pieces[1];
+      if (front.side != opponent ||
+          rear.side != opponent ||
+          _roleValue(front.role) <= _roleValue(rear.role) ||
+          _roleValue(rear.role) < 3) {
+        continue;
+      }
+      final capturesAttacker = NormalMove(
+        from: front.square,
+        to: playedMove.to,
+      );
+      if (after.isLegal(capturesAttacker)) continue;
+      final reply = trace.steps[1];
+      final consequence = trace.steps[2];
+      if (reply.movingSide != opponent ||
+          reply.fromSquare != _squareName(front.square) ||
+          consequence.movingSide != moverSide ||
+          consequence.fromSquare != _squareName(playedMove.to) ||
+          consequence.capturedSquare != _squareName(rear.square) ||
+          consequence.capturedRole != rear.role) {
+        continue;
+      }
+      return MoveInsightCausalProof(
+        mechanism: MoveInsightMechanismType.skewer,
+        consequence: MoveInsightConsequenceType.materialGain,
+        relationType: MoveInsightRelationType.skewers,
+        reasonCode: 'front_target_moves_and_rear_target_is_lost',
+        priority: 87,
+        attackerRole: movingRole,
+        attackerSquare: _squareName(playedMove.to),
+        targetRole: rear.role,
+        targetSquare: _squareName(rear.square),
+        secondaryTargetRole: front.role,
+        secondaryTargetSquare: _squareName(front.square),
+        lineType: ray.lineType,
+        lineSquares: ray.squares,
+      );
+    }
+    return null;
+  }
+
+  MoveInsightCausalProof? _discoveredAttackProof({
+    required Position before,
+    required Position after,
+    required NormalMove playedMove,
+    required Side moverSide,
+    required String movingRole,
+    required MoveInsightLineTrace trace,
+  }) {
+    if (trace.steps.length < 3) return null;
+    final from = playedMove.from;
+    final opponent = _opposite(moverSide);
+    for (final direction in _rayDirections) {
+      final attacker = _firstOccupied(
+        before,
+        from,
+        -direction.$1,
+        -direction.$2,
+      );
+      final target = _firstOccupied(before, from, direction.$1, direction.$2);
+      if (attacker == null ||
+          target == null ||
+          attacker.side != moverSide ||
+          target.side != opponent ||
+          !_sliderSupports(attacker.role, direction.$1, direction.$2) ||
+          _roleValue(target.role) < 3 ||
+          !_attacksSquare(after, attacker.square, target.square)) {
+        continue;
+      }
+      final consequence = trace.steps[2];
+      if (consequence.movingSide != moverSide ||
+          consequence.fromSquare != _squareName(attacker.square) ||
+          consequence.capturedSquare != _squareName(target.square) ||
+          consequence.capturedRole != target.role) {
+        continue;
+      }
+      final line = _raySquares(attacker.square, target.square);
+      return MoveInsightCausalProof(
+        mechanism: MoveInsightMechanismType.discoveredAttack,
+        consequence: MoveInsightConsequenceType.materialGain,
+        relationType: MoveInsightRelationType.opensLine,
+        reasonCode: 'moved_blocker_opens_exploited_line',
+        priority: 89,
+        initiatorRole: movingRole,
+        initiatorSquare: _squareName(playedMove.to),
+        attackerRole: attacker.role,
+        attackerSquare: _squareName(attacker.square),
+        targetRole: target.role,
+        targetSquare: _squareName(target.square),
+        lineType: _lineTypeFor(direction.$1, direction.$2),
+        lineSquares: line,
+      );
+    }
+    return null;
+  }
+
+  MoveInsightCausalProof? _removedDefenderProof({
+    required Position before,
+    required Position after,
+    required NormalMove playedMove,
+    required Side moverSide,
+    required String movingRole,
+    required MoveInsightLineTrace trace,
+  }) {
+    if (trace.steps.length < 3) return null;
+    final captured = _capturedPiece(before, playedMove);
+    final opponent = _opposite(moverSide);
+    if (captured == null || captured.piece.color != opponent) return null;
+    for (var index = 0; index < 64; index++) {
+      final square = Square(index);
+      final target = after.board.pieceAt(square);
+      if (target == null ||
+          target.color != opponent ||
+          target.role == Role.king ||
+          PositionHeuristics.pieceValue(target.role) < 3 ||
+          !_attacksSquare(before, captured.square, square) ||
+          _defenderCount(after, square, opponent) != 0) {
+        continue;
+      }
+      final consequence = trace.steps[2];
+      if (consequence.movingSide != moverSide ||
+          consequence.capturedSquare != _squareName(square) ||
+          consequence.capturedRole != target.role.name) {
+        continue;
+      }
+      return MoveInsightCausalProof(
+        mechanism: MoveInsightMechanismType.removesDefender,
+        consequence: MoveInsightConsequenceType.materialGain,
+        relationType: MoveInsightRelationType.removesDefense,
+        reasonCode: 'captured_defender_exposes_target',
+        priority: 91,
+        initiatorRole: movingRole,
+        initiatorSquare: _squareName(playedMove.to),
+        targetRole: target.role.name,
+        targetSquare: _squareName(square),
+        defenderRole: captured.piece.role.name,
+        defenderSquare: _squareName(captured.square),
+      );
+    }
+    return null;
+  }
+}
+
+class MoveInsightCausalProof {
+  const MoveInsightCausalProof({
+    required this.mechanism,
+    required this.consequence,
+    required this.relationType,
+    required this.reasonCode,
+    required this.priority,
+    this.initiatorRole,
+    this.initiatorSquare,
+    this.attackerRole,
+    this.attackerSquare,
+    this.targetRole,
+    this.targetSquare,
+    this.secondaryTargetRole,
+    this.secondaryTargetSquare,
+    this.defenderRole,
+    this.defenderSquare,
+    this.lineType,
+    this.lineSquares = const <String>[],
+  });
+
+  final MoveInsightMechanismType mechanism;
+  final MoveInsightConsequenceType consequence;
+  final MoveInsightRelationType relationType;
+  final String reasonCode;
+  final int priority;
+  final String? initiatorRole;
+  final String? initiatorSquare;
+  final String? attackerRole;
+  final String? attackerSquare;
+  final String? targetRole;
+  final String? targetSquare;
+  final String? secondaryTargetRole;
+  final String? secondaryTargetSquare;
+  final String? defenderRole;
+  final String? defenderSquare;
+  final MoveInsightLineType? lineType;
+  final List<String> lineSquares;
+
+  String get factId => 'f_causal_${mechanism.name.toLowerCase()}';
+
+  MoveInsightFact toFact(Side moverSide) => MoveInsightFact(
+    id: factId,
+    type:
+        mechanism == MoveInsightMechanismType.soundSacrifice ||
+            mechanism == MoveInsightMechanismType.unsoundSacrifice
+        ? MoveInsightFactType.materialInvestment
+        : MoveInsightFactType.changedRelationship,
+    pieceRole: attackerRole ?? initiatorRole,
+    pieceSide: moverSide.name,
+    fromSquare: attackerSquare ?? initiatorSquare,
+    toSquare: targetSquare,
+    relationType: relationType,
+    relatedPieceRole: targetRole,
+    relatedPieceSide:
+        mechanism == MoveInsightMechanismType.soundSacrifice ||
+            mechanism == MoveInsightMechanismType.unsoundSacrifice
+        ? moverSide.name
+        : _opposite(moverSide).name,
+    relatedSquare: targetSquare,
+    secondaryPieceRole: secondaryTargetRole ?? defenderRole,
+    secondaryPieceSide: _opposite(moverSide).name,
+    secondarySquare: secondaryTargetSquare ?? defenderSquare,
+    lineType: lineType,
+    lineSquares: lineSquares,
+  );
+}
+
 class MoveInsightClaimDetector {
   const MoveInsightClaimDetector();
 
@@ -341,6 +902,14 @@ class MoveInsightClaimDetector {
     final bestScore = evidence.bestMoveEvaluation;
     final playedTrace = features.playedTrace;
     final bestTrace = features.bestTrace;
+    MoveInsightCausalProof? proofWhere(
+      bool Function(MoveInsightCausalProof proof) predicate,
+    ) => features.causalProofs.where(predicate).firstOrNull;
+
+    List<String> factsWithProof(
+      List<String> base,
+      MoveInsightCausalProof? proof,
+    ) => proof == null ? base : <String>[...base, proof.factId];
 
     void add({
       required MoveInsightClaimType type,
@@ -358,8 +927,22 @@ class MoveInsightClaimDetector {
       List<String> continuationUci = const <String>[],
       String? openingEco,
       String? openingName,
+      MoveInsightCausalProof? mechanismProof,
+      MoveInsightMechanismType mechanism = MoveInsightMechanismType.none,
+      MoveInsightConsequenceType consequence = MoveInsightConsequenceType.none,
+      String? mechanismReasonCode,
+      String? initiatorRole,
+      String? initiatorSquare,
+      String? secondaryTargetRole,
+      String? secondaryTargetSquare,
+      String? defenderRole,
+      String? defenderSquare,
+      MoveInsightRelationType? relationType,
+      MoveInsightLineType? lineType,
+      List<String> lineSquares = const <String>[],
       List<MoveInsightCausalStep>? causalChain,
     }) {
+      final proof = mechanismProof;
       claims.add(
         MoveInsightClaimCandidate(
           priority: priority,
@@ -369,10 +952,10 @@ class MoveInsightClaimDetector {
             confidence: MoveInsightConfidence.verified,
             reasonCode: reason,
             supportingFactIds: factIds,
-            pieceRole: pieceRole,
-            pieceSquare: pieceSquare,
-            targetRole: targetRole,
-            targetSquare: targetSquare,
+            pieceRole: proof?.attackerRole ?? pieceRole,
+            pieceSquare: proof?.attackerSquare ?? pieceSquare,
+            targetRole: proof?.targetRole ?? targetRole,
+            targetSquare: proof?.targetSquare ?? targetSquare,
             materialDelta: materialDelta,
             betterMoveSan: betterMoveSan,
             opponentReplySan: opponentReplySan,
@@ -380,13 +963,29 @@ class MoveInsightClaimDetector {
             continuationUci: continuationUci,
             openingEco: openingEco,
             openingName: openingName,
+            mechanism: proof?.mechanism ?? mechanism,
+            consequence: proof?.consequence ?? consequence,
+            mechanismReasonCode: proof?.reasonCode ?? mechanismReasonCode,
+            initiatorRole: proof?.initiatorRole ?? initiatorRole,
+            initiatorSquare: proof?.initiatorSquare ?? initiatorSquare,
+            secondaryTargetRole:
+                proof?.secondaryTargetRole ?? secondaryTargetRole,
+            secondaryTargetSquare:
+                proof?.secondaryTargetSquare ?? secondaryTargetSquare,
+            defenderRole: proof?.defenderRole ?? defenderRole,
+            defenderSquare: proof?.defenderSquare ?? defenderSquare,
+            relationType: proof?.relationType ?? relationType,
+            lineType: proof?.lineType ?? lineType,
+            lineSquares: proof?.lineSquares ?? lineSquares,
           ),
           causalChain:
               causalChain ??
-              _defaultCausalChain(
-                factIds,
-                hasResponse: opponentReplySan != null,
-              ),
+              (proof == null
+                  ? _defaultCausalChain(
+                      factIds,
+                      hasResponse: opponentReplySan != null,
+                    )
+                  : _advancedCausalChain(factIds, proof)),
         ),
       );
     }
@@ -445,14 +1044,76 @@ class MoveInsightClaimDetector {
         _mateForMover(beforeScore, input.isWhiteMove) &&
         _mateForMover(playedScore, input.isWhiteMove) &&
         postMateWinner == moverSide) {
+      final sacrifice = proofWhere(
+        (proof) =>
+            proof.mechanism == MoveInsightMechanismType.soundSacrifice &&
+            proof.consequence == MoveInsightConsequenceType.checkmate,
+      );
       add(
         type: MoveInsightClaimType.preservesForcedMate,
         reason: 'verified_played_line_preserves_mate',
         priority: 94,
-        factIds: const <String>['f_legal', 'f_played_line'],
+        factIds: factsWithProof(const <String>[
+          'f_legal',
+          'f_played_line',
+        ], sacrifice),
         opponentReplySan: playedTrace.opponentReplySan,
         continuationSan: playedTrace.sanMoves.take(6).toList(growable: false),
         continuationUci: playedTrace.uciMoves.take(6).toList(growable: false),
+        mechanismProof: sacrifice,
+      );
+    }
+
+    final onlyMoveAlternativeFact = features.facts.any(
+      (fact) => fact.id == 'f_alternative_outcome',
+    );
+    if (input.classification == MoveQuality.onlyMove &&
+        onlyMoveAlternativeFact &&
+        bestTrace != null &&
+        bestTrace.sanMoves.length >= 2 &&
+        _sameUci(bestTrace.uciMoves.first, input.playedMoveUci)) {
+      add(
+        type: MoveInsightClaimType.onlyMoveDefense,
+        reason: 'complete_alternatives_allow_forced_mate',
+        priority: 92,
+        factIds: const <String>[
+          'f_legal',
+          'f_best_line',
+          'f_alternative_outcome',
+        ],
+        opponentReplySan: bestTrace.opponentReplySan,
+        continuationSan: bestTrace.sanMoves.take(6).toList(growable: false),
+        continuationUci: bestTrace.uciMoves.take(6).toList(growable: false),
+        mechanism: MoveInsightMechanismType.onlyMoveDefense,
+        consequence: MoveInsightConsequenceType.avoidsCheckmate,
+        mechanismReasonCode: 'alternatives_allow_forced_mate',
+        relationType: MoveInsightRelationType.alternativeAllowsMate,
+      );
+    }
+
+    if (input.classification == MoveQuality.missedWin &&
+        bestTrace != null &&
+        bestTrace.sanMoves.length >= 3 &&
+        bestTrace.materialDelta >= 3 &&
+        (playedTrace == null ||
+            bestTrace.materialDelta - playedTrace.materialDelta >= 3) &&
+        input.engineBestMoveSan?.isNotEmpty == true &&
+        !_mateForMover(bestScore, input.isWhiteMove)) {
+      add(
+        type: MoveInsightClaimType.missesMaterialWin,
+        reason: 'best_line_wins_material_but_played_move_does_not',
+        priority: 93,
+        factIds: const <String>['f_legal', 'f_best_line', 'f_best_material'],
+        targetRole: bestTrace.mostValuableOpponentLoss,
+        materialDelta: bestTrace.materialDelta,
+        betterMoveSan: input.engineBestMoveSan,
+        opponentReplySan: bestTrace.opponentReplySan,
+        continuationSan: bestTrace.sanMoves.take(6).toList(growable: false),
+        continuationUci: bestTrace.uciMoves.take(6).toList(growable: false),
+        mechanism: MoveInsightMechanismType.missedMaterialResource,
+        consequence: MoveInsightConsequenceType.missedMaterialGain,
+        mechanismReasonCode: 'best_line_wins_material',
+        relationType: MoveInsightRelationType.alternativeWinsMaterial,
       );
     }
 
@@ -464,41 +1125,51 @@ class MoveInsightClaimDetector {
       if (materialDelta <= -3 &&
           bestImprovesMaterial &&
           _isAdverseClassification(input.classification)) {
+        final sacrifice = proofWhere(
+          (proof) =>
+              proof.mechanism == MoveInsightMechanismType.unsoundSacrifice,
+        );
         add(
           type: MoveInsightClaimType.dropsMaterial,
           reason: 'best_response_line_sustains_material_loss',
           priority: 90,
-          factIds: const <String>[
+          factIds: factsWithProof(const <String>[
             'f_legal',
             'f_played_line',
             'f_played_material',
             'f_best_line',
-          ],
+          ], sacrifice),
           pieceRole: playedTrace.mostValuableMoverLoss,
           materialDelta: materialDelta,
           betterMoveSan: input.engineBestMoveSan,
           opponentReplySan: playedTrace.opponentReplySan,
           continuationSan: playedTrace.sanMoves.take(6).toList(growable: false),
           continuationUci: playedTrace.uciMoves.take(6).toList(growable: false),
+          mechanismProof: sacrifice,
         );
       } else if (materialDelta >= 3 &&
           evidence.isRecapture != true &&
           !_mateAgainstMover(playedScore, input.isWhiteMove) &&
           _moverScoreIsSound(playedScore, input.isWhiteMove)) {
+        final mechanism = proofWhere(
+          (proof) =>
+              proof.consequence == MoveInsightConsequenceType.materialGain,
+        );
         add(
           type: MoveInsightClaimType.winsMaterial,
           reason: 'best_response_line_sustains_material_gain',
           priority: 89,
-          factIds: const <String>[
+          factIds: factsWithProof(const <String>[
             'f_legal',
             'f_played_line',
             'f_played_material',
-          ],
+          ], mechanism),
           targetRole: playedTrace.mostValuableOpponentLoss,
           materialDelta: materialDelta,
           opponentReplySan: playedTrace.opponentReplySan,
           continuationSan: playedTrace.sanMoves.take(6).toList(growable: false),
           continuationUci: playedTrace.uciMoves.take(6).toList(growable: false),
+          mechanismProof: mechanism,
         );
       }
     }
@@ -565,19 +1236,102 @@ class MoveInsightRenderer {
   MoveInsightRenderedCopy render(MoveInsightClaim claim) =>
       renderForVersion(claim, kApexExplanationRendererVersion);
 
-  bool supportsVersion(int version) =>
-      version == kApexLegacyExplanationRendererVersion ||
-      version == kApexExplanationRendererVersion;
-
   MoveInsightRenderedCopy renderForVersion(
     MoveInsightClaim claim,
     int version,
   ) {
     return switch (version) {
       kApexLegacyExplanationRendererVersion => _renderV1(claim),
-      kApexExplanationRendererVersion => _renderV2(claim),
+      kApexChapter6ExplanationRendererVersion => _renderV2(claim),
+      kApexExplanationRendererVersion => _renderV3(claim),
       _ => throw StateError('Unsupported move insight renderer $version.'),
     };
+  }
+
+  MoveInsightRenderedCopy _renderV3(MoveInsightClaim claim) {
+    if (claim.mechanism == MoveInsightMechanismType.none) {
+      return _renderV2(claim);
+    }
+    final attacker = _pieceName(claim.pieceRole) ?? 'piece';
+    final initiator = _pieceName(claim.initiatorRole) ?? attacker;
+    final target = _pieceName(claim.targetRole) ?? 'piece';
+    final secondary = _pieceName(claim.secondaryTargetRole) ?? 'piece';
+    final defender = _pieceName(claim.defenderRole) ?? 'defender';
+    final better = claim.betterMoveSan;
+    final continuation = claim.continuationSan.take(4).join(' ');
+    late final String concise;
+    String? cause;
+    String? consequence;
+    String? betterMove;
+    switch (claim.mechanism) {
+      case MoveInsightMechanismType.fork:
+        concise =
+            'The $attacker forks the $secondary and $target, so the $target cannot be saved.';
+        cause = 'One move creates two immediate threats.';
+        consequence = 'The best response still loses the $target.';
+      case MoveInsightMechanismType.doubleAttack:
+        concise = secondary == target
+            ? 'The $attacker attacks two ${target}s at once, and one $target is lost.'
+            : 'The $attacker attacks the $secondary and $target at once, and the $target is lost.';
+        cause = 'The two threats cannot both be answered.';
+        consequence = 'The best response still loses the $target.';
+      case MoveInsightMechanismType.absolutePin:
+        concise =
+            'The $attacker pins the $target to the king, and the $target is lost.';
+        cause = 'Moving the $target off the line would expose the king.';
+        consequence = 'The best response cannot save the $target.';
+      case MoveInsightMechanismType.skewer:
+        concise =
+            'The $attacker skewers the $secondary and $target, and the $target is lost.';
+        cause = 'The $secondary must move from the line first.';
+        consequence = 'That exposes the $target behind it.';
+      case MoveInsightMechanismType.discoveredAttack ||
+          MoveInsightMechanismType.opensLine:
+        concise =
+            'Moving the $initiator opens the $attacker’s attack on the $target, and the $target is lost.';
+        cause = 'The move clears the line between the pieces.';
+        consequence = 'The best response cannot save the $target.';
+      case MoveInsightMechanismType.removesDefender:
+        concise =
+            'Capturing the $defender removes the $target’s defender, and the $target is lost.';
+        cause = 'The capture removes the target’s remaining protection.';
+        consequence = 'The continuation wins the $target.';
+      case MoveInsightMechanismType.soundSacrifice:
+        concise = claim.consequence == MoveInsightConsequenceType.checkmate
+            ? 'The $initiator sacrifice forces checkmate.'
+            : 'The $initiator sacrifice wins lasting material.';
+        cause = 'The material investment creates a forcing continuation.';
+        consequence = claim.consequence == MoveInsightConsequenceType.checkmate
+            ? 'Even the best defence cannot prevent checkmate.'
+            : 'The material is recovered with a lasting gain.';
+      case MoveInsightMechanismType.unsoundSacrifice:
+        concise =
+            'The $initiator sacrifice does not work, and the $initiator is lost.';
+        cause =
+            'The best response accepts the sacrifice without allowing compensation.';
+        consequence = 'The material loss cannot be recovered.';
+        if (better != null) betterMove = '$better avoids the failed sacrifice.';
+      case MoveInsightMechanismType.onlyMoveDefense:
+        concise = 'Only this move prevents a forced checkmate.';
+        cause = 'Every other analysed move allows a mating sequence.';
+        consequence = 'The played move keeps checkmate from being forced.';
+      case MoveInsightMechanismType.missedMaterialResource:
+        concise = better == null
+            ? 'This misses a forced material win.'
+            : '$better wins the $target; this move misses that chance.';
+        cause = 'The better move starts a forcing material sequence.';
+        consequence = 'The played move gives up that material gain.';
+        if (better != null) betterMove = '$better wins the $target.';
+      case MoveInsightMechanismType.none:
+        throw StateError('Causal renderer requires a mechanism.');
+    }
+    return MoveInsightRenderedCopy(
+      concise: concise,
+      cause: cause,
+      consequence: consequence,
+      betterMove: betterMove,
+      continuation: continuation.isEmpty ? null : continuation,
+    );
   }
 
   MoveInsightRenderedCopy _renderV2(MoveInsightClaim claim) {
@@ -620,6 +1374,17 @@ class MoveInsightRenderer {
             : 'After $reply, checkmate remains forced.';
         cause = 'The move stays on the forced mating path.';
         consequence = 'Even the best defence cannot prevent checkmate.';
+      case MoveInsightClaimType.missesMaterialWin:
+        concise = better == null
+            ? 'This misses a material win.'
+            : '$better wins material; this move misses that chance.';
+        cause = 'The better move starts a forcing material sequence.';
+        consequence = 'The played move gives up that material gain.';
+        if (better != null) betterMove = '$better wins material.';
+      case MoveInsightClaimType.onlyMoveDefense:
+        concise = 'Only this move prevents a forced checkmate.';
+        cause = 'Every other analysed move allows a mating sequence.';
+        consequence = 'The played move keeps checkmate from being forced.';
       case MoveInsightClaimType.winsMaterial:
         concise = target == null
             ? reply == null
@@ -716,6 +1481,17 @@ class MoveInsightRenderer {
             : 'After $reply, the verified mating line remains forced.';
         cause = 'The move stays inside the legally verified mating line.';
         consequence = 'Best defence still cannot prevent mate.';
+      case MoveInsightClaimType.missesMaterialWin:
+        concise = better == null
+            ? 'This misses a material win.'
+            : '$better wins material; this move misses that chance.';
+        cause = 'The best line wins material while the played line does not.';
+        consequence = 'The material opportunity is lost.';
+        if (better != null) betterMove = '$better wins material.';
+      case MoveInsightClaimType.onlyMoveDefense:
+        concise = 'Only this move avoids forced mate.';
+        cause = 'The alternatives allow a mating line.';
+        consequence = 'The move keeps the position alive.';
       case MoveInsightClaimType.winsMaterial:
         final material = target == null ? 'material' : 'the $target';
         concise = reply == null
@@ -772,31 +1548,6 @@ class MoveInsightRenderer {
       continuation: continuation.isEmpty ? null : continuation,
     );
   }
-
-  bool matchesPersisted(MoveInsight insight) {
-    if (!insight.hasValidStructure ||
-        insight.supportingClaims.isNotEmpty ||
-        !supportsVersion(insight.rendererVersion)) {
-      return false;
-    }
-    if (!insight.isDisplayable) {
-      return insight.conciseText == null &&
-          insight.causeText == null &&
-          insight.consequenceText == null &&
-          insight.betterMoveText == null &&
-          insight.continuationText == null;
-    }
-    final expected = renderForVersion(
-      insight.primaryClaim!,
-      insight.rendererVersion,
-    );
-    return insight.conciseText == expected.concise &&
-        insight.causeText == expected.cause &&
-        insight.consequenceText == expected.consequence &&
-        insight.betterMoveText == expected.betterMove &&
-        insight.continuationText == expected.continuation &&
-        !_debugTerm.hasMatch(insight.conciseText!);
-  }
 }
 
 /// Lightweight stored-reference validator. It never detects or plans claims;
@@ -811,6 +1562,7 @@ class MoveInsightPersistenceValidator {
     required String fenAfter,
     required String playedMoveUci,
     required bool isWhiteMove,
+    required MoveQuality classification,
     required MoveClassificationEvidence classificationEvidence,
     required OpeningEvidence openingEvidence,
     required List<EngineLine> preMoveLines,
@@ -842,10 +1594,10 @@ class MoveInsightPersistenceValidator {
       final claim = insight.primaryClaim!;
       if (claim.confidence != MoveInsightConfidence.verified ||
           claim.reasonCode != _reasonCodeFor(claim.type) ||
-          !_claimPayloadMatchesType(claim) ||
+          !_claimPayloadMatchesType(claim, insight.claimSchemaVersion) ||
           !_sameStringSet(
             claim.supportingFactIds,
-            _requiredFactIdsFor(claim.type),
+            _requiredFactIdsForClaim(claim),
           )) {
         return false;
       }
@@ -858,6 +1610,32 @@ class MoveInsightPersistenceValidator {
         preMoveLines,
         moverSide,
         fenBefore,
+      );
+      final referenceInput = MoveInsightInput(
+        fenBefore: fenBefore,
+        fenAfter: fenAfter,
+        playedMoveUci: playedMoveUci,
+        playedMoveSan: '',
+        isWhiteMove: isWhiteMove,
+        classification: classification,
+        classificationEvidence: classificationEvidence,
+        preMoveLines: preMoveLines,
+        postMoveLines: const <EngineLine>[],
+        postMoveSearchQualityMet: true,
+        engineBestMoveSan: claim.betterMoveSan,
+        openingEvidence: openingEvidence,
+      );
+      final mechanismMatches = _causalMechanismMatches(
+        insight: insight,
+        claim: claim,
+        input: referenceInput,
+        before: before,
+        after: declaredAfter,
+        playedMove: move,
+        moverSide: moverSide,
+        movingRole: piece.role.name,
+        playedTrace: persistedTrace,
+        bestTrace: preTraces.firstOrNull,
       );
       bool traceMatches(MoveInsightLineTrace? trace) =>
           trace != null &&
@@ -912,7 +1690,34 @@ class MoveInsightPersistenceValidator {
               ) &&
               traceMatches(persistedTrace) &&
               _sameUci(persistedTrace!.uciMoves.first, playedMoveUci) &&
-              persistedTrace.terminalWinner == moverSide;
+              persistedTrace.terminalWinner == moverSide &&
+              mechanismMatches;
+        case MoveInsightClaimType.missesMaterialWin:
+          final bestTrace = preTraces.firstOrNull;
+          return classification == MoveQuality.missedWin &&
+              bestTrace != null &&
+              bestTrace.materialDelta >= 3 &&
+              claim.materialDelta == bestTrace.materialDelta &&
+              claim.targetRole == bestTrace.mostValuableOpponentLoss &&
+              claim.betterMoveSan?.isNotEmpty == true &&
+              traceMatches(bestTrace) &&
+              claim.mechanism ==
+                  MoveInsightMechanismType.missedMaterialResource &&
+              claim.consequence ==
+                  MoveInsightConsequenceType.missedMaterialGain;
+        case MoveInsightClaimType.onlyMoveDefense:
+          final alternativeIndexes = _onlyMoveMateAlternativeIndexes(
+            evidence: classificationEvidence,
+            playedMoveUci: playedMoveUci,
+            isWhiteMove: isWhiteMove,
+            traces: preTraces,
+            moverSide: moverSide,
+          );
+          return classification == MoveQuality.onlyMove &&
+              alternativeIndexes != null &&
+              claim.mechanism == MoveInsightMechanismType.onlyMoveDefense &&
+              claim.consequence == MoveInsightConsequenceType.avoidsCheckmate &&
+              traceMatches(preTraces.firstOrNull);
         case MoveInsightClaimType.winsMaterial:
           return (claim.materialDelta ?? 0) >= 3 &&
               _hasMatchingMaterialFact(insight, claim.materialDelta!) &&
@@ -923,7 +1728,8 @@ class MoveInsightPersistenceValidator {
               _moverScoreIsSound(
                 classificationEvidence.playedMoveEvaluation,
                 isWhiteMove,
-              );
+              ) &&
+              mechanismMatches;
         case MoveInsightClaimType.dropsMaterial:
           final bestTrace = preTraces.firstOrNull;
           return (claim.materialDelta ?? 0) <= -3 &&
@@ -933,7 +1739,8 @@ class MoveInsightPersistenceValidator {
               persistedTrace.materialDelta == claim.materialDelta &&
               persistedTrace.mostValuableMoverLoss == claim.pieceRole &&
               bestTrace != null &&
-              bestTrace.materialDelta - persistedTrace.materialDelta >= 3;
+              bestTrace.materialDelta - persistedTrace.materialDelta >= 3 &&
+              mechanismMatches;
         case MoveInsightClaimType.promotes:
           return move.promotion?.name == claim.targetRole &&
               claim.targetSquare == _normalizedDestination(playedMoveUci);
@@ -960,9 +1767,237 @@ class MoveInsightPersistenceValidator {
             fact.type == MoveInsightFactType.materialDelta &&
             fact.intValue == value,
       );
+
+  bool _causalMechanismMatches({
+    required MoveInsight insight,
+    required MoveInsightClaim claim,
+    required MoveInsightInput input,
+    required Position before,
+    required Position after,
+    required NormalMove playedMove,
+    required Side moverSide,
+    required String movingRole,
+    required MoveInsightLineTrace? playedTrace,
+    required MoveInsightLineTrace? bestTrace,
+  }) {
+    if (claim.mechanism == MoveInsightMechanismType.none) {
+      return claim.consequence == MoveInsightConsequenceType.none &&
+          _claimHasNoCausalPayload(claim);
+    }
+    const factory = _MoveInsightCausalProofFactory();
+    final proof = switch (claim.mechanism) {
+      MoveInsightMechanismType.fork || MoveInsightMechanismType.doubleAttack =>
+        playedTrace == null
+            ? null
+            : factory._forkProof(
+                before: before,
+                after: after,
+                playedMove: playedMove,
+                moverSide: moverSide,
+                movingRole: movingRole,
+                trace: playedTrace,
+              ),
+      MoveInsightMechanismType.absolutePin =>
+        playedTrace == null
+            ? null
+            : factory._pinProof(
+                after: after,
+                playedMove: playedMove,
+                moverSide: moverSide,
+                movingRole: movingRole,
+                trace: playedTrace,
+              ),
+      MoveInsightMechanismType.skewer =>
+        playedTrace == null
+            ? null
+            : factory._skewerProof(
+                after: after,
+                playedMove: playedMove,
+                moverSide: moverSide,
+                movingRole: movingRole,
+                trace: playedTrace,
+              ),
+      MoveInsightMechanismType.discoveredAttack ||
+      MoveInsightMechanismType.opensLine =>
+        playedTrace == null
+            ? null
+            : factory._discoveredAttackProof(
+                before: before,
+                after: after,
+                playedMove: playedMove,
+                moverSide: moverSide,
+                movingRole: movingRole,
+                trace: playedTrace,
+              ),
+      MoveInsightMechanismType.removesDefender =>
+        playedTrace == null
+            ? null
+            : factory._removedDefenderProof(
+                before: before,
+                after: after,
+                playedMove: playedMove,
+                moverSide: moverSide,
+                movingRole: movingRole,
+                trace: playedTrace,
+              ),
+      MoveInsightMechanismType.soundSacrifice ||
+      MoveInsightMechanismType.unsoundSacrifice => factory._sacrificeProof(
+        input: input,
+        playedMove: playedMove,
+        moverSide: moverSide,
+        movingRole: movingRole,
+        playedTrace: playedTrace,
+        bestTrace: bestTrace,
+      ),
+      MoveInsightMechanismType.onlyMoveDefense ||
+      MoveInsightMechanismType.missedMaterialResource ||
+      MoveInsightMechanismType.none => null,
+    };
+    if (proof == null ||
+        proof.mechanism != claim.mechanism ||
+        proof.consequence != claim.consequence ||
+        proof.reasonCode != claim.mechanismReasonCode ||
+        proof.initiatorRole != claim.initiatorRole ||
+        proof.initiatorSquare != claim.initiatorSquare ||
+        proof.attackerRole != claim.pieceRole ||
+        proof.attackerSquare != claim.pieceSquare ||
+        proof.targetRole != claim.targetRole ||
+        proof.targetSquare != claim.targetSquare ||
+        proof.secondaryTargetRole != claim.secondaryTargetRole ||
+        proof.secondaryTargetSquare != claim.secondaryTargetSquare ||
+        proof.defenderRole != claim.defenderRole ||
+        proof.defenderSquare != claim.defenderSquare ||
+        proof.relationType != claim.relationType ||
+        proof.lineType != claim.lineType ||
+        !_sameMoveList(proof.lineSquares, claim.lineSquares)) {
+      return false;
+    }
+    final facts = insight.facts.where((fact) => fact.id == proof.factId);
+    if (facts.length != 1) return false;
+    return jsonEncode(facts.single.toJson()) ==
+        jsonEncode(proof.toFact(moverSide).toJson());
+  }
 }
 
-bool _claimPayloadMatchesType(MoveInsightClaim claim) {
+bool _claimPayloadMatchesType(MoveInsightClaim claim, int schemaVersion) {
+  if (schemaVersion == kApexLegacyExplanationClaimSchemaVersion) {
+    return claim.mechanism == MoveInsightMechanismType.none &&
+        claim.consequence == MoveInsightConsequenceType.none &&
+        _legacyClaimPayloadMatchesType(claim);
+  }
+  if (schemaVersion != kApexExplanationClaimSchemaVersion) return false;
+  if (claim.mechanism == MoveInsightMechanismType.none) {
+    return claim.consequence == MoveInsightConsequenceType.none &&
+        _claimHasNoCausalPayload(claim) &&
+        _legacyClaimPayloadMatchesType(claim);
+  }
+  final hasContinuation =
+      claim.continuationSan.isNotEmpty &&
+      claim.continuationSan.length == claim.continuationUci.length;
+  final hasMechanismIdentity =
+      claim.mechanismReasonCode?.isNotEmpty == true &&
+      claim.relationType != null;
+  if (!hasMechanismIdentity) return false;
+  switch (claim.mechanism) {
+    case MoveInsightMechanismType.fork || MoveInsightMechanismType.doubleAttack:
+      return claim.type == MoveInsightClaimType.winsMaterial &&
+          claim.consequence == MoveInsightConsequenceType.materialGain &&
+          claim.pieceRole != null &&
+          claim.pieceSquare != null &&
+          claim.targetRole != null &&
+          claim.targetSquare != null &&
+          claim.secondaryTargetRole != null &&
+          claim.secondaryTargetSquare != null &&
+          claim.defenderRole == null &&
+          claim.lineSquares.isEmpty &&
+          hasContinuation;
+    case MoveInsightMechanismType.absolutePin ||
+        MoveInsightMechanismType.skewer:
+      return claim.type == MoveInsightClaimType.winsMaterial &&
+          claim.consequence == MoveInsightConsequenceType.materialGain &&
+          claim.pieceRole != null &&
+          claim.pieceSquare != null &&
+          claim.targetRole != null &&
+          claim.targetSquare != null &&
+          claim.secondaryTargetRole != null &&
+          claim.secondaryTargetSquare != null &&
+          claim.lineType != null &&
+          claim.lineSquares.isNotEmpty &&
+          hasContinuation;
+    case MoveInsightMechanismType.discoveredAttack ||
+        MoveInsightMechanismType.opensLine:
+      return claim.type == MoveInsightClaimType.winsMaterial &&
+          claim.consequence == MoveInsightConsequenceType.materialGain &&
+          claim.initiatorRole != null &&
+          claim.initiatorSquare != null &&
+          claim.pieceRole != null &&
+          claim.pieceSquare != null &&
+          claim.targetRole != null &&
+          claim.targetSquare != null &&
+          claim.lineType != null &&
+          claim.lineSquares.isNotEmpty &&
+          hasContinuation;
+    case MoveInsightMechanismType.removesDefender:
+      return claim.type == MoveInsightClaimType.winsMaterial &&
+          claim.consequence == MoveInsightConsequenceType.materialGain &&
+          claim.initiatorRole != null &&
+          claim.initiatorSquare != null &&
+          claim.targetRole != null &&
+          claim.targetSquare != null &&
+          claim.defenderRole != null &&
+          claim.defenderSquare != null &&
+          hasContinuation;
+    case MoveInsightMechanismType.soundSacrifice:
+      return (claim.type == MoveInsightClaimType.preservesForcedMate ||
+              claim.type == MoveInsightClaimType.winsMaterial) &&
+          (claim.consequence == MoveInsightConsequenceType.checkmate ||
+              claim.consequence == MoveInsightConsequenceType.materialGain) &&
+          claim.initiatorRole != null &&
+          claim.initiatorSquare != null &&
+          claim.targetRole != null &&
+          claim.targetSquare != null &&
+          hasContinuation;
+    case MoveInsightMechanismType.unsoundSacrifice:
+      return claim.type == MoveInsightClaimType.dropsMaterial &&
+          claim.consequence == MoveInsightConsequenceType.materialLoss &&
+          claim.initiatorRole != null &&
+          claim.initiatorSquare != null &&
+          claim.targetRole != null &&
+          claim.targetSquare != null &&
+          claim.betterMoveSan != null &&
+          hasContinuation;
+    case MoveInsightMechanismType.onlyMoveDefense:
+      return claim.type == MoveInsightClaimType.onlyMoveDefense &&
+          claim.consequence == MoveInsightConsequenceType.avoidsCheckmate &&
+          claim.betterMoveSan == null &&
+          claim.opponentReplySan != null &&
+          hasContinuation;
+    case MoveInsightMechanismType.missedMaterialResource:
+      return claim.type == MoveInsightClaimType.missesMaterialWin &&
+          claim.consequence == MoveInsightConsequenceType.missedMaterialGain &&
+          claim.targetRole != null &&
+          claim.materialDelta != null &&
+          claim.betterMoveSan != null &&
+          claim.opponentReplySan != null &&
+          hasContinuation;
+    case MoveInsightMechanismType.none:
+      return false;
+  }
+}
+
+bool _claimHasNoCausalPayload(MoveInsightClaim claim) =>
+    claim.mechanismReasonCode == null &&
+    claim.initiatorRole == null &&
+    claim.initiatorSquare == null &&
+    claim.secondaryTargetRole == null &&
+    claim.secondaryTargetSquare == null &&
+    claim.defenderRole == null &&
+    claim.defenderSquare == null &&
+    claim.relationType == null &&
+    claim.lineType == null &&
+    claim.lineSquares.isEmpty;
+
+bool _legacyClaimPayloadMatchesType(MoveInsightClaim claim) {
   final hasContinuation =
       claim.continuationSan.isNotEmpty &&
       claim.continuationSan.length == claim.continuationUci.length;
@@ -1015,6 +2050,9 @@ bool _claimPayloadMatchesType(MoveInsightClaim claim) {
           hasContinuation &&
           claim.continuationSan.length >= 2 &&
           noOpening;
+    case MoveInsightClaimType.missesMaterialWin ||
+        MoveInsightClaimType.onlyMoveDefense:
+      return false;
     case MoveInsightClaimType.winsMaterial:
       return noPiece &&
           claim.targetSquare == null &&
@@ -1093,6 +2131,7 @@ class MoveInsightFeatures {
     this.postLines = const <MoveInsightLineTrace>[],
     this.playedTrace,
     this.bestTrace,
+    this.causalProofs = const <MoveInsightCausalProof>[],
   });
 
   const MoveInsightFeatures.contradictory(String reason)
@@ -1111,6 +2150,7 @@ class MoveInsightFeatures {
   final List<MoveInsightLineTrace> postLines;
   final MoveInsightLineTrace? playedTrace;
   final MoveInsightLineTrace? bestTrace;
+  final List<MoveInsightCausalProof> causalProofs;
 }
 
 class MoveInsightClaimCandidate {
@@ -1141,6 +2181,7 @@ class MoveInsightLineTrace {
   const MoveInsightLineTrace({
     required this.sanMoves,
     required this.uciMoves,
+    required this.steps,
     required this.materialDelta,
     required this.terminalWinner,
     required this.mostValuableMoverLoss,
@@ -1150,6 +2191,7 @@ class MoveInsightLineTrace {
 
   final List<String> sanMoves;
   final List<String> uciMoves;
+  final List<MoveInsightLineStep> steps;
   final int materialDelta;
   final Side? terminalWinner;
   final String? mostValuableMoverLoss;
@@ -1157,6 +2199,32 @@ class MoveInsightLineTrace {
   final bool moverPromoted;
 
   String? get opponentReplySan => sanMoves.length > 1 ? sanMoves[1] : null;
+}
+
+class MoveInsightLineStep {
+  const MoveInsightLineStep({
+    required this.before,
+    required this.after,
+    required this.move,
+    required this.movingRole,
+    required this.movingSide,
+    required this.fromSquare,
+    required this.toSquare,
+    required this.capturedRole,
+    required this.capturedSide,
+    required this.capturedSquare,
+  });
+
+  final Position before;
+  final Position after;
+  final NormalMove move;
+  final String movingRole;
+  final Side movingSide;
+  final String fromSquare;
+  final String toSquare;
+  final String? capturedRole;
+  final Side? capturedSide;
+  final String? capturedSquare;
 }
 
 class _CapturedPiece {
@@ -1203,6 +2271,7 @@ MoveInsightLineTrace? _traceLine(
     if (baseline == null || rawMoves.isEmpty) return null;
     final san = <String>[];
     final uciMoves = <String>[];
+    final steps = <MoveInsightLineStep>[];
     final moverLosses = <Role>[];
     final opponentLosses = <Role>[];
     var moverPromoted = false;
@@ -1223,7 +2292,24 @@ MoveInsightLineTrace? _traceLine(
       }
       san.add(position.makeSan(move).$2);
       uciMoves.add(rawMoves[ply].toLowerCase());
-      position = position.play(move);
+      final next = position.play(move);
+      steps.add(
+        MoveInsightLineStep(
+          before: position,
+          after: next,
+          move: move,
+          movingRole: position.board.pieceAt(move.from)?.role.name ?? 'pawn',
+          movingSide: movingSide,
+          fromSquare: _squareName(move.from),
+          toSquare: _normalizedDestination(rawMoves[ply]),
+          capturedRole: captured?.piece.role.name,
+          capturedSide: captured?.piece.color,
+          capturedSquare: captured == null
+              ? null
+              : _squareName(captured.square),
+        ),
+      );
+      position = next;
       if (position.isCheckmate || position.isStalemate) break;
     }
     final after = PositionHeuristics.materialBalanceFromFen(position.fen);
@@ -1235,6 +2321,7 @@ MoveInsightLineTrace? _traceLine(
     return MoveInsightLineTrace(
       sanMoves: List<String>.unmodifiable(san),
       uciMoves: List<String>.unmodifiable(uciMoves),
+      steps: List<MoveInsightLineStep>.unmodifiable(steps),
       materialDelta: (after - baseline) * sign,
       terminalWinner: winner,
       mostValuableMoverLoss: _mostValuableRole(moverLosses),
@@ -1332,6 +2419,41 @@ List<MoveInsightCausalStep> _defaultCausalChain(
   return out;
 }
 
+List<MoveInsightCausalStep> _advancedCausalChain(
+  List<String> factIds,
+  MoveInsightCausalProof proof,
+) {
+  final response = factIds.where(
+    (id) => id == 'f_played_line' || id == 'f_best_line',
+  );
+  final outcome = factIds.where(
+    (id) =>
+        id == 'f_terminal_mate' ||
+        id == 'f_played_material' ||
+        id == 'f_best_material' ||
+        id == 'f_alternative_outcome',
+  );
+  return <MoveInsightCausalStep>[
+    const MoveInsightCausalStep(
+      stage: MoveInsightCausalStage.move,
+      factId: 'f_legal',
+    ),
+    MoveInsightCausalStep(
+      stage: MoveInsightCausalStage.changedFact,
+      factId: proof.factId,
+    ),
+    if (response.isNotEmpty)
+      MoveInsightCausalStep(
+        stage: MoveInsightCausalStage.response,
+        factId: response.first,
+      ),
+    MoveInsightCausalStep(
+      stage: MoveInsightCausalStage.outcome,
+      factId: outcome.isNotEmpty ? outcome.first : proof.factId,
+    ),
+  ];
+}
+
 NormalMove? _moveFromUci(Position position, String raw) {
   final uci = normalizeCastlingUci(raw.toLowerCase());
   if (uci.length != 4 && uci.length != 5) return null;
@@ -1411,6 +2533,318 @@ bool _sameUciList(List<String> actual, List<String> expected) {
 bool _sameUci(String first, String second) =>
     normalizeCastlingUci(first) == normalizeCastlingUci(second);
 
+List<int>? _onlyMoveMateAlternativeIndexes({
+  required MoveClassificationEvidence evidence,
+  required String playedMoveUci,
+  required bool isWhiteMove,
+  required List<MoveInsightLineTrace> traces,
+  required Side moverSide,
+}) {
+  if (!evidence.searchQualityMet ||
+      !evidence.hasCompleteCandidateSet ||
+      !evidence.bestMovePv1Consistent ||
+      evidence.requestedMultiPv < 3 ||
+      evidence.candidates.length < 3 ||
+      evidence.legalMoveCount == null ||
+      evidence.legalMoveCount! <= 1 ||
+      traces.length != evidence.candidates.length ||
+      !_sameUci(evidence.candidates.first.rootUci, playedMoveUci) ||
+      !_sameUci(traces.first.uciMoves.first, playedMoveUci)) {
+    return null;
+  }
+  final alternatives = <int>[
+    for (var index = 0; index < evidence.candidates.length; index++)
+      if (!_sameUci(evidence.candidates[index].rootUci, playedMoveUci)) index,
+  ];
+  if (alternatives.length < 2 ||
+      alternatives.any(
+        (index) =>
+            !_mateAgainstMover(evidence.candidates[index].score, isWhiteMove) ||
+            traces[index].terminalWinner != _opposite(moverSide),
+      )) {
+    return null;
+  }
+  return alternatives;
+}
+
+Side _opposite(Side side) => side == Side.white ? Side.black : Side.white;
+
+int _roleValue(String role) => switch (role) {
+  'pawn' => 1,
+  'knight' || 'bishop' => 3,
+  'rook' => 5,
+  'queen' => 9,
+  'king' => 100,
+  _ => 0,
+};
+
+bool _isSlider(String role) =>
+    role == 'bishop' || role == 'rook' || role == 'queen';
+
+bool _sliderSupports(String role, int fileStep, int rankStep) {
+  final diagonal = fileStep != 0 && rankStep != 0;
+  return role == 'queen' ||
+      (role == 'bishop' && diagonal) ||
+      (role == 'rook' && !diagonal);
+}
+
+bool _attacksSquare(Position position, Square from, Square to) {
+  final piece = position.board.pieceAt(from);
+  if (piece == null || from == to) return false;
+  final fileDelta = to.file - from.file;
+  final rankDelta = to.rank - from.rank;
+  switch (piece.role) {
+    case Role.pawn:
+      final forward = piece.color == Side.white ? 1 : -1;
+      return rankDelta == forward && fileDelta.abs() == 1;
+    case Role.knight:
+      return (fileDelta.abs() == 1 && rankDelta.abs() == 2) ||
+          (fileDelta.abs() == 2 && rankDelta.abs() == 1);
+    case Role.king:
+      return fileDelta.abs() <= 1 && rankDelta.abs() <= 1;
+    case Role.bishop || Role.rook || Role.queen:
+      break;
+  }
+  if (piece.role == Role.bishop && fileDelta.abs() != rankDelta.abs()) {
+    return false;
+  }
+  if (piece.role == Role.rook && fileDelta != 0 && rankDelta != 0) {
+    return false;
+  }
+  if (piece.role == Role.queen &&
+      fileDelta != 0 &&
+      rankDelta != 0 &&
+      fileDelta.abs() != rankDelta.abs()) {
+    return false;
+  }
+  final fileStep = fileDelta.sign;
+  final rankStep = rankDelta.sign;
+  var file = from.file + fileStep;
+  var rank = from.rank + rankStep;
+  while (file != to.file || rank != to.rank) {
+    if (position.board.pieceAt(Square(file + rank * 8)) != null) return false;
+    file += fileStep;
+    rank += rankStep;
+  }
+  return true;
+}
+
+List<_BoardTarget> _attackedTargets(
+  Position position,
+  Square attacker,
+  Side targetSide,
+) {
+  final out = <_BoardTarget>[];
+  for (var index = 0; index < 64; index++) {
+    final square = Square(index);
+    final piece = position.board.pieceAt(square);
+    if (piece != null &&
+        piece.color == targetSide &&
+        _attacksSquare(position, attacker, square)) {
+      out.add(
+        _BoardTarget(role: piece.role.name, side: piece.color, square: square),
+      );
+    }
+  }
+  out.sort((a, b) {
+    final value = _roleValue(b.role).compareTo(_roleValue(a.role));
+    return value != 0
+        ? value
+        : _squareName(a.square).compareTo(_squareName(b.square));
+  });
+  return out;
+}
+
+List<_OccupiedRay> _occupiedRays(
+  Position position,
+  Square from,
+  String sliderRole,
+) {
+  final out = <_OccupiedRay>[];
+  for (final direction in _rayDirections) {
+    if (!_sliderSupports(sliderRole, direction.$1, direction.$2)) continue;
+    var file = from.file + direction.$1;
+    var rank = from.rank + direction.$2;
+    final pieces = <_BoardTarget>[];
+    final squares = <String>[];
+    while (file >= 0 && file < 8 && rank >= 0 && rank < 8) {
+      final square = Square(file + rank * 8);
+      squares.add(_squareName(square));
+      final piece = position.board.pieceAt(square);
+      if (piece != null) {
+        pieces.add(
+          _BoardTarget(
+            role: piece.role.name,
+            side: piece.color,
+            square: square,
+          ),
+        );
+        if (pieces.length == 2) break;
+      }
+      file += direction.$1;
+      rank += direction.$2;
+    }
+    if (pieces.isNotEmpty) {
+      out.add(
+        _OccupiedRay(
+          pieces: pieces,
+          squares: squares,
+          lineType: _lineTypeFor(direction.$1, direction.$2),
+        ),
+      );
+    }
+  }
+  return out;
+}
+
+_BoardTarget? _firstOccupied(
+  Position position,
+  Square from,
+  int fileStep,
+  int rankStep,
+) {
+  var file = from.file + fileStep;
+  var rank = from.rank + rankStep;
+  while (file >= 0 && file < 8 && rank >= 0 && rank < 8) {
+    final square = Square(file + rank * 8);
+    final piece = position.board.pieceAt(square);
+    if (piece != null) {
+      return _BoardTarget(
+        role: piece.role.name,
+        side: piece.color,
+        square: square,
+      );
+    }
+    file += fileStep;
+    rank += rankStep;
+  }
+  return null;
+}
+
+MoveInsightLineType _lineTypeFor(int fileStep, int rankStep) {
+  if (fileStep == 0) return MoveInsightLineType.file;
+  if (rankStep == 0) return MoveInsightLineType.rank;
+  return MoveInsightLineType.diagonal;
+}
+
+List<String> _raySquares(Square from, Square to) {
+  final fileDelta = to.file - from.file;
+  final rankDelta = to.rank - from.rank;
+  if (fileDelta != 0 && rankDelta != 0 && fileDelta.abs() != rankDelta.abs()) {
+    return const <String>[];
+  }
+  final out = <String>[];
+  var file = from.file + fileDelta.sign;
+  var rank = from.rank + rankDelta.sign;
+  while (file != to.file || rank != to.rank) {
+    out.add(_squareName(Square(file + rank * 8)));
+    file += fileDelta.sign;
+    rank += rankDelta.sign;
+  }
+  out.add(_squareName(to));
+  return out;
+}
+
+int _defenderCount(Position position, Square target, Side side) {
+  var count = 0;
+  for (var index = 0; index < 64; index++) {
+    final from = Square(index);
+    final piece = position.board.pieceAt(from);
+    if (from != target &&
+        piece?.color == side &&
+        _attacksSquare(position, from, target)) {
+      count++;
+    }
+  }
+  return count;
+}
+
+int _attackerCount(Position position, Square target, Side side) =>
+    _defenderCount(position, target, side);
+
+_CausalCapture? _trackedTargetCapture(
+  List<MoveInsightLineStep> steps, {
+  required String initialSquare,
+  required Side owner,
+  required String role,
+}) {
+  var square = initialSquare;
+  for (var index = 1; index < steps.length; index++) {
+    final step = steps[index];
+    if (step.capturedSquare == square &&
+        step.capturedSide == owner &&
+        step.capturedRole == role) {
+      return _CausalCapture(
+        capturedRole: role,
+        capturedSquare: square,
+        capturerSide: step.movingSide,
+        capturerRole: step.movingRole,
+        capturerInitialSquare: step.fromSquare,
+        linePly: index,
+      );
+    }
+    if (step.movingSide == owner &&
+        step.movingRole == role &&
+        step.fromSquare == square) {
+      square = step.toSquare;
+    }
+  }
+  return null;
+}
+
+class _BoardTarget {
+  const _BoardTarget({
+    required this.role,
+    required this.side,
+    required this.square,
+  });
+
+  final String role;
+  final Side side;
+  final Square square;
+}
+
+class _OccupiedRay {
+  const _OccupiedRay({
+    required this.pieces,
+    required this.squares,
+    required this.lineType,
+  });
+
+  final List<_BoardTarget> pieces;
+  final List<String> squares;
+  final MoveInsightLineType lineType;
+}
+
+class _CausalCapture {
+  const _CausalCapture({
+    required this.capturedRole,
+    required this.capturedSquare,
+    required this.capturerSide,
+    required this.capturerRole,
+    required this.capturerInitialSquare,
+    required this.linePly,
+  });
+
+  final String capturedRole;
+  final String capturedSquare;
+  final Side capturerSide;
+  final String capturerRole;
+  final String capturerInitialSquare;
+  final int linePly;
+}
+
+const List<(int, int)> _rayDirections = <(int, int)>[
+  (1, 0),
+  (-1, 0),
+  (0, 1),
+  (0, -1),
+  (1, 1),
+  (1, -1),
+  (-1, 1),
+  (-1, -1),
+];
+
 String _reasonCodeFor(MoveInsightClaimType type) => switch (type) {
   MoveInsightClaimType.deliversMate => 'legal_move_reaches_checkmate',
   MoveInsightClaimType.createsStalemate => 'legal_move_reaches_stalemate',
@@ -1420,6 +2854,10 @@ String _reasonCodeFor(MoveInsightClaimType type) => switch (type) {
     'verified_best_line_mates_but_played_move_does_not',
   MoveInsightClaimType.preservesForcedMate =>
     'verified_played_line_preserves_mate',
+  MoveInsightClaimType.missesMaterialWin =>
+    'best_line_wins_material_but_played_move_does_not',
+  MoveInsightClaimType.onlyMoveDefense =>
+    'complete_alternatives_allow_forced_mate',
   MoveInsightClaimType.winsMaterial =>
     'best_response_line_sustains_material_gain',
   MoveInsightClaimType.dropsMaterial =>
@@ -1430,36 +2868,56 @@ String _reasonCodeFor(MoveInsightClaimType type) => switch (type) {
   MoveInsightClaimType.bookTransition => 'verified_exact_opening_transition',
 };
 
-List<String> _requiredFactIdsFor(MoveInsightClaimType type) => switch (type) {
-  MoveInsightClaimType.deliversMate => const <String>[
-    'f_legal',
-    'f_terminal_mate',
-  ],
-  MoveInsightClaimType.createsStalemate => const <String>['f_legal'],
-  MoveInsightClaimType.allowsForcedMate ||
-  MoveInsightClaimType.preservesForcedMate => const <String>[
-    'f_legal',
-    'f_played_line',
-  ],
-  MoveInsightClaimType.missesForcedMate => const <String>[
-    'f_legal',
-    'f_best_line',
-  ],
-  MoveInsightClaimType.winsMaterial => const <String>[
-    'f_legal',
-    'f_played_line',
-    'f_played_material',
-  ],
-  MoveInsightClaimType.dropsMaterial => const <String>[
-    'f_legal',
-    'f_played_line',
-    'f_played_material',
-    'f_best_line',
-  ],
-  MoveInsightClaimType.promotes => const <String>['f_legal', 'f_promotion'],
-  MoveInsightClaimType.recaptures => const <String>['f_legal', 'f_capture'],
-  MoveInsightClaimType.bookTransition => const <String>['f_legal', 'f_opening'],
-};
+List<String> _requiredFactIdsForClaim(MoveInsightClaim claim) {
+  final base = switch (claim.type) {
+    MoveInsightClaimType.deliversMate => const <String>[
+      'f_legal',
+      'f_terminal_mate',
+    ],
+    MoveInsightClaimType.createsStalemate => const <String>['f_legal'],
+    MoveInsightClaimType.allowsForcedMate ||
+    MoveInsightClaimType.preservesForcedMate => const <String>[
+      'f_legal',
+      'f_played_line',
+    ],
+    MoveInsightClaimType.missesForcedMate => const <String>[
+      'f_legal',
+      'f_best_line',
+    ],
+    MoveInsightClaimType.missesMaterialWin => const <String>[
+      'f_legal',
+      'f_best_line',
+      'f_best_material',
+    ],
+    MoveInsightClaimType.onlyMoveDefense => const <String>[
+      'f_legal',
+      'f_best_line',
+      'f_alternative_outcome',
+    ],
+    MoveInsightClaimType.winsMaterial => const <String>[
+      'f_legal',
+      'f_played_line',
+      'f_played_material',
+    ],
+    MoveInsightClaimType.dropsMaterial => const <String>[
+      'f_legal',
+      'f_played_line',
+      'f_played_material',
+      'f_best_line',
+    ],
+    MoveInsightClaimType.promotes => const <String>['f_legal', 'f_promotion'],
+    MoveInsightClaimType.recaptures => const <String>['f_legal', 'f_capture'],
+    MoveInsightClaimType.bookTransition => const <String>[
+      'f_legal',
+      'f_opening',
+    ],
+  };
+  return claim.mechanism == MoveInsightMechanismType.none ||
+          claim.mechanism == MoveInsightMechanismType.onlyMoveDefense ||
+          claim.mechanism == MoveInsightMechanismType.missedMaterialResource
+      ? base
+      : <String>[...base, 'f_causal_${claim.mechanism.name.toLowerCase()}'];
+}
 
 bool _sameStringSet(List<String> first, List<String> second) =>
     first.length == second.length && first.toSet().containsAll(second);
@@ -1548,8 +3006,3 @@ String _legacyMaterialConsequence(int? delta, {required bool winning}) {
       ? 'The line finishes at least $amount material points ahead of the start.'
       : 'The line finishes at least $amount material points below the start.';
 }
-
-final RegExp _debugTerm = RegExp(
-  r'\b(stockfish|pv\d*|centipawns?|debug|uci|fen)\b',
-  caseSensitive: false,
-);

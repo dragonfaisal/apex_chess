@@ -18,17 +18,24 @@ const String kApexClassifierProfile = 'apex_trustworthy_offline_v6';
 const int kApexTacticalVerifierVersion = 3;
 
 /// Bump when the persisted analysis result/cache schema changes.
-const int kApexAnalysisSchemaVersion = 5;
+const int kApexAnalysisSchemaVersion = 6;
+
+/// First persisted schema carrying structured move insights. Schema 5 remains
+/// an exact-reopen contract and must never be rewritten as Chapter 7 data.
+const int kApexLegacyInsightAnalysisSchemaVersion = 5;
 
 /// Last schema before structured, evidence-grounded move insights.
 const int kApexLegacyAnalysisSchemaVersion = 4;
 
 /// Deterministic explanation contracts. These versions are independent from
 /// the classifier: changing copy or claim semantics must never retune labels.
-const int kApexExplanationPolicyVersion = 1;
-const int kApexExplanationClaimSchemaVersion = 1;
+const int kApexLegacyExplanationPolicyVersion = 1;
+const int kApexExplanationPolicyVersion = 2;
+const int kApexLegacyExplanationClaimSchemaVersion = 1;
+const int kApexExplanationClaimSchemaVersion = 2;
 const int kApexLegacyExplanationRendererVersion = 1;
-const int kApexExplanationRendererVersion = 2;
+const int kApexChapter6ExplanationRendererVersion = 2;
+const int kApexExplanationRendererVersion = 3;
 
 /// Embedded opening-intelligence policy and persisted evidence contract.
 ///

@@ -106,17 +106,21 @@ class AnalysisTimeline {
       moves.isNotEmpty;
 
   bool get hasCurrentExplanationContract =>
-      analysisSchemaVersion >= kApexAnalysisSchemaVersion &&
+      analysisSchemaVersion == kApexAnalysisSchemaVersion &&
       explanationPolicyVersion == kApexExplanationPolicyVersion &&
       explanationClaimSchemaVersion == kApexExplanationClaimSchemaVersion &&
       explanationRendererVersion == kApexExplanationRendererVersion;
 
   bool get hasSupportedExplanationContract =>
-      analysisSchemaVersion >= kApexAnalysisSchemaVersion &&
-      explanationPolicyVersion == kApexExplanationPolicyVersion &&
-      explanationClaimSchemaVersion == kApexExplanationClaimSchemaVersion &&
-      (explanationRendererVersion == kApexLegacyExplanationRendererVersion ||
-          explanationRendererVersion == kApexExplanationRendererVersion);
+      hasCurrentExplanationContract ||
+      (analysisSchemaVersion == kApexLegacyInsightAnalysisSchemaVersion &&
+          explanationPolicyVersion == kApexLegacyExplanationPolicyVersion &&
+          explanationClaimSchemaVersion ==
+              kApexLegacyExplanationClaimSchemaVersion &&
+          (explanationRendererVersion ==
+                  kApexLegacyExplanationRendererVersion ||
+              explanationRendererVersion ==
+                  kApexChapter6ExplanationRendererVersion));
 
   /// O(1) access to a specific ply's analysis.
   MoveAnalysis? operator [](int ply) {

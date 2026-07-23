@@ -9,6 +9,7 @@ import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
 import 'package:apex_chess/features/pgn_review/presentation/models/review_board_display.dart';
 import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -257,6 +258,35 @@ void main() {
     expect(insight.betterMoveReason, isNull);
   });
 
+  test('advanced outcome and mechanism use one persisted artifact', () {
+    final persisted = testForkInsight();
+    final insight = ReviewCoachInsightDisplay.fromMove(
+      _move(
+        ply: 0,
+        isWhite: true,
+        san: 'Nc7+',
+        uci: 'b5c7',
+        quality: MoveQuality.great,
+        insight: persisted,
+      ),
+      timeline: _timeline(),
+      mode: AnalysisMode.deep,
+      userIsWhite: true,
+    );
+
+    expect(
+      insight.explanation,
+      'The knight forks the king and queen, so the queen cannot be saved.',
+    );
+    expect(insight.coachDetail, 'One move creates two immediate threats.');
+    expect(
+      insight.consequenceDetail,
+      'The best response still loses the queen.',
+    );
+    expect(insight.engineLinePreview, 'Nc7+ Kf8 Nxa8 Kg8');
+    expect(insight.artifactDigest, persisted.integrityDigest);
+  });
+
   test('schema-v4 timeline cannot surface a structured schema-v5 insight', () {
     final insight = ReviewCoachInsightDisplay.fromMove(
       _move(
@@ -315,6 +345,49 @@ void main() {
     expect(items[1].label, '1... e5');
     expect(items[1].marker, '?!');
     expect(identical(items, warm), isTrue);
+  });
+
+  test('100-ply selected navigation reuses the mapped timeline', () {
+    final moves = <MoveAnalysis>[
+      for (var ply = 0; ply < 100; ply++)
+        _move(
+          ply: ply,
+          isWhite: ply.isEven,
+          san: ply.isEven ? 'Nf3' : 'Nf6',
+          uci: ply.isEven ? 'g1f3' : 'g8f6',
+          insight: ply == 50 ? testForkInsight() : null,
+        ),
+    ];
+    final timeline = _timeline().copyWith(
+      moves: moves,
+      winPercentages: List<double>.filled(100, 50),
+    );
+    final cold = Stopwatch()..start();
+    ReviewBoardDisplayModel.fromTimeline(
+      timeline,
+      currentPly: 0,
+      flipped: false,
+      mode: AnalysisMode.deep,
+      userIsWhite: true,
+    );
+    cold.stop();
+    final warm = Stopwatch()..start();
+    for (var ply = 0; ply < 100; ply++) {
+      ReviewBoardDisplayModel.fromTimeline(
+        timeline,
+        currentPly: ply,
+        flipped: false,
+        mode: AnalysisMode.deep,
+        userIsWhite: true,
+      );
+    }
+    warm.stop();
+
+    expect(ReviewTimelinePlyDisplay.fromTimeline(timeline), hasLength(100));
+    debugPrint(
+      'CHAPTER7_NAV_PERF coldUs=${cold.elapsedMicroseconds} '
+      'selected100Us=${warm.elapsedMicroseconds}',
+    );
   });
 
   test('better move arrow hides without data and updates by active ply', () {

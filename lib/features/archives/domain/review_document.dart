@@ -345,7 +345,7 @@ class ReviewDocument {
     return document;
   }
 
-  void validate({bool validateRenderedCopy = true}) {
+  void validate() {
     if (schemaVersion != kReviewDocumentSchemaVersion) {
       throw ReviewDocumentValidationException(
         'Unsupported review document schema $schemaVersion.',
@@ -425,7 +425,8 @@ class ReviewDocument {
       );
     }
     _validateOpeningContract();
-    if (timeline.analysisSchemaVersion < kApexAnalysisSchemaVersion &&
+    if (timeline.analysisSchemaVersion <
+            kApexLegacyInsightAnalysisSchemaVersion &&
         (compatibility.hasExplanationContract ||
             timeline.explanationPolicyVersion != 0 ||
             timeline.explanationClaimSchemaVersion != 0 ||
@@ -458,12 +459,9 @@ class ReviewDocument {
       if (timeline.analysisSchemaVersion >= 4) {
         _validateClassificationEvidence(analyzed, timeline: timeline);
       }
-      if (timeline.analysisSchemaVersion >= kApexAnalysisSchemaVersion) {
-        _validateMoveInsight(
-          analyzed,
-          timeline: timeline,
-          validateRenderedCopy: validateRenderedCopy,
-        );
+      if (timeline.analysisSchemaVersion >=
+          kApexLegacyInsightAnalysisSchemaVersion) {
+        _validateMoveInsight(analyzed, timeline: timeline);
       }
       if (timeline.openingBookVersion >= 2) {
         _validateOpeningEvidence(analyzed, timeline: timeline);
@@ -537,29 +535,26 @@ class ReviewDocument {
   void _validateMoveInsight(
     MoveAnalysis move, {
     required AnalysisTimeline timeline,
-    required bool validateRenderedCopy,
   }) {
     final insight = move.insight;
-    const renderer = MoveInsightRenderer();
     if (!timeline.hasSupportedExplanationContract ||
         variantId.algorithmVersion != kAnalysisVariantAlgorithmVersion ||
         compatibility.explanationPolicyVersion !=
-            kApexExplanationPolicyVersion ||
+            timeline.explanationPolicyVersion ||
         compatibility.explanationClaimSchemaVersion !=
-            kApexExplanationClaimSchemaVersion ||
-        !renderer.supportsVersion(compatibility.explanationRendererVersion) ||
+            timeline.explanationClaimSchemaVersion ||
         insight == null ||
         insight.policyVersion != timeline.explanationPolicyVersion ||
         insight.claimSchemaVersion != timeline.explanationClaimSchemaVersion ||
         insight.rendererVersion != timeline.explanationRendererVersion ||
         !insight.hasValidStructure ||
-        (validateRenderedCopy && !renderer.matchesPersisted(insight)) ||
         !const MoveInsightPersistenceValidator().validate(
           insight: insight,
           fenBefore: move.fenBefore,
           fenAfter: move.fenAfter,
           playedMoveUci: move.uci,
           isWhiteMove: move.isWhiteMove,
+          classification: move.classification,
           classificationEvidence: move.classificationEvidence!,
           openingEvidence: move.openingEvidence!,
           preMoveLines: move.engineLines,
@@ -684,7 +679,8 @@ class ReviewDocument {
     // Current documents carry a sealed per-ply digest and are reopened without
     // classifier execution. Historic schema-v4 documents retain their frozen
     // validation behavior and never receive Chapter 6 insights.
-    if (timeline.analysisSchemaVersion >= kApexAnalysisSchemaVersion) {
+    if (timeline.analysisSchemaVersion >=
+        kApexLegacyInsightAnalysisSchemaVersion) {
       if (!move.hasValidAnalysisIntegrity) {
         throw ReviewDocumentValidationException(
           'Stored move integrity mismatch at ply ${move.ply}.',
@@ -756,10 +752,10 @@ class ReviewDocument {
       );
     }
     final document = ReviewDocument.fromJson(decoded);
-    // Current moves are sealed over every persisted field. Reopen validates
+    // Current moves are sealed over every persisted field. Validation checks
     // those seals and semantic fact references without rerendering product
-    // copy; renderer execution belongs only to creation/save validation.
-    document.validate(validateRenderedCopy: false);
+    // copy.
+    document.validate();
     return document;
   }
 }

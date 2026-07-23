@@ -110,6 +110,98 @@ MoveInsight testMateInsight() {
   return _insight(facts, claim);
 }
 
+MoveInsight testForkInsight() {
+  const facts = <MoveInsightFact>[
+    MoveInsightFact(
+      id: 'f_legal',
+      type: MoveInsightFactType.legalTransition,
+      pieceRole: 'knight',
+      pieceSide: 'white',
+      fromSquare: 'b5',
+      toSquare: 'c7',
+    ),
+    MoveInsightFact(
+      id: 'f_played_line',
+      type: MoveInsightFactType.coherentEngineLine,
+      textValue: 'Nc7+ Kf8 Nxa8 Kg8',
+    ),
+    MoveInsightFact(
+      id: 'f_played_material',
+      type: MoveInsightFactType.materialDelta,
+      intValue: 9,
+    ),
+    MoveInsightFact(
+      id: 'f_causal_fork',
+      type: MoveInsightFactType.changedRelationship,
+      pieceRole: 'knight',
+      pieceSide: 'white',
+      fromSquare: 'c7',
+      toSquare: 'a8',
+      relationType: MoveInsightRelationType.attacks,
+      relatedPieceRole: 'queen',
+      relatedPieceSide: 'black',
+      relatedSquare: 'a8',
+      secondaryPieceRole: 'king',
+      secondaryPieceSide: 'black',
+      secondarySquare: 'e8',
+    ),
+  ];
+  const claim = MoveInsightClaim(
+    id: 'c_winsmaterial',
+    type: MoveInsightClaimType.winsMaterial,
+    confidence: MoveInsightConfidence.verified,
+    reasonCode: 'best_response_line_sustains_material_gain',
+    supportingFactIds: <String>[
+      'f_legal',
+      'f_played_line',
+      'f_played_material',
+      'f_causal_fork',
+    ],
+    pieceRole: 'knight',
+    pieceSquare: 'c7',
+    targetRole: 'queen',
+    targetSquare: 'a8',
+    secondaryTargetRole: 'king',
+    secondaryTargetSquare: 'e8',
+    materialDelta: 9,
+    opponentReplySan: 'Kf8',
+    continuationSan: <String>['Nc7+', 'Kf8', 'Nxa8', 'Kg8'],
+    continuationUci: <String>['b5c7', 'e8f8', 'c7a8', 'f8g8'],
+    mechanism: MoveInsightMechanismType.fork,
+    consequence: MoveInsightConsequenceType.materialGain,
+    mechanismReasonCode: 'new_fork_survives_best_response',
+    relationType: MoveInsightRelationType.attacks,
+  );
+  final rendered = const MoveInsightRenderer().render(claim);
+  return MoveInsight.create(
+    state: MoveInsightState.available,
+    facts: facts,
+    primaryClaim: claim,
+    causalChain: const <MoveInsightCausalStep>[
+      MoveInsightCausalStep(
+        stage: MoveInsightCausalStage.move,
+        factId: 'f_legal',
+      ),
+      MoveInsightCausalStep(
+        stage: MoveInsightCausalStage.changedFact,
+        factId: 'f_causal_fork',
+      ),
+      MoveInsightCausalStep(
+        stage: MoveInsightCausalStage.response,
+        factId: 'f_played_line',
+      ),
+      MoveInsightCausalStep(
+        stage: MoveInsightCausalStage.outcome,
+        factId: 'f_played_material',
+      ),
+    ],
+    conciseText: rendered.concise,
+    causeText: rendered.cause,
+    consequenceText: rendered.consequence,
+    continuationText: rendered.continuation,
+  );
+}
+
 MoveInsight _insight(List<MoveInsightFact> facts, MoveInsightClaim claim) {
   final rendered = const MoveInsightRenderer().render(claim);
   return MoveInsight.create(

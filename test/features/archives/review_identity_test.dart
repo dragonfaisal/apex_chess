@@ -270,7 +270,9 @@ void main() {
 
       final currentId = idFor(current);
       final rendererChanged = idFor(
-        current.copyWith(explanationRendererVersion: 3),
+        current.copyWith(
+          explanationRendererVersion: kApexChapter6ExplanationRendererVersion,
+        ),
       );
       final historicId = idFor(
         current.copyWith(

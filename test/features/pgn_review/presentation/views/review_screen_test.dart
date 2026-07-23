@@ -56,6 +56,7 @@ AnalysisTimeline _timeline({
   String thirdSan = 'Qh5??',
   bool includeFirstInsight = true,
   String firstOpeningName = "King's Pawn Game",
+  MoveInsight? firstInsight,
 }) {
   return AnalysisTimeline(
     moves: [
@@ -68,7 +69,7 @@ AnalysisTimeline _timeline({
         scoreCpAfter: 24,
         coachExplanation: 'Spoofed legacy explanation.',
         insight: includeFirstInsight
-            ? testBookInsight(name: firstOpeningName)
+            ? firstInsight ?? testBookInsight(name: firstOpeningName)
             : null,
       ),
       _move(
@@ -584,6 +585,52 @@ void main() {
     expect(boardFrameSize.width, greaterThanOrEqualTo(276));
     expect(boardFrameSize.height, greaterThanOrEqualTo(276));
     expect(evalBarSize.width, lessThanOrEqualTo(18));
+  });
+
+  testWidgets('advanced causal copy stays compact at 320px and 360px', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    container
+        .read(reviewControllerProvider.notifier)
+        .loadTimeline(
+          _timeline(firstInsight: testForkInsight()),
+          userIsWhite: true,
+        );
+
+    await tester.pumpWidget(_host(container));
+    await _pumpReview(tester);
+    expect(
+      find.text(
+        'The knight forks the king and queen, so the queen cannot be saved.',
+      ),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+
+    tester.view.physicalSize = const Size(360, 800);
+    await tester.pump();
+    await _pumpReview(tester);
+    await tester.tap(find.byKey(const ValueKey('review-coach-orb')));
+    await _pumpReview(tester);
+    await tester.tap(find.byKey(const ValueKey('review-command-explain')));
+    await _pumpReview(tester);
+    expect(
+      find.byKey(const ValueKey('review-coach-explain-sheet')),
+      findsOneWidget,
+    );
+    expect(
+      find.text('One move creates two immediate threats.'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('missing persisted insight omits the card and explain action', (
