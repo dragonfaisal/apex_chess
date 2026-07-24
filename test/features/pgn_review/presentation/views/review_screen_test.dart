@@ -4,6 +4,7 @@ import 'package:apex_chess/core/domain/entities/move_analysis.dart';
 import 'package:apex_chess/core/domain/entities/move_insight.dart';
 import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
+import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
 import 'package:apex_chess/features/pgn_review/presentation/views/review_screen.dart';
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
@@ -149,6 +150,27 @@ Widget _host(
   );
 }
 
+Widget _corruptReviewHost(ProviderContainer container) {
+  return UncontrolledProviderScope(
+    container: container,
+    child: MaterialApp(
+      theme: ApexTheme.dark,
+      initialRoute: '/review',
+      routes: <String, WidgetBuilder>{
+        '/': (_) => const Scaffold(
+          body: Center(
+            child: Text(
+              'Archive',
+              key: ValueKey('corrupt-review-back-destination'),
+            ),
+          ),
+        ),
+        '/review': (_) => const ReviewScreen(),
+      },
+    ),
+  );
+}
+
 Future<void> _pumpReview(WidgetTester tester) async {
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
@@ -222,6 +244,57 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('review-prev-button')));
     await _pumpReview(tester);
     expect(container.read(reviewControllerProvider).currentPly, 1);
+  });
+
+  testWidgets('start end and critical controls select authoritative ply', (
+    tester,
+  ) async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    container
+        .read(reviewControllerProvider.notifier)
+        .loadTimeline(_timeline(), userIsWhite: true);
+
+    await tester.pumpWidget(_host(container));
+    await _pumpReview(tester);
+
+    await tester.tap(find.byKey(const ValueKey('review-next-critical-button')));
+    await _pumpReview(tester);
+    expect(container.read(reviewControllerProvider).currentPly, 1);
+
+    await tester.tap(find.byKey(const ValueKey('review-next-critical-button')));
+    await _pumpReview(tester);
+    expect(container.read(reviewControllerProvider).currentPly, 2);
+
+    await tester.tap(find.byKey(const ValueKey('review-prev-critical-button')));
+    await _pumpReview(tester);
+    expect(container.read(reviewControllerProvider).currentPly, 1);
+
+    await tester.tap(find.byKey(const ValueKey('review-end-button')));
+    await _pumpReview(tester);
+    expect(container.read(reviewControllerProvider).currentPly, 2);
+
+    await tester.tap(find.byKey(const ValueKey('review-start-button')));
+    await _pumpReview(tester);
+    expect(container.read(reviewControllerProvider).currentPly, -1);
+    expect(find.text('Start position'), findsOneWidget);
+  });
+
+  testWidgets('selected move remains visible when insight is absent', (
+    tester,
+  ) async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    container
+        .read(reviewControllerProvider.notifier)
+        .loadTimeline(_timeline(includeFirstInsight: false), userIsWhite: true);
+
+    await tester.pumpWidget(_host(container));
+    await _pumpReview(tester);
+
+    expect(find.byKey(const ValueKey('review-selected-move')), findsOneWidget);
+    expect(find.text('1. e4'), findsWidgets);
+    expect(find.byKey(const ValueKey('review-coach-insight')), findsNothing);
   });
 
   testWidgets('coach command orb opens closes and contains secondary actions', (
@@ -299,7 +372,7 @@ void main() {
       final sheet = find.byKey(const ValueKey('review-coach-explain-sheet'));
       expect(sheet, findsOneWidget);
       expect(
-        find.descendant(of: sheet, matching: find.text('Coach')),
+        find.descendant(of: sheet, matching: find.text('Move insight')),
         findsOneWidget,
       );
       expect(
@@ -716,4 +789,71 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'corrupt saved review is truthful empty semantic and back-navigable',
+    (tester) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      final semantics = tester.ensureSemantics();
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final opened = container
+          .read(reviewControllerProvider.notifier)
+          .openSavedReview(
+            ArchivedGame(
+              id: 'corrupt-review',
+              source: ArchiveSource.pgn,
+              white: '',
+              black: '',
+              result: '*',
+              analyzedAt: DateTime.utc(2026, 7, 24),
+              depth: 0,
+              pgn: '',
+              qualityCounts: const {},
+              averageCpLoss: 0,
+              totalPlies: 0,
+              recordKind: ArchivedRecordKind.unavailable,
+              unavailableReason: 'quarantined-corrupt-value',
+            ),
+            source: ReviewRuntimeSource.archiveExact,
+          );
+      expect(opened, isFalse);
+
+      await tester.pumpWidget(_corruptReviewHost(container));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Saved review unavailable'), findsOneWidget);
+      expect(
+        find.text('The saved data could not be safely opened.'),
+        findsOneWidget,
+      );
+      final unavailableSemantics = tester.getSemantics(
+        find.byKey(const ValueKey('review-unavailable-semantics')),
+      );
+      expect(unavailableSemantics.label, contains('Saved review unavailable'));
+      expect(
+        unavailableSemantics.label,
+        contains('The saved data could not be safely opened.'),
+      );
+      expect(find.byKey(const ValueKey('review-board-frame')), findsNothing);
+      expect(find.byKey(const ValueKey('review-timeline')), findsNothing);
+      expect(find.byKey(const ValueKey('review-coach-insight')), findsNothing);
+      expect(find.textContaining('Retry'), findsNothing);
+      expect(find.textContaining('analysis'), findsNothing);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('corrupt-review-back-destination')),
+        findsOneWidget,
+      );
+      semantics.dispose();
+    },
+  );
 }

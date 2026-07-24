@@ -1,7 +1,7 @@
 /// Per-quality neon vapor aura rendered on the target square of the last move.
 ///
-/// Trusted highlight qualities get a breathing aura; everything else renders
-/// nothing.
+/// Trusted highlight qualities get one restrained static aura; everything
+/// else renders nothing. Review motion is reserved for bounded state changes.
 ///
 ///   * **Brilliant** — ruby → aurora (sapphire/cyan) gradient.
 ///   * **Best Move** — emerald glow.
@@ -11,9 +11,8 @@
 ///
 /// The widget is sized to its parent (caller places it inside a
 /// [Positioned] scoped to a single square) so the glow can never bleed
-/// across square boundaries. A single [AnimationController] drives a
-/// slow sinusoidal breathing envelope (1.8 s period); alpha never
-/// reaches full 1.0 so the underlying piece stays readable.
+/// across square boundaries. It is deliberately static so the underlying
+/// piece stays readable without a permanent repeating ticker.
 library;
 
 import 'package:flutter/material.dart';
@@ -57,63 +56,29 @@ import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
   }
 }
 
-class MoveQualityAura extends StatefulWidget {
+class MoveQualityAura extends StatelessWidget {
   const MoveQualityAura({super.key, required this.quality});
 
   final MoveQuality quality;
 
   @override
-  State<MoveQualityAura> createState() => _MoveQualityAuraState();
-}
-
-class _MoveQualityAuraState extends State<MoveQualityAura>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _breath;
-
-  @override
-  void initState() {
-    super.initState();
-    _breath = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1800),
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _breath.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final palette = _palette(widget.quality);
+    final palette = _palette(quality);
     if (palette == null) return const SizedBox.shrink();
 
     return IgnorePointer(
-      child: AnimatedBuilder(
-        animation: _breath,
-        builder: (context, _) {
-          // Ease-in-out sine so the breath doesn't feel mechanical.
-          final t = Curves.easeInOutSine.transform(_breath.value);
-          final peak = 0.35 + 0.35 * t; // 0.35..0.70
-          final mid = 0.18 + 0.18 * t; // 0.18..0.36
-          return DecoratedBox(
-            decoration: BoxDecoration(
-              // Inset the gradient so the rim hugs the square without
-              // any hard edge — feels vapor-like rather than painted.
-              gradient: RadialGradient(
-                radius: 0.70,
-                colors: [
-                  palette.inner.withValues(alpha: peak),
-                  palette.outer.withValues(alpha: mid),
-                  palette.outer.withValues(alpha: 0.0),
-                ],
-                stops: const [0.0, 0.55, 1.0],
-              ),
-            ),
-          );
-        },
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: RadialGradient(
+            radius: 0.70,
+            colors: [
+              palette.inner.withValues(alpha: 0.42),
+              palette.outer.withValues(alpha: 0.20),
+              palette.outer.withValues(alpha: 0.0),
+            ],
+            stops: const [0.0, 0.55, 1.0],
+          ),
+        ),
       ),
     );
   }

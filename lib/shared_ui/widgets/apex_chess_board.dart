@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import 'package:apex_chess/shared_ui/themes/apex_theme.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_board_overlay.dart';
 import 'package:apex_chess/shared_ui/widgets/move_quality_aura.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
 
@@ -27,6 +28,7 @@ class ApexChessBoard extends StatelessWidget {
   final bool isCheck;
   final ValueChanged<String>? onSquareTapped;
   final MoveQuality? lastMoveQuality;
+  final ApexBoardOverlay? evidenceOverlay;
 
   /// Optional engine "better move" arrow rendered from the source square
   /// to the destination, in algebraic form (e.g. `('f8', 'e7')` for
@@ -46,133 +48,203 @@ class ApexChessBoard extends StatelessWidget {
     this.onSquareTapped,
     this.lastMoveQuality,
     this.betterMove,
+    this.evidenceOverlay,
   });
 
   @override
   Widget build(BuildContext context) {
     final pieces = _parseFen(fen);
-    return AspectRatio(
-      aspectRatio: 1.0,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final boardSize = constraints.maxWidth;
-          final squareSize = boardSize / 8;
-          final moveAccent = lastMoveQuality?.color ?? ApexColors.electricBlue;
-          return GestureDetector(
-            onTapUp: (details) => _handleTap(details, squareSize),
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: CustomPaint(
-                    painter: _ApexBoardPainter(flipped: flipped),
-                    isComplex: false,
-                    willChange: false,
-                  ),
-                ),
-                if (lastMove != null) ...[
-                  _buildHighlight(
-                    lastMove!.$1,
-                    squareSize,
-                    moveAccent.withAlpha(26),
-                  ),
-                  _buildHighlight(
-                    lastMove!.$2,
-                    squareSize,
-                    moveAccent.withAlpha(44),
-                  ),
-                  // Castling: detect from king's 2-square horizontal hop
-                  // on the back rank and highlight the rook's trail so the
-                  // eye reads the move as a single combined action
-                  // instead of a king move with a rook that "teleports".
-                  ..._buildCastlingRookHighlight(lastMove!, squareSize),
-                ],
-                if (selectedSquare != null)
-                  _buildHighlight(
-                    selectedSquare!,
-                    squareSize,
-                    ApexColors.electricBlue.withAlpha(65),
-                  ),
-                if (isCheck) _buildCheckHighlight(pieces, squareSize),
-                for (final sq in legalMoveSquares)
-                  _buildLegalMoveIndicator(
-                    sq,
-                    squareSize,
-                    isOccupied: pieces.values.any(
-                      (e) =>
-                          e.$1 == _fileFromAlgebraic(sq) &&
-                          e.$2 == _rankFromAlgebraic(sq),
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return Semantics(
+      label: [
+        flipped
+            ? 'Chess board, Black orientation'
+            : 'Chess board, White orientation',
+        if (lastMove != null) 'played move ${lastMove!.$1} to ${lastMove!.$2}',
+        if (betterMove != null)
+          'better move ${betterMove!.$1} to ${betterMove!.$2}',
+        if (evidenceOverlay != null) evidenceOverlay!.semanticLabel,
+      ].join('. '),
+      image: true,
+      child: AspectRatio(
+        aspectRatio: 1.0,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final boardSize = constraints.maxWidth;
+            final squareSize = boardSize / 8;
+            final moveAccent =
+                lastMoveQuality?.color ?? ApexColors.electricBlue;
+            return GestureDetector(
+              onTapUp: (details) => _handleTap(details, squareSize),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: CustomPaint(
+                      painter: _ApexBoardPainter(flipped: flipped),
+                      isComplex: false,
+                      willChange: false,
                     ),
                   ),
-                // Per-quality breathing neon aura on the move's target
-                // square. Rendered under the piece so the piece reads
-                // against a glowing halo instead of being washed out.
-                if (lastMove != null && lastMoveQuality != null)
-                  _buildQualityAura(lastMove!.$2, squareSize, lastMoveQuality!),
-                for (final entry in pieces.entries)
-                  _buildPiece(entry.key, entry.value, squareSize),
-                if (lastMove != null && lastMoveQuality != null)
-                  _buildQualityOverlay(
-                    lastMove!.$2,
-                    squareSize,
-                    lastMoveQuality!,
-                  ),
-                // Engine "better move" arrow + destination halo. Drawn
-                // *after* pieces so it reads on top of the board, but
-                // *before* coordinates so the file/rank labels stay
-                // legible. Only renders for valid algebraic squares —
-                // out-of-band data is silently skipped.
-                if (betterMove != null)
-                  Positioned.fill(
-                    child: TweenAnimationBuilder<double>(
-                      key: ValueKey(
-                        'better-${betterMove!.$1}-${betterMove!.$2}-$flipped',
+                  if (lastMove != null) ...[
+                    _buildHighlight(
+                      lastMove!.$1,
+                      squareSize,
+                      moveAccent.withAlpha(26),
+                    ),
+                    _buildHighlight(
+                      lastMove!.$2,
+                      squareSize,
+                      moveAccent.withAlpha(44),
+                    ),
+                    // Castling: detect from king's 2-square horizontal hop
+                    // on the back rank and highlight the rook's trail so the
+                    // eye reads the move as a single combined action
+                    // instead of a king move with a rook that "teleports".
+                    ..._buildCastlingRookHighlight(lastMove!, squareSize),
+                  ],
+                  if (selectedSquare != null)
+                    _buildHighlight(
+                      selectedSquare!,
+                      squareSize,
+                      ApexColors.electricBlue.withAlpha(65),
+                    ),
+                  if (evidenceOverlay != null) ...[
+                    for (final square in evidenceOverlay!.raySquares)
+                      if (ApexBoardGeometry.isSquare(square))
+                        _buildHighlight(
+                          square,
+                          squareSize,
+                          ApexColors.sapphireBright.withAlpha(24),
+                        ),
+                    for (final square in evidenceOverlay!.supportSquares)
+                      if (ApexBoardGeometry.isSquare(square))
+                        _buildOutlinedHighlight(
+                          square,
+                          squareSize,
+                          ApexColors.sapphireBright,
+                        ),
+                    for (final square in evidenceOverlay!.targetSquares)
+                      if (ApexBoardGeometry.isSquare(square))
+                        _buildOutlinedHighlight(
+                          square,
+                          squareSize,
+                          ApexColors.aurora,
+                        ),
+                  ],
+                  if (isCheck) _buildCheckHighlight(pieces, squareSize),
+                  for (final sq in legalMoveSquares)
+                    _buildLegalMoveIndicator(
+                      sq,
+                      squareSize,
+                      isOccupied: pieces.values.any(
+                        (e) =>
+                            e.$1 == _fileFromAlgebraic(sq) &&
+                            e.$2 == _rankFromAlgebraic(sq),
                       ),
-                      tween: Tween(begin: 0, end: 1),
-                      duration: const Duration(milliseconds: 220),
-                      curve: Curves.easeOutCubic,
-                      builder: (context, value, child) {
-                        return Opacity(
-                          opacity: value,
-                          child: Transform.scale(
-                            scale: 0.96 + (0.04 * value),
-                            child: child,
+                    ),
+                  // Per-quality breathing neon aura on the move's target
+                  // square. Rendered under the piece so the piece reads
+                  // against a glowing halo instead of being washed out.
+                  if (lastMove != null && lastMoveQuality != null)
+                    _buildQualityAura(
+                      lastMove!.$2,
+                      squareSize,
+                      lastMoveQuality!,
+                    ),
+                  for (final entry in pieces.entries)
+                    _buildPiece(entry.key, entry.value, squareSize),
+                  if (lastMove != null && lastMoveQuality != null)
+                    _buildQualityOverlay(
+                      lastMove!.$2,
+                      squareSize,
+                      lastMoveQuality!,
+                    ),
+                  if (evidenceOverlay?.principalArrow != null)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          key: const ValueKey('review-causal-overlay'),
+                          painter: _EvidenceArrowPainter(
+                            from: evidenceOverlay!.principalArrow!.$1,
+                            to: evidenceOverlay!.principalArrow!.$2,
+                            flipped: flipped,
+                            color: ApexColors.aurora,
                           ),
-                        );
-                      },
-                      child: Stack(
-                        children: [
-                          _buildBetterMoveHalo(betterMove!.$2, squareSize),
-                          Positioned.fill(
-                            child: IgnorePointer(
-                              child: CustomPaint(
-                                painter: _BetterMoveArrowPainter(
-                                  fromFile: _fileFromAlgebraic(betterMove!.$1),
-                                  fromRank: _rankFromAlgebraic(betterMove!.$1),
-                                  toFile: _fileFromAlgebraic(betterMove!.$2),
-                                  toRank: _rankFromAlgebraic(betterMove!.$2),
-                                  flipped: flipped,
-                                ),
-                                isComplex: false,
-                                willChange: false,
+                          isComplex: false,
+                          willChange: false,
+                        ),
+                      ),
+                    ),
+                  // Engine "better move" arrow + destination halo. Drawn
+                  // *after* pieces so it reads on top of the board, but
+                  // *before* coordinates so the file/rank labels stay
+                  // legible. Only renders for valid algebraic squares —
+                  // out-of-band data is silently skipped.
+                  if (betterMove != null &&
+                      ApexBoardGeometry.isSquare(betterMove!.$1) &&
+                      ApexBoardGeometry.isSquare(betterMove!.$2))
+                    Positioned.fill(
+                      child: reduceMotion
+                          ? _buildBetterMoveLayer(betterMove!, squareSize)
+                          : TweenAnimationBuilder<double>(
+                              key: ValueKey(
+                                'better-${betterMove!.$1}-${betterMove!.$2}-$flipped',
+                              ),
+                              tween: Tween(begin: 0, end: 1),
+                              duration: const Duration(milliseconds: 220),
+                              curve: Curves.easeOutCubic,
+                              builder: (context, value, child) {
+                                return Opacity(
+                                  opacity: value,
+                                  child: Transform.scale(
+                                    scale: 0.96 + (0.04 * value),
+                                    child: child,
+                                  ),
+                                );
+                              },
+                              child: _buildBetterMoveLayer(
+                                betterMove!,
+                                squareSize,
                               ),
                             ),
-                          ),
-                        ],
-                      ),
+                    ),
+                  Positioned.fill(
+                    child: CustomPaint(
+                      painter: _CoordinatePainter(flipped: flipped),
+                      isComplex: false,
+                      willChange: false,
                     ),
                   ),
-                Positioned.fill(
-                  child: CustomPaint(
-                    painter: _CoordinatePainter(flipped: flipped),
-                    isComplex: false,
-                    willChange: false,
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
+                ],
+              ),
+            );
+          },
+        ),
       ),
+    );
+  }
+
+  Widget _buildBetterMoveLayer((String, String) move, double squareSize) {
+    return Stack(
+      children: [
+        _buildBetterMoveHalo(move.$2, squareSize),
+        Positioned.fill(
+          child: IgnorePointer(
+            child: CustomPaint(
+              key: const ValueKey('review-better-move-overlay'),
+              painter: _BetterMoveArrowPainter(
+                fromFile: _fileFromAlgebraic(move.$1),
+                fromRank: _rankFromAlgebraic(move.$1),
+                toFile: _fileFromAlgebraic(move.$2),
+                toRank: _rankFromAlgebraic(move.$2),
+                flipped: flipped,
+              ),
+              isComplex: false,
+              willChange: false,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -201,6 +273,29 @@ class ApexChessBoard extends StatelessWidget {
       width: squareSize,
       height: squareSize,
       child: Container(color: color),
+    );
+  }
+
+  Widget _buildOutlinedHighlight(
+    String square,
+    double squareSize,
+    Color color,
+  ) {
+    final pos = _squareToPosition(square, squareSize);
+    return Positioned(
+      left: pos.dx + 2,
+      top: pos.dy + 2,
+      width: squareSize - 4,
+      height: squareSize - 4,
+      child: IgnorePointer(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: color.withAlpha(22),
+            borderRadius: BorderRadius.circular(5),
+            border: Border.all(color: color.withAlpha(164), width: 1.5),
+          ),
+        ),
+      ),
     );
   }
 
@@ -493,6 +588,77 @@ class _ApexBoardPainter extends CustomPainter {
   @override
   bool shouldRepaint(_ApexBoardPainter oldDelegate) =>
       flipped != oldDelegate.flipped;
+}
+
+/// Draws one evidence-backed causal relationship. It deliberately uses a
+/// different colour from the better-move suggestion so "what happened" and
+/// "what should have happened" cannot be confused.
+class _EvidenceArrowPainter extends CustomPainter {
+  const _EvidenceArrowPainter({
+    required this.from,
+    required this.to,
+    required this.flipped,
+    required this.color,
+  });
+
+  final String from;
+  final String to;
+  final bool flipped;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (!ApexBoardGeometry.isSquare(from) ||
+        !ApexBoardGeometry.isSquare(to) ||
+        from == to) {
+      return;
+    }
+    final start = ApexBoardGeometry.centerForSquare(
+      from,
+      boardSize: size,
+      flipped: flipped,
+    );
+    final end = ApexBoardGeometry.centerForSquare(
+      to,
+      boardSize: size,
+      flipped: flipped,
+    );
+    final direction = end - start;
+    final distance = direction.distance;
+    if (distance <= 1) return;
+    final squareSize = size.width / 8;
+    final unit = Offset(direction.dx / distance, direction.dy / distance);
+    final shaftStart = start + unit * (squareSize * 0.30);
+    final tip = end - unit * (squareSize * 0.20);
+    final shaftEnd = tip - unit * (squareSize * 0.28);
+    final paint = Paint()
+      ..color = color.withAlpha(190)
+      ..strokeWidth = squareSize * 0.075
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(shaftStart, shaftEnd, paint);
+
+    final perpendicular = Offset(-unit.dy, unit.dx);
+    final headWidth = squareSize * 0.18;
+    final path = Path()
+      ..moveTo(tip.dx, tip.dy)
+      ..lineTo(
+        shaftEnd.dx + perpendicular.dx * headWidth,
+        shaftEnd.dy + perpendicular.dy * headWidth,
+      )
+      ..lineTo(
+        shaftEnd.dx - perpendicular.dx * headWidth,
+        shaftEnd.dy - perpendicular.dy * headWidth,
+      )
+      ..close();
+    canvas.drawPath(path, paint..style = PaintingStyle.fill);
+  }
+
+  @override
+  bool shouldRepaint(_EvidenceArrowPainter oldDelegate) =>
+      oldDelegate.from != from ||
+      oldDelegate.to != to ||
+      oldDelegate.flipped != flipped ||
+      oldDelegate.color != color;
 }
 
 /// Draws an electric-blue arrow from the source to destination square

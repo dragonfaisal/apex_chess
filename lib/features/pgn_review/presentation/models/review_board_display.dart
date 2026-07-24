@@ -8,10 +8,14 @@ import 'package:flutter/material.dart';
 
 import 'package:apex_chess/core/domain/entities/analysis_timeline.dart';
 import 'package:apex_chess/core/domain/entities/move_analysis.dart';
+import 'package:apex_chess/core/domain/entities/move_insight.dart';
 import 'package:apex_chess/core/domain/services/evaluation_analyzer.dart';
+import 'package:apex_chess/core/domain/services/analysis_versions.dart';
 import 'package:apex_chess/core/domain/services/move_quality_display.dart';
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
+import 'package:apex_chess/features/pgn_review/presentation/controllers/review_controller.dart';
 import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
+import 'package:apex_chess/shared_ui/widgets/apex_board_overlay.dart';
 
 enum ReviewBoardSide { white, black }
 
@@ -230,11 +234,17 @@ class ReviewMoveQualityChipDisplay {
     required this.label,
     required this.color,
     required this.marker,
+    required this.icon,
+    required this.semanticDescription,
+    this.allowsBrilliantEmphasis = false,
   });
 
   final String label;
   final Color color;
   final String marker;
+  final IconData icon;
+  final String semanticDescription;
+  final bool allowsBrilliantEmphasis;
 
   factory ReviewMoveQualityChipDisplay.fromMove(MoveAnalysis move) {
     final label = MoveQualityDisplay.labelForMove(move);
@@ -246,8 +256,45 @@ class ReviewMoveQualityChipDisplay {
       label: label.label,
       color: label.color,
       marker: markerForLabel(label),
+      icon: iconForLabel(label),
+      semanticDescription: semanticDescriptionForLabel(label),
+      allowsBrilliantEmphasis: label == ReviewMoveLabel.brilliant,
     );
   }
+
+  static IconData iconForLabel(ReviewMoveLabel label) => switch (label) {
+    ReviewMoveLabel.brilliant => Icons.diamond_outlined,
+    ReviewMoveLabel.great => Icons.auto_awesome_outlined,
+    ReviewMoveLabel.onlyMove || ReviewMoveLabel.forced => Icons.route_outlined,
+    ReviewMoveLabel.best ||
+    ReviewMoveLabel.excellent ||
+    ReviewMoveLabel.good => Icons.check_circle_outline_rounded,
+    ReviewMoveLabel.book => Icons.menu_book_outlined,
+    ReviewMoveLabel.inaccuracy => Icons.info_outline_rounded,
+    ReviewMoveLabel.mistake ||
+    ReviewMoveLabel.miss ||
+    ReviewMoveLabel.blunder => Icons.warning_amber_rounded,
+    ReviewMoveLabel.unavailable => Icons.help_outline_rounded,
+    ReviewMoveLabel.checkmate => Icons.flag_outlined,
+  };
+
+  static String semanticDescriptionForLabel(ReviewMoveLabel label) =>
+      switch (label) {
+        ReviewMoveLabel.brilliant => 'Brilliant move',
+        ReviewMoveLabel.great => 'Great move',
+        ReviewMoveLabel.onlyMove => 'Only move',
+        ReviewMoveLabel.forced => 'Forced move',
+        ReviewMoveLabel.best => 'Best move',
+        ReviewMoveLabel.excellent => 'Excellent move',
+        ReviewMoveLabel.good => 'Good move',
+        ReviewMoveLabel.book => 'Verified opening move',
+        ReviewMoveLabel.inaccuracy => 'Inaccuracy',
+        ReviewMoveLabel.mistake => 'Mistake',
+        ReviewMoveLabel.miss => 'Missed opportunity',
+        ReviewMoveLabel.blunder => 'Blunder',
+        ReviewMoveLabel.unavailable => 'Classification unavailable',
+        ReviewMoveLabel.checkmate => 'Checkmate',
+      };
 
   static String markerForLabel(ReviewMoveLabel label) {
     return switch (label) {
@@ -305,6 +352,8 @@ class ReviewCoachInsightDisplay {
         label: 'Move',
         color: Color(0xFF4FC3FF),
         marker: '',
+        icon: Icons.circle_outlined,
+        semanticDescription: 'Selected position',
       ),
     );
   }
@@ -401,45 +450,179 @@ class ReviewTimelinePlyDisplay {
   static List<ReviewTimelinePlyDisplay> fromTimeline(
     AnalysisTimeline timeline,
   ) {
-    final cached = _timelineRows[timeline];
-    if (cached != null) return cached;
-    final rows = List<ReviewTimelinePlyDisplay>.unmodifiable([
-      for (final move in timeline.moves)
-        ReviewTimelinePlyDisplay.fromMove(move),
-    ]);
-    _timelineRows[timeline] = rows;
-    return rows;
+    return _projectionCacheFor(timeline).rows;
   }
 }
 
+enum ReviewCompatibilityState {
+  current,
+  historicSchema5,
+  historicSchema4,
+  unsupported,
+}
+
+class ReviewOpeningDisplay {
+  const ReviewOpeningDisplay._({
+    required this.isVerified,
+    this.eco,
+    this.name,
+    this.variation,
+  });
+
+  const ReviewOpeningDisplay.unavailable() : this._(isVerified: false);
+
+  final bool isVerified;
+  final String? eco;
+  final String? name;
+  final String? variation;
+
+  String? get label {
+    if (!isVerified || name == null) return null;
+    final prefix = eco == null || eco!.isEmpty ? '' : '$eco · ';
+    return '$prefix$name';
+  }
+
+  factory ReviewOpeningDisplay.fromMove(MoveAnalysis? move) {
+    final evidence = move?.openingEvidence;
+    final candidate = evidence?.selectedCandidate;
+    if (evidence?.isVerifiedBookTransition != true || candidate == null) {
+      return const ReviewOpeningDisplay.unavailable();
+    }
+    return ReviewOpeningDisplay._(
+      isVerified: true,
+      eco: candidate.ecoCode.trim(),
+      name: candidate.openingName.trim(),
+      variation: candidate.variation?.trim(),
+    );
+  }
+}
+
+class ReviewCausalMechanismDisplay {
+  const ReviewCausalMechanismDisplay({
+    required this.label,
+    required this.semanticLabel,
+  });
+
+  final String label;
+  final String semanticLabel;
+
+  static ReviewCausalMechanismDisplay? fromMove(
+    MoveAnalysis? move, {
+    required AnalysisTimeline timeline,
+  }) {
+    final insight = timeline.hasSupportedExplanationContract
+        ? move?.insight
+        : null;
+    final claim = insight?.isDisplayable == true ? insight!.primaryClaim : null;
+    if (claim == null || claim.mechanism == MoveInsightMechanismType.none) {
+      return null;
+    }
+    final label = switch (claim.mechanism) {
+      MoveInsightMechanismType.fork => 'Fork',
+      MoveInsightMechanismType.doubleAttack => 'Double attack',
+      MoveInsightMechanismType.absolutePin => 'Absolute pin',
+      MoveInsightMechanismType.skewer => 'Skewer',
+      MoveInsightMechanismType.discoveredAttack => 'Discovered attack',
+      MoveInsightMechanismType.opensLine => 'Opened line',
+      MoveInsightMechanismType.removesDefender => 'Removed defender',
+      MoveInsightMechanismType.soundSacrifice => 'Sound sacrifice',
+      MoveInsightMechanismType.unsoundSacrifice => 'Unsound sacrifice',
+      MoveInsightMechanismType.onlyMoveDefense => 'Only defense',
+      MoveInsightMechanismType.missedMaterialResource =>
+        'Missed material resource',
+      MoveInsightMechanismType.none => '',
+    };
+    return ReviewCausalMechanismDisplay(
+      label: label,
+      semanticLabel: 'Tactical mechanism: $label',
+    );
+  }
+}
+
+class _ReviewTimelineProjectionCache {
+  const _ReviewTimelineProjectionCache({
+    required this.rows,
+    required this.criticalPlies,
+    required this.criticalPlySet,
+    required this.previousCriticalBySelection,
+    required this.nextCriticalBySelection,
+  });
+
+  final List<ReviewTimelinePlyDisplay> rows;
+  final List<int> criticalPlies;
+  final Set<int> criticalPlySet;
+  final List<int?> previousCriticalBySelection;
+  final List<int?> nextCriticalBySelection;
+}
+
+/// The single immutable selected-ply presentation authority for Review V2.
+///
+/// It projects already accepted timeline/document evidence. Widgets render
+/// these values and never inspect engine/classifier/opening/claim internals.
 class ReviewBoardDisplayModel {
   const ReviewBoardDisplayModel({
+    required this.documentIdentity,
+    required this.variantIdentity,
+    required this.gameIdentity,
+    required this.executionId,
+    required this.presentationKey,
     required this.currentFen,
+    required this.fenBefore,
+    required this.fenAfter,
     required this.currentMove,
     required this.currentPly,
     required this.totalPlies,
+    required this.moverLabel,
+    required this.sideToMoveLabel,
     required this.flipped,
     required this.topPlayer,
     required this.bottomPlayer,
     required this.eval,
+    required this.opening,
     required this.insight,
+    required this.mechanism,
+    required this.boardOverlay,
     required this.timeline,
+    required this.criticalPlies,
+    required Set<int> criticalPlySet,
+    required List<int?> previousCriticalBySelection,
+    required List<int?> nextCriticalBySelection,
+    required this.compatibility,
     required this.executionKey,
     this.lastMove,
     this.selectedSquare,
     this.bestMoveArrow,
-  });
+  }) : _criticalPlySet = criticalPlySet,
+       _previousCriticalBySelection = previousCriticalBySelection,
+       _nextCriticalBySelection = nextCriticalBySelection;
 
+  final String? documentIdentity;
+  final String? variantIdentity;
+  final String? gameIdentity;
+  final int executionId;
+  final String presentationKey;
   final String currentFen;
+  final String fenBefore;
+  final String fenAfter;
   final MoveAnalysis? currentMove;
   final int currentPly;
   final int totalPlies;
+  final String moverLabel;
+  final String sideToMoveLabel;
   final bool flipped;
   final ReviewPlayerHeaderDisplay topPlayer;
   final ReviewPlayerHeaderDisplay bottomPlayer;
   final ReviewEvalDisplay eval;
+  final ReviewOpeningDisplay opening;
   final ReviewCoachInsightDisplay insight;
+  final ReviewCausalMechanismDisplay? mechanism;
+  final ApexBoardOverlay? boardOverlay;
   final List<ReviewTimelinePlyDisplay> timeline;
+  final List<int> criticalPlies;
+  final Set<int> _criticalPlySet;
+  final List<int?> _previousCriticalBySelection;
+  final List<int?> _nextCriticalBySelection;
+  final ReviewCompatibilityState compatibility;
   final String executionKey;
   final (String, String)? lastMove;
   final String? selectedSquare;
@@ -448,6 +631,27 @@ class ReviewBoardDisplayModel {
   bool get canGoPrevious => currentPly > -1;
   bool get canGoNext => currentPly < totalPlies - 1;
   bool get hasBestMove => insight.betterMove != null;
+  bool get isCriticalMoment => _criticalPlySet.contains(currentPly);
+  int? get previousCriticalPly => _previousCriticalBySelection[currentPly + 1];
+  int? get nextCriticalPly => _nextCriticalBySelection[currentPly + 1];
+
+  factory ReviewBoardDisplayModel.fromState(ReviewState state) {
+    final timeline = state.timeline;
+    if (timeline == null) {
+      throw StateError('Review presentation requires a loaded timeline.');
+    }
+    return ReviewBoardDisplayModel.fromTimeline(
+      timeline,
+      currentPly: state.currentPly,
+      flipped: state.flipped,
+      mode: state.mode,
+      userIsWhite: state.userIsWhite,
+      documentIdentity: state.reviewDocumentId,
+      variantIdentity: state.analysisVariantId,
+      gameIdentity: state.gameId,
+      executionId: state.executionId,
+    );
+  }
 
   factory ReviewBoardDisplayModel.fromTimeline(
     AnalysisTimeline timeline, {
@@ -455,11 +659,17 @@ class ReviewBoardDisplayModel {
     required bool flipped,
     required AnalysisMode mode,
     required bool? userIsWhite,
+    String? documentIdentity,
+    String? variantIdentity,
+    String? gameIdentity,
+    int executionId = 0,
   }) {
     final safePly = timeline.moves.isEmpty
         ? -1
         : currentPly.clamp(-1, timeline.totalPlies - 1).toInt();
     final move = safePly < 0 ? null : timeline.moves[safePly];
+    final fenBefore = move?.fenBefore ?? timeline.startingFen;
+    final fenAfter = move?.fenAfter ?? timeline.startingFen;
     final lastMove = _lastMoveFromUci(move?.uci);
     final insight = ReviewCoachInsightDisplay.fromMove(
       move,
@@ -467,11 +677,35 @@ class ReviewBoardDisplayModel {
       mode: mode,
       userIsWhite: userIsWhite,
     );
+    final cache = _projectionCacheFor(timeline);
+    final overlay = _overlayFromMove(move, timeline: timeline);
+    final timelineToken = identityHashCode(timeline);
+    final identityKey =
+        documentIdentity ??
+        variantIdentity ??
+        timeline.cacheKey ??
+        'timeline-$timelineToken';
+    final presentationKey =
+        '$identityKey|run=$executionId|timeline=$timelineToken|ply=$safePly|'
+        'flipped=$flipped';
     return ReviewBoardDisplayModel(
-      currentFen: move?.fenAfter ?? timeline.startingFen,
+      documentIdentity: documentIdentity,
+      variantIdentity: variantIdentity,
+      gameIdentity: gameIdentity,
+      executionId: executionId,
+      presentationKey: presentationKey,
+      currentFen: fenAfter,
+      fenBefore: fenBefore,
+      fenAfter: fenAfter,
       currentMove: move,
       currentPly: safePly,
       totalPlies: timeline.totalPlies,
+      moverLabel: move == null
+          ? 'No move selected'
+          : move.isWhiteMove
+          ? 'White moved'
+          : 'Black moved',
+      sideToMoveLabel: _sideToMoveFromFen(fenAfter),
       flipped: flipped,
       topPlayer: ReviewPlayerHeaderDisplay.top(
         timeline,
@@ -484,17 +718,25 @@ class ReviewBoardDisplayModel {
         userIsWhite: userIsWhite,
       ),
       eval: ReviewEvalDisplay.fromMove(move),
+      opening: ReviewOpeningDisplay.fromMove(move),
       insight: insight,
-      timeline: ReviewTimelinePlyDisplay.fromTimeline(timeline),
-      executionKey:
-          '${timeline.cacheKey ?? 'uncached'}|'
-          '${timeline.completedAt?.toUtc().toIso8601String() ?? 'undated'}|'
-          '${insight.artifactDigest ?? 'no-insight'}',
+      mechanism: ReviewCausalMechanismDisplay.fromMove(
+        move,
+        timeline: timeline,
+      ),
+      boardOverlay: overlay,
+      timeline: cache.rows,
+      criticalPlies: cache.criticalPlies,
+      criticalPlySet: cache.criticalPlySet,
+      previousCriticalBySelection: cache.previousCriticalBySelection,
+      nextCriticalBySelection: cache.nextCriticalBySelection,
+      compatibility: _compatibilityFor(timeline),
+      executionKey: '$identityKey|run=$executionId|timeline=$timelineToken',
       lastMove: lastMove,
       selectedSquare: move?.targetSquare.isNotEmpty == true
           ? move!.targetSquare
           : lastMove?.$2,
-      bestMoveArrow: insight.betterMove != null
+      bestMoveArrow: insight.betterMove != null && overlay == null
           ? _arrowFromUci(move?.engineBestMoveUci)
           : null,
     );
@@ -541,7 +783,168 @@ class ReviewBoardDisplayModel {
     if (best == null || played.isEmpty) return false;
     return normalizeCastlingUci(best) == normalizeCastlingUci(played);
   }
+
+  static String _sideToMoveFromFen(String fen) {
+    final fields = fen.trim().split(RegExp(r'\s+'));
+    if (fields.length < 2) return 'Side to move unavailable';
+    return fields[1] == 'b' ? 'Black to move' : 'White to move';
+  }
+
+  static ReviewCompatibilityState _compatibilityFor(
+    AnalysisTimeline timeline,
+  ) => switch (timeline.analysisSchemaVersion) {
+    kApexAnalysisSchemaVersion => ReviewCompatibilityState.current,
+    kApexLegacyInsightAnalysisSchemaVersion =>
+      ReviewCompatibilityState.historicSchema5,
+    kApexLegacyAnalysisSchemaVersion =>
+      ReviewCompatibilityState.historicSchema4,
+    _ => ReviewCompatibilityState.unsupported,
+  };
+
+  static ApexBoardOverlay? _overlayFromMove(
+    MoveAnalysis? move, {
+    required AnalysisTimeline timeline,
+  }) {
+    final insight = timeline.hasSupportedExplanationContract
+        ? move?.insight
+        : null;
+    final claim = insight?.isDisplayable == true ? insight!.primaryClaim : null;
+    if (claim == null || claim.mechanism == MoveInsightMechanismType.none) {
+      return null;
+    }
+
+    (String, String)? arrow(String? from, String? to) {
+      if (!ApexBoardGeometry.isSquare(from) ||
+          !ApexBoardGeometry.isSquare(to) ||
+          from == to) {
+        return null;
+      }
+      return (from!, to!);
+    }
+
+    List<String> squares(Iterable<String?> candidates) =>
+        List<String>.unmodifiable(
+          candidates
+              .whereType<String>()
+              .where(ApexBoardGeometry.isSquare)
+              .toSet(),
+        );
+
+    final label = ReviewCausalMechanismDisplay.fromMove(
+      move,
+      timeline: timeline,
+    )?.semanticLabel;
+    if (label == null) return null;
+
+    final overlay = switch (claim.mechanism) {
+      MoveInsightMechanismType.fork ||
+      MoveInsightMechanismType.doubleAttack => ApexBoardOverlay(
+        semanticLabel: label,
+        principalArrow: arrow(claim.pieceSquare, claim.targetSquare),
+        targetSquares: squares([
+          claim.targetSquare,
+          claim.secondaryTargetSquare,
+        ]),
+      ),
+      MoveInsightMechanismType.absolutePin ||
+      MoveInsightMechanismType.skewer => ApexBoardOverlay(
+        semanticLabel: label,
+        principalArrow: arrow(claim.pieceSquare, claim.targetSquare),
+        targetSquares: squares([
+          claim.targetSquare,
+          claim.secondaryTargetSquare,
+        ]),
+        raySquares: squares(claim.lineSquares),
+      ),
+      MoveInsightMechanismType.discoveredAttack ||
+      MoveInsightMechanismType.opensLine => ApexBoardOverlay(
+        semanticLabel: label,
+        principalArrow: arrow(claim.pieceSquare, claim.targetSquare),
+        targetSquares: squares([claim.targetSquare]),
+        raySquares: squares(claim.lineSquares),
+        supportSquares: squares([claim.initiatorSquare]),
+      ),
+      MoveInsightMechanismType.removesDefender => ApexBoardOverlay(
+        semanticLabel: label,
+        principalArrow: arrow(claim.defenderSquare, claim.targetSquare),
+        targetSquares: squares([claim.targetSquare]),
+        supportSquares: squares([claim.defenderSquare, claim.initiatorSquare]),
+      ),
+      MoveInsightMechanismType.soundSacrifice ||
+      MoveInsightMechanismType.unsoundSacrifice => ApexBoardOverlay(
+        semanticLabel: label,
+        targetSquares: squares([claim.initiatorSquare, claim.targetSquare]),
+      ),
+      MoveInsightMechanismType.onlyMoveDefense ||
+      MoveInsightMechanismType.missedMaterialResource ||
+      MoveInsightMechanismType.none => const ApexBoardOverlay(
+        semanticLabel: '',
+      ),
+    };
+    return overlay.isEmpty ? null : overlay;
+  }
 }
 
-final Expando<List<ReviewTimelinePlyDisplay>> _timelineRows =
-    Expando<List<ReviewTimelinePlyDisplay>>('reviewTimelineRows');
+typedef ReviewSelectedPlyPresentation = ReviewBoardDisplayModel;
+
+final Expando<_ReviewTimelineProjectionCache> _timelineProjectionCache =
+    Expando<_ReviewTimelineProjectionCache>('reviewTimelineProjection');
+
+_ReviewTimelineProjectionCache _projectionCacheFor(AnalysisTimeline timeline) {
+  final cached = _timelineProjectionCache[timeline];
+  if (cached != null) return cached;
+  final rows = List<ReviewTimelinePlyDisplay>.unmodifiable([
+    for (final move in timeline.moves) ReviewTimelinePlyDisplay.fromMove(move),
+  ]);
+  final critical = List<int>.unmodifiable([
+    for (final move in timeline.moves)
+      if (_isCriticalMove(move, timeline: timeline)) move.ply,
+  ]);
+  final criticalSet = Set<int>.unmodifiable(critical);
+  final previousCritical = List<int?>.filled(timeline.totalPlies + 1, null);
+  int? previous;
+  for (var current = -1; current < timeline.totalPlies; current++) {
+    previousCritical[current + 1] = previous;
+    if (criticalSet.contains(current)) previous = current;
+  }
+  final nextCritical = List<int?>.filled(timeline.totalPlies + 1, null);
+  var nextIndex = 0;
+  for (var current = -1; current < timeline.totalPlies; current++) {
+    while (nextIndex < critical.length && critical[nextIndex] <= current) {
+      nextIndex++;
+    }
+    nextCritical[current + 1] = nextIndex < critical.length
+        ? critical[nextIndex]
+        : null;
+  }
+  final projection = _ReviewTimelineProjectionCache(
+    rows: rows,
+    criticalPlies: critical,
+    criticalPlySet: criticalSet,
+    previousCriticalBySelection: List<int?>.unmodifiable(previousCritical),
+    nextCriticalBySelection: List<int?>.unmodifiable(nextCritical),
+  );
+  _timelineProjectionCache[timeline] = projection;
+  return projection;
+}
+
+bool _isCriticalMove(MoveAnalysis move, {required AnalysisTimeline timeline}) {
+  final classificationCritical = switch (move.classification) {
+    MoveQuality.brilliant ||
+    MoveQuality.great ||
+    MoveQuality.onlyMove ||
+    MoveQuality.missedWin ||
+    MoveQuality.inaccuracy ||
+    MoveQuality.mistake ||
+    MoveQuality.blunder => true,
+    _ => false,
+  };
+  final forcedMatePresent = move.mateInAfter != null;
+  final insight = timeline.hasSupportedExplanationContract
+      ? move.insight
+      : null;
+  final highSignalMechanism =
+      insight?.isDisplayable == true &&
+      insight!.primaryClaim?.mechanism != MoveInsightMechanismType.none;
+  return classificationCritical || forcedMatePresent || highSignalMechanism;
+}

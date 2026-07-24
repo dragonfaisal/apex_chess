@@ -17,15 +17,17 @@ class BrilliantGlow extends StatefulWidget {
     required this.child,
     required this.visible,
     this.borderRadius = 18,
+    this.reduceMotion = false,
   });
 
   final Widget child;
 
-  /// Flip to `true` to trigger the animation. Flipping back to `false` is a
-  /// no-op during playback; the animation always runs to completion.
+  /// A false-to-true transition triggers one bounded emphasis. Initial mount
+  /// does not replay a historic Brilliant move.
   final bool visible;
 
   final double borderRadius;
+  final bool reduceMotion;
 
   @override
   State<BrilliantGlow> createState() => _BrilliantGlowState();
@@ -42,13 +44,16 @@ class _BrilliantGlowState extends State<BrilliantGlow>
       vsync: this,
       duration: const Duration(milliseconds: 1400),
     );
-    if (widget.visible) _controller.forward(from: 0);
   }
 
   @override
   void didUpdateWidget(covariant BrilliantGlow old) {
     super.didUpdateWidget(old);
-    if (widget.visible && !old.visible) {
+    if (!widget.visible || widget.reduceMotion) {
+      _controller
+        ..stop()
+        ..reset();
+    } else if (widget.visible && !old.visible && !widget.reduceMotion) {
       _controller.forward(from: 0);
     }
   }
@@ -61,6 +66,7 @@ class _BrilliantGlowState extends State<BrilliantGlow>
 
   @override
   Widget build(BuildContext context) {
+    if (widget.reduceMotion) return widget.child;
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
@@ -79,15 +85,16 @@ class _BrilliantGlowState extends State<BrilliantGlow>
               child: IgnorePointer(
                 child: Container(
                   decoration: BoxDecoration(
-                    borderRadius:
-                        BorderRadius.circular(widget.borderRadius + 2),
+                    borderRadius: BorderRadius.circular(
+                      widget.borderRadius + 2,
+                    ),
                     boxShadow: [
                       BoxShadow(
                         color: Color.lerp(
-                                ApexColors.sapphire,
-                                ApexColors.aurora,
-                                t)!
-                            .withValues(alpha: 0.55 * env),
+                          ApexColors.sapphire,
+                          ApexColors.aurora,
+                          t,
+                        )!.withValues(alpha: 0.55 * env),
                         blurRadius: blur,
                         spreadRadius: spread,
                       ),
@@ -102,11 +109,9 @@ class _BrilliantGlowState extends State<BrilliantGlow>
                 child: IgnorePointer(
                   child: Container(
                     decoration: BoxDecoration(
-                      borderRadius:
-                          BorderRadius.circular(widget.borderRadius),
+                      borderRadius: BorderRadius.circular(widget.borderRadius),
                       border: Border.all(
-                        color: ApexColors.aurora
-                            .withValues(alpha: 0.6 * env),
+                        color: ApexColors.aurora.withValues(alpha: 0.6 * env),
                         width: 1.2,
                       ),
                     ),

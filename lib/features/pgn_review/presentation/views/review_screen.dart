@@ -42,23 +42,12 @@ class ReviewScreen extends ConsumerWidget {
       return Scaffold(
         backgroundColor: ApexColors.darkSurface,
         appBar: _buildAppBar(context),
-        body: const Center(
-          child: Text(
-            'No analysis loaded.',
-            style: TextStyle(color: ApexColors.textTertiary),
-          ),
-        ),
+        body: _ReviewUnavailableState(state: state),
       );
     }
 
     final controller = ref.read(reviewControllerProvider.notifier);
-    final display = ReviewBoardDisplayModel.fromTimeline(
-      timeline,
-      currentPly: state.currentPly,
-      flipped: state.flipped,
-      mode: state.mode,
-      userIsWhite: state.userIsWhite,
-    );
+    final display = ReviewBoardDisplayModel.fromState(state);
 
     return Scaffold(
       appBar: _buildAppBar(context, display),
@@ -66,6 +55,14 @@ class ReviewScreen extends ConsumerWidget {
         display: display,
         onPrevious: controller.prev,
         onNext: controller.next,
+        onStart: controller.goToStart,
+        onEnd: controller.goToEnd,
+        onPreviousCritical: display.previousCriticalPly == null
+            ? null
+            : () => controller.jumpTo(display.previousCriticalPly!),
+        onNextCritical: display.nextCriticalPly == null
+            ? null
+            : () => controller.jumpTo(display.nextCriticalPly!),
         onScrub: controller.jumpTo,
         onMoves: () => _showMoveList(context, controller.jumpTo),
         onExplain: display.insight.hasDetails
@@ -89,7 +86,10 @@ class ReviewScreen extends ConsumerWidget {
                   _evalBarWidth -
                   _evalBarGap -
                   (_boardFramePadding * 2);
-              final heightShare = constraints.maxHeight < 620 ? 0.58 : 0.62;
+              // On short screens the body scrolls intentionally; preserve a
+              // readable board instead of shrinking it to make every section
+              // fit above the fold.
+              final heightShare = constraints.maxHeight < 620 ? 0.68 : 0.64;
               final boardMaxFromHeight = constraints.maxHeight * heightShare;
               final boardFloor = math.min(
                 190.0,
@@ -148,6 +148,8 @@ class ReviewScreen extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 7),
+                    _SelectedMoveIdentityPanel(display: display),
+                    const SizedBox(height: 7),
                     if (display.insight.hasDetails)
                       _CoachInsightPanel(
                         display: display,
@@ -201,6 +203,75 @@ class ReviewScreen extends ConsumerWidget {
         ],
       ),
       centerTitle: true,
+    );
+  }
+}
+
+class _ReviewUnavailableState extends StatelessWidget {
+  const _ReviewUnavailableState({required this.state});
+
+  final ReviewState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final loading = state.isLoading;
+    final title = loading
+        ? 'Loading review'
+        : state.failure == ReviewRuntimeFailure.corruptedSavedReview
+        ? 'Saved review unavailable'
+        : state.failure == ReviewRuntimeFailure.engineUnavailable
+        ? 'Review provider unavailable'
+        : state.error ?? 'No review loaded';
+    final detail = loading
+        ? 'Preparing the exact saved position.'
+        : state.failure == ReviewRuntimeFailure.corruptedSavedReview
+        ? 'The saved data could not be safely opened.'
+        : 'Open a saved game or complete an analysis to review its moves.';
+    return Container(
+      decoration: const BoxDecoration(gradient: ApexGradients.spaceCanvas),
+      child: SafeArea(
+        child: Center(
+          child: Semantics(
+            key: const ValueKey('review-unavailable-semantics'),
+            liveRegion: true,
+            label: '$title. $detail',
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (loading)
+                    const CircularProgressIndicator(
+                      key: ValueKey('review-loading-indicator'),
+                    )
+                  else
+                    const Icon(
+                      Icons.description_outlined,
+                      color: ApexColors.textTertiary,
+                      size: 30,
+                    ),
+                  const SizedBox(height: 14),
+                  Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: ApexTypography.titleMedium.copyWith(
+                      color: ApexColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    detail,
+                    textAlign: TextAlign.center,
+                    style: ApexTypography.bodyMedium.copyWith(
+                      color: ApexColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -347,14 +418,18 @@ class _BoardWithEval extends StatelessWidget {
                   ],
                 ),
                 child: BrilliantGlow(
+                  key: ValueKey('review-brilliant-${display.executionKey}'),
                   visible: currentMove?.classification == MoveQuality.brilliant,
+                  reduceMotion: MediaQuery.disableAnimationsOf(context),
                   child: ApexChessBoard(
+                    key: ValueKey('review-board-${display.presentationKey}'),
                     fen: display.currentFen,
                     flipped: display.flipped,
                     lastMove: display.lastMove,
                     selectedSquare: display.selectedSquare,
                     lastMoveQuality: currentMove?.classification,
                     betterMove: display.bestMoveArrow,
+                    evidenceOverlay: display.boardOverlay,
                   ),
                 ),
               ),
@@ -428,7 +503,9 @@ class _VerticalEvalBar extends StatelessWidget {
                       Positioned.fill(
                         child: TweenAnimationBuilder<double>(
                           tween: Tween<double>(end: display.whiteShare),
-                          duration: ApexMotion.normal,
+                          duration: MediaQuery.disableAnimationsOf(context)
+                              ? Duration.zero
+                              : ApexMotion.normal,
                           curve: ApexMotion.standard,
                           builder: (context, share, _) {
                             return LayoutBuilder(
@@ -550,6 +627,168 @@ class _EvalPercentPill extends StatelessWidget {
   }
 }
 
+class _SelectedMoveIdentityPanel extends StatelessWidget {
+  const _SelectedMoveIdentityPanel({required this.display});
+
+  final ReviewBoardDisplayModel display;
+
+  @override
+  Widget build(BuildContext context) {
+    final move = display.currentMove;
+    final opening = display.opening.label;
+    final quality = move == null ? null : display.insight.quality;
+    final moveLabel = move == null
+        ? 'Start position'
+        : '${display.insight.moveLabel} ${display.insight.san}';
+    final semantics = [
+      'Current position: $moveLabel',
+      display.moverLabel,
+      display.sideToMoveLabel,
+      if (quality != null) quality.semanticDescription,
+      'Evaluation ${display.eval.label}',
+      if (opening != null) 'Verified opening $opening',
+      if (display.isCriticalMoment) 'Critical moment',
+    ].join('. ');
+    return Semantics(
+      container: true,
+      label: semantics,
+      child: Container(
+        key: const ValueKey('review-selected-move'),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: ApexColors.cardSurface.withValues(alpha: 0.62),
+          borderRadius: BorderRadius.circular(13),
+          border: Border.all(
+            color: (quality?.color ?? ApexColors.subtleBorder).withValues(
+              alpha: 0.34,
+            ),
+            width: 0.7,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                if (quality != null) ...[
+                  _QualityChip(display: quality),
+                  const SizedBox(width: 8),
+                ],
+                Expanded(
+                  child: Text(
+                    moveLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: ApexTypography.titleMedium.copyWith(
+                      color: ApexColors.textPrimary,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  display.eval.label,
+                  key: const ValueKey('review-selected-eval'),
+                  style: ApexTypography.monoEval.copyWith(
+                    color: ApexColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+            if (opening != null ||
+                display.mechanism != null ||
+                display.compatibility != ReviewCompatibilityState.current) ...[
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                runSpacing: 5,
+                children: [
+                  if (opening != null)
+                    _ContextChip(
+                      key: const ValueKey('review-opening-badge'),
+                      icon: Icons.menu_book_outlined,
+                      label: opening,
+                      semanticsLabel: 'Verified opening $opening',
+                    ),
+                  if (display.mechanism != null)
+                    _ContextChip(
+                      key: const ValueKey('review-mechanism-badge'),
+                      icon: Icons.account_tree_outlined,
+                      label: display.mechanism!.label,
+                      semanticsLabel: display.mechanism!.semanticLabel,
+                    ),
+                  if (display.compatibility != ReviewCompatibilityState.current)
+                    const _ContextChip(
+                      key: ValueKey('review-historic-badge'),
+                      icon: Icons.history_rounded,
+                      label: 'Historic review',
+                      semanticsLabel:
+                          'Historic saved review shown without recomputation',
+                    ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ContextChip extends StatelessWidget {
+  const _ContextChip({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.semanticsLabel,
+  });
+
+  final IconData icon;
+  final String label;
+  final String semanticsLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: semanticsLabel,
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.sizeOf(context).width - 40,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+        decoration: BoxDecoration(
+          color: ApexColors.sapphire.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: ApexColors.sapphireBright.withValues(alpha: 0.28),
+            width: 0.6,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 12, color: ApexColors.sapphireBright),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: ApexTypography.labelLarge.copyWith(
+                  color: ApexColors.textSecondary,
+                  fontSize: 10,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _CoachInsightPanel extends StatelessWidget {
   const _CoachInsightPanel({required this.display, required this.onTap});
 
@@ -559,70 +798,76 @@ class _CoachInsightPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final insight = display.insight;
-    return Material(
-      key: const ValueKey('review-coach-insight'),
-      color: ApexColors.cardSurface.withValues(alpha: 0.62),
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onTap,
+    return Semantics(
+      button: true,
+      label:
+          'Move insight, collapsed. ${insight.explanation}. '
+          'Double tap to expand.',
+      child: Material(
+        key: const ValueKey('review-coach-insight'),
+        color: ApexColors.cardSurface.withValues(alpha: 0.62),
         borderRadius: BorderRadius.circular(14),
-        child: AnimatedContainer(
-          duration: ApexMotion.normal,
-          curve: ApexMotion.standard,
-          padding: const EdgeInsets.fromLTRB(10, 8, 10, 9),
-          decoration: BoxDecoration(
-            color: ApexColors.cardSurface.withValues(alpha: 0.62),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: insight.quality.color.withValues(alpha: 0.34),
-              width: 0.6,
-            ),
-          ),
-          child: AnimatedSwitcher(
-            duration: ApexMotion.fast,
-            child: Column(
-              key: ValueKey(
-                'insight-${display.executionKey}-${display.currentPly}',
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: AnimatedContainer(
+            duration: ApexMotion.normal,
+            curve: ApexMotion.standard,
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 9),
+            decoration: BoxDecoration(
+              color: ApexColors.cardSurface.withValues(alpha: 0.62),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: insight.quality.color.withValues(alpha: 0.34),
+                width: 0.6,
               ),
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    _QualityChip(display: insight.quality),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        '${insight.moveLabel} ${insight.san}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: ApexTypography.titleMedium.copyWith(
-                          color: ApexColors.textPrimary,
-                          fontSize: 13,
+            ),
+            child: AnimatedSwitcher(
+              duration: ApexMotion.fast,
+              child: Column(
+                key: ValueKey(
+                  'insight-${display.executionKey}-${display.currentPly}',
+                ),
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      _QualityChip(display: insight.quality),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          '${insight.moveLabel} ${insight.san}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: ApexTypography.titleMedium.copyWith(
+                            color: ApexColors.textPrimary,
+                            fontSize: 13,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 4),
-                    const Icon(
-                      Icons.expand_more_rounded,
-                      size: 17,
-                      color: ApexColors.textTertiary,
+                      const SizedBox(width: 4),
+                      const Icon(
+                        Icons.expand_more_rounded,
+                        size: 17,
+                        color: ApexColors.textTertiary,
+                      ),
+                    ],
+                  ),
+                  if (insight.explanation != null) ...[
+                    const SizedBox(height: 5),
+                    Text(
+                      insight.explanation!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: ApexTypography.bodyMedium.copyWith(
+                        color: ApexColors.textSecondary,
+                        fontSize: 11,
+                      ),
                     ),
                   ],
-                ),
-                if (insight.explanation != null) ...[
-                  const SizedBox(height: 5),
-                  Text(
-                    insight.explanation!,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: ApexTypography.bodyMedium.copyWith(
-                      color: ApexColors.textSecondary,
-                      fontSize: 11,
-                    ),
-                  ),
                 ],
-              ],
+              ),
             ),
           ),
         ),
@@ -638,25 +883,37 @@ class _QualityChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      constraints: BoxConstraints(
-        maxWidth: MediaQuery.sizeOf(context).width * 0.38,
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-      decoration: BoxDecoration(
-        color: display.color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: display.color.withValues(alpha: 0.42)),
-      ),
-      child: Text(
-        display.marker.isEmpty
-            ? display.label
-            : '${display.label} ${display.marker}',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: ApexTypography.labelLarge.copyWith(
-          color: display.color,
-          fontSize: 10,
+    return Semantics(
+      label: display.semanticDescription,
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.sizeOf(context).width * 0.42,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+        decoration: BoxDecoration(
+          color: display.color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: display.color.withValues(alpha: 0.42)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(display.icon, size: 12, color: display.color),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                display.marker.isEmpty
+                    ? display.label
+                    : '${display.label} ${display.marker}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: ApexTypography.labelLarge.copyWith(
+                  color: display.color,
+                  fontSize: 10,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -781,11 +1038,13 @@ class _MoveTimelineScrubber extends StatefulWidget {
     super.key,
     required this.items,
     required this.activePly,
+    required this.selectionKey,
     required this.onTapPly,
   });
 
   final List<ReviewTimelinePlyDisplay> items;
   final int activePly;
+  final String selectionKey;
   final ValueChanged<int> onTapPly;
 
   @override
@@ -794,12 +1053,23 @@ class _MoveTimelineScrubber extends StatefulWidget {
 
 class _MoveTimelineScrubberState extends State<_MoveTimelineScrubber> {
   final _controller = ScrollController();
+  int _scrollGeneration = 0;
 
   @override
   void didUpdateWidget(covariant _MoveTimelineScrubber oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.activePly != widget.activePly) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToActive());
+    if (oldWidget.activePly != widget.activePly ||
+        oldWidget.selectionKey != widget.selectionKey ||
+        !identical(oldWidget.items, widget.items)) {
+      final generation = ++_scrollGeneration;
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _scrollToActive(
+          generation: generation,
+          animate:
+              oldWidget.selectionKey == widget.selectionKey &&
+              (oldWidget.activePly - widget.activePly).abs() <= 3,
+        ),
+      );
     }
   }
 
@@ -809,16 +1079,28 @@ class _MoveTimelineScrubberState extends State<_MoveTimelineScrubber> {
     super.dispose();
   }
 
-  void _scrollToActive() {
-    if (!_controller.hasClients || widget.items.isEmpty) return;
+  void _scrollToActive({required int generation, required bool animate}) {
+    if (!mounted ||
+        generation != _scrollGeneration ||
+        !_controller.hasClients ||
+        widget.items.isEmpty) {
+      return;
+    }
     final target = (widget.activePly * 76.0).clamp(
       0.0,
       _controller.position.maxScrollExtent,
     );
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    if (!animate || reduceMotion) {
+      _controller.jumpTo(target);
+      return;
+    }
+    // Cancels any obsolete selection animation before starting this one.
+    _controller.jumpTo(_controller.offset);
     _controller.animateTo(
       target,
-      duration: ApexMotion.normal,
-      curve: ApexMotion.standard,
+      duration: const Duration(milliseconds: 160),
+      curve: Curves.easeOutCubic,
     );
   }
 
@@ -922,6 +1204,10 @@ class _ReviewActionBar extends StatelessWidget {
     required this.display,
     required this.onPrevious,
     required this.onNext,
+    required this.onStart,
+    required this.onEnd,
+    required this.onPreviousCritical,
+    required this.onNextCritical,
     required this.onScrub,
     required this.onMoves,
     required this.onExplain,
@@ -933,6 +1219,10 @@ class _ReviewActionBar extends StatelessWidget {
   final ReviewBoardDisplayModel display;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
+  final VoidCallback onStart;
+  final VoidCallback onEnd;
+  final VoidCallback? onPreviousCritical;
+  final VoidCallback? onNextCritical;
   final ValueChanged<int> onScrub;
   final VoidCallback onMoves;
   final VoidCallback? onExplain;
@@ -957,72 +1247,101 @@ class _ReviewActionBar extends StatelessWidget {
                 key: const ValueKey('review-timeline'),
                 items: display.timeline,
                 activePly: display.currentPly,
+                selectionKey: display.executionKey,
                 onTapPly: onScrub,
               ),
               const SizedBox(height: 6),
               Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
+                  _ActionIcon(
+                    key: const ValueKey('review-prev-critical-button'),
+                    tooltip: 'Previous critical moment',
+                    icon: Icons.keyboard_double_arrow_left_rounded,
+                    onPressed: onPreviousCritical,
+                    accent: ApexColors.aurora,
+                  ),
+                  _ActionIcon(
+                    key: const ValueKey('review-prev-button'),
+                    tooltip: 'Previous move',
+                    icon: Icons.chevron_left_rounded,
+                    onPressed: display.canGoPrevious ? onPrevious : null,
+                    accent: ApexColors.sapphireBright,
+                  ),
                   SizedBox(
-                    width: 48,
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: _ActionIcon(
-                        key: const ValueKey('review-move-list-button'),
-                        tooltip: 'Moves',
-                        icon: Icons.format_list_bulleted_rounded,
-                        onPressed: onMoves,
+                    width: 76,
+                    child: Semantics(
+                      label:
+                          'Move ${display.currentPly + 1} of ${display.totalPlies}'
+                          '${display.isCriticalMoment ? ', critical moment' : ''}',
+                      child: Text(
+                        '${display.currentPly + 1} / ${display.totalPlies}',
+                        key: const ValueKey('review-ply-counter'),
+                        maxLines: 1,
+                        textAlign: TextAlign.center,
+                        style: ApexTypography.monoEval.copyWith(
+                          color: display.isCriticalMoment
+                              ? ApexColors.aurora
+                              : ApexColors.textPrimary,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
+                  ),
+                  _ActionIcon(
+                    key: const ValueKey('review-next-button'),
+                    tooltip: 'Next move',
+                    icon: Icons.chevron_right_rounded,
+                    onPressed: display.canGoNext ? onNext : null,
+                    accent: ApexColors.sapphireBright,
+                  ),
+                  _ActionIcon(
+                    key: const ValueKey('review-next-critical-button'),
+                    tooltip: 'Next critical moment',
+                    icon: Icons.keyboard_double_arrow_right_rounded,
+                    onPressed: onNextCritical,
+                    accent: ApexColors.aurora,
+                  ),
+                ],
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _ActionIcon(
+                    key: const ValueKey('review-start-button'),
+                    tooltip: 'Start position',
+                    icon: Icons.first_page_rounded,
+                    onPressed: display.canGoPrevious ? onStart : null,
+                  ),
+                  _ActionIcon(
+                    key: const ValueKey('review-move-list-button'),
+                    tooltip: 'All moves',
+                    icon: Icons.format_list_bulleted_rounded,
+                    onPressed: onMoves,
                   ),
                   Expanded(
-                    child: Center(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _ActionIcon(
-                            key: const ValueKey('review-prev-button'),
-                            tooltip: 'Previous',
-                            icon: Icons.chevron_left_rounded,
-                            onPressed: display.canGoPrevious
-                                ? onPrevious
-                                : null,
-                            accent: ApexColors.sapphireBright,
-                          ),
-                          SizedBox(
-                            width: 72,
-                            child: Text(
-                              '${display.currentPly + 1} / ${display.totalPlies}',
-                              key: const ValueKey('review-ply-counter'),
-                              maxLines: 1,
-                              textAlign: TextAlign.center,
-                              style: ApexTypography.monoEval.copyWith(
-                                color: ApexColors.textPrimary,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                          _ActionIcon(
-                            key: const ValueKey('review-next-button'),
-                            tooltip: 'Next',
-                            icon: Icons.chevron_right_rounded,
-                            onPressed: display.canGoNext ? onNext : null,
-                            accent: ApexColors.sapphireBright,
-                          ),
-                        ],
+                    child: Text(
+                      '${display.criticalPlies.length} critical',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: ApexTypography.labelLarge.copyWith(
+                        color: ApexColors.textTertiary,
+                        fontSize: 10,
                       ),
                     ),
                   ),
-                  SizedBox(
-                    width: 48,
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: _CoachCommandOrb(
-                        onExplain: onExplain,
-                        onBetter: onBetter,
-                        onFlip: onFlip,
-                        onSummary: onSummary,
-                      ),
-                    ),
+                  _ActionIcon(
+                    key: const ValueKey('review-end-button'),
+                    tooltip: 'End position',
+                    icon: Icons.last_page_rounded,
+                    onPressed: display.canGoNext ? onEnd : null,
+                  ),
+                  _CoachCommandOrb(
+                    onExplain: onExplain,
+                    onBetter: onBetter,
+                    onFlip: onFlip,
+                    onSummary: onSummary,
                   ),
                 ],
               ),
@@ -1054,8 +1373,8 @@ class _ActionIcon extends StatelessWidget {
       message: tooltip,
       child: IconButton(
         visualDensity: VisualDensity.compact,
-        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-        padding: const EdgeInsets.all(6),
+        constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+        padding: const EdgeInsets.all(8),
         icon: Icon(icon),
         color: accent,
         disabledColor: ApexColors.textTertiary.withValues(alpha: 0.38),
@@ -1166,15 +1485,15 @@ class _CoachCommandOrbState extends State<_CoachCommandOrb> {
       duration: ApexMotion.fast,
       curve: ApexMotion.standard,
       child: Tooltip(
-        message: 'Coach',
+        message: 'Review actions',
         child: InkResponse(
           key: const ValueKey('review-coach-orb'),
           onTap: _toggleMenu,
           radius: 24,
           child: AnimatedContainer(
             duration: ApexMotion.fast,
-            width: 40,
-            height: 40,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: ApexColors.cardSurface.withValues(alpha: 0.92),
@@ -1195,7 +1514,7 @@ class _CoachCommandOrbState extends State<_CoachCommandOrb> {
               ],
             ),
             child: Icon(
-              Icons.psychology_alt_rounded,
+              Icons.manage_search_rounded,
               color: _isOpen
                   ? ApexColors.sapphireBright
                   : ApexColors.textSecondary,
@@ -1438,13 +1757,16 @@ class _CoachExplainSheet extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Text(
-                'Coach',
-                style: ApexTypography.titleMedium.copyWith(
-                  color: ApexColors.textPrimary,
+              Expanded(
+                child: Text(
+                  'Move insight',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: ApexTypography.titleMedium.copyWith(
+                    color: ApexColors.textPrimary,
+                  ),
                 ),
               ),
-              const Spacer(),
               IconButton(
                 tooltip: 'Close',
                 onPressed: () => Navigator.of(context).pop(),
@@ -1590,15 +1912,8 @@ class _MoveListSheet extends ConsumerWidget {
 }
 
 ReviewBoardDisplayModel? _displayFromReviewState(ReviewState state) {
-  final timeline = state.timeline;
-  if (timeline == null) return null;
-  return ReviewBoardDisplayModel.fromTimeline(
-    timeline,
-    currentPly: state.currentPly,
-    flipped: state.flipped,
-    mode: state.mode,
-    userIsWhite: state.userIsWhite,
-  );
+  if (state.timeline == null) return null;
+  return ReviewBoardDisplayModel.fromState(state);
 }
 
 class _SheetLinePreview extends StatelessWidget {
