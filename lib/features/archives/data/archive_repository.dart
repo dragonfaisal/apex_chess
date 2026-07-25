@@ -40,6 +40,44 @@ class ReviewStoreDiagnostics {
   final int orphanedIndexes;
 }
 
+enum ReviewDocumentSourceIssueKind {
+  corruptCanonical,
+  legacyUntrusted,
+  legacyMalformed,
+}
+
+class ValidatedReviewDocumentSource {
+  const ValidatedReviewDocumentSource({
+    required this.document,
+    required this.contentDigest,
+  });
+
+  final ReviewDocument document;
+  final String contentDigest;
+}
+
+class ReviewDocumentSourceIssue {
+  const ReviewDocumentSourceIssue({
+    required this.sourceKey,
+    required this.kind,
+  });
+
+  final String sourceKey;
+  final ReviewDocumentSourceIssueKind kind;
+}
+
+class ReviewDocumentSourceScan {
+  const ReviewDocumentSourceScan({
+    required this.sources,
+    required this.issues,
+    required this.revision,
+  });
+
+  final List<ValidatedReviewDocumentSource> sources;
+  final List<ReviewDocumentSourceIssue> issues;
+  final int revision;
+}
+
 class ArchiveRepository {
   ArchiveRepository._({
     required Box<String> legacyBox,
@@ -87,10 +125,12 @@ class ArchiveRepository {
 
   ReviewStoreDiagnostics _diagnostics = const ReviewStoreDiagnostics();
   ReviewStoreDiagnostics get diagnostics => _diagnostics;
+  int _contentRevision = 0;
 
   /// Legacy compatibility write. New product saves use [saveReviewDocument].
   Future<void> save(ArchivedGame game) async {
     await _legacyBox.put(game.id, jsonEncode(game.toJson()));
+    _contentRevision++;
   }
 
   Future<String> saveReviewDocument(ReviewDocument document) async {
@@ -137,6 +177,7 @@ class ArchiveRepository {
       );
     }
     _refreshDiagnostics();
+    _contentRevision++;
     return document.documentId;
   }
 
@@ -179,6 +220,105 @@ class ArchiveRepository {
     }
     out.sort((a, b) => b.run.completedAt.compareTo(a.run.completedAt));
     return out;
+  }
+
+  /// Validated, read-only source boundary for derived local analytics.
+  ///
+  /// Canonical documents are decoded exactly once per scan. Raw Hive payloads
+  /// and legacy migration details remain inside the repository boundary.
+  ///
+  /// Decoding yields between bounded batches so a cold analytics scan cannot
+  /// monopolize the Flutter event loop. If archive content changes during the
+  /// scan, the stale snapshot is discarded and rebuilt from the new revision.
+  Future<ReviewDocumentSourceScan> scanValidatedReviewDocuments({
+    int yieldEvery = 2,
+  }) async {
+    if (yieldEvery < 1) {
+      throw ArgumentError.value(yieldEvery, 'yieldEvery', 'Must be positive.');
+    }
+    while (true) {
+      final revision = _contentRevision;
+      final documentEntries = [
+        for (final key in _documentBox.keys)
+          MapEntry(key.toString(), _documentBox.get(key)),
+      ];
+      final legacyEntries = [
+        for (final key in _legacyBox.keys)
+          MapEntry(key.toString(), _legacyBox.get(key)),
+      ];
+      final sources = <ValidatedReviewDocumentSource>[];
+      final issues = <ReviewDocumentSourceIssue>[];
+      final validatedDocumentIds = <String>{};
+      var processed = 0;
+
+      await Future<void>.delayed(Duration.zero);
+      for (final entry in documentEntries) {
+        if (processed > 0 && processed % yieldEvery == 0) {
+          await Future<void>.delayed(Duration.zero);
+        }
+        processed++;
+        final documentId = entry.key;
+        final raw = entry.value;
+        if (raw == null) continue;
+        try {
+          final document = ReviewDocument.decodeAndValidate(raw);
+          if (document.documentId != documentId) {
+            throw const ReviewDocumentValidationException(
+              'Document key does not match document id.',
+            );
+          }
+          sources.add(
+            ValidatedReviewDocumentSource(
+              document: document,
+              contentDigest: _fingerprint(raw),
+            ),
+          );
+          validatedDocumentIds.add(document.documentId);
+        } on Object {
+          issues.add(
+            ReviewDocumentSourceIssue(
+              sourceKey: documentId,
+              kind: ReviewDocumentSourceIssueKind.corruptCanonical,
+            ),
+          );
+        }
+      }
+
+      for (final entry in legacyEntries) {
+        if (processed > 0 && processed % yieldEvery == 0) {
+          await Future<void>.delayed(Duration.zero);
+        }
+        processed++;
+        final sourceKey = entry.key;
+        final raw = entry.value;
+        if (raw == null) continue;
+        final state = _migrationState(sourceKey);
+        if (state?.isMigrated == true &&
+            state?.documentId != null &&
+            validatedDocumentIds.contains(state!.documentId)) {
+          continue;
+        }
+        issues.add(
+          ReviewDocumentSourceIssue(
+            sourceKey: sourceKey,
+            kind: state?.disposition == _MigrationDisposition.quarantined
+                ? ReviewDocumentSourceIssueKind.legacyMalformed
+                : ReviewDocumentSourceIssueKind.legacyUntrusted,
+          ),
+        );
+      }
+
+      if (revision != _contentRevision) continue;
+      sources.sort(
+        (a, b) => a.document.documentId.compareTo(b.document.documentId),
+      );
+      issues.sort((a, b) => a.sourceKey.compareTo(b.sourceKey));
+      return ReviewDocumentSourceScan(
+        sources: List.unmodifiable(sources),
+        issues: List.unmodifiable(issues),
+        revision: revision,
+      );
+    }
   }
 
   /// Compact archive list. Canonical timelines are not decoded here.
@@ -232,6 +372,10 @@ class ArchiveRepository {
   }
 
   Future<void> delete(String id) async {
+    final existed =
+        _indexBox.containsKey(id) ||
+        _documentBox.containsKey(id) ||
+        _legacyBox.containsKey(id);
     if (_indexBox.containsKey(id) || _documentBox.containsKey(id)) {
       await _documentBox.delete(id);
       await _indexBox.delete(id);
@@ -239,9 +383,16 @@ class ArchiveRepository {
       await _legacyBox.delete(id);
     }
     _refreshDiagnostics();
+    if (existed) _contentRevision++;
   }
 
   Future<void> clear() async {
+    final hadContent =
+        _legacyBox.isNotEmpty ||
+        _documentBox.isNotEmpty ||
+        _indexBox.isNotEmpty ||
+        _migrationBox.isNotEmpty ||
+        _quarantineBox.isNotEmpty;
     await Future.wait([
       _legacyBox.clear(),
       _documentBox.clear(),
@@ -250,6 +401,7 @@ class ArchiveRepository {
       _quarantineBox.clear(),
     ]);
     _refreshDiagnostics();
+    if (hadContent) _contentRevision++;
   }
 
   Future<void> _repairAndMigrate() async {

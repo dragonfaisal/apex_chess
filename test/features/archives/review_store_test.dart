@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -615,6 +616,11 @@ void main() {
       ArchiveRepository.documentBoxName,
     ).put('intentionally-undecodable-document', 'not json');
 
+    var eventLoopAdvanced = false;
+    Timer.run(() => eventLoopAdvanced = true);
+    final analyticsScanWatch = Stopwatch()..start();
+    final analyticsSources = await repository.scanValidatedReviewDocuments();
+    analyticsScanWatch.stop();
     final watch = Stopwatch()..start();
     final entries = repository.loadAll();
     watch.stop();
@@ -634,11 +640,15 @@ void main() {
       'archiveLoadMs=${watch.elapsedMilliseconds} '
       'exactReopenMs=${reopenWatch.elapsedMilliseconds} '
       'indexRebuildMs=${rebuildWatch.elapsedMilliseconds} '
+      'analyticsManifestScanMs=${analyticsScanWatch.elapsedMilliseconds} '
       'serializedBytes=$serializedBytes '
       'rssDeltaBytes=${rssAfter - rssBefore}',
     );
 
     expect(entries, hasLength(125));
+    expect(analyticsSources.sources, hasLength(125));
+    expect(analyticsSources.issues, hasLength(1));
+    expect(eventLoopAdvanced, isTrue);
     expect(reopened, isNotNull);
     expect(reopened!.timeline.totalPlies, 40);
     expect(repository.loadAll(), hasLength(125));
@@ -646,7 +656,36 @@ void main() {
     expect(watch.elapsed, lessThan(const Duration(seconds: 2)));
     expect(reopenWatch.elapsed, lessThan(const Duration(seconds: 2)));
     expect(rebuildWatch.elapsed, lessThan(const Duration(seconds: 10)));
+    expect(analyticsScanWatch.elapsed, lessThan(const Duration(seconds: 2)));
   });
+
+  test(
+    'analytics source scan returns validated documents, digests, and issues',
+    () async {
+      final document = _document(engine: 'Stockfish 17');
+      final before = await repository.scanValidatedReviewDocuments();
+
+      await repository.saveReviewDocument(document);
+      await Hive.box<String>(
+        ArchiveRepository.documentBoxName,
+      ).put('corrupt-analytics-source', 'not-json');
+      final scan = await repository.scanValidatedReviewDocuments();
+
+      expect(scan.revision, greaterThan(before.revision));
+      expect(scan.sources, hasLength(1));
+      expect(scan.sources.single.document.documentId, document.documentId);
+      expect(
+        scan.sources.single.contentDigest,
+        sha256.convert(utf8.encode(document.encode())).toString(),
+      );
+      expect(scan.issues, hasLength(1));
+      expect(
+        scan.issues.single.kind,
+        ReviewDocumentSourceIssueKind.corruptCanonical,
+      );
+      expect(scan.issues.single.sourceKey, 'corrupt-analytics-source');
+    },
+  );
 }
 
 ReviewDocument _document({

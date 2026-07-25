@@ -23,7 +23,6 @@ import 'package:apex_chess/features/apex_academy/presentation/views/apex_academy
 import 'package:apex_chess/features/archives/domain/archived_game.dart';
 import 'package:apex_chess/features/archives/presentation/controllers/archive_controller.dart';
 import 'package:apex_chess/features/archives/presentation/views/archive_screen.dart';
-import 'package:apex_chess/features/global_dashboard/presentation/views/global_dashboard_screen.dart';
 import 'package:apex_chess/features/import_match/presentation/views/import_match_screen.dart';
 import 'package:apex_chess/features/live_play/presentation/views/live_play_screen.dart';
 import 'package:apex_chess/features/mistake_vault/data/mistake_vault_save_hook.dart';
@@ -38,6 +37,7 @@ import 'package:apex_chess/features/pgn_review/presentation/widgets/offline_revi
 import 'package:apex_chess/features/profile/presentation/views/profile_screen.dart';
 import 'package:apex_chess/features/profile_scanner/presentation/controllers/profile_scanner_controller.dart';
 import 'package:apex_chess/features/profile_scanner/presentation/views/profile_scanner_screen.dart';
+import 'package:apex_chess/features/player_intelligence/presentation/views/player_intelligence_screen.dart';
 import 'package:apex_chess/shared_ui/controllers/connection_presence_controller.dart';
 import 'package:apex_chess/shared_ui/copy/apex_copy.dart';
 import 'package:apex_chess/shared_ui/identity/player_identity_display.dart';
@@ -121,7 +121,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 .refresh(showSyncing: true),
           ),
           const ArchiveScreen(showBackButton: false),
-          const GlobalDashboardScreen(showBackButton: false),
+          const PlayerIntelligenceScreen(showBackButton: false),
           const ApexAcademyScreen(showBackButton: false),
         ],
       ),
